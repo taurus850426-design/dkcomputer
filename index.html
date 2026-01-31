@@ -33,7 +33,11 @@
           </div>
         </div>
 
-        <nav class="nav">
+        <button id="mobileMenuBtn" class="btn btn-ghost btn-sm mobile-menu-btn" type="button" aria-controls="siteNav" aria-expanded="false">
+          選單
+        </button>
+
+        <nav id="siteNav" class="nav" aria-label="主選單">
           <a href="#inventory">庫存</a>
           <a href="#all">所有商品</a>
           <a href="#order">下單方式</a>
@@ -46,7 +50,7 @@
     </header>
 
     <main>
-      <section id="google" class="section hero">
+      <section id="hero" class="section hero">
         <div class="container">
           <div class="hero-grid">
             <div>
@@ -68,45 +72,6 @@
                 </div>
               </div>
             </div>
-
-            <aside class="card card-soft google-card">
-              <h2 class="h2">Google 商家資訊</h2>
-              <p class="muted">直接導航到店或查看營業資訊。</p>
-
-              <div class="google-layout">
-                <div class="google-photo-wrap">
-                  <img id="shopPhoto" class="shop-photo" alt="Google 商家照片" loading="lazy" />
-                </div>
-
-                <div class="google-info">
-                  <div class="info-list">
-                    <div class="info-row">
-                      <div class="info-k">店名</div>
-                      <div class="info-v" id="shopName">哈啦電競電腦維修</div>
-                    </div>
-                    <div class="info-row">
-                      <div class="info-k">地址</div>
-                      <div class="info-v">
-                        <a id="shopAddressLink" class="link" target="_blank" rel="noreferrer">510 彰化縣員林市中山路二段 277 巷 12 弄 73 號 B1</a>
-                      </div>
-                    </div>
-                    <div class="info-row">
-                      <div class="info-k">電話</div>
-                      <div class="info-v"><a id="shopPhoneLink" class="link">0976 009 628</a></div>
-                    </div>
-                    <div class="info-row">
-                      <div class="info-k">營業時間</div>
-                      <div class="info-v muted">以 Google 商家為準</div>
-                    </div>
-                  </div>
-
-                  <div class="btn-row">
-                    <a id="shopMapBtn" class="btn btn-primary" target="_blank" rel="noreferrer">在 Google 地圖查看</a>
-                    <a id="shopCallBtn" class="btn btn-ghost">直接撥打</a>
-                  </div>
-                </div>
-              </div>
-            </aside>
           </div>
         </div>
       </section>
@@ -258,6 +223,46 @@
               <div class="muted">點一下加入 LINE，把商品名稱或截圖丟給我。</div>
             </div>
             <a id="lineMainBtn" class="btn btn-primary">LINE</a>
+          </div>
+        </div>
+      </section>
+
+      <section id="google" class="section section-soft">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <h2 class="h2">Google 商家資訊</h2>
+              <p class="muted">直接導航到店或查看營業資訊。</p>
+            </div>
+            <div class="section-actions">
+              <a id="shopMapBtn2" class="btn btn-primary" target="_blank" rel="noreferrer">在 Google 地圖查看</a>
+              <a id="shopCallBtn2" class="btn btn-ghost">直接撥打</a>
+            </div>
+          </div>
+
+          <div class="card card-soft">
+            <div class="google-info">
+              <div class="info-list">
+                <div class="info-row">
+                  <div class="info-k">店名</div>
+                  <div class="info-v" id="shopName">哈啦電競電腦維修</div>
+                </div>
+                <div class="info-row">
+                  <div class="info-k">地址</div>
+                  <div class="info-v">
+                    <a id="shopAddressLink" class="link" target="_blank" rel="noreferrer">510 彰化縣員林市中山路二段 277 巷 12 弄 73 號 B1</a>
+                  </div>
+                </div>
+                <div class="info-row">
+                  <div class="info-k">電話</div>
+                  <div class="info-v"><a id="shopPhoneLink" class="link">0976 009 628</a></div>
+                </div>
+                <div class="info-row">
+                  <div class="info-k">營業時間</div>
+                  <div class="info-v muted">以 Google 商家為準</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>

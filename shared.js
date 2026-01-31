@@ -180,15 +180,20 @@ function applyConfigToHomePage() {
 
   const shopPhoneLink = document.getElementById("shopPhoneLink");
   const shopCallBtn = document.getElementById("shopCallBtn");
+  const shopCallBtn2 = document.getElementById("shopCallBtn2");
   const phoneHref = cfg.shop.phone ? `tel:+886${cfg.shop.phone.replaceAll(" ", "").replace(/^0/, "")}` : "#";
   if (shopPhoneLink) {
     shopPhoneLink.textContent = cfg.shop.phone;
     shopPhoneLink.href = phoneHref;
   }
   if (shopCallBtn) shopCallBtn.href = phoneHref;
+  if (shopCallBtn2) shopCallBtn2.href = phoneHref;
 
   const shopMapBtn = document.getElementById("shopMapBtn");
   if (shopMapBtn) shopMapBtn.href = cfg.shop.mapUrl || "#";
+
+  const shopMapBtn2 = document.getElementById("shopMapBtn2");
+  if (shopMapBtn2) shopMapBtn2.href = cfg.shop.mapUrl || "#";
 
   const shopPhoto = document.getElementById("shopPhoto");
   if (shopPhoto) {
@@ -283,6 +288,45 @@ window.DK = {
   isAdminAuthed,
   setAdminAuthed,
 };
+
+// 手機選單（小螢幕可展開主選單/進後台）
+(function initMobileMenu() {
+  const btn = document.getElementById("mobileMenuBtn");
+  const nav = document.getElementById("siteNav") || document.querySelector(".nav");
+  if (!btn || !nav) return;
+
+  function setOpen(open) {
+    nav.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    const open = !nav.classList.contains("open");
+    setOpen(open);
+  });
+
+  // 點選連結後自動關閉
+  nav.addEventListener("click", (e) => {
+    const a = e.target?.closest?.("a");
+    if (!a) return;
+    setOpen(false);
+  });
+
+  // 點外面關閉
+  document.addEventListener("click", (e) => {
+    if (!nav.classList.contains("open")) return;
+    const target = e.target;
+    if (target === btn || btn.contains(target)) return;
+    if (target === nav || nav.contains(target)) return;
+    setOpen(false);
+  });
+
+  // ESC 關閉
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") setOpen(false);
+  });
+})();
 
 // 首頁自動套用商家/連結設定
 if (document.getElementById("inventoryGrid")) {
