@@ -6,6 +6,12 @@
     <meta name="color-scheme" content="light" />
     <title>DK Computer｜現貨庫存｜加LINE下單</title>
     <meta name="description" content="現貨 / 低庫存 / 缺貨標示清楚。搜尋很快，下單更簡單：按「加 LINE 下單」，用你的用途與預算確認最適合的配置。" />
+    <meta name="keywords" content="電腦主機,電競主機,現貨主機,客製化電腦,遊戲主機,剪輯主機,辦公主機,RTX,AMD,Intel,彰化員林" />
+    <meta property="og:title" content="DK Computer｜現貨庫存｜加LINE下單" />
+    <meta property="og:description" content="現貨 / 低庫存 / 缺貨標示清楚。搜尋很快，下單更簡單：按「加 LINE 下單」，用你的用途與預算確認最適合的配置。" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_TW" />
+    <link rel="canonical" href="./index.html" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -101,6 +107,41 @@
                 </div>
               </div>
             </aside>
+          </div>
+        </div>
+      </section>
+
+      <section id="focus" class="section section-soft">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <h2 class="h2">焦點推薦</h2>
+              <p class="muted">把「最熱門、最常被問」先放最前面。點商品可看詳情，也可直接加 LINE 下單。</p>
+            </div>
+            <div class="section-actions">
+              <a class="btn btn-ghost" href="#inventory">直接看現貨庫存</a>
+              <button id="focusOnlyInStockBtn" class="btn btn-primary" type="button">只看現貨</button>
+            </div>
+          </div>
+
+          <div class="focus-grid">
+            <article class="card focus-card">
+              <div class="focus-head">
+                <h3 class="h3">🔥 本週熱銷主機</h3>
+                <button id="focusHotBtn" class="btn btn-ghost btn-sm" type="button">看更多</button>
+              </div>
+              <div id="focusHotGrid" class="mini-grid" aria-live="polite"></div>
+              <div id="focusHotEmpty" class="muted" hidden>目前還沒有設定熱銷商品（可到管理員後台新增標籤「熱銷/熱門/推薦」）。</div>
+            </article>
+
+            <article class="card focus-card">
+              <div class="focus-head">
+                <h3 class="h3">🎯 遊戲專用配置</h3>
+                <button id="focusGameBtn" class="btn btn-ghost btn-sm" type="button">看更多</button>
+              </div>
+              <div id="focusGameGrid" class="mini-grid" aria-live="polite"></div>
+              <div id="focusGameEmpty" class="muted" hidden>目前沒有遊戲分類商品。</div>
+            </article>
           </div>
         </div>
       </section>
