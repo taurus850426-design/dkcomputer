@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>DK Computer｜現貨庫存｜加LINE下單</title>
+    <meta name="description" content="現貨 / 低庫存 / 缺貨標示清楚。搜尋很快，下單更簡單：按「加 LINE 下單」，用你的用途與預算確認最適合的配置。" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#inventory">跳到現貨庫存</a>
+
+    <header class="site-header">
+      <div class="container header-inner">
+        <div class="brand">
+          <div id="brandMark" class="brand-mark" aria-hidden="true">DK</div>
+          <div class="brand-text">
+            <div id="brandTitle" class="brand-title">DK Computer</div>
+            <div id="brandSubtitle" class="brand-subtitle">現貨庫存｜加 LINE 下單</div>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <a href="#inventory">庫存</a>
+          <a href="#all">所有商品</a>
+          <a href="#order">下單方式</a>
+          <a href="#faq">FAQ</a>
+          <a href="#google">Google 商家</a>
+          <a class="nav-cta" href="#line">加入LINE下單</a>
+          <a class="nav-admin" href="./admin.html">管理員</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section id="google" class="section hero">
+        <div class="container">
+          <div class="hero-grid">
+            <div>
+              <h1 id="heroTitle" class="h1">DK Computer｜現貨庫存｜加LINE下單</h1>
+              <p class="lead">我把「客人最在意的」放前面：庫存狀態、用途分類、重點規格。要下單或微調升級，一律到 LINE。</p>
+
+              <div class="pill-row">
+                <div class="pill">
+                  <div class="pill-title">庫存一眼懂</div>
+                  <div class="pill-body">現貨 / 低庫存 / 缺貨標示清楚，不用一直問。</div>
+                </div>
+                <div class="pill">
+                  <div class="pill-title">搜尋很快</div>
+                  <div class="pill-body">輸入型號或關鍵字，立刻找到你要的那台。</div>
+                </div>
+                <div class="pill">
+                  <div class="pill-title">下單更簡單</div>
+                  <div class="pill-body">按「加 LINE 下單」，我會用你的用途與預算確認最適合的配置。</div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="card card-soft google-card">
+              <h2 class="h2">Google 商家資訊</h2>
+              <p class="muted">直接導航到店或查看營業資訊。</p>
+
+              <div class="google-layout">
+                <div class="google-photo-wrap">
+                  <img id="shopPhoto" class="shop-photo" alt="Google 商家照片" loading="lazy" />
+                </div>
+
+                <div class="google-info">
+                  <div class="info-list">
+                    <div class="info-row">
+                      <div class="info-k">店名</div>
+                      <div class="info-v" id="shopName">哈啦電競電腦維修</div>
+                    </div>
+                    <div class="info-row">
+                      <div class="info-k">地址</div>
+                      <div class="info-v">
+                        <a id="shopAddressLink" class="link" target="_blank" rel="noreferrer">510 彰化縣員林市中山路二段 277 巷 12 弄 73 號 B1</a>
+                      </div>
+                    </div>
+                    <div class="info-row">
+                      <div class="info-k">電話</div>
+                      <div class="info-v"><a id="shopPhoneLink" class="link">0976 009 628</a></div>
+                    </div>
+                    <div class="info-row">
+                      <div class="info-k">營業時間</div>
+                      <div class="info-v muted">以 Google 商家為準</div>
+                    </div>
+                  </div>
+
+                  <div class="btn-row">
+                    <a id="shopMapBtn" class="btn btn-primary" target="_blank" rel="noreferrer">在 Google 地圖查看</a>
+                    <a id="shopCallBtn" class="btn btn-ghost">直接撥打</a>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section id="inventory" class="section">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <h2 class="h2">現貨庫存</h2>
+              <p class="muted">你可以搜尋、也可以用分類篩選。想下單就點每張卡片的 LINE 按鈕。</p>
+            </div>
+            <div class="section-actions">
+              <a class="btn btn-ghost" href="#order">下單方式</a>
+              <a class="btn btn-primary" href="#line">加入LINE｜我要下單</a>
+            </div>
+          </div>
+
+          <div class="toolbar">
+            <label class="search">
+              <span class="search-label">搜尋（型號 / CPU / GPU / 用途）</span>
+              <input id="searchInput" type="search" placeholder="例如：4060 / 7500F / 剪輯 / 辦公" autocomplete="off" />
+            </label>
+
+            <div class="filters">
+              <div class="segmented" role="tablist" aria-label="用途分類">
+                <button class="seg active" data-category="全部" type="button" role="tab">全部</button>
+                <button class="seg" data-category="遊戲" type="button" role="tab">遊戲</button>
+                <button class="seg" data-category="剪輯" type="button" role="tab">剪輯</button>
+                <button class="seg" data-category="辦公" type="button" role="tab">辦公</button>
+              </div>
+
+              <div class="select">
+                <label class="select-label" for="stockSelect">庫存狀態</label>
+                <select id="stockSelect">
+                  <option value="全部">全部</option>
+                  <option value="現貨">現貨</option>
+                  <option value="低庫存">低庫存</option>
+                  <option value="缺貨">缺貨</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid" id="inventoryGrid" aria-live="polite"></div>
+          <div class="empty" id="emptyState" hidden>
+            <div class="empty-title">找不到符合的商品</div>
+            <div class="empty-body muted">試試看換關鍵字或改篩選條件。</div>
+          </div>
+
+          <div id="all" class="section-split"></div>
+        </div>
+      </section>
+
+      <section id="order" class="section section-soft">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <h2 class="h2">下單方式</h2>
+              <p class="muted">網站用來瀏覽庫存；下單與確認細節一律到官方 LINE 完成。</p>
+            </div>
+            <div class="section-actions">
+              <a class="btn btn-primary" href="#line">加入LINE｜我要下單</a>
+            </div>
+          </div>
+
+          <div class="two-col">
+            <div class="card">
+              <h3 class="h3">你要做的</h3>
+              <ol class="ol">
+                <li>先在本頁挑一台你喜歡的</li>
+                <li>按「加 LINE 下單」</li>
+                <li>貼上商品名稱 / 截圖給我</li>
+              </ol>
+            </div>
+            <div class="card">
+              <h3 class="h3">我會幫你做的</h3>
+              <ol class="ol">
+                <li>確認庫存 / 交期</li>
+                <li>確認用途是否適合（遊戲/剪輯/辦公）</li>
+                <li>告訴你可升級選項與最終報價</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="faq" class="section">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <h2 class="h2">常見問題</h2>
+              <p class="muted">把客人最常問的先講清楚，成交會更順。</p>
+            </div>
+          </div>
+
+          <div class="faq">
+            <details class="faq-item" open>
+              <summary>價格會不會每天都不一樣？</summary>
+              <div class="faq-body muted">會。零件價格波動正常，最終以 LINE 當天報價與庫存為準。</div>
+            </details>
+            <details class="faq-item">
+              <summary>我不懂規格怎麼選？</summary>
+              <div class="faq-body muted">沒關係。你只要告訴我「用途＋預算＋螢幕解析度」，我會直接推薦最適合的方案。</div>
+            </details>
+            <details class="faq-item">
+              <summary>我想升級 RAM / SSD / 顯卡可以嗎？</summary>
+              <div class="faq-body muted">可以。加 LINE 後我會按「最划算升級順序」建議你怎麼配。</div>
+            </details>
+          </div>
+
+          <div class="footer-cta" id="line">
+            <div>
+              <div class="footer-cta-title">想下單？</div>
+              <div class="muted">點一下加入 LINE，把商品名稱或截圖丟給我。</div>
+            </div>
+            <a id="lineMainBtn" class="btn btn-primary">LINE</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <div class="muted">© <span id="copyrightYear"></span> DK Computer</div>
+        <div class="footer-links muted">
+          <a href="#order">出貨方式</a>
+          <a href="#faq">售後支援</a>
+          <a href="#line">客服時間</a>
+        </div>
+      </div>
+    </footer>
+
+    <div class="sticky-bar" role="region" aria-label="快速下單">
+      <div class="container sticky-inner">
+        <div class="sticky-text">
+          <div class="sticky-title">加入 LINE 下單</div>
+          <div class="sticky-sub muted">把商品名稱或截圖丟給我</div>
+        </div>
+        <a id="lineStickyBtn" class="btn btn-primary btn-sm">加 LINE</a>
+      </div>
+    </div>
+
+    <script src="./shared.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

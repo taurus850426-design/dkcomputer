@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>管理員｜庫存管理</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="admin-shell">
+      <div class="container">
+        <div class="admin-head">
+          <div>
+            <h1>管理員後台</h1>
+            <div class="muted">登入後可修改「商家資訊 / Google 連結 / LINE 連結 / 庫存商品」。</div>
+          </div>
+          <div class="actions">
+            <a class="btn btn-ghost" href="./index.html">回到網站</a>
+            <button id="logoutBtn" class="btn btn-ghost" type="button" hidden>登出</button>
+          </div>
+        </div>
+
+        <section id="loginCard" class="card">
+          <h2 class="h2">登入</h2>
+          <div class="form-grid" style="margin-top: 12px">
+            <div class="field">
+              <label for="username">帳號</label>
+              <input id="username" type="text" autocomplete="username" />
+            </div>
+            <div class="field">
+              <label for="password">密碼</label>
+              <input id="password" type="password" autocomplete="current-password" />
+            </div>
+            <div class="full actions">
+              <button id="loginBtn" class="btn btn-primary" type="button">登入</button>
+            </div>
+          </div>
+          <div id="loginError" class="muted" style="margin-top: 10px" hidden></div>
+        </section>
+
+        <section id="panel" hidden>
+          <div class="tabs">
+            <button class="tab active" data-tab="settings" type="button">站台/商家設定</button>
+            <button class="tab" data-tab="preview" type="button">現有庫存</button>
+            <button class="tab" data-tab="inventory" type="button">庫存管理</button>
+          </div>
+
+          <section id="tab-settings" class="card">
+            <h2 class="h2">站台/商家設定</h2>
+            <div class="form-grid" style="margin-top: 12px">
+              <div class="field full">
+                <label for="siteTitle">網站標題（首頁 H1 + 瀏覽器標題）</label>
+                <input id="siteTitle" type="text" />
+              </div>
+
+              <div class="field">
+                <label for="brandMark">品牌縮寫（左上角方塊）</label>
+                <input id="brandMarkInput" type="text" />
+              </div>
+              <div class="field">
+                <label for="brandTitle">品牌名稱（左上角）</label>
+                <input id="brandTitleInput" type="text" />
+              </div>
+              <div class="field full">
+                <label for="brandSubtitle">品牌副標</label>
+                <input id="brandSubtitleInput" type="text" />
+              </div>
+
+              <div class="field">
+                <label for="shopName">店名</label>
+                <input id="shopNameInput" type="text" />
+              </div>
+              <div class="field">
+                <label for="shopPhone">電話</label>
+                <input id="shopPhoneInput" type="text" />
+              </div>
+              <div class="field full">
+                <label for="shopAddress">地址（會顯示在首頁）</label>
+                <input id="shopAddressInput" type="text" />
+              </div>
+              <div class="field full">
+                <label for="shopMapUrl">Google 商家/地圖連結</label>
+                <input id="shopMapUrlInput" type="text" />
+                <small>你提供的連結：<span class="mono">https://share.google/8KYdQojTnx4cKgqxz</span></small>
+              </div>
+              <div class="field full">
+                <label for="shopPhotoUrl">Google 商家照片路徑/網址</label>
+                <input id="shopPhotoUrlInput" type="text" placeholder="./assets/google-photo.png" />
+                <small>建議：把照片放到本資料夾的 <span class="mono">assets</span> 內，再填相對路徑。</small>
+              </div>
+
+              <div class="field full">
+                <label for="lineUrl">LINE 連結（加入/下單）</label>
+                <input id="lineUrlInput" type="text" placeholder="https://lin.ee/zWYz2KH7" />
+              </div>
+              <div class="field full">
+                <label for="lineTpl">加 LINE 下單時要複製的訊息模板</label>
+                <input id="lineTplInput" type="text" placeholder="你好，我想詢問：{name}" />
+                <small>支援變數：<span class="mono">{name}</span></small>
+              </div>
+
+              <div class="field">
+                <label for="adminUser">管理員帳號</label>
+                <input id="adminUserInput" type="text" />
+              </div>
+              <div class="field">
+                <label for="adminPass">管理員密碼</label>
+                <input id="adminPassInput" type="text" />
+              </div>
+
+              <div class="full actions">
+                <button id="saveSettingsBtn" class="btn btn-primary" type="button">儲存設定</button>
+                <button id="resetBtn" class="btn btn-ghost" type="button">重置為預設</button>
+              </div>
+            </div>
+            <div id="settingsMsg" class="muted" style="margin-top: 10px" hidden></div>
+          </section>
+
+          <section id="tab-inventory" class="card" hidden>
+            <div class="section-head" style="margin-bottom: 8px">
+              <div>
+                <h2 class="h2">庫存管理</h2>
+                <p class="muted">新增/編輯/刪除商品後，首頁會立即更新（同一台電腦/同一個瀏覽器）。</p>
+              </div>
+              <div class="section-actions">
+                <button id="newItemBtn" class="btn btn-primary" type="button">新增商品</button>
+              </div>
+            </div>
+
+            <div class="card" style="margin: 10px 0">
+              <h3 class="h3" style="margin-bottom: 8px">編輯商品</h3>
+              <div class="form-grid">
+                <div class="field full">
+                  <label for="itemName">商品名稱</label>
+                  <input id="itemName" type="text" />
+                </div>
+                <div class="field">
+                  <label for="itemCategory">用途分類</label>
+                  <select id="itemCategory">
+                    <option value="遊戲">遊戲</option>
+                    <option value="剪輯">剪輯</option>
+                    <option value="辦公">辦公</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="itemStock">庫存狀態</label>
+                  <select id="itemStock">
+                    <option value="現貨">現貨</option>
+                    <option value="低庫存">低庫存</option>
+                    <option value="缺貨">缺貨</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label for="itemCpu">CPU</label>
+                  <input id="itemCpu" type="text" />
+                </div>
+                <div class="field">
+                  <label for="itemGpu">GPU</label>
+                  <input id="itemGpu" type="text" />
+                </div>
+                <div class="field">
+                  <label for="itemRam">RAM</label>
+                  <input id="itemRam" type="text" />
+                </div>
+                <div class="field">
+                  <label for="itemSsd">SSD</label>
+                  <input id="itemSsd" type="text" />
+                </div>
+
+                <div class="field">
+                  <label for="itemPrice">價格（NT$）</label>
+                  <input id="itemPrice" type="number" min="0" step="100" />
+                </div>
+                <div class="field full">
+                  <label for="itemTags">標籤（用逗號分隔）</label>
+                  <input id="itemTags" type="text" placeholder="2K, 高CP, 剪輯" />
+                </div>
+                <div class="field full">
+                  <label for="itemNote">備註</label>
+                  <input id="itemNote" type="text" />
+                </div>
+                <div class="field full">
+                  <label for="itemPhotos">商品相片（最多 5 張）</label>
+                  <input id="itemPhotos" type="file" accept="image/*" multiple />
+                  <small>選擇檔案後會自動轉成可保存的 URL（存本機）。</small>
+                </div>
+                <div class="full">
+                  <div id="photoStrip" class="photo-strip"></div>
+                  <div id="photoHint" class="muted" style="margin-top: 8px" hidden></div>
+                </div>
+
+                <div class="full actions">
+                  <button id="saveItemBtn" class="btn btn-primary" type="button">儲存商品</button>
+                  <button id="cancelEditBtn" class="btn btn-ghost" type="button">取消</button>
+                </div>
+                <div class="full muted" id="itemMsg" hidden></div>
+              </div>
+            </div>
+
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>名稱</th>
+                  <th class="nowrap">分類</th>
+                  <th class="nowrap">庫存</th>
+                  <th>規格</th>
+                  <th class="nowrap">價格</th>
+                  <th class="nowrap" style="text-align: right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="itemsTbody"></tbody>
+            </table>
+          </section>
+
+          <section id="tab-preview" class="card" hidden>
+            <div class="section-head" style="margin-bottom: 10px">
+              <div>
+                <h2 class="h2">現有庫存</h2>
+                <p class="muted">這裡是「目前庫存」的展示預覽（可直接按卡片上的「編輯」快速跳到編輯表單）。</p>
+              </div>
+              <div class="section-actions">
+                <a class="btn btn-ghost" href="./index.html#inventory" target="_blank" rel="noreferrer">在首頁查看</a>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <label class="search">
+                <span class="search-label">搜尋（型號 / CPU / GPU / 用途）</span>
+                <input id="previewSearchInput" type="search" placeholder="例如：4060 / 7500F / 剪輯 / 辦公" autocomplete="off" />
+              </label>
+
+              <div class="filters">
+                <div class="segmented" role="tablist" aria-label="用途分類（預覽）">
+                  <button class="seg active" data-category="全部" type="button" role="tab">全部</button>
+                  <button class="seg" data-category="遊戲" type="button" role="tab">遊戲</button>
+                  <button class="seg" data-category="剪輯" type="button" role="tab">剪輯</button>
+                  <button class="seg" data-category="辦公" type="button" role="tab">辦公</button>
+                </div>
+
+                <div class="select">
+                  <label class="select-label" for="previewStockSelect">庫存狀態</label>
+                  <select id="previewStockSelect">
+                    <option value="全部">全部</option>
+                    <option value="現貨">現貨</option>
+                    <option value="低庫存">低庫存</option>
+                    <option value="缺貨">缺貨</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid" id="previewGrid" aria-live="polite"></div>
+            <div class="empty" id="previewEmptyState" hidden>
+              <div class="empty-title">找不到符合的商品</div>
+              <div class="empty-body muted">試試看換關鍵字或改篩選條件。</div>
+            </div>
+          </section>
+        </section>
+      </div>
+    </main>
+
+    <script src="./shared.js"></script>
+    <script src="./admin.js"></script>
+  </body>
+</html>
+
