@@ -298,17 +298,23 @@ window.DK = {
   function setOpen(open) {
     nav.classList.toggle("open", open);
     btn.setAttribute("aria-expanded", open ? "true" : "false");
+    btn.textContent = open ? "關閉" : "選單";
   }
 
-  btn.addEventListener("click", (e) => {
+  function toggle(e) {
     e.preventDefault();
+    e.stopPropagation?.();
     const open = !nav.classList.contains("open");
     setOpen(open);
-  });
+  }
+
+  // iOS/Safari：同時綁 click + touchend 更穩
+  btn.addEventListener("click", toggle);
+  btn.addEventListener("touchend", toggle, { passive: false });
 
   // 點選連結後自動關閉
   nav.addEventListener("click", (e) => {
-    const a = e.target?.closest?.("a");
+    const a = e.target && e.target.closest ? e.target.closest("a") : null;
     if (!a) return;
     setOpen(false);
   });

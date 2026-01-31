@@ -522,16 +522,18 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
   .grid{ grid-template-columns: 1fr; }
   /* Hero 三塊特色：改成左→右滑動（手機） */
   .pill-row{
-    grid-template-columns: none;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(240px, 88%);
+    display:flex;
+    flex-wrap: nowrap;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
     scroll-snap-type: x mandatory;
     padding-bottom: 6px;
   }
-  .pill{ scroll-snap-align: start; }
+  .pill{
+    scroll-snap-align: start;
+    flex: 0 0 88%;
+  }
 
   /* 手機選單：顯示選單按鈕，nav 變下拉 */
   .mobile-menu-btn{ display:inline-flex; }
@@ -541,6 +543,7 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
     left: 0;
     right: 0;
     top: calc(100% + 10px);
+    z-index: 80;
     padding: 10px;
     background: rgba(255,255,255,0.92);
     border: 1px solid rgba(17,24,39,0.10);
