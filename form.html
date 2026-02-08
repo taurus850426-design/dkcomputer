@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>不知道怎麼選｜需求表單｜二手電腦</title>
+    <meta name="description" content="填寫用途、預算、是否接受二手，我們會依需求推薦最適合的配置。" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css?v=20260201" />
+  </head>
+  <body class="theme-apple">
+    <header class="site-header">
+      <div class="container header-inner">
+        <div class="brand">
+          <div id="brandMark" class="brand-mark" aria-hidden="true"><img src="./assets/dk-logo.png" alt="DK" class="brand-logo" /></div>
+          <div class="brand-text">
+            <div id="brandTitle" class="brand-title">二手電腦・實測交付</div>
+            <div id="brandSubtitle" class="brand-subtitle">依用途配機，不亂賣、不踩雷</div>
+          </div>
+        </div>
+
+        <button id="mobileMenuBtn" class="btn btn-ghost btn-sm mobile-menu-btn" type="button" aria-controls="siteNav" aria-expanded="false">選單</button>
+
+        <nav id="siteNav" class="nav" aria-label="主選單">
+          <a href="./index.html">首頁</a>
+          <a href="./machine.html">整機販售</a>
+          <a href="./form.html">不知道怎麼選</a>
+          <a id="navLineBtn" class="nav-cta" href="#">加 LINE</a>
+          <a class="nav-admin" href="./admin.html">管理員</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="section">
+        <div class="container container-form">
+          <div class="page-head">
+            <h1 class="h1">不知道怎麼選？</h1>
+            <p class="lead muted">填完表單，加 LINE 傳給我。客人填完，你已經贏一半。</p>
+          </div>
+
+          <form id="demandForm" class="form-card">
+            <div class="field">
+              <label for="usage">用途 <span class="required">*</span></label>
+              <select id="usage" required>
+                <option value="">請選擇</option>
+                <option value="文書">文書</option>
+                <option value="遊戲">遊戲</option>
+                <option value="FiveM">FiveM</option>
+                <option value="吃雞">吃雞（PUBG 等）</option>
+                <option value="剪輯">剪輯</option>
+                <option value="其他">其他</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="budget">預算區間 <span class="required">*</span></label>
+              <select id="budget" required>
+                <option value="">請選擇</option>
+                <option value="3000-6000">$3,000–6,000（文書）</option>
+                <option value="7000-12000">$7,000–12,000（遊戲入門）</option>
+                <option value="13000-20000">$13,000–20,000（遊戲中階）</option>
+                <option value="18000+">$18,000+（工作／效能）</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>是否接受二手</label>
+              <div class="radio-row">
+                <label class="radio-wrap">
+                  <input type="radio" name="used" value="是" checked />
+                  <span>是</span>
+                </label>
+                <label class="radio-wrap">
+                  <input type="radio" name="used" value="否" />
+                  <span>否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>有沒有舊電腦</label>
+              <div class="radio-row">
+                <label class="radio-wrap">
+                  <input type="radio" name="oldPC" value="有" />
+                  <span>有</span>
+                </label>
+                <label class="radio-wrap">
+                  <input type="radio" name="oldPC" value="沒有" checked />
+                  <span>沒有</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="lineId">LINE ID <span class="required">*</span></label>
+              <input type="text" id="lineId" placeholder="你的 LINE ID 或手機號" required />
+            </div>
+
+            <div class="field">
+              <label for="note">備註（選填）</label>
+              <textarea id="note" rows="3" placeholder="例如：想玩 2K 遊戲、需要 WiFi..."></textarea>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary btn-lg">填完，加 LINE 傳送</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <div class="muted">© <span id="copyrightYear"></span> 二手電腦・實測交付</div>
+        <div class="footer-links muted">
+          <a href="./index.html">首頁</a>
+          <a href="./machine.html">整機販售</a>
+          <a href="./admin.html">管理員</a>
+        </div>
+      </div>
+    </footer>
+
+    <script src="./shared.js?v=20260201"></script>
+    <script src="./form.js?v=20260201"></script>
+  </body>
+</html>

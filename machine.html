@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>整機販售｜二手電腦・依用途配機</title>
+    <meta name="description" content="整機販售：文書、遊戲入門、遊戲中階、工作效能。依用途分類，價格約略區間，詳細配備請加 LINE 詢問。" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css?v=20260201" />
+  </head>
+  <body class="theme-apple">
+    <header class="site-header">
+      <div class="container header-inner">
+        <div class="brand">
+          <div id="brandMark" class="brand-mark" aria-hidden="true"><img src="./assets/dk-logo.png" alt="DK" class="brand-logo" /></div>
+          <div class="brand-text">
+            <div id="brandTitle" class="brand-title">二手電腦・實測交付</div>
+            <div id="brandSubtitle" class="brand-subtitle">依用途配機，不亂賣、不踩雷</div>
+          </div>
+        </div>
+
+        <button id="mobileMenuBtn" class="btn btn-ghost btn-sm mobile-menu-btn" type="button" aria-controls="siteNav" aria-expanded="false">選單</button>
+
+        <nav id="siteNav" class="nav" aria-label="主選單">
+          <a href="./index.html">首頁</a>
+          <a href="./machine.html">整機販售</a>
+          <a href="./form.html">不知道怎麼選</a>
+          <a id="navLineBtn" class="nav-cta" href="#">加 LINE</a>
+          <a class="nav-admin" href="./admin.html">管理員</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="section">
+        <div class="container">
+          <div class="page-head">
+            <h1 id="machinePageTitle" class="h1">整機販售</h1>
+            <p id="machinePageSub" class="lead muted">依用途分類，不寫一堆規格。價格是「約」，詳細配備請加 LINE 詢問。</p>
+          </div>
+
+          <!-- 四張 9:16 分類卡片，橫向排列 -->
+          <div class="cat-cards-row" role="tablist" aria-label="用途分類">
+            <button type="button" class="cat-card" data-cat="office" role="tab">
+              <span class="cat-card-bg" aria-hidden="true"></span>
+              <span class="cat-card-num">①</span>
+              <span class="cat-card-title">文書／上網／學生</span>
+              <span class="cat-card-price">NT$ 3,000–6,000</span>
+            </button>
+            <button type="button" class="cat-card" data-cat="game-entry" role="tab">
+              <span class="cat-card-bg" aria-hidden="true"></span>
+              <span class="cat-card-num">②</span>
+              <span class="cat-card-title">遊戲入門</span>
+              <span class="cat-card-price">NT$ 7,000–12,000</span>
+            </button>
+            <button type="button" class="cat-card" data-cat="game-mid" role="tab">
+              <span class="cat-card-bg" aria-hidden="true"></span>
+              <span class="cat-card-num">③</span>
+              <span class="cat-card-title">遊戲中階（主力）</span>
+              <span class="cat-card-price">NT$ 13,000–20,000</span>
+            </button>
+            <button type="button" class="cat-card" data-cat="work" role="tab">
+              <span class="cat-card-bg" aria-hidden="true"></span>
+              <span class="cat-card-num">④</span>
+              <span class="cat-card-title">工作／效能取向</span>
+              <span class="cat-card-price">NT$ 18,000+</span>
+            </button>
+            <button type="button" class="cat-card" data-cat="peripherals" role="tab">
+              <span class="cat-card-bg" aria-hidden="true"></span>
+              <span class="cat-card-num">⑤</span>
+              <span class="cat-card-title">電腦周邊</span>
+              <span class="cat-card-price">價格依品項</span>
+            </button>
+          </div>
+
+          <!-- 點選後顯示的商品區 -->
+          <div id="productsSection" class="products-section" hidden>
+            <h2 id="productsSectionTitle" class="h2 products-section-title"></h2>
+            <div id="productsGrid" class="machine-cards"></div>
+            <div id="productsEmpty" class="products-empty muted" hidden>此分類目前沒有上架商品，加 LINE 詢問可客製配機。</div>
+          </div>
+
+          <div id="productsPrompt" class="products-prompt muted">點選上方分類查看商品</div>
+        </div>
+      </section>
+
+      <section class="section section-soft">
+        <div class="container">
+          <div class="contact-block">
+            <div>
+              <div class="contact-title">想詢問配備或報價？</div>
+              <div class="muted">加 LINE，把用途跟預算告訴我。</div>
+            </div>
+            <a id="lineMainBtn" class="btn btn-primary btn-lg">加 LINE</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <div class="muted">© <span id="copyrightYear"></span> 二手電腦・實測交付</div>
+        <div class="footer-links muted">
+          <a href="./index.html">首頁</a>
+          <a href="./form.html">需求表單</a>
+          <a href="./admin.html">管理員</a>
+        </div>
+      </div>
+    </footer>
+
+    <div class="sticky-bar">
+      <div class="container sticky-inner">
+        <div class="sticky-text">
+          <div class="sticky-title">加 LINE 詢問配備</div>
+          <div class="sticky-sub muted">價格約略，以當天報價為準</div>
+        </div>
+        <a id="lineStickyBtn" class="btn btn-primary btn-sm">加 LINE</a>
+      </div>
+    </div>
+
+    <script src="./shared.js?v=20260201"></script>
+    <script src="./machine.js?v=20260201"></script>
+  </body>
+</html>

@@ -46,9 +46,671 @@
 
         <section id="panel" hidden>
           <div class="tabs">
+            <button class="tab active" data-tab="inv" type="button">庫存管理</button>
+            <button class="tab" data-tab="publish" type="button">上架管理</button>
+            <button class="tab" data-tab="orders" type="button">訂單管理</button>
+            <button class="tab" data-tab="reports" type="button">報表管理</button>
+            <button class="tab" data-tab="frontend" type="button">前台管理</button>
+          </div>
+
+          <!-- ① 庫存管理（Inventory Management） -->
+          <section id="tab-inv" class="card">
+            <div class="section-head" style="margin-bottom: 10px">
+              <div>
+                <h2 class="h2">庫存管理（Inventory Management）</h2>
+                <p class="muted">CRUD + 批次匯入 + 自動計算可售數量（在庫才可售）。</p>
+              </div>
+              <div class="section-actions">
+                <button id="invNewBtn" class="btn btn-primary" type="button">新增商品</button>
+                <button id="invBatchBtn" class="btn btn-ghost" type="button">批次匯入</button>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <label class="search">
+                <span class="search-label">搜尋（ID / 名稱 / 類別 / 批次來源）</span>
+                <input id="invSearch" type="search" placeholder="例如：GPU-3060TI / 3060Ti / 網咖" autocomplete="off" />
+              </label>
+              <div class="filters">
+                <div class="select">
+                  <label class="select-label" for="invStatusFilter">狀態</label>
+                  <select id="invStatusFilter">
+                    <option value="全部">全部</option>
+                    <option value="在庫">在庫</option>
+                    <option value="測試中">測試中</option>
+                    <option value="已預定">已預定</option>
+                    <option value="已售出">已售出</option>
+                    <option value="不良品">不良品</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <table class="table">
+              <thead>
+                <tr>
+                  <th class="nowrap">ID</th>
+                  <th>名稱</th>
+                  <th class="nowrap">類別</th>
+                  <th class="nowrap">庫存</th>
+                  <th class="nowrap">可售</th>
+                  <th class="nowrap">狀態</th>
+                  <th class="nowrap">成本</th>
+                  <th class="nowrap">建議</th>
+                  <th class="nowrap">實際</th>
+                  <th class="nowrap">清潔</th>
+                  <th>批次來源</th>
+                  <th class="nowrap" style="text-align:right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="invTbody"></tbody>
+            </table>
+
+            <div id="invEditor" class="card" style="margin-top: 12px" hidden>
+              <div class="section-head" style="margin-bottom: 10px">
+                <div>
+                  <h3 class="h3" style="margin: 0">新增 / 編輯商品</h3>
+                  <div id="invEditorTitle" class="muted"></div>
+                </div>
+                <div class="section-actions">
+                  <button id="invCloseBtn" class="btn btn-ghost" type="button">關閉</button>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <div class="field full">
+                  <label>ID（自動生成）</label>
+                  <div id="invIdPreview" class="muted">-</div>
+                </div>
+                <div class="field">
+                  <label for="invIdPrefix">ID 前綴（例如 GPU）</label>
+                  <input id="invIdPrefix" type="text" placeholder="GPU" />
+                </div>
+                <div class="field">
+                  <label for="invIdModel">型號碼（用於 ID，例如 3060TI）</label>
+                  <input id="invIdModel" type="text" placeholder="3060TI" />
+                </div>
+                <div class="field full">
+                  <label for="invName">商品名稱</label>
+                  <input id="invName" type="text" />
+                </div>
+                <div class="field">
+                  <label for="invCategory">商品類別</label>
+                  <input id="invCategory" type="text" placeholder="顯卡 / 主機 / 周邊..." />
+                </div>
+                <div class="field">
+                  <label for="invQty">庫存數量</label>
+                  <input id="invQty" type="number" min="0" step="1" />
+                </div>
+                <div class="field">
+                  <label for="invCost">成本（單價）</label>
+                  <input id="invCost" type="number" min="0" step="1" />
+                </div>
+                <div class="field">
+                  <label for="invSuggested">建議售價</label>
+                  <input id="invSuggested" type="number" min="0" step="1" />
+                </div>
+                <div class="field">
+                  <label for="invActual">實際售價（售出時填）</label>
+                  <input id="invActual" type="number" min="0" step="1" />
+                </div>
+                <div class="field">
+                  <label for="invStatus">商品狀態</label>
+                  <select id="invStatus">
+                    <option value="在庫">在庫</option>
+                    <option value="測試中">測試中</option>
+                    <option value="已預定">已預定</option>
+                    <option value="已售出">已售出</option>
+                    <option value="不良品">不良品</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="invCleaning">清潔狀態</label>
+                  <select id="invCleaning">
+                    <option value="未清潔">未清潔</option>
+                    <option value="已清潔">已清潔</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="invBatchSource">批次來源</label>
+                  <input id="invBatchSource" type="text" placeholder="網咖 / 客收 / 通路..." />
+                </div>
+                <div class="field full">
+                  <label for="invNote">備註</label>
+                  <input id="invNote" type="text" />
+                </div>
+                <div class="field">
+                  <label for="invBench">測試：跑分</label>
+                  <input id="invBench" type="text" placeholder="3DMark 12500" />
+                </div>
+                <div class="field">
+                  <label for="invTemp">測試：溫度</label>
+                  <input id="invTemp" type="text" placeholder="78°C" />
+                </div>
+                <div class="field full">
+                  <label for="invVideoUrl">測試：影片 URL</label>
+                  <input id="invVideoUrl" type="text" placeholder="https://..." />
+                </div>
+
+                <div class="full actions">
+                  <button id="invSaveBtn" class="btn btn-primary" type="button">儲存</button>
+                  <button id="invDeleteBtn" class="btn btn-danger" type="button" hidden>刪除</button>
+                </div>
+                <div id="invMsg" class="full muted" hidden></div>
+              </div>
+            </div>
+
+            <div id="invBatch" class="card" style="margin-top: 12px" hidden>
+              <div class="section-head" style="margin-bottom: 10px">
+                <div>
+                  <h3 class="h3" style="margin: 0">批次匯入（一次增加大量商品）</h3>
+                  <div class="muted">每行一筆：前綴,型號碼,名稱,類別,數量,成本,建議售價,批次來源</div>
+                </div>
+                <div class="section-actions">
+                  <button id="invBatchCloseBtn" class="btn btn-ghost" type="button">關閉</button>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="field full">
+                  <label for="invBatchText">貼上批次資料</label>
+                  <textarea id="invBatchText" rows="6" placeholder="GPU,3060TI,RTX 3060 Ti 8G,顯卡,20,6500,7900,網咖"></textarea>
+                </div>
+                <div class="full actions">
+                  <button id="invBatchImportBtn" class="btn btn-primary" type="button">匯入</button>
+                </div>
+                <div id="invBatchMsg" class="full muted" hidden></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ② 上架管理（Publish Management） -->
+          <section id="tab-publish" class="card" hidden>
+            <div class="section-head" style="margin-bottom: 10px">
+              <div>
+                <h2 class="h2">上架管理</h2>
+                <p class="muted">目前前台架上的商品如下；若要新增，請點右上角「上架商品」。</p>
+              </div>
+              <div class="section-actions">
+                <button id="publishSubmitBtn" class="btn btn-primary" type="button">上架商品</button>
+              </div>
+            </div>
+            <div id="publishMsg" class="muted" style="margin-bottom: 12px" hidden></div>
+
+            <div id="publishWebGrid" class="publish-web-grid"></div>
+            <p id="publishWebEmpty" class="muted" style="margin: 8px 0 0" hidden>目前沒有架上商品，請點右上角「上架商品」新增。</p>
+
+            <div id="publishEditor" class="card" style="margin-top: 12px" hidden>
+              <div class="section-head" style="margin-bottom: 10px">
+                <div>
+                  <h3 class="h3" style="margin: 0">編輯架上商品</h3>
+                  <div id="publishEditorTitle" class="muted"></div>
+                </div>
+                <div class="section-actions">
+                  <button id="publishEditorCloseBtn" class="btn btn-ghost" type="button">關閉</button>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="field full">
+                  <label for="webEditName">商品名稱</label>
+                  <input id="webEditName" type="text" />
+                </div>
+                <div class="field">
+                  <label for="webEditCategory">分類</label>
+                  <select id="webEditCategory">
+                    <option value="遊戲">遊戲</option>
+                    <option value="剪輯">剪輯</option>
+                    <option value="辦公">辦公</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="webEditStockStatus">庫存狀態</label>
+                  <select id="webEditStockStatus">
+                    <option value="現貨">現貨</option>
+                    <option value="低庫存">低庫存</option>
+                    <option value="缺貨">缺貨</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="webEditPrice">售價（NT$）</label>
+                  <input id="webEditPrice" type="number" min="0" step="100" />
+                </div>
+                <div class="field">
+                  <label for="webEditQty">剩餘數量</label>
+                  <input id="webEditQty" type="number" min="0" step="1" />
+                </div>
+                <div class="field full">
+                  <label for="webEditNote">備注</label>
+                  <input id="webEditNote" type="text" />
+                </div>
+                <div class="full actions">
+                  <button id="webEditSaveBtn" class="btn btn-primary" type="button">儲存</button>
+                  <button id="webEditOffBtn" class="btn btn-ghost" type="button">下架</button>
+                </div>
+                <div id="publishEditorMsg" class="full muted" hidden></div>
+              </div>
+            </div>
+
+            <div id="publishFormCard" class="card" style="margin: 16px 0 12px" hidden>
+              <h3 class="h3" style="margin-bottom: 10px">上架商品規格</h3>
+              <div class="form-grid">
+                <div class="field full">
+                  <label for="publishProductName">商品名稱</label>
+                  <input id="publishProductName" type="text" placeholder="例如：R5 7500F / RTX 4060 遊戲主機" />
+                </div>
+                <div class="field full">
+                  <label for="publishSpecSummary">規格（選填，摘要說明）</label>
+                  <input id="publishSpecSummary" type="text" placeholder="例如：高CP 2K 遊戲機" />
+                </div>
+                <div class="publish-specs-grid">
+                <div class="field publish-spec-block">
+                  <label>處理器 CPU</label>
+                  <div class="row-flex row-compact">
+                    <select id="publishCpu" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                    <input id="publishCpuCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    <select id="publishCpuCondition" class="publish-condition" title="全新／二手"><option value="全新">全新</option><option value="二手">二手</option></select>
+                    <input id="publishCpuPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  </div>
+                  <span id="publishCpuInfo" class="muted small"></span>
+                  <input id="publishCpuRemark" type="text" placeholder="備注" class="publish-remark" />
+                </div>
+                <div class="field publish-spec-block">
+                  <label>主機板 MB</label>
+                  <div class="row-flex row-compact">
+                    <select id="publishMb" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                    <input id="publishMbCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    <select id="publishMbCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                    <input id="publishMbPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  </div>
+                  <span id="publishMbInfo" class="muted small"></span>
+                  <input id="publishMbRemark" type="text" placeholder="備注" class="publish-remark" />
+                </div>
+                <div class="field publish-spec-block">
+                  <label>記憶體 RAM</label>
+                  <div class="row-flex row-compact">
+                    <select id="publishRam" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                    <input id="publishRamCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    <select id="publishRamCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                    <input id="publishRamPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  </div>
+                  <span id="publishRamInfo" class="muted small"></span>
+                  <input id="publishRamRemark" type="text" placeholder="備注" class="publish-remark" />
+                </div>
+                <div class="field publish-spec-block">
+                  <label>硬碟</label>
+                  <div class="row-flex row-compact">
+                    <select id="publishHdd" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                    <input id="publishHddCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    <select id="publishHddCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                    <input id="publishHddPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  </div>
+                  <span id="publishHddInfo" class="muted small"></span>
+                  <input id="publishHddRemark" type="text" placeholder="備注" class="publish-remark" />
+                </div>
+                <div class="field publish-spec-block">
+                  <label>顯示卡 VGA</label>
+                  <div class="row-flex row-compact">
+                    <select id="publishVga" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                    <input id="publishVgaCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    <select id="publishVgaCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                    <input id="publishVgaPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  </div>
+                  <span id="publishVgaInfo" class="muted small"></span>
+                  <input id="publishVgaRemark" type="text" placeholder="備注" class="publish-remark" />
+                </div>
+                <div class="field publish-spec-block">
+                  <label>電源供應器</label>
+                  <div class="row-flex row-compact">
+                    <select id="publishPsu" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                    <input id="publishPsuCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    <select id="publishPsuCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                    <input id="publishPsuPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  </div>
+                  <span id="publishPsuInfo" class="muted small"></span>
+                  <input id="publishPsuRemark" type="text" placeholder="備注" class="publish-remark" />
+                </div>
+                <div class="field publish-spec-block">
+                  <label>機殼</label>
+                  <div class="row-flex row-compact">
+                    <select id="publishCase" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                    <input id="publishCaseCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    <select id="publishCaseCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                    <input id="publishCasePrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  </div>
+                  <span id="publishCaseInfo" class="muted small"></span>
+                  <input id="publishCaseRemark" type="text" placeholder="備注" class="publish-remark" />
+                </div>
+                <div class="field publish-spec-block">
+                  <label>螢幕</label>
+                  <div class="row-flex row-compact">
+                    <select id="publishMonitor" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                    <input id="publishMonitorCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    <select id="publishMonitorCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                    <input id="publishMonitorPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  </div>
+                  <span id="publishMonitorInfo" class="muted small"></span>
+                  <input id="publishMonitorRemark" type="text" placeholder="備注" class="publish-remark" />
+                </div>
+                <div class="field publish-spec-block">
+                  <label>作業系統</label>
+                  <div class="row-flex row-compact">
+                    <select id="publishOs" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                    <input id="publishOsCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    <select id="publishOsCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                    <input id="publishOsPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  </div>
+                  <span id="publishOsInfo" class="muted small"></span>
+                  <input id="publishOsRemark" type="text" placeholder="備注" class="publish-remark" />
+                </div>
+                </div>
+                <div class="field full">
+                  <label>預估成本總計</label>
+                  <div id="publishTotalCost" class="muted">NT$ 0</div>
+                </div>
+                <div class="field full">
+                  <label>出售金額（各規格定價加總，自動計算）</label>
+                  <input id="publishPrice" type="text" readonly class="publish-sale-total" />
+                </div>
+                <div class="field">
+                  <label for="publishQty">剩餘數量</label>
+                  <input id="publishQty" type="number" min="0" step="1" value="1" placeholder="1" />
+                </div>
+                <div class="field full">
+                  <label for="publishPhotosInput">商品照片（1–5 張，選填，選檔後自動轉成 URL）</label>
+                  <input id="publishPhotosInput" type="file" accept="image/*" multiple />
+                  <div id="publishPhotoStrip" class="photo-strip" style="margin-top: 8px"></div>
+                  <div id="publishPhotoHint" class="muted small" style="margin-top: 6px" hidden></div>
+                </div>
+                <div class="full actions" style="justify-content: flex-end; margin-top: 16px;">
+                  <button id="publishConfirmBtn" class="btn btn-primary" type="button">確認上架</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ③ 訂單管理（Order Management） -->
+          <section id="tab-orders" class="card" hidden>
+            <div class="section-head" style="margin-bottom: 10px">
+              <div>
+                <h2 class="h2">訂單管理（Order Management）</h2>
+                <p class="muted">成本自動帶入、毛利自動計算，成交後自動扣庫存。</p>
+              </div>
+              <div class="section-actions">
+                <button id="ordNewBtn" class="btn btn-primary" type="button">新增訂單</button>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <label class="search">
+                <span class="search-label">搜尋（訂單號 / 客戶 / 商品ID）</span>
+                <input id="ordSearch" type="search" placeholder="例如：ORD-20260201 / GPU-3060TI" autocomplete="off" />
+              </label>
+              <div class="filters">
+                <div class="select">
+                  <label class="select-label" for="ordShipFilter">出貨</label>
+                  <select id="ordShipFilter">
+                    <option value="全部">全部</option>
+                    <option value="未出貨">未出貨</option>
+                    <option value="已出貨">已出貨</option>
+                    <option value="已取消">已取消</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <table class="table">
+              <thead>
+                <tr>
+                  <th class="nowrap">訂單編號</th>
+                  <th class="nowrap">成交日期</th>
+                  <th>客戶</th>
+                  <th class="nowrap">商品 ID</th>
+                  <th class="nowrap">數量</th>
+                  <th class="nowrap">售價</th>
+                  <th class="nowrap">成本</th>
+                  <th class="nowrap">毛利</th>
+                  <th class="nowrap">出貨</th>
+                  <th class="nowrap" style="text-align:right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="ordTbody"></tbody>
+            </table>
+
+            <div id="ordEditor" class="card" style="margin-top: 12px" hidden>
+              <div class="section-head" style="margin-bottom: 10px">
+                <div>
+                  <h3 class="h3" style="margin: 0">新增 / 編輯訂單</h3>
+                  <div id="ordEditorTitle" class="muted"></div>
+                </div>
+                <div class="section-actions">
+                  <button id="ordCloseBtn" class="btn btn-ghost" type="button">關閉</button>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="field">
+                  <label for="ordDate">成交日期</label>
+                  <input id="ordDate" type="date" />
+                </div>
+                <div class="field">
+                  <label for="ordShip">出貨狀態</label>
+                  <select id="ordShip">
+                    <option value="未出貨">未出貨</option>
+                    <option value="已出貨">已出貨</option>
+                    <option value="已取消">已取消</option>
+                  </select>
+                </div>
+                <div class="field full">
+                  <label for="ordCustomer">客戶資訊</label>
+                  <input id="ordCustomer" type="text" placeholder="名稱/暱稱/電話/LINE..." />
+                </div>
+                <div class="field">
+                  <label for="ordItemId">商品 ID</label>
+                  <input id="ordItemId" type="text" placeholder="例如：GPU-3060TI-001" />
+                </div>
+                <div class="field">
+                  <label for="ordQty">數量</label>
+                  <input id="ordQty" type="number" min="1" step="1" />
+                </div>
+                <div class="field">
+                  <label for="ordPrice">售價（總額）</label>
+                  <input id="ordPrice" type="number" min="0" step="1" />
+                </div>
+                <div class="field">
+                  <label>成本（自動）</label>
+                  <div id="ordCost" class="muted">-</div>
+                </div>
+                <div class="field">
+                  <label>毛利（自動）</label>
+                  <div id="ordProfit" class="muted">-</div>
+                </div>
+                <div class="field full">
+                  <label for="ordNote">備註</label>
+                  <input id="ordNote" type="text" />
+                </div>
+
+                <div class="full actions">
+                  <button id="ordSaveBtn" class="btn btn-primary" type="button">儲存</button>
+                  <button id="ordDeleteBtn" class="btn btn-danger" type="button" hidden>刪除</button>
+                </div>
+                <div id="ordMsg" class="full muted" hidden></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ⑤ 前台管理（外觀／文字） -->
+          <section id="tab-frontend" class="card" hidden>
+            <div class="section-head" style="margin-bottom: 10px">
+              <div>
+                <h2 class="h2">前台管理</h2>
+                <p class="muted">修改首頁、整機販售等頁面的文字與外觀設定。</p>
+              </div>
+              <div class="section-actions">
+                <a class="btn btn-ghost" href="./index.html" target="_blank" rel="noreferrer">預覽首頁</a>
+                <button id="frontendSaveBtn" class="btn btn-primary" type="button">儲存設定</button>
+              </div>
+            </div>
+
+            <div class="form-grid" style="margin-top: 12px">
+              <div class="field full">
+                <label for="feSiteTitle">網站標題（瀏覽器標籤）</label>
+                <input id="feSiteTitle" type="text" placeholder="二手電腦・實測交付｜依用途配機，不亂賣、不踩雷" />
+              </div>
+
+              <div class="field full">
+                <label class="h3" style="margin: 8px 0 4px">品牌（左上角）</label>
+              </div>
+              <div class="field">
+                <label for="feBrandMark">品牌縮寫</label>
+                <input id="feBrandMark" type="text" placeholder="DK" />
+              </div>
+              <div class="field">
+                <label for="feBrandTitle">品牌名稱</label>
+                <input id="feBrandTitle" type="text" placeholder="二手電腦・實測交付" />
+              </div>
+              <div class="field full">
+                <label for="feBrandSubtitle">品牌副標</label>
+                <input id="feBrandSubtitle" type="text" placeholder="依用途配機，不亂賣、不踩雷" />
+              </div>
+
+              <div class="field full">
+                <label class="h3" style="margin: 16px 0 4px">首頁首屏</label>
+              </div>
+              <div class="field full">
+                <label for="feHeroTagline">主標語</label>
+                <input id="feHeroTagline" type="text" placeholder="二手電腦・實測交付" />
+              </div>
+              <div class="field full">
+                <label for="feHeroSub">副標語</label>
+                <input id="feHeroSub" type="text" placeholder="依用途配機，不亂賣、不踩雷" />
+              </div>
+              <div class="field">
+                <label for="feHeroBtn1">主按鈕 1</label>
+                <input id="feHeroBtn1" type="text" placeholder="🔥 我要買整機" />
+              </div>
+              <div class="field">
+                <label for="feHeroBtn2">主按鈕 2</label>
+                <input id="feHeroBtn2" type="text" placeholder="🧠 不知道怎麼選（需求表單）" />
+              </div>
+              <div class="field">
+                <label for="feHeroBtn3">主按鈕 3</label>
+                <input id="feHeroBtn3" type="text" placeholder="🔧 電腦有問題要維修" />
+              </div>
+
+              <div class="field full">
+                <label class="h3" style="margin: 16px 0 4px">信任建立區塊</label>
+              </div>
+              <div class="field full">
+                <label for="feTrustTitle">標題</label>
+                <input id="feTrustTitle" type="text" placeholder="所有整機皆" />
+              </div>
+              <div class="field full">
+                <label for="feTrustItems">項目（每行一項）</label>
+                <textarea id="feTrustItems" rows="5" placeholder="實測
+清潔
+交付前檢查
+不賣不適合用途的配法
+有問題可回來處理"></textarea>
+              </div>
+              <div class="field full">
+                <label for="feTrustNote">備註說明</label>
+                <input id="feTrustNote" type="text" placeholder="官網會寫清楚：不適合誰、不能幹嘛、不賣的情況。奧客會自己離開。" />
+              </div>
+
+              <div class="field full">
+                <label class="h3" style="margin: 16px 0 4px">聯絡區塊</label>
+              </div>
+              <div class="field">
+                <label for="feContactTitle">聯絡標題</label>
+                <input id="feContactTitle" type="text" placeholder="聯絡我們" />
+              </div>
+              <div class="field full">
+                <label for="feContactSub">聯絡說明</label>
+                <input id="feContactSub" type="text" placeholder="只留 LINE 官方帳，入口越少你越不亂。" />
+              </div>
+
+              <div class="field full">
+                <label class="h3" style="margin: 16px 0 4px">整機販售頁</label>
+              </div>
+              <div class="field full">
+                <label for="feMachinePageTitle">頁面標題</label>
+                <input id="feMachinePageTitle" type="text" placeholder="整機販售" />
+              </div>
+              <div class="field full">
+                <label for="feMachinePageSub">頁面說明</label>
+                <input id="feMachinePageSub" type="text" placeholder="依用途分類，不寫一堆規格。價格是「約」，詳細配備請加 LINE 詢問。" />
+              </div>
+
+              <div class="field full">
+                <label class="h3" style="margin: 16px 0 4px">LINE 連結</label>
+              </div>
+              <div class="field full">
+                <label for="feLineUrl">LINE 官方帳連結</label>
+                <input id="feLineUrl" type="text" placeholder="https://lin.ee/zWYz2KH7" />
+              </div>
+
+              <div class="full actions">
+                <button id="frontendSaveBtn2" class="btn btn-primary" type="button">儲存設定</button>
+                <button id="frontendResetBtn" class="btn btn-ghost" type="button">重置為預設</button>
+              </div>
+              <div id="frontendMsg" class="full muted" style="margin-top: 10px" hidden></div>
+            </div>
+          </section>
+
+          <!-- ④ 報表管理（Report Dashboard） -->
+          <section id="tab-reports" class="card" hidden>
+            <div class="section-head" style="margin-bottom: 10px">
+              <div>
+                <h2 class="h2">報表管理（Report Dashboard）</h2>
+                <p class="muted">日 / 週 / 月營收、毛利、銷售量；最熱賣品項、最佳毛利批次、滯銷商品提醒；庫存分佈圖、低庫存警示。</p>
+              </div>
+              <div class="section-actions">
+                <div class="select">
+                  <label class="select-label" for="repRange">區間</label>
+                  <select id="repRange">
+                    <option value="day">日</option>
+                    <option value="week">週</option>
+                    <option value="month" selected>月</option>
+                  </select>
+                </div>
+                <button id="repRefreshBtn" class="btn btn-primary" type="button">更新報表</button>
+              </div>
+            </div>
+
+            <div id="repWrap" class="two-col"></div>
+            <div class="card" style="margin-top: 12px">
+              <h3 class="h3">庫存分佈圖</h3>
+              <div id="repInvDist" style="margin-top: 10px"></div>
+            </div>
+            <div class="card" style="margin-top: 12px">
+              <div class="section-head" style="margin-bottom: 10px">
+                <div>
+                  <h3 class="h3">低庫存警示</h3>
+                  <div class="muted">可售數量 ≤ 門檻</div>
+                </div>
+                <div class="section-actions">
+                  <div class="select">
+                    <label class="select-label" for="repLowThreshold">門檻</label>
+                    <input id="repLowThreshold" type="number" min="0" step="1" value="2" />
+                  </div>
+                </div>
+              </div>
+              <div id="repLowStock"></div>
+            </div>
+            <div class="card" style="margin-top: 12px">
+              <h3 class="h3">滯銷商品提醒</h3>
+              <div class="muted">在庫且 30 天內無成交</div>
+              <div id="repSlow" style="margin-top: 10px"></div>
+            </div>
+          </section>
+        </section>
+
+        <!-- 舊版後台：保留但不顯示（避免你過去資料/版面衝突） -->
+        <section id="panelLegacy" hidden style="display:none">
+          <div class="tabs">
             <button class="tab active" data-tab="settings" type="button">站台/商家設定</button>
-            <button class="tab" data-tab="preview" type="button">現有庫存</button>
-            <button class="tab" data-tab="inventory" type="button">庫存管理</button>
+            <button class="tab" data-tab="stock" type="button">庫存</button>
+            <button class="tab" data-tab="publish" type="button">前台上架</button>
+            <button class="tab" data-tab="reports" type="button">每月營運報表</button>
+            <button class="tab" data-tab="data" type="button">匯入/匯出</button>
           </div>
 
           <section id="tab-settings" class="card">
@@ -120,6 +782,759 @@
               </div>
             </div>
             <div id="settingsMsg" class="muted" style="margin-top: 10px" hidden></div>
+
+            <div class="section-split" style="margin-top: 18px"></div>
+
+            <details id="stockFieldsDetails" style="margin-top: 14px">
+              <summary class="h3" style="cursor: pointer; font-weight: 900">庫存規格欄位設定（自訂項目）</summary>
+              <div class="muted" style="margin-top: 8px">這裡決定「每個庫存」要填哪些規格欄位。庫存頁會保持乾淨，只顯示編輯與列表。</div>
+
+              <div class="card" style="margin-top: 12px">
+                <div class="section-head" style="margin-bottom: 10px">
+                  <div>
+                    <h3 class="h3">自訂欄位</h3>
+                    <p class="muted">可改名稱、排序、刪除或新增（例如：散熱器/螢幕/作業系統）。</p>
+                  </div>
+                  <div class="section-actions">
+                    <input id="newFieldLabel" type="text" placeholder="新增欄位名稱（例如：散熱器）" style="min-width: 220px" />
+                    <button id="addFieldBtn" class="btn btn-ghost" type="button">新增欄位</button>
+                  </div>
+                </div>
+
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>欄位名稱</th>
+                      <th class="nowrap">key</th>
+                      <th class="nowrap" style="text-align:right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="schemaTbody"></tbody>
+                </table>
+                <div class="muted" style="margin-top: 10px">提示：key 是系統用的代號；你只要改「欄位名稱」即可。</div>
+              </div>
+            </details>
+
+            <details id="stockKindsDetails" style="margin-top: 14px">
+              <summary class="h3" style="cursor: pointer; font-weight: 900">庫存類別設定（可新增）</summary>
+              <div class="muted" style="margin-top: 8px">你可以新增自己的類別（例如：螢幕、鍵鼠、主機板）。每個類別要有一個「編號前綴」，用來自動產生庫存編號。</div>
+
+              <div class="card" style="margin-top: 12px">
+                <div class="section-head" style="margin-bottom: 10px">
+                  <div>
+                    <h3 class="h3">自訂類別</h3>
+                    <p class="muted">範例：電腦 → DK-001｜顯卡 → GPU-001｜螢幕 → MON-001</p>
+                  </div>
+                  <div class="section-actions">
+                    <input id="newKindLabel" type="text" placeholder="類別名稱（例如：螢幕）" style="min-width: 180px" />
+                    <input id="newKindPrefix" type="text" placeholder="前綴（例如：MON）" style="min-width: 140px; text-transform: uppercase" />
+                    <button id="addKindBtn" class="btn btn-ghost" type="button">新增類別</button>
+                  </div>
+                </div>
+
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>類別名稱</th>
+                      <th class="nowrap">前綴</th>
+                      <th class="nowrap" style="text-align:right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="kindsTbody"></tbody>
+                </table>
+                <div class="muted" style="margin-top: 10px">前綴規則：2–4 碼英數（會自動轉大寫），且不可重複。</div>
+                <div class="muted" id="kindsMsg" style="margin-top: 8px" hidden></div>
+              </div>
+            </details>
+          </section>
+
+          <section id="tab-computers" class="card" hidden>
+            <div class="section-head" style="margin-bottom: 8px">
+              <div>
+                <h2 class="h2">電腦【庫存表】（一台一列）</h2>
+                <p class="muted">目標：我現在有什麼？總成本多少？賣多少才不虧（最低可賣價）。</p>
+              </div>
+              <div class="section-actions">
+                <button id="newPcBtn" class="btn btn-primary" type="button">新增電腦</button>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <label class="search">
+                <span class="search-label">搜尋（機器編號 / CPU / GPU / 客人）</span>
+                <input id="pcSearchInput" type="search" placeholder="例如：DK-023 / 3060Ti / 7500F" autocomplete="off" />
+              </label>
+              <div class="filters">
+                <div class="select">
+                  <label class="select-label" for="pcStatusSelect">狀態</label>
+                  <select id="pcStatusSelect">
+                    <option value="全部">全部</option>
+                    <option value="在庫">在庫</option>
+                    <option value="已預訂">已預訂</option>
+                    <option value="已售出">已售出</option>
+                  </select>
+                </div>
+                <div class="select">
+                  <label class="select-label" for="pcTypeSelect">類型</label>
+                  <select id="pcTypeSelect">
+                    <option value="全部">全部</option>
+                    <option value="文書機">文書機</option>
+                    <option value="電競機">電競機</option>
+                    <option value="整新機">整新機</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="margin: 10px 0">
+              <h3 class="h3" style="margin-bottom: 8px">編輯電腦</h3>
+              <div class="form-grid">
+                <div class="field">
+                  <label for="pcMachineNo">機器編號（例如 DK-023）</label>
+                  <input id="pcMachineNo" type="text" />
+                </div>
+                <div class="field">
+                  <label for="pcType">類型</label>
+                  <select id="pcType">
+                    <option value="文書機">文書機</option>
+                    <option value="電競機">電競機</option>
+                    <option value="整新機">整新機</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label for="pcStatus">目前狀態</label>
+                  <select id="pcStatus">
+                    <option value="在庫">在庫</option>
+                    <option value="已預訂">已預訂</option>
+                    <option value="已售出">已售出</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="pcListedAt">上架日期</label>
+                  <input id="pcListedAt" type="date" />
+                </div>
+
+                <div class="field">
+                  <label for="pcSoldAt">售出日期</label>
+                  <input id="pcSoldAt" type="date" />
+                </div>
+                <div class="field">
+                  <label for="pcSoldPrice">售出金額（NT$）</label>
+                  <input id="pcSoldPrice" type="number" min="0" step="100" />
+                </div>
+
+                <div class="field">
+                  <label for="pcCpu">CPU</label>
+                  <input id="pcCpu" type="text" />
+                </div>
+                <div class="field">
+                  <label for="pcMotherboard">主機板</label>
+                  <input id="pcMotherboard" type="text" />
+                </div>
+                <div class="field">
+                  <label for="pcRam">RAM</label>
+                  <input id="pcRam" type="text" />
+                </div>
+                <div class="field">
+                  <label for="pcStorage">SSD / HDD</label>
+                  <input id="pcStorage" type="text" />
+                </div>
+                <div class="field">
+                  <label for="pcGpu">顯卡</label>
+                  <input id="pcGpu" type="text" />
+                </div>
+                <div class="field">
+                  <label for="pcPsu">電源</label>
+                  <input id="pcPsu" type="text" />
+                </div>
+                <div class="field">
+                  <label for="pcCase">機殼</label>
+                  <input id="pcCase" type="text" />
+                </div>
+
+                <div class="field">
+                  <label for="pcCostBase">整機進貨成本</label>
+                  <input id="pcCostBase" type="number" min="0" step="100" />
+                </div>
+                <div class="field">
+                  <label for="pcCostAddon">零件加購成本</label>
+                  <input id="pcCostAddon" type="number" min="0" step="100" />
+                </div>
+                <div class="field">
+                  <label for="pcCostRefurb">維修/整理成本</label>
+                  <input id="pcCostRefurb" type="number" min="0" step="100" />
+                </div>
+                <div class="field full">
+                  <label>成本摘要</label>
+                  <div id="pcCostSummary" class="muted">總成本：-｜預估毛利（建議售價 - 總成本）：-</div>
+                </div>
+
+                <div class="field">
+                  <label for="pcSuggestedPrice">建議售價</label>
+                  <input id="pcSuggestedPrice" type="number" min="0" step="100" />
+                </div>
+                <div class="field">
+                  <label for="pcMinPrice">最低可賣價（保命線）</label>
+                  <input id="pcMinPrice" type="number" min="0" step="100" />
+                </div>
+
+                <div class="field">
+                  <label for="pcSource">客人來源</label>
+                  <input id="pcSource" type="text" placeholder="LINE / 社群 / 短影音 / 老客戶回購..." />
+                </div>
+                <div class="field">
+                  <label for="pcCustomer">客人名稱/暱稱（選填）</label>
+                  <input id="pcCustomer" type="text" />
+                </div>
+                <div class="field full">
+                  <label for="pcNote">備註</label>
+                  <input id="pcNote" type="text" placeholder="很盧 / 很快成交 / 回購..." />
+                </div>
+
+                <div class="full actions">
+                  <button id="savePcBtn" class="btn btn-primary" type="button">儲存電腦</button>
+                  <button id="cancelPcBtn" class="btn btn-ghost" type="button">取消</button>
+                  <button id="deletePcBtn" class="btn btn-danger" type="button" hidden>刪除</button>
+                </div>
+                <div class="full muted" id="pcMsg" hidden></div>
+              </div>
+            </div>
+
+            <table class="table">
+              <thead>
+                <tr>
+                  <th class="nowrap">機器編號</th>
+                  <th class="nowrap">類型</th>
+                  <th class="nowrap">狀態</th>
+                  <th>規格</th>
+                  <th class="nowrap">總成本</th>
+                  <th class="nowrap">建議/最低</th>
+                  <th class="nowrap" style="text-align:right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="pcsTbody"></tbody>
+            </table>
+          </section>
+
+          <section id="tab-gpus" class="card" hidden>
+            <div class="section-head" style="margin-bottom: 8px">
+              <div>
+                <h2 class="h2">顯卡【庫存表】</h2>
+                <p class="muted">建議顯卡獨立管理：成本、測試狀態、保固、售價與最低售價。</p>
+              </div>
+              <div class="section-actions">
+                <button id="newGpuBtn" class="btn btn-primary" type="button">新增顯卡</button>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <label class="search">
+                <span class="search-label">搜尋（顯卡編號 / 型號 / 客人）</span>
+                <input id="gpuSearchInput" type="search" placeholder="例如：GPU-008 / 3060 Ti" autocomplete="off" />
+              </label>
+              <div class="filters">
+                <div class="select">
+                  <label class="select-label" for="gpuStatusSelect">狀態</label>
+                  <select id="gpuStatusSelect">
+                    <option value="全部">全部</option>
+                    <option value="在庫">在庫</option>
+                    <option value="已售出">已售出</option>
+                  </select>
+                </div>
+                <div class="select">
+                  <label class="select-label" for="gpuTestSelect">測試</label>
+                  <select id="gpuTestSelect">
+                    <option value="全部">全部</option>
+                    <option value="OK">OK</option>
+                    <option value="待測">待測</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="margin: 10px 0">
+              <h3 class="h3" style="margin-bottom: 8px">編輯顯卡</h3>
+              <div class="form-grid">
+                <div class="field">
+                  <label for="gpuNo">顯卡編號（例如 GPU-023）</label>
+                  <input id="gpuNo" type="text" />
+                </div>
+                <div class="field">
+                  <label for="gpuModel">型號（RTX 3060 Ti）</label>
+                  <input id="gpuModel" type="text" />
+                </div>
+                <div class="field">
+                  <label for="gpuBrand">廠牌</label>
+                  <input id="gpuBrand" type="text" />
+                </div>
+                <div class="field">
+                  <label for="gpuFans">風扇數</label>
+                  <input id="gpuFans" type="number" min="0" step="1" />
+                </div>
+                <div class="field">
+                  <label for="gpuOrigin">來源（網咖/客收）</label>
+                  <input id="gpuOrigin" type="text" />
+                </div>
+                <div class="field">
+                  <label for="gpuCost">進貨成本</label>
+                  <input id="gpuCost" type="number" min="0" step="100" />
+                </div>
+                <div class="field">
+                  <label for="gpuTestStatus">測試狀態</label>
+                  <select id="gpuTestStatus">
+                    <option value="OK">OK</option>
+                    <option value="待測">待測</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="gpuWarranty">有無保固</label>
+                  <select id="gpuWarranty">
+                    <option value="N">N</option>
+                    <option value="Y">Y</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label for="gpuStatus">目前狀態</label>
+                  <select id="gpuStatus">
+                    <option value="在庫">在庫</option>
+                    <option value="已售出">已售出</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="gpuListedAt">上架日期</label>
+                  <input id="gpuListedAt" type="date" />
+                </div>
+                <div class="field">
+                  <label for="gpuSoldAt">售出日期</label>
+                  <input id="gpuSoldAt" type="date" />
+                </div>
+                <div class="field">
+                  <label for="gpuSoldPrice">售出金額</label>
+                  <input id="gpuSoldPrice" type="number" min="0" step="100" />
+                </div>
+
+                <div class="field">
+                  <label for="gpuSuggestedPrice">建議售價</label>
+                  <input id="gpuSuggestedPrice" type="number" min="0" step="100" />
+                </div>
+                <div class="field">
+                  <label for="gpuMinPrice">最低售價</label>
+                  <input id="gpuMinPrice" type="number" min="0" step="100" />
+                </div>
+
+                <div class="field">
+                  <label for="gpuSource">客人來源</label>
+                  <input id="gpuSource" type="text" />
+                </div>
+                <div class="field">
+                  <label for="gpuCustomer">客人（選填）</label>
+                  <input id="gpuCustomer" type="text" />
+                </div>
+                <div class="field full">
+                  <label for="gpuNote">備註</label>
+                  <input id="gpuNote" type="text" />
+                </div>
+
+                <div class="full actions">
+                  <button id="saveGpuBtn" class="btn btn-primary" type="button">儲存顯卡</button>
+                  <button id="cancelGpuBtn" class="btn btn-ghost" type="button">取消</button>
+                  <button id="deleteGpuBtn" class="btn btn-danger" type="button" hidden>刪除</button>
+                </div>
+                <div class="full muted" id="gpuMsg" hidden></div>
+              </div>
+            </div>
+
+            <table class="table">
+              <thead>
+                <tr>
+                  <th class="nowrap">顯卡編號</th>
+                  <th>型號</th>
+                  <th class="nowrap">測試</th>
+                  <th class="nowrap">保固</th>
+                  <th class="nowrap">狀態</th>
+                  <th class="nowrap">成本</th>
+                  <th class="nowrap">建議/最低</th>
+                  <th class="nowrap" style="text-align:right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="gpusTbody"></tbody>
+            </table>
+          </section>
+
+          <section id="tab-reports" class="card" hidden>
+            <div class="section-head" style="margin-bottom: 10px">
+              <div>
+                <h2 class="h2">每月【營運報表】</h2>
+                <p class="muted">不是給會計看，是給你自己決策用：營收/成本/毛利/毛利率、分類收入、來源成效、3 個 KPI。</p>
+              </div>
+              <div class="section-actions">
+                <label class="select">
+                  <span class="select-label">月份</span>
+                  <input id="reportMonth" type="month" />
+                </label>
+                <button id="refreshReportBtn" class="btn btn-primary" type="button">更新報表</button>
+              </div>
+            </div>
+
+            <div id="reportWrap" class="two-col"></div>
+            <div id="reportExtra" class="card" style="margin-top: 12px">
+              <div class="section-head" style="margin-bottom: 10px">
+                <div>
+                  <h3 class="h3">其他收入（維修/配件/升級）</h3>
+                  <p class="muted">把不是賣主機/顯卡的收入也記起來，報表才準。</p>
+                </div>
+                <div class="section-actions">
+                  <button id="newMiscBtn" class="btn btn-ghost" type="button">新增一筆</button>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <div class="field">
+                  <label for="miscDate">日期</label>
+                  <input id="miscDate" type="date" />
+                </div>
+                <div class="field">
+                  <label for="miscCategory">分類</label>
+                  <select id="miscCategory">
+                    <option value="維修收入">維修收入</option>
+                    <option value="其他">其他</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="miscRevenue">收入（NT$）</label>
+                  <input id="miscRevenue" type="number" min="0" step="100" />
+                </div>
+                <div class="field">
+                  <label for="miscCost">成本（NT$）</label>
+                  <input id="miscCost" type="number" min="0" step="100" />
+                </div>
+                <div class="field">
+                  <label for="miscSource">來源</label>
+                  <input id="miscSource" type="text" placeholder="LINE / 短影音..." />
+                </div>
+                <div class="field">
+                  <label for="miscCustomer">客人（選填）</label>
+                  <input id="miscCustomer" type="text" />
+                </div>
+                <div class="field full">
+                  <label for="miscNote">備註</label>
+                  <input id="miscNote" type="text" />
+                </div>
+                <div class="full actions">
+                  <button id="saveMiscBtn" class="btn btn-primary" type="button">儲存</button>
+                  <button id="cancelMiscBtn" class="btn btn-ghost" type="button">取消</button>
+                  <button id="deleteMiscBtn" class="btn btn-danger" type="button" hidden>刪除</button>
+                </div>
+                <div class="full muted" id="miscMsg" hidden></div>
+              </div>
+
+              <table class="table" style="margin-top: 12px">
+                <thead>
+                  <tr>
+                    <th class="nowrap">日期</th>
+                    <th class="nowrap">分類</th>
+                    <th class="nowrap">收入</th>
+                    <th class="nowrap">成本</th>
+                    <th>備註</th>
+                    <th class="nowrap" style="text-align:right">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="miscTbody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="tab-data" class="card" hidden>
+            <div class="section-head" style="margin-bottom: 10px">
+              <div>
+                <h2 class="h2">匯入 / 匯出（備份/換手機）</h2>
+                <p class="muted">因為本站是靜態網站，資料存在瀏覽器本機。建議定期匯出備份。</p>
+              </div>
+              <div class="section-actions">
+                <button id="exportAllBtn" class="btn btn-primary" type="button">匯出全部資料（JSON）</button>
+                <button id="copyAllBtn" class="btn btn-ghost" type="button">複製到剪貼簿</button>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="field full">
+                <label for="dataText">備份 JSON</label>
+                <textarea id="dataText" rows="10" placeholder="按『匯出』後會出現在這裡，或把備份貼回來再按『匯入』。"></textarea>
+              </div>
+              <div class="full actions">
+                <button id="importAllBtn" class="btn btn-primary" type="button">匯入（會覆蓋目前資料）</button>
+                <button id="clearDataBtn" class="btn btn-danger" type="button">清空所有資料</button>
+              </div>
+              <div class="full muted" id="dataMsg" hidden></div>
+            </div>
+          </section>
+
+          <section id="tab-stock" class="card" hidden>
+            <div class="section-head" style="margin-bottom: 8px">
+              <div>
+                <h2 class="h2">庫存（只留一個）</h2>
+                <p class="muted">你可以自訂庫存欄位（CPU / 記憶體 / 顯示卡 / 主機板 / 硬碟 / 電源供應器 / 機殼 / 周邊…）。</p>
+              </div>
+              <div class="section-actions">
+                <button id="newStockBtn" class="btn btn-primary" type="button">新增庫存</button>
+              </div>
+            </div>
+            <div id="stockListMsg" class="muted" style="margin-bottom: 10px" hidden></div>
+
+            <div class="toolbar">
+              <label class="search">
+                <span class="search-label">搜尋（庫存編號 / 規格 / 客人）</span>
+                <input id="stockSearchInput" type="search" placeholder="例如：DK-023 / 3060Ti / 32GB" autocomplete="off" />
+              </label>
+              <div class="filters">
+                <div class="select">
+                  <label class="select-label" for="stockStatusSelect">狀態</label>
+                  <select id="stockStatusSelect">
+                    <option value="全部">全部</option>
+                    <option value="在庫">在庫</option>
+                    <option value="已預訂">已預訂</option>
+                    <option value="已售出">已售出</option>
+                  </select>
+                </div>
+                <div class="select">
+                  <label class="select-label" for="stockKindSelect">類別</label>
+                  <select id="stockKindSelect">
+                    <option value="全部">全部</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <table class="table">
+              <thead>
+                <tr>
+                  <th class="nowrap">庫存編號</th>
+                  <th class="nowrap">類別</th>
+                  <th class="nowrap">狀態</th>
+                  <th class="nowrap">前台</th>
+                  <th>規格摘要</th>
+                  <th class="nowrap">總成本</th>
+                  <th class="nowrap">建議/最低</th>
+                  <th class="nowrap" style="text-align:right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="stockTbody"></tbody>
+            </table>
+
+            <div id="stockEditorCard" class="card" style="margin: 12px 0" hidden>
+              <div class="section-head" style="margin-bottom: 8px">
+                <div>
+                  <h3 class="h3" style="margin: 0">新增 / 編輯庫存</h3>
+                  <div class="muted">只在你按「新增」或「編輯」時才會展開。</div>
+                </div>
+                <div class="section-actions">
+                  <button id="cancelStockBtn" class="btn btn-ghost" type="button">關閉</button>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <div class="field">
+                  <label for="stockNo">庫存編號（例如 DK-023）</label>
+                  <input id="stockNo" type="text" readonly />
+                  <small class="muted">系統自動產生（新增時不可手動修改）</small>
+                </div>
+                <div class="field">
+                  <label for="stockKind">類別</label>
+                  <select id="stockKind"></select>
+                </div>
+                <div class="field">
+                  <label for="stockBrand">品牌</label>
+                  <input id="stockBrand" type="text" placeholder="例如：ASUS / MSI / 技嘉 / 影馳..." />
+                </div>
+                <div class="field">
+                  <label for="stockCostTotal">成本（NT$）</label>
+                  <input id="stockCostTotal" type="number" min="0" step="100" />
+                </div>
+                <div class="field full">
+                  <label for="stockModelSpec">型號 / 規格</label>
+                  <textarea id="stockModelSpec" rows="3" placeholder="例如：R5 7500F / RTX 4060 / 32GB / 1TB SSD"></textarea>
+                </div>
+
+                <details class="full" style="margin-top: 4px">
+                  <summary class="h3" style="cursor: pointer; font-weight: 900">更多欄位（選填）</summary>
+                  <div class="muted" style="margin-top: 6px">需要記售出/預訂、建議價、客人來源或詳細規格時再展開。</div>
+
+                  <div class="form-grid" style="margin-top: 10px">
+                    <div class="field">
+                      <label for="stockType">類型（選填）</label>
+                      <input id="stockType" type="text" placeholder="例如：電競機 / 文書機 / 整新機" />
+                    </div>
+                    <div class="field">
+                      <label for="stockStatus">目前狀態</label>
+                      <select id="stockStatus">
+                        <option value="在庫">在庫</option>
+                        <option value="已預訂">已預訂</option>
+                        <option value="已售出">已售出</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="stockListedAt">上架日期</label>
+                      <input id="stockListedAt" type="date" />
+                    </div>
+                    <div class="field">
+                      <label for="stockSoldAt">售出日期</label>
+                      <input id="stockSoldAt" type="date" />
+                    </div>
+                    <div class="field">
+                      <label for="stockSoldPrice">售出金額（NT$）</label>
+                      <input id="stockSoldPrice" type="number" min="0" step="100" />
+                    </div>
+
+                    <div class="field">
+                      <label for="stockSuggestedPrice">建議售價</label>
+                      <input id="stockSuggestedPrice" type="number" min="0" step="100" />
+                    </div>
+                    <div class="field">
+                      <label for="stockMinPrice">最低可賣價</label>
+                      <input id="stockMinPrice" type="number" min="0" step="100" />
+                    </div>
+                    <div class="field full">
+                      <label>成本摘要</label>
+                      <div id="stockCostSummary" class="muted">總成本：-｜預估毛利（建議售價 - 總成本）：-</div>
+                    </div>
+
+                    <div class="field">
+                      <label for="stockSource">客人來源</label>
+                      <input id="stockSource" type="text" placeholder="LINE / 社群 / 短影音..." />
+                    </div>
+                    <div class="field">
+                      <label for="stockCustomer">客人（選填）</label>
+                      <input id="stockCustomer" type="text" />
+                    </div>
+                    <div class="field full">
+                      <label for="stockNote">備註</label>
+                      <input id="stockNote" type="text" />
+                    </div>
+
+                    <div class="full">
+                      <h3 class="h3" style="margin: 8px 0">詳細規格（依你自訂欄位）</h3>
+                      <div id="stockSpecGrid" class="form-grid"></div>
+                    </div>
+                  </div>
+                </details>
+
+                <div class="full actions">
+                  <button id="saveStockBtn" class="btn btn-primary" type="button">儲存</button>
+                  <button id="deleteStockBtn" class="btn btn-danger" type="button" hidden>刪除</button>
+                </div>
+                <div class="full muted" id="stockMsg" hidden></div>
+              </div>
+            </div>
+          </section>
+
+          <section id="tab-publish" class="card" hidden>
+            <div class="section-head" style="margin-bottom: 8px">
+              <div>
+                <h2 class="h2">前台上架</h2>
+                <p class="muted">庫存歸庫存；前台歸前台。這裡只管理「是否上架」與前台顯示內容（名稱/分類/狀態/售價/標籤/相片）。</p>
+              </div>
+              <div class="section-actions">
+                <button id="syncNowBtn" class="btn btn-primary" type="button">立即同步到前台</button>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <label class="search">
+                <span class="search-label">搜尋（庫存編號 / 前台名稱 / 規格）</span>
+                <input id="publishSearchInput" type="search" placeholder="例如：DK-023 / 4060 / 熱銷" autocomplete="off" />
+              </label>
+              <div class="filters">
+                <div class="select">
+                  <label class="select-label" for="publishSelect">上架</label>
+                  <select id="publishSelect">
+                    <option value="全部">全部</option>
+                    <option value="上架">上架</option>
+                    <option value="未上架">未上架</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="margin: 10px 0">
+              <h3 class="h3" style="margin-bottom: 8px">編輯前台上架</h3>
+              <div class="form-grid">
+                <div class="field full">
+                  <label>目前編輯</label>
+                  <div id="publishTarget" class="muted">尚未選擇庫存（請在下方列表按「編輯上架」）</div>
+                </div>
+
+                <div class="field full">
+                  <label>
+                    <input id="webPublish" type="checkbox" />
+                    上架到前台（首頁顯示）
+                  </label>
+                </div>
+
+                <div class="field full">
+                  <label for="webName">前台商品名稱</label>
+                  <input id="webName" type="text" placeholder="例如：R5 7500F / RTX 4060 遊戲主機" />
+                </div>
+                <div class="field">
+                  <label for="webCategory">前台用途分類</label>
+                  <select id="webCategory">
+                    <option value="遊戲">遊戲</option>
+                    <option value="剪輯">剪輯</option>
+                    <option value="辦公">辦公</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="webStockStatus">前台庫存狀態</label>
+                  <select id="webStockStatus">
+                    <option value="現貨">現貨</option>
+                    <option value="低庫存">低庫存</option>
+                    <option value="缺貨">缺貨</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="webPrice">前台售價（NT$）</label>
+                  <input id="webPrice" type="number" min="0" step="100" />
+                </div>
+                <div class="field full">
+                  <label for="webTags">前台標籤（逗號分隔）</label>
+                  <input id="webTags" type="text" placeholder="熱銷, 推薦, 2K, 高CP" />
+                </div>
+                <div class="field full">
+                  <label for="webNote">前台備註（選填）</label>
+                  <input id="webNote" type="text" />
+                </div>
+                <div class="field full">
+                  <label for="webPhotos">前台商品相片（最多 5 張）</label>
+                  <input id="webPhotos" type="file" accept="image/*" multiple />
+                  <small>選擇檔案後會自動壓縮轉成可保存的 URL（存本機）。</small>
+                </div>
+                <div class="full">
+                  <div id="webPhotoStrip" class="photo-strip"></div>
+                  <div id="webPhotoHint" class="muted" style="margin-top: 8px" hidden></div>
+                </div>
+
+                <div class="full actions">
+                  <button id="savePublishBtn" class="btn btn-primary" type="button">儲存上架設定</button>
+                  <button id="cancelPublishBtn" class="btn btn-ghost" type="button">取消</button>
+                </div>
+                <div class="full muted" id="publishMsg" hidden></div>
+              </div>
+            </div>
+
+            <table class="table">
+              <thead>
+                <tr>
+                  <th class="nowrap">庫存編號</th>
+                  <th class="nowrap">類別</th>
+                  <th class="nowrap">庫存狀態</th>
+                  <th class="nowrap">前台</th>
+                  <th>前台內容</th>
+                  <th class="nowrap" style="text-align:right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="publishTbody"></tbody>
+            </table>
           </section>
 
           <section id="tab-inventory" class="card" hidden>
@@ -267,7 +1682,7 @@
     </main>
 
     <script src="./shared.js?v=20260201"></script>
-    <script src="./admin.js?v=20260201"></script>
+    <script src="./admin3.js?v=20260201"></script>
   </body>
 </html>
 

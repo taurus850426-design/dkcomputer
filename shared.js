@@ -3,15 +3,36 @@
 const STORAGE_KEYS = {
   config: "dk_site_config_v1",
   inventory: "dk_inventory_v1",
+  inventoryBackup: "dk_inventory_backup_v1",
   adminAuthed: "dk_admin_authed_v1",
+  computers: "dk_computers_v1",
+  gpus: "dk_gpus_v1",
+  misc: "dk_misc_v1",
+  stockKinds: "dk_stock_kinds_v1",
+  stockSchema: "dk_stock_schema_v1",
+  stock: "dk_stock_v1",
 };
 
 const DEFAULT_CONFIG = {
-  siteTitle: "哈啦電競電腦維修｜現貨庫存｜加 LINE 下單",
+  siteTitle: "二手電腦・實測交付｜依用途配機，不亂賣、不踩雷",
   brand: {
     mark: "DK",
-    title: "DK Computer",
-    subtitle: "現貨庫存｜加 LINE 下單",
+    title: "二手電腦・實測交付",
+    subtitle: "依用途配機，不亂賣、不踩雷",
+  },
+  frontend: {
+    heroTagline: "二手電腦・實測交付",
+    heroSub: "依用途配機，不亂賣、不踩雷",
+    heroBtn1: "🔥 我要買整機",
+    heroBtn2: "🧠 不知道怎麼選（需求表單）",
+    heroBtn3: "🔧 電腦有問題要維修",
+    trustTitle: "所有整機皆",
+    trustItems: ["實測", "清潔", "交付前檢查", "不賣不適合用途的配法", "有問題可回來處理"],
+    trustNote: "官網會寫清楚：不適合誰、不能幹嘛、不賣的情況。奧客會自己離開。",
+    contactTitle: "聯絡我們",
+    contactSub: "只留 LINE 官方帳，入口越少你越不亂。",
+    machinePageTitle: "整機販售",
+    machinePageSub: "依用途分類，不寫一堆規格。價格是「約」，詳細配備請加 LINE 詢問。",
   },
   shop: {
     name: "哈啦電競電腦維修",
@@ -79,6 +100,135 @@ const DEFAULT_INVENTORY = [
   },
 ];
 
+// 新後台：電腦庫存（每台一列）
+const DEFAULT_COMPUTERS = [
+  {
+    id: "pc-demo-1",
+    machineNo: "DK-001",
+    type: "電競機", // 文書機 / 電競機 / 整新機
+    cpu: "Ryzen 5 7500F",
+    motherboard: "B650",
+    ram: "32GB",
+    storage: "1TB SSD",
+    gpu: "RTX 4060",
+    psu: "650W",
+    case: "ATX",
+    costBase: 24000,
+    costAddon: 1200,
+    costRefurb: 0,
+    suggestedPrice: 28900,
+    minPrice: 27500,
+    status: "在庫", // 在庫 / 已預訂 / 已售出
+    listedAt: "2026-02-01",
+    soldAt: "",
+    soldPrice: null,
+    source: "LINE", // LINE / 社群 / 短影音 / 老客戶回購 / 朋友介紹 ...
+    customer: "",
+    note: "",
+  },
+];
+
+// 新後台：顯卡庫存
+const DEFAULT_GPUS = [
+  {
+    id: "gpu-demo-1",
+    gpuNo: "GPU-001",
+    model: "RTX 3060 Ti",
+    brand: "MSI",
+    fans: 2,
+    origin: "網咖",
+    cost: 6500,
+    testStatus: "OK", // OK / 待測
+    warranty: false,
+    suggestedPrice: 7900,
+    minPrice: 7400,
+    status: "在庫", // 在庫 / 已售出
+    listedAt: "2026-02-01",
+    soldAt: "",
+    soldPrice: null,
+    source: "社群",
+    customer: "",
+    note: "",
+  },
+];
+
+// 新後台：其他收入（維修/升級/配件等）
+const DEFAULT_MISC = [
+  {
+    id: "misc-demo-1",
+    date: "2026-02-01",
+    category: "維修收入", // 維修收入 / 其他
+    revenue: 1200,
+    cost: 0,
+    source: "LINE",
+    customer: "",
+    note: "更換風扇",
+  },
+];
+
+// ✅ 你要的「庫存類別可自訂」：每個類別對應一個編號前綴（例如 DK-001 / GPU-001）
+const DEFAULT_STOCK_KINDS = [
+  { label: "電腦", prefix: "DK" },
+  { label: "顯卡", prefix: "GPU" },
+  { label: "周邊", prefix: "ACC" },
+  { label: "其他", prefix: "OT" },
+];
+
+// ✅ 你要的「一個庫存」＋「可自訂項目（欄位）」
+const DEFAULT_STOCK_SCHEMA = [
+  { key: "cpu", label: "CPU" },
+  { key: "ram", label: "記憶體" },
+  { key: "gpu", label: "顯示卡" },
+  { key: "motherboard", label: "主機板" },
+  { key: "storage", label: "硬碟" },
+  { key: "psu", label: "電源供應器" },
+  { key: "case", label: "機殼" },
+  { key: "peripherals", label: "周邊" },
+];
+
+const DEFAULT_STOCK = [
+  {
+    id: "stk-demo-1",
+    stockNo: "DK-001",
+    kind: "電腦",
+    brand: "DK",
+    modelSpec: "R5 7500F / RTX 4060 / 32GB / 1TB SSD",
+    type: "電競機", // 文書機 / 電競機 / 整新機 / 自訂
+    status: "在庫", // 在庫 / 已預訂 / 已售出
+    listedAt: "2026-02-01",
+    soldAt: "",
+    soldPrice: null,
+    costBase: 24000,
+    costAddon: 1200,
+    costRefurb: 0,
+    suggestedPrice: 28900,
+    minPrice: 27500,
+    source: "LINE",
+    customer: "",
+    note: "",
+    web: {
+      publish: true,
+      name: "R5 7500F / RTX 4060 遊戲主機",
+      category: "遊戲", // 遊戲 / 剪輯 / 辦公
+      stockStatus: "現貨", // 現貨 / 低庫存 / 缺貨
+      price: 28900,
+      tags: ["熱銷"],
+      note: "",
+      photos: [],
+    },
+    spec: {
+      cpu: "Ryzen 5 7500F",
+      ram: "32GB",
+      gpu: "RTX 4060",
+      motherboard: "B650",
+      storage: "1TB SSD",
+      psu: "650W",
+      case: "ATX",
+      peripherals: "",
+    },
+  },
+];
+
 function safeJsonParse(value, fallback) {
   try {
     if (!value) return fallback;
@@ -123,9 +273,344 @@ function saveInventory(items) {
   localStorage.setItem(STORAGE_KEYS.inventory, JSON.stringify(items));
 }
 
+function getComputers() {
+  const saved = safeJsonParse(localStorage.getItem(STORAGE_KEYS.computers), null);
+  if (!saved || !Array.isArray(saved)) return [...DEFAULT_COMPUTERS];
+  return saved;
+}
+
+function saveComputers(items) {
+  localStorage.setItem(STORAGE_KEYS.computers, JSON.stringify(items));
+}
+
+function getGpus() {
+  const saved = safeJsonParse(localStorage.getItem(STORAGE_KEYS.gpus), null);
+  if (!saved || !Array.isArray(saved)) return [...DEFAULT_GPUS];
+  return saved;
+}
+
+function saveGpus(items) {
+  localStorage.setItem(STORAGE_KEYS.gpus, JSON.stringify(items));
+}
+
+function getMisc() {
+  const saved = safeJsonParse(localStorage.getItem(STORAGE_KEYS.misc), null);
+  if (!saved || !Array.isArray(saved)) return [...DEFAULT_MISC];
+  return saved;
+}
+
+function saveMisc(items) {
+  localStorage.setItem(STORAGE_KEYS.misc, JSON.stringify(items));
+}
+
+function getStockKinds() {
+  const saved = safeJsonParse(localStorage.getItem(STORAGE_KEYS.stockKinds), null);
+  if (!saved || !Array.isArray(saved) || saved.length === 0) return [...DEFAULT_STOCK_KINDS];
+  return saved
+    .map((x) => ({
+      label: String(x?.label || "").trim(),
+      prefix: String(x?.prefix || "").trim().toUpperCase(),
+    }))
+    .filter((x) => x.label && x.prefix);
+}
+
+function saveStockKinds(kinds) {
+  localStorage.setItem(STORAGE_KEYS.stockKinds, JSON.stringify(kinds));
+}
+
+function getStockSchema() {
+  const saved = safeJsonParse(localStorage.getItem(STORAGE_KEYS.stockSchema), null);
+  if (!saved || !Array.isArray(saved) || saved.length === 0) return [...DEFAULT_STOCK_SCHEMA];
+  // 清掉不合法的 key/label
+  return saved
+    .map((x) => ({ key: String(x?.key || "").trim(), label: String(x?.label || "").trim() }))
+    .filter((x) => x.key && x.label);
+}
+
+function saveStockSchema(schema) {
+  localStorage.setItem(STORAGE_KEYS.stockSchema, JSON.stringify(schema));
+}
+
+function getStock() {
+  const saved = safeJsonParse(localStorage.getItem(STORAGE_KEYS.stock), null);
+  if (!saved || !Array.isArray(saved)) return [...DEFAULT_STOCK];
+  return saved;
+}
+
+function saveStock(items) {
+  localStorage.setItem(STORAGE_KEYS.stock, JSON.stringify(items));
+}
+
 function formatPrice(n) {
   if (typeof n !== "number" || Number.isNaN(n)) return "";
   return n.toLocaleString("zh-Hant-TW");
+}
+
+function toNumber(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function todayISO() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function calcTotalCostPC(pc) {
+  const a = Number(pc?.costBase || 0);
+  const b = Number(pc?.costAddon || 0);
+  const c = Number(pc?.costRefurb || 0);
+  return (Number.isFinite(a) ? a : 0) + (Number.isFinite(b) ? b : 0) + (Number.isFinite(c) ? c : 0);
+}
+
+function backupInventoryOnce() {
+  const hasBackup = localStorage.getItem(STORAGE_KEYS.inventoryBackup);
+  if (hasBackup) return;
+  const current = localStorage.getItem(STORAGE_KEYS.inventory);
+  if (current) localStorage.setItem(STORAGE_KEYS.inventoryBackup, current);
+}
+
+function guessWebCategory(item) {
+  const t = String(item?.type || "").trim();
+  const hay = normalizeText(t);
+  if (hay.includes("文書") || hay.includes("辦公")) return "辦公";
+  if (hay.includes("剪輯") || hay.includes("影片")) return "剪輯";
+  if (hay.includes("電競") || hay.includes("遊戲")) return "遊戲";
+  return "遊戲";
+}
+
+function statusToWebStockStatus(status) {
+  if (status === "在庫") return "現貨";
+  if (status === "已預訂") return "低庫存";
+  if (status === "已售出") return "缺貨";
+  return "現貨";
+}
+
+function buildDefaultWebNameFromStock(it) {
+  const kind = String(it?.kind || "").trim();
+  const type = String(it?.type || "").trim();
+  const cpu = String(it?.spec?.cpu || "").trim();
+  const gpu = String(it?.spec?.gpu || "").trim();
+  if (kind === "電腦") {
+    const parts = [];
+    if (cpu) parts.push(cpu);
+    if (gpu) parts.push(gpu);
+    const modelSpec = String(it?.modelSpec || "").trim();
+    const core = parts.length ? parts.join(" / ") : modelSpec || String(it?.stockNo || "電腦");
+    return `${core}${type ? ` ${type}` : " 主機"}`.trim();
+  }
+  if (kind === "顯卡") {
+    return `${gpu || it?.stockNo || "顯卡"}`.trim();
+  }
+  return String(it?.stockNo || "庫存").trim();
+}
+
+function stockToInventoryItem(it) {
+  const web = it?.web || {};
+  // 已售出就不要出現在前台
+  if (it?.status === "已售出") return null;
+  if (!web.publish) return null;
+  const name = String(web.name || "").trim();
+  const category = String(web.category || "").trim();
+  const stockStatus = String(web.stockStatus || "").trim();
+  if (!name || !category || !stockStatus) return null;
+
+  const tags = Array.isArray(web.tags)
+    ? web.tags.map((x) => String(x || "").trim()).filter(Boolean)
+    : String(web.tags || "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+  const photos = Array.isArray(web.photos) ? web.photos.filter(Boolean) : [];
+
+  return {
+    id: String(it?.id || makeId("item")),
+    name,
+    category,
+    stockStatus,
+    cpu: String(it?.spec?.cpu || "").trim(),
+    gpu: String(it?.spec?.gpu || "").trim(),
+    ram: String(it?.spec?.ram || "").trim(),
+    ssd: String(it?.spec?.storage || "").trim(),
+    price: typeof web.price === "number" ? web.price : toNumber(web.price) ?? undefined,
+    tags,
+    note: String(web.note || it?.note || it?.modelSpec || "").trim(),
+    photos,
+  };
+}
+
+function syncWebInventoryFromStock() {
+  backupInventoryOnce();
+  const items = getStock()
+    .map(stockToInventoryItem)
+    .filter(Boolean);
+  saveInventory(items);
+}
+
+function ensureUnifiedStockInitialized() {
+  // 若已存在就不動
+  const existing = safeJsonParse(localStorage.getItem(STORAGE_KEYS.stock), null);
+  if (Array.isArray(existing)) return;
+
+  // 先以「電腦/顯卡」舊資料做一次整併（同一個庫存）
+  const out = [];
+  try {
+    const pcs = getComputers();
+    for (const pc of pcs) {
+      const it = {
+        id: pc.id || makeId("stk"),
+        stockNo: pc.machineNo || makeId("DK"),
+        kind: "電腦",
+        brand: "",
+        modelSpec: [pc.cpu, pc.gpu, pc.ram, pc.storage].filter(Boolean).join(" / "),
+        type: pc.type || "",
+        status: pc.status || "在庫",
+        listedAt: pc.listedAt || "",
+        soldAt: pc.soldAt || "",
+        soldPrice: typeof pc.soldPrice === "number" ? pc.soldPrice : null,
+        costBase: Number(pc.costBase || 0),
+        costAddon: Number(pc.costAddon || 0),
+        costRefurb: Number(pc.costRefurb || 0),
+        suggestedPrice: typeof pc.suggestedPrice === "number" ? pc.suggestedPrice : null,
+        minPrice: typeof pc.minPrice === "number" ? pc.minPrice : null,
+        source: pc.source || "",
+        customer: pc.customer || "",
+        note: pc.note || "",
+        web: {
+          publish: (pc.status || "在庫") !== "已售出",
+          name: "", // 下面補預設
+          category: guessWebCategory(pc),
+          stockStatus: statusToWebStockStatus(pc.status || "在庫"),
+          price: typeof pc.suggestedPrice === "number" ? pc.suggestedPrice : null,
+          tags: [],
+          note: "",
+          photos: [],
+        },
+        spec: {
+          cpu: pc.cpu || "",
+          ram: pc.ram || "",
+          gpu: pc.gpu || "",
+          motherboard: pc.motherboard || "",
+          storage: pc.storage || "",
+          psu: pc.psu || "",
+          case: pc.case || "",
+          peripherals: "",
+        },
+      };
+      it.web.name = buildDefaultWebNameFromStock(it);
+      out.push(it);
+    }
+  } catch {}
+
+  try {
+    const gs = getGpus();
+    for (const g of gs) {
+      const it = {
+        id: g.id || makeId("stk"),
+        stockNo: g.gpuNo || makeId("GPU"),
+        kind: "顯卡",
+        brand: g.brand || "",
+        modelSpec: g.model || "",
+        type: "",
+        status: g.status === "已售出" ? "已售出" : "在庫",
+        listedAt: g.listedAt || "",
+        soldAt: g.soldAt || "",
+        soldPrice: typeof g.soldPrice === "number" ? g.soldPrice : null,
+        costBase: Number(g.cost || 0),
+        costAddon: 0,
+        costRefurb: 0,
+        suggestedPrice: typeof g.suggestedPrice === "number" ? g.suggestedPrice : null,
+        minPrice: typeof g.minPrice === "number" ? g.minPrice : null,
+        source: g.source || "",
+        customer: g.customer || "",
+        note: g.note || "",
+        web: {
+          publish: g.status !== "已售出",
+          name: "", // 下面補預設
+          category: "遊戲",
+          stockStatus: statusToWebStockStatus(g.status === "已售出" ? "已售出" : "在庫"),
+          price: typeof g.suggestedPrice === "number" ? g.suggestedPrice : null,
+          tags: [],
+          note: "",
+          photos: [],
+        },
+        spec: {
+          cpu: "",
+          ram: "",
+          gpu: g.model || "",
+          motherboard: "",
+          storage: "",
+          psu: "",
+          case: "",
+          peripherals: g.brand ? `廠牌：${g.brand}` : "",
+        },
+      };
+      it.web.name = buildDefaultWebNameFromStock(it);
+      out.push(it);
+    }
+  } catch {}
+
+  // 若舊資料都沒有，就放預設示範
+  if (out.length === 0) {
+    saveStock([...DEFAULT_STOCK]);
+    saveStockKinds([...DEFAULT_STOCK_KINDS]);
+    saveStockSchema([...DEFAULT_STOCK_SCHEMA]);
+    return;
+  }
+
+  saveStock(out);
+  const kindsExisting = safeJsonParse(localStorage.getItem(STORAGE_KEYS.stockKinds), null);
+  if (!Array.isArray(kindsExisting)) saveStockKinds([...DEFAULT_STOCK_KINDS]);
+  // 如果使用者之前沒有 schema，就存一份預設（可自行改）
+  const schemaExisting = safeJsonParse(localStorage.getItem(STORAGE_KEYS.stockSchema), null);
+  if (!Array.isArray(schemaExisting)) saveStockSchema([...DEFAULT_STOCK_SCHEMA]);
+}
+
+function nextNumber(prefix, existingCodes) {
+  // existingCodes: ["DK-001", ...] or ["GPU-001", ...]
+  let max = 0;
+  for (const code of existingCodes || []) {
+    const m = String(code || "").match(/(\d+)\s*$/);
+    if (!m) continue;
+    const n = Number(m[1]);
+    if (Number.isFinite(n)) max = Math.max(max, n);
+  }
+  const next = max + 1;
+  const num = String(next).padStart(3, "0");
+  return `${prefix}-${num}`;
+}
+
+function exportAllData() {
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    config: getConfig(),
+    inventory: getInventory(),
+    computers: getComputers(),
+    gpus: getGpus(),
+    misc: getMisc(),
+    stockKinds: getStockKinds(),
+    stockSchema: getStockSchema(),
+    stock: getStock(),
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+function importAllData(jsonText) {
+  const data = safeJsonParse(jsonText, null);
+  if (!data || typeof data !== "object") throw new Error("invalid json");
+  if (data.config) saveConfig(deepMerge(DEFAULT_CONFIG, data.config));
+  if (Array.isArray(data.inventory)) saveInventory(data.inventory);
+  if (Array.isArray(data.computers)) saveComputers(data.computers);
+  if (Array.isArray(data.gpus)) saveGpus(data.gpus);
+  if (Array.isArray(data.misc)) saveMisc(data.misc);
+  if (Array.isArray(data.stockKinds)) saveStockKinds(data.stockKinds);
+  if (Array.isArray(data.stockSchema)) saveStockSchema(data.stockSchema);
+  if (Array.isArray(data.stock)) saveStock(data.stock);
 }
 
 function makeId(prefix = "item") {
@@ -160,14 +645,42 @@ function applyConfigToHomePage() {
 
   const heroTitle = document.getElementById("heroTitle");
   if (heroTitle) heroTitle.textContent = cfg.siteTitle;
-  document.title = cfg.siteTitle;
+  if (document.querySelector("title")) document.title = cfg.siteTitle || document.title;
 
   const brandMark = document.getElementById("brandMark");
-  if (brandMark) brandMark.textContent = cfg.brand.mark;
+  if (brandMark && !brandMark.querySelector("img")) brandMark.textContent = cfg.brand.mark;
   const brandTitle = document.getElementById("brandTitle");
   if (brandTitle) brandTitle.textContent = cfg.brand.title;
   const brandSubtitle = document.getElementById("brandSubtitle");
   if (brandSubtitle) brandSubtitle.textContent = cfg.brand.subtitle;
+
+  const fe = cfg.frontend || {};
+  const heroTagline = document.getElementById("heroTagline");
+  if (heroTagline) heroTagline.textContent = fe.heroTagline ?? cfg.brand.title;
+  const heroSub = document.getElementById("heroSub");
+  if (heroSub) heroSub.textContent = fe.heroSub ?? cfg.brand.subtitle;
+  const heroBtn1 = document.getElementById("heroBtn1");
+  if (heroBtn1) heroBtn1.textContent = fe.heroBtn1 ?? "🔥 我要買整機";
+  const heroBtn2 = document.getElementById("heroBtn2");
+  if (heroBtn2) heroBtn2.textContent = fe.heroBtn2 ?? "🧠 不知道怎麼選（需求表單）";
+  const heroBtn3 = document.getElementById("heroBtn3");
+  if (heroBtn3) heroBtn3.textContent = fe.heroBtn3 ?? "🔧 電腦有問題要維修";
+  const trustTitle = document.getElementById("trustTitle");
+  if (trustTitle) trustTitle.textContent = fe.trustTitle ?? "所有整機皆";
+  const trustList = document.getElementById("trustList");
+  if (trustList && Array.isArray(fe.trustItems) && fe.trustItems.length > 0) {
+    trustList.innerHTML = fe.trustItems.map((t) => `<li>${escapeHtml(t)}</li>`).join("");
+  }
+  const trustNote = document.getElementById("trustNote");
+  if (trustNote) trustNote.textContent = fe.trustNote ?? "";
+  const contactTitle = document.getElementById("contactTitle");
+  if (contactTitle) contactTitle.textContent = fe.contactTitle ?? "聯絡我們";
+  const contactSub = document.getElementById("contactSub");
+  if (contactSub) contactSub.textContent = fe.contactSub ?? "";
+  const machinePageTitle = document.getElementById("machinePageTitle");
+  if (machinePageTitle) machinePageTitle.textContent = fe.machinePageTitle ?? "整機販售";
+  const machinePageSub = document.getElementById("machinePageSub");
+  if (machinePageSub) machinePageSub.textContent = fe.machinePageSub ?? "";
 
   const shopName = document.getElementById("shopName");
   if (shopName) shopName.textContent = cfg.shop.name;
@@ -216,6 +729,8 @@ function applyConfigToHomePage() {
   const lineButtons = [
     document.getElementById("lineMainBtn"),
     document.getElementById("lineStickyBtn"),
+    document.getElementById("navLineBtn"),
+    document.getElementById("heroBtn3"),
   ].filter(Boolean);
 
   for (const btn of lineButtons) {
@@ -278,13 +793,40 @@ window.DK = {
   saveConfig,
   getInventory,
   saveInventory,
+  DEFAULT_COMPUTERS,
+  DEFAULT_GPUS,
+  DEFAULT_MISC,
+  getComputers,
+  saveComputers,
+  getGpus,
+  saveGpus,
+  getMisc,
+  saveMisc,
+  DEFAULT_STOCK_KINDS,
+  getStockKinds,
+  saveStockKinds,
+  DEFAULT_STOCK_SCHEMA,
+  DEFAULT_STOCK,
+  getStockSchema,
+  saveStockSchema,
+  getStock,
+  saveStock,
   formatPrice,
+  toNumber,
+  todayISO,
+  calcTotalCostPC,
+  ensureUnifiedStockInitialized,
+  syncWebInventoryFromStock,
+  nextNumber,
+  exportAllData,
+  importAllData,
   makeId,
   normalizeText,
   stockBadgeClass,
   escapeHtml,
   applyConfigToHomePage,
   openLineOrder,
+  tryCopy,
   isAdminAuthed,
   setAdminAuthed,
 };
@@ -334,8 +876,8 @@ window.DK = {
   });
 })();
 
-// 首頁自動套用商家/連結設定
-if (document.getElementById("inventoryGrid")) {
+// 各頁面自動套用設定（品牌、LINE 連結等）
+if (document.getElementById("copyrightYear") || document.getElementById("lineMainBtn") || document.getElementById("navLineBtn")) {
   applyConfigToHomePage();
 }
 

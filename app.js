@@ -62,6 +62,7 @@
       const badgeClass = DK.stockBadgeClass(item.stockStatus);
       const photos = Array.isArray(item.photos) ? item.photos : [];
       const firstPhoto = photos[0] || "";
+      const qty = typeof item.qty === "number" && item.qty >= 0 ? item.qty : null;
 
       el.innerHTML = `
         ${firstPhoto ? `<img class="mini-photo" alt="${DK.escapeHtml(item.name)}" src="${firstPhoto}" loading="lazy" />` : ""}
@@ -70,7 +71,7 @@
             <a class="mini-name" href="./product.html?id=${encodeURIComponent(item.id)}">${DK.escapeHtml(item.name)}</a>
             <span class="badge ${badgeClass}">${DK.escapeHtml(item.stockStatus)}</span>
           </div>
-          <div class="mini-spec muted">CPU：${DK.escapeHtml(item.cpu || "-")}｜GPU：${DK.escapeHtml(item.gpu || "-")}</div>
+          <div class="mini-spec muted">CPU：${DK.escapeHtml(item.cpu || "-")}｜GPU：${DK.escapeHtml(item.gpu || "-")}${qty != null ? `｜剩餘 ${qty} 件` : ""}</div>
           <div class="mini-bottom">
             <div class="price"><small>NT$</small> ${DK.formatPrice(item.price) || "-"}</div>
             <div class="mini-actions">
@@ -160,6 +161,7 @@
       const tags = Array.isArray(item.tags) ? item.tags : [];
       const photos = Array.isArray(item.photos) ? item.photos : [];
       const firstPhoto = photos[0] || "";
+      const qty = typeof item.qty === "number" && item.qty >= 0 ? item.qty : null;
 
       const tagBadges = tags
         .slice(0, 4)
@@ -167,7 +169,7 @@
         .join("");
 
       el.innerHTML = `
-        ${firstPhoto ? `<img class="item-photo" alt="${DK.escapeHtml(item.name)}" src="${firstPhoto}" loading="lazy" />` : ""}
+        ${firstPhoto ? `<div class="item-photo-wrap"><img class="item-photo" alt="${DK.escapeHtml(item.name)}" src="${firstPhoto}" loading="lazy" /></div>` : ""}
         <div class="item-top">
           <a class="item-name" href="./product.html?id=${encodeURIComponent(item.id)}">${DK.escapeHtml(item.name)}</a>
           <div class="badges">
@@ -185,7 +187,10 @@
         </div>
 
         <div class="item-bottom">
-          <div class="price"><small>NT$</small> ${DK.formatPrice(item.price) || "-"}</div>
+          <div class="item-price-block">
+            <div class="price"><small>NT$</small> ${DK.formatPrice(item.price) || "-"}</div>
+            ${qty != null ? `<div class="item-qty">剩餘 ${qty} 件</div>` : ""}
+          </div>
           <div class="item-actions">
             <a class="btn btn-ghost btn-sm" href="./product.html?id=${encodeURIComponent(item.id)}">查看詳情</a>
             <button class="btn btn-primary btn-sm" type="button">加 LINE 下單</button>
