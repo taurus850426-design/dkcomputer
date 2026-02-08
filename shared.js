@@ -648,7 +648,7 @@ function applyConfigToHomePage() {
   if (document.querySelector("title")) document.title = cfg.siteTitle || document.title;
 
   const brandMark = document.getElementById("brandMark");
-  if (brandMark && !brandMark.querySelector("img")) brandMark.textContent = cfg.brand.mark;
+  if (brandMark) brandMark.textContent = cfg.brand.mark;
   const brandTitle = document.getElementById("brandTitle");
   if (brandTitle) brandTitle.textContent = cfg.brand.title;
   const brandSubtitle = document.getElementById("brandSubtitle");
