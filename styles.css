@@ -183,11 +183,20 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 }
 .cat-card:hover{ opacity: 1; border-color: var(--primary); transform: translateY(-4px) scale(1.05); }
 .cat-card.active{ opacity: 1; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(0,0,0,0.06); }
+.cat-card-bg-img{
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
 .cat-card-bg{
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.35) 100%);
+  background: linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.5) 100%);
   pointer-events: none;
+  z-index: 1;
 }
 .cat-card [aria-hidden="true"]{ z-index: 0; }
 .cat-card-num, .cat-card-title, .cat-card-price{ position: relative; z-index: 1; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
@@ -195,12 +204,7 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .cat-card-title{ font-size: 16px; font-weight: 700; text-align: center; line-height: 1.3; margin-bottom: 8px; }
 .cat-card-price{ font-size: 13px; opacity: 0.95; }
 
-/* 各分類卡片背景圖 */
-.cat-card[data-cat="office"] .cat-card-bg{ background: linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.5) 100%), url("./assets/cat-office.png") center/cover no-repeat; }
-.cat-card[data-cat="game-entry"] .cat-card-bg{ background: linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.5) 100%), url("./assets/cat-game-entry.png") center/cover no-repeat; }
-.cat-card[data-cat="game-mid"] .cat-card-bg{ background: linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.5) 100%), url("./assets/cat-game-mid.png") center/cover no-repeat; }
-.cat-card[data-cat="work"] .cat-card-bg{ background: linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.5) 100%), url("./assets/cat-work.png") center/cover no-repeat; }
-.cat-card[data-cat="peripherals"] .cat-card-bg{ background: linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.5) 100%), url("./assets/cat-peripherals.png") center/cover no-repeat; }
+/* 各分類卡片背景圖：改由 HTML img 標籤載入 */
 
 .products-section{ margin-top: 24px; }
 .products-section-title{ margin-bottom: 16px; }

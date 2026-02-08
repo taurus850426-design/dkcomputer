@@ -1,18 +1,6 @@
 /* machine.js - 整機販售頁：5 張 9:16 分類卡片，點進去顯示上架商品 */
 
 (function () {
-  // 修正 GitHub Pages 等部署路徑：依當前頁面位置決定 assets 的完整網址
-  const base = window.location.href.replace(/#.*$/, "").replace(/\/[^/]*$/, "/");
-  const asset = (name) => base + "assets/" + name;
-  document.querySelectorAll(".cat-card[data-cat]").forEach((card) => {
-    const bg = card.querySelector(".cat-card-bg");
-    const cat = card.dataset.cat;
-    if (bg && cat) {
-      const img = "cat-" + cat + ".png";
-      bg.style.background = 'linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.5) 100%), url("' + asset(img) + '") center/cover no-repeat';
-    }
-  });
-
   const catCards = document.querySelectorAll(".cat-card");
   const productsSection = document.getElementById("productsSection");
   const productsSectionTitle = document.getElementById("productsSectionTitle");
