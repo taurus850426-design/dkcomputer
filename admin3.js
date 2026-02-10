@@ -1,6 +1,6 @@
-/* admin3.js - 後台 3 大模組：庫存 / 訂單 / 報表（localStorage） */
+/* admin3.js - 後台 3 大模組：庫存 / 訂單 / 報表（localStorage + Supabase 前台商品） */
 
-(function () {
+(async function () {
   // ---------- storage ----------
   const KEYS = {
     items: "dk_im_items_v1",
@@ -739,7 +739,7 @@
     if (publishTotalCost) publishTotalCost.textContent = `NT$ ${formatNum(total)}`;
   }
 
-  function submitPublish() {
+  async function submitPublish() {
     hide(publishMsg);
     const productName = String(publishProductName?.value || "").trim();
     if (!productName) {
@@ -804,6 +804,14 @@
     };
     currentInv.unshift(newItem);
     window.DK.saveInventory(currentInv);
+    // 同步到 Supabase
+    if (window.DK?.upsertInventoryItemToSupabase) {
+      try {
+        await window.DK.upsertInventoryItemToSupabase(newItem);
+      } catch (e) {
+        console.warn("同步新上架商品到 Supabase 失敗", e);
+      }
+    }
 
     let msg = `已上架「${productName}」至前台（出售金額 NT$ ${formatNum(salePrice)}，${photoCount} 張照片）。`;
     if (zeroStockNames.length) msg += ` 以下規格庫存為 0，請至庫存管理補齊：${zeroStockNames.join("、")}`;
@@ -845,7 +853,7 @@
     hide(publishEditorMsg);
   }
 
-  function savePublishEditor() {
+  async function savePublishEditor() {
     hide(publishEditorMsg);
     if (!editingWebId || !window.DK?.getInventory || !window.DK?.saveInventory) return;
     const items = getWebItems();
@@ -870,14 +878,30 @@
       note: String(webEditNote?.value || "").trim(),
     };
     window.DK.saveInventory(items);
+    // 同步更新到 Supabase
+    if (window.DK?.upsertInventoryItemToSupabase) {
+      try {
+        await window.DK.upsertInventoryItemToSupabase(items[idx]);
+      } catch (e) {
+        console.warn("同步編輯後商品到 Supabase 失敗", e);
+      }
+    }
     closePublishEditor();
     renderPublish();
   }
 
-  function removeFromWeb(id) {
+  async function removeFromWeb(id) {
     if (!window.DK?.getInventory || !window.DK?.saveInventory) return;
     const items = getWebItems().filter((x) => x.id !== id);
     window.DK.saveInventory(items);
+    // 從 Supabase 刪除
+    if (window.DK?.deleteInventoryItemFromSupabase) {
+      try {
+        await window.DK.deleteInventoryItemFromSupabase(id);
+      } catch (e) {
+        console.warn("從 Supabase 刪除商品失敗", e);
+      }
+    }
     if (editingWebId === id) closePublishEditor();
     renderPublish();
   }
@@ -932,7 +956,16 @@
 
   function saveOrders(orders) {
     saveArr(KEYS.orders, orders);
+    if (window.DK?.saveOrdersToSupabase) {
+      window.DK.saveOrdersToSupabase(orders).catch(function () {});
+    }
   }
+
+  // 後台載入時從 Supabase 拉訂單，多裝置看到同一份
+  try {
+    const orders = await window.DK.fetchOrdersFromSupabase();
+    if (Array.isArray(orders)) saveArr(KEYS.orders, orders);
+  } catch (_) {}
 
   function openOrdEditor() {
     if (!ordEditor) return;

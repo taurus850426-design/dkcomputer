@@ -1,6 +1,6 @@
 /* machine.js - 整機販售頁：5 張 9:16 分類卡片，點進去顯示上架商品 */
 
-(function () {
+(async function () {
   // 分類圖片：後台設定優先（data URL），否則用完整 URL 載入預設圖
   const cfg = typeof DK !== "undefined" && DK.getConfig ? DK.getConfig() : {};
   const catImages = cfg.frontend?.catImages || {};
@@ -26,6 +26,18 @@
   const productsPrompt = document.getElementById("productsPrompt");
 
   if (!catCards.length || !productsSection || !productsGrid) return;
+
+  // 先從 Supabase 載入最新前台商品，覆蓋本機快取（若尚未設定 Supabase 則會退回本機資料）
+  if (window.DK?.fetchInventoryFromSupabase && window.DK?.saveInventory) {
+    try {
+      const remoteItems = await DK.fetchInventoryFromSupabase();
+      if (Array.isArray(remoteItems) && remoteItems.length) {
+        DK.saveInventory(remoteItems);
+      }
+    } catch (e) {
+      console.warn("載入 Supabase 商品失敗，改用本機資料", e);
+    }
+  }
 
   // 用途分類對應
   const CAT_MAP = {

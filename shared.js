@@ -13,6 +13,26 @@ const STORAGE_KEYS = {
   stock: "dk_stock_v1",
 };
 
+// ===== Supabase（遠端前台商品）設定 =====
+// ⚠️ 請把下面兩個常數改成你在 Supabase 後台看到的值：
+// - SUPABASE_URL：Project Settings → Data API 裡的 Project URL
+// - SUPABASE_ANON_KEY：Project Settings → API Keys 裡的 Publishable key
+//
+// 例：
+// const SUPABASE_URL = "https://xxxxx.supabase.co";
+// const SUPABASE_ANON_KEY = "sb_publishable_xxx...";
+//
+// 目前先留空，若沒填就會退回使用 localStorage 的舊行為。
+const SUPABASE_URL = "https://npynqrsmduukulwgylkz.supabase.co"; // TODO: 改成你的 Supabase Project URL
+const SUPABASE_ANON_KEY = "sb_publishable_K0fyhespfyQIP-56bTZEFg_Gq1PJG4F"; // TODO: 改成你的 Supabase Publishable key
+const SUPABASE_INVENTORY_TABLE = "inventory";
+const SUPABASE_SITE_CONFIG_TABLE = "site_config";
+const SITE_CONFIG_ROW_ID = "default";
+const SUPABASE_STOCK_DATA_TABLE = "stock_data";
+const STOCK_DATA_ROW_ID = "default";
+const SUPABASE_ORDERS_DATA_TABLE = "orders_data";
+const ORDERS_DATA_ROW_ID = "default";
+
 const DEFAULT_CONFIG = {
   siteTitle: "二手電腦・實測交付｜依用途配機，不亂賣、不踩雷",
   brand: {
@@ -262,6 +282,10 @@ function getConfig() {
 
 function saveConfig(nextConfig) {
   localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(nextConfig));
+  // 同步寫入 Supabase，讓所有人看到同一份前台設定
+  if (window.DK?.saveSiteConfigToSupabase) {
+    window.DK.saveSiteConfigToSupabase(nextConfig).catch(() => {});
+  }
 }
 
 function getInventory() {
@@ -272,6 +296,202 @@ function getInventory() {
 
 function saveInventory(items) {
   localStorage.setItem(STORAGE_KEYS.inventory, JSON.stringify(items));
+}
+
+// ===== Supabase：前台商品讀寫 =====
+async function fetchInventoryFromSupabase() {
+  // 若尚未設定 Supabase，退回用 localStorage / 預設 demo
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return getInventory();
+
+  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_INVENTORY_TABLE}?select=*`;
+  const res = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error("fetch inventory from Supabase failed");
+  }
+  const rows = await res.json();
+  return rows.map((r) => ({
+    id: String(r.id || ""),
+    name: String(r.name || ""),
+    category: String(r.category || ""),
+    stockStatus: String(r.stock_status || "現貨"),
+    price: typeof r.price === "number" ? r.price : toNumber(r.price) ?? null,
+    note: String(r.note || ""),
+    photos: Array.isArray(r.photos) ? r.photos : [],
+  }));
+}
+
+async function upsertInventoryItemToSupabase(item) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !item || !item.id) return;
+  const payload = {
+    id: String(item.id),
+    name: String(item.name || ""),
+    category: String(item.category || ""),
+    stock_status: String(item.stockStatus || "現貨"),
+    price: typeof item.price === "number" ? item.price : toNumber(item.price),
+    note: String(item.note || ""),
+    photos: Array.isArray(item.photos) ? item.photos : [],
+  };
+
+  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_INVENTORY_TABLE}?on_conflict=id`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify([payload]),
+  });
+  if (!res.ok) {
+    // 失敗時先不要阻斷使用者操作，只在 console 提示
+    console.warn("同步商品到 Supabase 失敗", await res.text());
+  }
+}
+
+async function deleteInventoryItemFromSupabase(id) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !id) return;
+  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_INVENTORY_TABLE}?id=eq.${encodeURIComponent(
+    String(id),
+  )}`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  if (!res.ok) {
+    console.warn("從 Supabase 刪除商品失敗", await res.text());
+  }
+}
+
+// ===== Supabase：官網設定（site_config）讀寫 =====
+async function fetchSiteConfigFromSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_SITE_CONFIG_TABLE}?id=eq.${encodeURIComponent(
+    SITE_CONFIG_ROW_ID,
+  )}&select=data`;
+  const res = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  if (!res.ok) return null;
+  const rows = await res.json();
+  const raw = rows?.[0]?.data;
+  if (!raw || typeof raw !== "object") return null;
+  return deepMerge(DEFAULT_CONFIG, raw);
+}
+
+async function saveSiteConfigToSupabase(config) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !config || typeof config !== "object") return;
+  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_SITE_CONFIG_TABLE}?on_conflict=id`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation,resolution=merge-duplicates",
+    },
+    body: JSON.stringify([{ id: SITE_CONFIG_ROW_ID, data: config }]),
+  });
+  if (!res.ok) {
+    console.warn("同步官網設定到 Supabase 失敗", await res.text());
+  }
+}
+
+// ===== Supabase：庫存資料（stock + stockKinds + stockSchema）讀寫 =====
+async function fetchStockDataFromSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_STOCK_DATA_TABLE}?id=eq.${encodeURIComponent(
+    STOCK_DATA_ROW_ID,
+  )}&select=data`;
+  const res = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  if (!res.ok) return null;
+  const rows = await res.json();
+  const raw = rows?.[0]?.data;
+  if (!raw || typeof raw !== "object") return null;
+  return raw;
+}
+
+async function saveAllStockDataToSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+  const payload = {
+    id: STOCK_DATA_ROW_ID,
+    data: {
+      stock: getStock(),
+      stockKinds: getStockKinds(),
+      stockSchema: getStockSchema(),
+    },
+  };
+  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_STOCK_DATA_TABLE}?on_conflict=id`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation,resolution=merge-duplicates",
+    },
+    body: JSON.stringify([payload]),
+  });
+  if (!res.ok) {
+    console.warn("同步庫存到 Supabase 失敗", await res.text());
+  }
+}
+
+// ===== Supabase：訂單資料（訂單管理、報表用）讀寫 =====
+async function fetchOrdersFromSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_ORDERS_DATA_TABLE}?id=eq.${encodeURIComponent(
+    ORDERS_DATA_ROW_ID,
+  )}&select=data`;
+  const res = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  if (!res.ok) return null;
+  const rows = await res.json();
+  const raw = rows?.[0]?.data;
+  if (!raw || typeof raw !== "object" || !Array.isArray(raw.orders)) return null;
+  return raw.orders;
+}
+
+async function saveOrdersToSupabase(orders) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !Array.isArray(orders)) return;
+  const payload = {
+    id: ORDERS_DATA_ROW_ID,
+    data: { orders: orders },
+  };
+  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_ORDERS_DATA_TABLE}?on_conflict=id`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation,resolution=merge-duplicates",
+    },
+    body: JSON.stringify([payload]),
+  });
+  if (!res.ok) {
+    console.warn("同步訂單到 Supabase 失敗", await res.text());
+  }
 }
 
 function getComputers() {
@@ -315,8 +535,11 @@ function getStockKinds() {
     .filter((x) => x.label && x.prefix);
 }
 
-function saveStockKinds(kinds) {
+function saveStockKinds(kinds, skipSupabaseSync) {
   localStorage.setItem(STORAGE_KEYS.stockKinds, JSON.stringify(kinds));
+  if (!skipSupabaseSync && window.DK?.saveAllStockDataToSupabase) {
+    window.DK.saveAllStockDataToSupabase().catch(function () {});
+  }
 }
 
 function getStockSchema() {
@@ -328,8 +551,11 @@ function getStockSchema() {
     .filter((x) => x.key && x.label);
 }
 
-function saveStockSchema(schema) {
+function saveStockSchema(schema, skipSupabaseSync) {
   localStorage.setItem(STORAGE_KEYS.stockSchema, JSON.stringify(schema));
+  if (!skipSupabaseSync && window.DK?.saveAllStockDataToSupabase) {
+    window.DK.saveAllStockDataToSupabase().catch(function () {});
+  }
 }
 
 function getStock() {
@@ -338,8 +564,11 @@ function getStock() {
   return saved;
 }
 
-function saveStock(items) {
+function saveStock(items, skipSupabaseSync) {
   localStorage.setItem(STORAGE_KEYS.stock, JSON.stringify(items));
+  if (!skipSupabaseSync && window.DK?.saveAllStockDataToSupabase) {
+    window.DK.saveAllStockDataToSupabase().catch(function () {});
+  }
 }
 
 function formatPrice(n) {
@@ -798,6 +1027,15 @@ window.DK = {
   saveConfig,
   getInventory,
   saveInventory,
+  fetchInventoryFromSupabase,
+  upsertInventoryItemToSupabase,
+  deleteInventoryItemFromSupabase,
+  fetchSiteConfigFromSupabase,
+  saveSiteConfigToSupabase,
+  fetchStockDataFromSupabase,
+  saveAllStockDataToSupabase,
+  fetchOrdersFromSupabase,
+  saveOrdersToSupabase,
   DEFAULT_COMPUTERS,
   DEFAULT_GPUS,
   DEFAULT_MISC,
@@ -835,6 +1073,28 @@ window.DK = {
   isAdminAuthed,
   setAdminAuthed,
 };
+
+// 頁面載入時從 Supabase 拉官網設定，覆蓋本機（大家看到同一份設定）
+if (window.DK.fetchSiteConfigFromSupabase && window.DK.saveConfig) {
+  window.DK
+    .fetchSiteConfigFromSupabase()
+    .then(function (c) {
+      if (c != null) window.DK.saveConfig(c);
+    })
+    .catch(function () {});
+}
+// 頁面載入時從 Supabase 拉庫存（stock + 類別 + 欄位），多裝置看到同一份（不觸發回寫）
+if (window.DK.fetchStockDataFromSupabase) {
+  window.DK
+    .fetchStockDataFromSupabase()
+    .then(function (data) {
+      if (!data) return;
+      if (Array.isArray(data.stock)) window.DK.saveStock(data.stock, true);
+      if (Array.isArray(data.stockKinds)) window.DK.saveStockKinds(data.stockKinds, true);
+      if (Array.isArray(data.stockSchema)) window.DK.saveStockSchema(data.stockSchema, true);
+    })
+    .catch(function () {});
+}
 
 // 手機選單（小螢幕可展開主選單/進後台）
 (function initMobileMenu() {
