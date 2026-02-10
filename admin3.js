@@ -171,6 +171,7 @@
   const webEditOffBtn = document.getElementById("webEditOffBtn");
   const publishQty = document.getElementById("publishQty");
   const publishProductName = document.getElementById("publishProductName");
+  const publishCategory = document.getElementById("publishCategory");
   const publishSpecSummary = document.getElementById("publishSpecSummary");
   const publishTotalCost = document.getElementById("publishTotalCost");
   const publishPrice = document.getElementById("publishPrice");
@@ -789,7 +790,7 @@
     const newItem = {
       id: makeWebItemId(),
       name: productName,
-      category: "遊戲",
+      category: publishCategory?.value || "遊戲",
       stockStatus: "現貨",
       cpu,
       gpu,

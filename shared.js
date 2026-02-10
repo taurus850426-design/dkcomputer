@@ -446,10 +446,14 @@ function stockToInventoryItem(it) {
 
 function syncWebInventoryFromStock() {
   backupInventoryOnce();
-  const items = getStock()
-    .map(stockToInventoryItem)
-    .filter(Boolean);
-  saveInventory(items);
+  const stockList = getStock();
+  const stockIds = new Set(stockList.map((s) => String(s?.id || "").trim()).filter(Boolean));
+  const fromStock = stockList.map(stockToInventoryItem).filter(Boolean);
+  const currentInv = getInventory();
+  // 保留「僅在 inventory、不在庫存」的項目（例如上架管理新增的 WEB-xxx），避免被同步洗掉
+  const inventoryOnly = currentInv.filter((it) => it?.id && !stockIds.has(String(it.id)));
+  const merged = [...fromStock, ...inventoryOnly];
+  saveInventory(merged);
 }
 
 function ensureUnifiedStockInitialized() {

@@ -93,7 +93,10 @@
     const items = getItems();
     const filtered = items.filter((it) => {
       if (!categoryMatch(it, cfg.categories)) return false;
-      return priceInRange(it.price, cfg.minPrice, cfg.maxPrice);
+      // 售價 0 或未填視為「價格請加 LINE 詢問」，仍顯示在該分類
+      const p = it.price;
+      if (p == null || p === "" || (typeof p === "number" && (Number.isNaN(p) || p <= 0))) return true;
+      return priceInRange(p, cfg.minPrice, cfg.maxPrice);
     });
 
     if (productsSectionTitle) productsSectionTitle.textContent = cfg.title;

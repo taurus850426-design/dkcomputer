@@ -252,14 +252,16 @@
               <div class="form-grid">
                 <div class="field full">
                   <label for="webEditName">商品名稱</label>
-                  <input id="webEditName" type="text" />
+                  <input id="webEditName" type="text" placeholder="可依分類命名，例如：文書機、遊戲入門機、電腦周邊" />
                 </div>
                 <div class="field">
-                  <label for="webEditCategory">分類</label>
+                  <label for="webEditCategory">分類（對應前台五張卡片）</label>
                   <select id="webEditCategory">
-                    <option value="遊戲">遊戲</option>
-                    <option value="剪輯">剪輯</option>
-                    <option value="辦公">辦公</option>
+                    <option value="文書">① 文書／上網／學生</option>
+                    <option value="遊戲">② 遊戲入門</option>
+                    <option value="遊戲">③ 遊戲中階（主力）</option>
+                    <option value="剪輯">④ 工作／效能取向</option>
+                    <option value="周邊">⑤ 電腦周邊</option>
                   </select>
                 </div>
                 <div class="field">
@@ -295,7 +297,17 @@
               <div class="form-grid">
                 <div class="field full">
                   <label for="publishProductName">商品名稱</label>
-                  <input id="publishProductName" type="text" placeholder="例如：R5 7500F / RTX 4060 遊戲主機" />
+                  <input id="publishProductName" type="text" placeholder="例如：文書機 / 遊戲入門機 / 遊戲中階機 / 工作機 / 鍵盤滑鼠組（可依上方分類命名）" />
+                </div>
+                <div class="field">
+                  <label for="publishCategory">分類（對應前台五張卡片）</label>
+                  <select id="publishCategory">
+                    <option value="文書">① 文書／上網／學生</option>
+                    <option value="遊戲">② 遊戲入門</option>
+                    <option value="遊戲">③ 遊戲中階（主力）</option>
+                    <option value="剪輯">④ 工作／效能取向</option>
+                    <option value="周邊">⑤ 電腦周邊</option>
+                  </select>
                 </div>
                 <div class="field full">
                   <label for="publishSpecSummary">規格（選填，摘要說明）</label>
@@ -303,103 +315,139 @@
                 </div>
                 <div class="publish-specs-grid">
                 <div class="field publish-spec-block">
-                  <label>處理器 CPU</label>
-                  <div class="row-flex row-compact">
-                    <select id="publishCpu" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
-                    <input id="publishCpuCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
-                    <select id="publishCpuCondition" class="publish-condition" title="全新／二手"><option value="全新">全新</option><option value="二手">二手</option></select>
-                    <input id="publishCpuPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  <div class="publish-spec-box">
+                    <label class="publish-spec-title">處理器 CPU</label>
+                    <div class="publish-spec-row publish-spec-combo">
+                      <select id="publishCpu" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <input id="publishCpuCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    </div>
+                    <div class="publish-spec-row publish-spec-meta">
+                      <select id="publishCpuCondition" class="publish-condition" title="全新／二手"><option value="全新">全新</option><option value="二手">二手</option></select>
+                      <input id="publishCpuPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                      <input id="publishCpuRemark" type="text" placeholder="備注" class="publish-remark" />
+                    </div>
+                    <span id="publishCpuInfo" class="muted small"></span>
                   </div>
-                  <span id="publishCpuInfo" class="muted small"></span>
-                  <input id="publishCpuRemark" type="text" placeholder="備注" class="publish-remark" />
                 </div>
                 <div class="field publish-spec-block">
-                  <label>主機板 MB</label>
-                  <div class="row-flex row-compact">
-                    <select id="publishMb" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
-                    <input id="publishMbCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
-                    <select id="publishMbCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
-                    <input id="publishMbPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  <div class="publish-spec-box">
+                    <label class="publish-spec-title">主機板 MB</label>
+                    <div class="publish-spec-row publish-spec-combo">
+                      <select id="publishMb" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <input id="publishMbCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    </div>
+                    <div class="publish-spec-row publish-spec-meta">
+                      <select id="publishMbCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                      <input id="publishMbPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                      <input id="publishMbRemark" type="text" placeholder="備注" class="publish-remark" />
+                    </div>
+                    <span id="publishMbInfo" class="muted small"></span>
                   </div>
-                  <span id="publishMbInfo" class="muted small"></span>
-                  <input id="publishMbRemark" type="text" placeholder="備注" class="publish-remark" />
                 </div>
                 <div class="field publish-spec-block">
-                  <label>記憶體 RAM</label>
-                  <div class="row-flex row-compact">
-                    <select id="publishRam" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
-                    <input id="publishRamCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
-                    <select id="publishRamCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
-                    <input id="publishRamPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  <div class="publish-spec-box">
+                    <label class="publish-spec-title">記憶體 RAM</label>
+                    <div class="publish-spec-row publish-spec-combo">
+                      <select id="publishRam" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <input id="publishRamCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    </div>
+                    <div class="publish-spec-row publish-spec-meta">
+                      <select id="publishRamCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                      <input id="publishRamPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                      <input id="publishRamRemark" type="text" placeholder="備注" class="publish-remark" />
+                    </div>
+                    <span id="publishRamInfo" class="muted small"></span>
                   </div>
-                  <span id="publishRamInfo" class="muted small"></span>
-                  <input id="publishRamRemark" type="text" placeholder="備注" class="publish-remark" />
                 </div>
                 <div class="field publish-spec-block">
-                  <label>硬碟</label>
-                  <div class="row-flex row-compact">
-                    <select id="publishHdd" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
-                    <input id="publishHddCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
-                    <select id="publishHddCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
-                    <input id="publishHddPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  <div class="publish-spec-box">
+                    <label class="publish-spec-title">硬碟</label>
+                    <div class="publish-spec-row publish-spec-combo">
+                      <select id="publishHdd" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <input id="publishHddCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    </div>
+                    <div class="publish-spec-row publish-spec-meta">
+                      <select id="publishHddCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                      <input id="publishHddPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                      <input id="publishHddRemark" type="text" placeholder="備注" class="publish-remark" />
+                    </div>
+                    <span id="publishHddInfo" class="muted small"></span>
                   </div>
-                  <span id="publishHddInfo" class="muted small"></span>
-                  <input id="publishHddRemark" type="text" placeholder="備注" class="publish-remark" />
                 </div>
                 <div class="field publish-spec-block">
-                  <label>顯示卡 VGA</label>
-                  <div class="row-flex row-compact">
-                    <select id="publishVga" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
-                    <input id="publishVgaCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
-                    <select id="publishVgaCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
-                    <input id="publishVgaPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  <div class="publish-spec-box">
+                    <label class="publish-spec-title">顯示卡 VGA</label>
+                    <div class="publish-spec-row publish-spec-combo">
+                      <select id="publishVga" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <input id="publishVgaCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    </div>
+                    <div class="publish-spec-row publish-spec-meta">
+                      <select id="publishVgaCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                      <input id="publishVgaPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                      <input id="publishVgaRemark" type="text" placeholder="備注" class="publish-remark" />
+                    </div>
+                    <span id="publishVgaInfo" class="muted small"></span>
                   </div>
-                  <span id="publishVgaInfo" class="muted small"></span>
-                  <input id="publishVgaRemark" type="text" placeholder="備注" class="publish-remark" />
                 </div>
                 <div class="field publish-spec-block">
-                  <label>電源供應器</label>
-                  <div class="row-flex row-compact">
-                    <select id="publishPsu" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
-                    <input id="publishPsuCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
-                    <select id="publishPsuCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
-                    <input id="publishPsuPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  <div class="publish-spec-box">
+                    <label class="publish-spec-title">電源供應器</label>
+                    <div class="publish-spec-row publish-spec-combo">
+                      <select id="publishPsu" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <input id="publishPsuCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    </div>
+                    <div class="publish-spec-row publish-spec-meta">
+                      <select id="publishPsuCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                      <input id="publishPsuPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                      <input id="publishPsuRemark" type="text" placeholder="備注" class="publish-remark" />
+                    </div>
+                    <span id="publishPsuInfo" class="muted small"></span>
                   </div>
-                  <span id="publishPsuInfo" class="muted small"></span>
-                  <input id="publishPsuRemark" type="text" placeholder="備注" class="publish-remark" />
                 </div>
                 <div class="field publish-spec-block">
-                  <label>機殼</label>
-                  <div class="row-flex row-compact">
-                    <select id="publishCase" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
-                    <input id="publishCaseCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
-                    <select id="publishCaseCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
-                    <input id="publishCasePrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  <div class="publish-spec-box">
+                    <label class="publish-spec-title">機殼</label>
+                    <div class="publish-spec-row publish-spec-combo">
+                      <select id="publishCase" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <input id="publishCaseCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    </div>
+                    <div class="publish-spec-row publish-spec-meta">
+                      <select id="publishCaseCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                      <input id="publishCasePrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                      <input id="publishCaseRemark" type="text" placeholder="備注" class="publish-remark" />
+                    </div>
+                    <span id="publishCaseInfo" class="muted small"></span>
                   </div>
-                  <span id="publishCaseInfo" class="muted small"></span>
-                  <input id="publishCaseRemark" type="text" placeholder="備注" class="publish-remark" />
                 </div>
                 <div class="field publish-spec-block">
-                  <label>螢幕</label>
-                  <div class="row-flex row-compact">
-                    <select id="publishMonitor" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
-                    <input id="publishMonitorCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
-                    <select id="publishMonitorCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
-                    <input id="publishMonitorPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  <div class="publish-spec-box">
+                    <label class="publish-spec-title">螢幕</label>
+                    <div class="publish-spec-row publish-spec-combo">
+                      <select id="publishMonitor" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <input id="publishMonitorCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    </div>
+                    <div class="publish-spec-row publish-spec-meta">
+                      <select id="publishMonitorCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                      <input id="publishMonitorPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                      <input id="publishMonitorRemark" type="text" placeholder="備注" class="publish-remark" />
+                    </div>
+                    <span id="publishMonitorInfo" class="muted small"></span>
                   </div>
-                  <span id="publishMonitorInfo" class="muted small"></span>
-                  <input id="publishMonitorRemark" type="text" placeholder="備注" class="publish-remark" />
                 </div>
                 <div class="field publish-spec-block">
-                  <label>作業系統</label>
-                  <div class="row-flex row-compact">
-                    <select id="publishOs" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
-                    <input id="publishOsCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
-                    <select id="publishOsCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
-                    <input id="publishOsPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                  <div class="publish-spec-box">
+                    <label class="publish-spec-title">作業系統</label>
+                    <div class="publish-spec-row publish-spec-combo">
+                      <select id="publishOs" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <input id="publishOsCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
+                    </div>
+                    <div class="publish-spec-row publish-spec-meta">
+                      <select id="publishOsCondition" class="publish-condition"><option value="全新">全新</option><option value="二手">二手</option></select>
+                      <input id="publishOsPrice" type="number" min="0" step="10" class="publish-spec-price" placeholder="價" title="定價" />
+                      <input id="publishOsRemark" type="text" placeholder="備注" class="publish-remark" />
+                    </div>
+                    <span id="publishOsInfo" class="muted small"></span>
                   </div>
-                  <span id="publishOsInfo" class="muted small"></span>
-                  <input id="publishOsRemark" type="text" placeholder="備注" class="publish-remark" />
                 </div>
                 </div>
                 <div class="field full">
