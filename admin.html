@@ -640,6 +640,58 @@
               </div>
 
               <div class="field full">
+                <label class="h3" style="margin: 16px 0 4px">五張分類卡片圖片</label>
+                <p class="muted small">從電腦選擇照片可替換整機販售頁的五張分類圖。未上傳則使用預設圖。</p>
+              </div>
+              <div class="field full" style="display: flex; flex-wrap: wrap; gap: 16px;">
+                <div class="cat-image-slot">
+                  <div class="cat-image-label">① 文書／上網／學生</div>
+                  <div class="cat-image-preview" id="feCatPreviewOffice"></div>
+                  <input type="file" id="feCatFileOffice" accept="image/*" class="cat-image-input" data-cat="office" style="display:none" />
+                  <div style="margin-top:6px;display:flex;gap:8px;">
+                    <label class="btn btn-ghost btn-sm" for="feCatFileOffice">選擇圖片</label>
+                    <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="office">清除</button>
+                  </div>
+                </div>
+                <div class="cat-image-slot">
+                  <div class="cat-image-label">② 遊戲入門</div>
+                  <div class="cat-image-preview" id="feCatPreviewGameEntry"></div>
+                  <input type="file" id="feCatFileGameEntry" accept="image/*" class="cat-image-input" data-cat="game-entry" style="display:none" />
+                  <div style="margin-top:6px;display:flex;gap:8px;">
+                    <label class="btn btn-ghost btn-sm" for="feCatFileGameEntry">選擇圖片</label>
+                    <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="game-entry">清除</button>
+                  </div>
+                </div>
+                <div class="cat-image-slot">
+                  <div class="cat-image-label">③ 遊戲中階（主力）</div>
+                  <div class="cat-image-preview" id="feCatPreviewGameMid"></div>
+                  <input type="file" id="feCatFileGameMid" accept="image/*" class="cat-image-input" data-cat="game-mid" style="display:none" />
+                  <div style="margin-top:6px;display:flex;gap:8px;">
+                    <label class="btn btn-ghost btn-sm" for="feCatFileGameMid">選擇圖片</label>
+                    <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="game-mid">清除</button>
+                  </div>
+                </div>
+                <div class="cat-image-slot">
+                  <div class="cat-image-label">④ 工作／效能取向</div>
+                  <div class="cat-image-preview" id="feCatPreviewWork"></div>
+                  <input type="file" id="feCatFileWork" accept="image/*" class="cat-image-input" data-cat="work" style="display:none" />
+                  <div style="margin-top:6px;display:flex;gap:8px;">
+                    <label class="btn btn-ghost btn-sm" for="feCatFileWork">選擇圖片</label>
+                    <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="work">清除</button>
+                  </div>
+                </div>
+                <div class="cat-image-slot">
+                  <div class="cat-image-label">⑤ 電腦周邊</div>
+                  <div class="cat-image-preview" id="feCatPreviewPeripherals"></div>
+                  <input type="file" id="feCatFilePeripherals" accept="image/*" class="cat-image-input" data-cat="peripherals" style="display:none" />
+                  <div style="margin-top:6px;display:flex;gap:8px;">
+                    <label class="btn btn-ghost btn-sm" for="feCatFilePeripherals">選擇圖片</label>
+                    <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="peripherals">清除</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="field full">
                 <label class="h3" style="margin: 16px 0 4px">LINE 連結</label>
               </div>
               <div class="field full">

@@ -1,12 +1,20 @@
 /* machine.js - 整機販售頁：5 張 9:16 分類卡片，點進去顯示上架商品 */
 
 (function () {
-  // 使用完整 URL 載入分類圖片（解決 GitHub Pages 等部署路徑問題）
+  // 分類圖片：後台設定優先（data URL），否則用完整 URL 載入預設圖
+  const cfg = typeof DK !== "undefined" && DK.getConfig ? DK.getConfig() : {};
+  const catImages = cfg.frontend?.catImages || {};
   const base = window.location.origin + window.location.pathname.replace(/\/[^/]*$/, "/");
   document.querySelectorAll(".cat-card .cat-card-bg-img").forEach((img) => {
-    const src = img.getAttribute("src");
-    if (src && !src.startsWith("http")) {
-      img.src = base + src;
+    const card = img.closest(".cat-card");
+    const cat = card?.dataset?.cat;
+    if (cat && catImages[cat]) {
+      img.src = catImages[cat];
+    } else {
+      const src = img.getAttribute("src");
+      if (src && !src.startsWith("http")) {
+        img.src = base + src;
+      }
     }
   });
 

@@ -1429,6 +1429,24 @@
     document.getElementById("feMachinePageTitle").value = fe.machinePageTitle ?? def.machinePageTitle ?? "";
     document.getElementById("feMachinePageSub").value = fe.machinePageSub ?? def.machinePageSub ?? "";
     document.getElementById("feLineUrl").value = cfg.line?.url ?? "";
+    const catIds = ["office", "game-entry", "game-mid", "work", "peripherals"];
+    const catImages = fe.catImages || {};
+    catIds.forEach((cat) => {
+      const el = document.getElementById("feCatPreview" + cat.replace(/-([a-z])/g, (_, c) => c.toUpperCase()).replace(/^([a-z])/, (_, c) => c.toUpperCase()));
+      if (el) {
+        el.innerHTML = "";
+        if (catImages[cat]) {
+          const img = document.createElement("img");
+          img.src = catImages[cat];
+          img.alt = "";
+          img.style.cssText = "max-width:100%;max-height:120px;object-fit:cover;border-radius:8px;";
+          el.appendChild(img);
+        } else {
+          el.textContent = "未設定";
+          el.className = "cat-image-preview muted";
+        }
+      }
+    });
     const msg = document.getElementById("frontendMsg");
     if (msg) msg.hidden = true;
   }
@@ -1464,6 +1482,7 @@
         contactSub: document.getElementById("feContactSub").value?.trim(),
         machinePageTitle: document.getElementById("feMachinePageTitle").value?.trim(),
         machinePageSub: document.getElementById("feMachinePageSub").value?.trim(),
+        catImages: cfg.frontend?.catImages || {},
       },
       line: {
         ...cfg.line,
@@ -1496,6 +1515,53 @@
   document.getElementById("frontendSaveBtn2")?.addEventListener("click", saveFrontend);
   document.getElementById("frontendResetBtn")?.addEventListener("click", () => {
     if (confirm("確定重置前台設定為預設值？")) resetFrontend();
+  });
+
+  function updateCatImage(cat, dataUrl) {
+    const cfg = window.DK?.getConfig?.() || {};
+    const fe = cfg.frontend || {};
+    const catImages = { ...(fe.catImages || {}), [cat]: dataUrl || undefined };
+    if (!dataUrl) delete catImages[cat];
+    const next = { ...cfg, frontend: { ...fe, catImages } };
+    window.DK?.saveConfig?.(next);
+    loadFrontendForm();
+  }
+
+  function renderCatPreview(cat, dataUrl) {
+    const id = "feCatPreview" + cat.replace(/-([a-z])/g, (_, c) => c.toUpperCase()).replace(/^([a-z])/, (_, c) => c.toUpperCase());
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = "";
+    el.className = "cat-image-preview";
+    if (dataUrl) {
+      const img = document.createElement("img");
+      img.src = dataUrl;
+      img.alt = "";
+      img.style.cssText = "max-width:100%;max-height:120px;object-fit:cover;border-radius:8px;";
+      el.appendChild(img);
+    } else {
+      el.textContent = "未設定";
+      el.className = "cat-image-preview muted";
+    }
+  }
+
+  ["office", "game-entry", "game-mid", "work", "peripherals"].forEach((cat) => {
+    const input = document.getElementById("feCatFile" + cat.replace(/-([a-z])/g, (_, c) => c.toUpperCase()).replace(/^([a-z])/, (_, c) => c.toUpperCase()));
+    const clearBtn = document.querySelector(".cat-image-clear[data-cat=\"" + cat + "\"]");
+    input?.addEventListener("change", async (e) => {
+      const file = e.target?.files?.[0];
+      e.target.value = "";
+      if (!file || !file.type.startsWith("image/")) return;
+      try {
+        const url = await fileToCompressedDataUrl(file, { maxW: 800, maxH: 1200, quality: 0.8 });
+        updateCatImage(cat, url);
+      } catch (err) {
+        alert("圖片處理失敗：" + (err?.message || String(err)));
+      }
+    });
+    clearBtn?.addEventListener("click", () => {
+      updateCatImage(cat, null);
+    });
   });
 
   // ---------- init ----------

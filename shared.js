@@ -33,6 +33,7 @@ const DEFAULT_CONFIG = {
     contactSub: "只留 LINE 官方帳，入口越少你越不亂。",
     machinePageTitle: "整機販售",
     machinePageSub: "依用途分類，不寫一堆規格。價格是「約」，詳細配備請加 LINE 詢問。",
+    catImages: {},
   },
   shop: {
     name: "哈啦電競電腦維修",
