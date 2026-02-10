@@ -1,6 +1,15 @@
 /* machine.js - 整機販售頁：5 張 9:16 分類卡片，點進去顯示上架商品 */
 
 (function () {
+  // 使用完整 URL 載入分類圖片（解決 GitHub Pages 等部署路徑問題）
+  const base = window.location.origin + window.location.pathname.replace(/\/[^/]*$/, "/");
+  document.querySelectorAll(".cat-card .cat-card-bg-img").forEach((img) => {
+    const src = img.getAttribute("src");
+    if (src && !src.startsWith("http")) {
+      img.src = base + src;
+    }
+  });
+
   const catCards = document.querySelectorAll(".cat-card");
   const productsSection = document.getElementById("productsSection");
   const productsSectionTitle = document.getElementById("productsSectionTitle");
