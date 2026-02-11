@@ -331,7 +331,11 @@ async function fetchInventoryFromSupabase() {
 }
 
 async function upsertInventoryItemToSupabase(item) {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !item || !item.id) return;
+  if (!item || !item.id) return;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.warn("[Supabase] 未設定 SUPABASE_URL 或 SUPABASE_ANON_KEY，上架僅存於本機，不會同步到 Supabase。請在 shared.js 填寫並重新部署。");
+    return;
+  }
   const payload = {
     id: String(item.id),
     name: String(item.name || ""),
@@ -349,13 +353,13 @@ async function upsertInventoryItemToSupabase(item) {
       apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       "Content-Type": "application/json",
-      Prefer: "return=representation",
+      Prefer: "return=representation,resolution=merge-duplicates",
     },
     body: JSON.stringify([payload]),
   });
   if (!res.ok) {
-    // 失敗時先不要阻斷使用者操作，只在 console 提示
-    console.warn("同步商品到 Supabase 失敗", await res.text());
+    var errText = await res.text();
+    console.error("同步商品到 Supabase 失敗 (" + res.status + ")", errText);
   }
 }
 
@@ -1097,12 +1101,12 @@ async function openLineOrder(item) {
 }
 
 function isAdminAuthed() {
-  return sessionStorage.getItem(STORAGE_KEYS.adminAuthed) === "1";
+  return localStorage.getItem(STORAGE_KEYS.adminAuthed) === "1";
 }
 
 function setAdminAuthed(v) {
-  if (v) sessionStorage.setItem(STORAGE_KEYS.adminAuthed, "1");
-  else sessionStorage.removeItem(STORAGE_KEYS.adminAuthed);
+  if (v) localStorage.setItem(STORAGE_KEYS.adminAuthed, "1");
+  else localStorage.removeItem(STORAGE_KEYS.adminAuthed);
 }
 
 window.DK = {

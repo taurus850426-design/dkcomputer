@@ -90,6 +90,31 @@ git push -u origin main
 
 ---
 
+## 四之一、用網址登入後上架，Supabase 卻沒有資料？
+
+**原因**：你現在看到的網址（例如 `https://taurus850426-design.github.io/dkcomputer/`）是 **GitHub Pages 從某個 repo 建出來的**。若那個 repo 裡的 `shared.js` **沒有填** `SUPABASE_URL` 和 `SUPABASE_ANON_KEY`，或填的是舊的，上架只會存到該瀏覽器的 localStorage，**不會寫入 Supabase**。
+
+**請這樣做**：
+
+1. **確認「要部署的那份」shared.js 有填 Supabase**  
+   在你要推上去、並用來開 GitHub Pages 的專案裡，打開 `shared.js`，確認最上面有：
+   - `SUPABASE_URL = "https://你的專案.supabase.co"`
+   - `SUPABASE_ANON_KEY = "你的 anon key"`
+
+2. **把目前這份程式推上去**  
+   `git add .` → `git commit -m "補上 Supabase 並修正圖片 404"` → `git push`  
+   等 GitHub Pages 重新部署（約 1～2 分鐘）。
+
+3. **再測一次**  
+   用網址開 **admin.html** → 上架一筆商品 → 開 F12 → **Console** 看有沒有出現  
+   `[Supabase] 未設定 SUPABASE_URL 或 SUPABASE_ANON_KEY...`  
+   若有，代表畫面上跑的仍是沒填 key 的版本。到 **Network** 找對 `supabase.co/rest/v1/inventory` 的 **POST** 請求，看狀態碼與回應。
+
+4. **Supabase RLS**  
+   若 POST 回 403，到 Supabase Dashboard → 該表 → RLS 新增 Policy 允許 `anon` 讀寫。
+
+---
+
 ## 五、安全提醒
 
 - **後台帳密**：目前是前端的簡單檢查，有心人若看程式碼會知道登入方式。若只給自己用、且 Supabase 有設 RLS，一般這樣即可。

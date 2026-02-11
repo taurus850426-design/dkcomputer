@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#7c5cff" />
+    <title>拍照辨識新增庫存｜後台</title>
+    <link rel="stylesheet" href="./styles.css?v=20260201" />
+    <style>
+      .photo-rec-page { max-width: 560px; margin: 0 auto; padding: 16px; padding-bottom: 80px; }
+      .photo-rec-page .back-link { display: inline-block; margin-bottom: 16px; color: var(--muted); font-size: 14px; }
+      .photo-rec-page .upload-zone { background: var(--panel2); border: 2px dashed var(--border); border-radius: var(--radius); padding: 24px; text-align: center; margin-bottom: 16px; }
+      .photo-rec-page .upload-zone .btn { margin: 4px; }
+      .photo-rec-page #ocrStatus { display: block; margin-top: 8px; font-size: 13px; }
+      .photo-rec-page #ocrTextBlock { margin-top: 12px; }
+      .photo-rec-page #ocrTextBlock textarea { width: 100%; min-height: 80px; padding: 10px; font-size: 13px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+      .photo-rec-page .result-label { font-size: 12px; color: var(--muted); margin-top: 8px; margin-bottom: 4px; }
+      .photo-rec-page #recForm { margin-top: 20px; }
+      .photo-rec-page #recForm .confidence-low { color: var(--warn, #c90); font-size: 13px; margin-bottom: 8px; }
+      .photo-rec-page .form-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+      .photo-rec-page #saveSummary { margin-top: 16px; padding: 12px; background: var(--panel2); border-radius: var(--radius-sm); }
+      .photo-rec-page .sub-type-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .photo-rec-page #previewImg { max-width: 100%; max-height: 200px; border-radius: var(--radius-sm); margin-top: 8px; }
+      @media (max-width: 400px) { .photo-rec-page .sub-type-row { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body class="theme-apple">
+    <div class="photo-rec-page">
+      <a href="./admin.html" class="back-link">← 回到後台</a>
+      <h1 class="h1">拍照辨識新增庫存</h1>
+      <p class="muted" style="margin-bottom: 16px;">上傳產品盒子或本體照片，系統以 OCR 辨識文字並自動判斷品類與型號，確認後入庫。</p>
+
+      <div class="upload-zone" id="uploadZone">
+        <p class="muted small">上傳產品照片（盒子或本體）</p>
+        <label for="photoCamera" class="btn btn-primary">📷 拍照</label>
+        <input id="photoCamera" type="file" accept="image/*" capture="environment" style="display:none" />
+        <label for="photoGallery" class="btn btn-ghost">🖼 從相簿選擇</label>
+        <input id="photoGallery" type="file" accept="image/*" style="display:none" />
+        <span id="ocrStatus" class="muted small"></span>
+        <div id="previewWrap" hidden style="margin-top:12px">
+          <img id="previewImg" alt="預覽" />
+        </div>
+        <div id="ocrTextBlock" class="card" hidden style="margin-top:12px">
+          <p class="result-label">OCR 擷取文字（可編輯後再辨識）</p>
+          <textarea id="ocrText" placeholder="辨識結果會顯示於此…"></textarea>
+          <button id="ocrReRunBtn" class="btn btn-ghost small" type="button" style="margin-top:8px">依上方文字重新判斷</button>
+        </div>
+      </div>
+
+      <div id="recForm" class="card" hidden>
+        <h3 class="h3">系統判斷結果（可手動修改）</h3>
+        <p id="confidenceWarn" class="confidence-low" hidden>辨識信心較低，請手動補齊後再儲存。</p>
+        <div class="form-grid">
+          <div class="field"><label for="recCategory">品類</label><select id="recCategory"><option value="PC">電腦</option><option value="GPU">顯卡</option><option value="PART">零件</option><option value="CONSUMABLE">耗材</option></select></div>
+          <div class="field full">
+            <label for="recSubType">細分類</label>
+            <select id="recSubType">
+              <option value="">— 選填 —</option>
+              <option value="CPU">CPU</option>
+              <option value="GPU">GPU</option>
+              <option value="SSD">SSD</option>
+              <option value="HDD">HDD</option>
+              <option value="RAM">RAM</option>
+              <option value="MOTHERBOARD">主機板</option>
+              <option value="PSU">電源</option>
+              <option value="CASE">機殼</option>
+              <option value="COOLER">散熱</option>
+              <option value="OTHER">其他</option>
+            </select>
+          </div>
+          <div class="field"><label for="recBrand">品牌</label><input id="recBrand" type="text" placeholder="例：MSI" /></div>
+          <div class="field"><label for="recModel">型號</label><input id="recModel" type="text" placeholder="例：RTX 3060 Ti" /></div>
+          <div class="field full"><label for="recSpec">規格</label><input id="recSpec" type="text" placeholder="例：8G / DDR4 16G / 512G NVMe" /></div>
+          <div class="field full"><label for="recSku">SKU（唯一）</label><input id="recSku" type="text" placeholder="系統會建議，可改" /></div>
+          <div class="field"><label for="recCondition">成色</label><select id="recCondition"><option value="NEW">全新</option><option value="USED" selected>二手</option><option value="REFURB">整新</option></select></div>
+          <div class="field"><label for="recStatusSel">狀態</label><select id="recStatusSel"><option value="TESTING" selected>待測</option><option value="READY">可售</option><option value="PREP">待整理</option><option value="RESERVED">保留</option><option value="CLEARANCE">待出清</option><option value="SCRAP">報廢拆料</option></select></div>
+          <div class="field"><label for="recQty">數量</label><input id="recQty" type="number" min="1" value="1" /></div>
+          <div class="field"><label for="recCost">單位成本</label><input id="recCost" type="number" min="0" step="1" value="0" /></div>
+          <div class="field"><label for="recInboundDate">入庫日</label><input id="recInboundDate" type="date" /></div>
+          <div class="field"><label for="recLocation">位置</label><input id="recLocation" type="text" placeholder="櫃/架" /></div>
+          <div class="field"><label for="recReorderPoint">補貨警戒（耗材用）</label><input id="recReorderPoint" type="number" min="0" value="0" /></div>
+          <div class="field full"><label for="recNotes">備註</label><input id="recNotes" type="text" placeholder="可註記 OCR 來源" /></div>
+          <div class="field full form-actions">
+            <button id="recSaveBtn" class="btn btn-primary" type="button">儲存入庫</button>
+            <button id="recCancelBtn" class="btn btn-ghost" type="button">取消</button>
+          </div>
+        </div>
+        <div id="recFormMsg" class="muted" hidden></div>
+      </div>
+
+      <div id="saveSummary" class="card" hidden>
+        <h3 class="h3">入庫完成</h3>
+        <p id="saveSummaryText"></p>
+        <button id="recAgainBtn" class="btn btn-primary" type="button">再辨識一筆</button>
+        <a href="./admin.html" class="btn btn-ghost">回庫存列表</a>
+      </div>
+    </div>
+
+    <script src="./shared.js?v=20260201"></script>
+    <script src="./inventory-ledger.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="./photo-recognize-add.js?v=20260201"></script>
+  </body>
+</html>
