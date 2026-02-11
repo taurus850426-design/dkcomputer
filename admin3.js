@@ -223,7 +223,8 @@
   if (!loginCard || !panel) return;
 
   // ---------- state ----------
-  let invState = { q: "", status: "全部" };
+  const INV_KIND_LIST = ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "作業系統"];
+  let invState = { q: "", status: "全部", kind: "全部" };
   let ordState = { q: "", ship: "全部" };
   let editingInvId = null;
   let editingOrdId = null;
@@ -347,6 +348,13 @@
 
   function invMatches(it) {
     if (invState.status !== "全部" && it.status !== invState.status) return false;
+    const k = invState.kind;
+    if (k !== "全部") {
+      const cat = String(it.category || "").trim();
+      if (k === "其他") {
+        if (INV_KIND_LIST.some((c) => cat === c)) return false;
+      } else if (cat !== k) return false;
+    }
     const q = norm(invState.q);
     if (!q) return true;
     const hay = [it.id, it.name, it.category, it.batchSource, it.note, it.test?.bench, it.test?.temp, it.test?.videoUrl]
@@ -1348,6 +1356,14 @@
   invStatusFilter?.addEventListener("change", () => {
     invState.status = invStatusFilter.value;
     renderInventory();
+  });
+  document.querySelectorAll(".btn-inv-kind").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const kind = btn.getAttribute("data-kind") || "全部";
+      invState.kind = kind;
+      document.querySelectorAll(".btn-inv-kind").forEach((b) => b.classList.toggle("active", (b.getAttribute("data-kind") || "全部") === kind));
+      renderInventory();
+    });
   });
   invBatchBtn?.addEventListener("click", openBatch);
   invBatchCloseBtn?.addEventListener("click", closeBatch);

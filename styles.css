@@ -437,6 +437,30 @@ input[type="search"]::placeholder{ color: rgba(18,24,38,0.40); }
 input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); box-shadow: 0 0 0 3px rgba(93,214,255,0.14); }
 
 .filters{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+.inv-kind-btns{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+}
+.btn-inv-kind{
+  padding: 6px 12px;
+  font-size: 13px;
+  border: 1px solid rgba(0,80,50,0.35);
+  border-radius: 8px;
+  background: rgba(200,230,210,0.5);
+  color: #0d3d27;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-inv-kind:hover{
+  background: rgba(180,220,195,0.8);
+}
+.btn-inv-kind.active{
+  background: rgba(80,160,110,0.35);
+  color: #062a1a;
+  font-weight: 600;
+}
 .segmented{
   display:inline-flex;
   gap:6px;
