@@ -350,6 +350,9 @@
       note: webEditNote?.value?.trim() ?? items[idx].note,
     };
     window.DK?.saveInventory?.(items);
+    if (window.DK?.upsertInventoryItemToSupabase) {
+      window.DK.upsertInventoryItemToSupabase(items[idx]).catch(function () {});
+    }
     show(publishEditorMsg, "已儲存");
     if (publishEditorMsg) publishEditorMsg.hidden = false;
     renderPublish();
@@ -359,6 +362,9 @@
   function removeFromWeb(webId) {
     const items = (window.DK?.getInventory?.() || []).filter((x) => x.id !== webId);
     window.DK?.saveInventory?.(items);
+    if (window.DK?.deleteInventoryItemFromSupabase) {
+      window.DK.deleteInventoryItemFromSupabase(webId).catch(function () {});
+    }
     renderPublish();
     closePublishEditor();
   }
@@ -388,6 +394,9 @@
     const items = window.DK?.getInventory?.() || [];
     items.push(item);
     window.DK?.saveInventory?.(items);
+    if (window.DK?.upsertInventoryItemToSupabase) {
+      window.DK.upsertInventoryItemToSupabase(item).catch(function () {});
+    }
     publishPhotos.length = 0;
     renderPublishPhotoStrip();
     if (publishFormCard) publishFormCard.hidden = true;

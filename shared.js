@@ -1169,6 +1169,15 @@ if (window.DK.fetchSiteConfigFromSupabase && window.DK.saveConfig) {
     })
     .catch(function () {});
 }
+// 頁面載入時從 Supabase 拉前台商品（上架清單），後台／前台看到同一份
+if (window.DK && window.DK.fetchInventoryFromSupabase && window.DK.saveInventory) {
+  window.DK
+    .fetchInventoryFromSupabase()
+    .then(function (items) {
+      if (Array.isArray(items) && items.length > 0) window.DK.saveInventory(items);
+    })
+    .catch(function () {});
+}
 // 頁面載入時從 Supabase 拉庫存（stock + 類別 + 欄位），多裝置看到同一份（不觸發回寫）
 if (window.DK && window.DK.fetchStockDataFromSupabase) {
   window.DK
