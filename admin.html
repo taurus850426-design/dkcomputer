@@ -72,7 +72,6 @@
                 <a href="./scan-add.html" class="btn btn-primary" target="_blank" rel="noopener">📷 掃碼新增</a>
                 <button id="btnNewItem" class="btn btn-primary" type="button">新增品項</button>
                 <button id="btnDeleteSelectedItems" class="btn btn-ghost" type="button" style="color:var(--danger,#c00)">刪除所選</button>
-                <button id="btnSeed" class="btn btn-ghost" type="button">載入測試資料</button>
               </div>
             </div>
             <label class="search">
@@ -125,14 +124,6 @@
             <div id="itemEditor" class="card" style="margin-top:12px" hidden>
               <h3 class="h3">新增 / 編輯品項</h3>
               <div class="form-grid">
-                <div class="field full" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
-                  <span class="muted small" style="width:100%;margin-bottom:4px">辨識條碼／型號：</span>
-                  <label for="itemScanCamera" class="btn btn-primary" style="margin:0">📷 開啟相機拍照</label>
-                  <input id="itemScanCamera" type="file" accept="image/*" capture="environment" style="display:none" />
-                  <label for="itemScanImage" class="btn btn-ghost" style="margin:0">🖼 從相簿選擇</label>
-                  <input id="itemScanImage" type="file" accept="image/*" style="display:none" />
-                  <span id="itemScanStatus" class="muted small"></span>
-                </div>
                 <div class="field"><label for="itemBrand">品牌（選填）</label><input id="itemBrand" type="text" placeholder="例：Kingston" /></div>
                 <div class="field"><label for="itemSku">SKU（唯一）</label><input id="itemSku" type="text" placeholder="PC-001" /></div>
                 <div class="field"><label for="itemCategory">品類</label><select id="itemCategory"><option value="PC">電腦</option><option value="GPU">顯卡</option><option value="PART">零件</option><option value="CONSUMABLE">耗材</option></select></div>

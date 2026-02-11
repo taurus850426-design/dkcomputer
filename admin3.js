@@ -1023,17 +1023,6 @@
       };
       reader.readAsDataURL(file);
     }
-    document.getElementById("itemScanImage")?.addEventListener("change", function (e) {
-      const file = e.target?.files?.[0];
-      e.target.value = "";
-      if (file) handleItemScanFile(file);
-    });
-    document.getElementById("itemScanCamera")?.addEventListener("change", function (e) {
-      const file = e.target?.files?.[0];
-      e.target.value = "";
-      if (file) handleItemScanFile(file);
-    });
-
     document.getElementById("itemSave")?.addEventListener("click", () => {
       const brand = String(document.getElementById("itemBrand")?.value || "").trim();
       const sku = String(document.getElementById("itemSku")?.value || "").trim().toUpperCase();
@@ -1107,16 +1096,6 @@
         sel.indeterminate = checked > 0 && checked < rowCbs.length;
       }
     });
-    document.getElementById("btnSeed")?.addEventListener("click", () => {
-      const r = DK.seed();
-      alert("已載入測試資料：Items " + r.items + "、Ledger " + r.ledger + "、Orders " + r.orders + "、Expenses " + r.expenses);
-      renderV2Items();
-      renderV2Ledger();
-      renderV2Orders();
-      renderV2Expenses();
-      renderV2Reports();
-    });
-
     const ledgerTbody = document.getElementById("ledgerTbody");
     const ledgerForm = document.getElementById("ledgerForm");
     const ledgerMsg = document.getElementById("ledgerMsg");
