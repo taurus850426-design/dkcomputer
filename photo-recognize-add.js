@@ -160,6 +160,8 @@
     el("recModel").value = suggestion.model || "";
     el("recSpec").value = suggestion.spec || "";
     el("recSku").value = skuSuggestion || "";
+    var skuInput = el("recSku");
+    if (skuInput) skuInput.readOnly = true;
     el("recCondition").value = "USED";
     el("recStatusSel").value = "TESTING";
     el("recQty").value = "1";
@@ -193,14 +195,31 @@
     el("saveSummaryText").textContent = text;
   }
 
+  // 依表單欄位產生建議 SKU，並確保不與既有重複（可加 -2, -3...）
+  function ensureUniqueSKU(baseSku) {
+    var DK = window.DK;
+    if (!DK || !DK.findItemBySku) return baseSku || "ITEM-" + Date.now().toString(36);
+    var sku = (baseSku || "").trim().toUpperCase() || "ITEM-" + Date.now().toString(36);
+    var n = 1;
+    while (DK.findItemBySku(sku)) {
+      sku = (baseSku || "ITEM").trim().toUpperCase().replace(/\-\d+$/, "") + "-" + (++n);
+    }
+    return sku;
+  }
+
   // ---------- 儲存入庫：建立/更新 Item + Ledger IN ----------
   function savePhotoRecInbound() {
-    const sku = String(el("recSku").value || "").trim().toUpperCase();
-    const category = el("recCategory").value || "PART";
-    const subType = el("recSubType").value || "";
-    const brand = String(el("recBrand").value || "").trim();
-    const model = String(el("recModel").value || "").trim();
-    const spec = String(el("recSpec").value || "").trim();
+    var DK = window.DK;
+    var category = el("recCategory").value || "PART";
+    var subType = el("recSubType").value || "";
+    var brand = String(el("recBrand").value || "").trim();
+    var model = String(el("recModel").value || "").trim();
+    var spec = String(el("recSpec").value || "").trim();
+    var baseSku = String(el("recSku").value || "").trim() || suggestSKU({ category: category, sub_type: subType, brand: brand, model: model, spec: spec });
+    const DK = window.DK;
+    var existing = DK && DK.findItemBySku ? DK.findItemBySku(baseSku) : null;
+    var sku = existing ? baseSku : ensureUniqueSKU(baseSku);
+    el("recSku").value = sku;
     const name = brand ? brand + " " + model : model || "未命名";
     const qty = Math.max(1, parseInt(el("recQty").value, 10) || 1);
     const unitCost = parseFloat(el("recCost").value) || 0;
@@ -210,19 +229,12 @@
     const status = el("recStatusSel").value || "TESTING";
     const inboundDate = el("recInboundDate").value || todayStr();
     const reorderPoint = Math.max(0, parseInt(el("recReorderPoint") && el("recReorderPoint").value, 10) || 0);
-
-    if (!sku) {
-      el("recFormMsg").textContent = "請填寫 SKU";
-      el("recFormMsg").hidden = false;
-      return;
-    }
     if (!name || name === "未命名") {
       el("recFormMsg").textContent = "請填寫品牌或型號（名稱）";
       el("recFormMsg").hidden = false;
       return;
     }
 
-    const DK = window.DK;
     if (!DK || !DK.getItems || !DK.saveItems || !DK.addLedgerEntry) {
       el("recFormMsg").textContent = "庫存模組未載入，請從後台進入。";
       el("recFormMsg").hidden = false;

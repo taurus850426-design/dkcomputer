@@ -780,7 +780,7 @@
       const item = id ? DK.findItemById(id) : null;
       const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
       set("itemBrand", "");
-      set("itemSku", item ? item.sku : "");
+      set("itemSku", item ? item.sku : "ITEM-" + Date.now().toString(36).toUpperCase());
       set("itemCategory", item ? item.category : "PC");
       set("itemName", item ? item.name : "");
       set("itemSpec", item ? item.spec : "");
@@ -795,7 +795,7 @@
       set("itemLocation", item ? item.location ?? "" : "");
       set("itemNotes", item ? item.notes ?? "" : "");
       const skuEl = document.getElementById("itemSku");
-      if (skuEl) skuEl.readOnly = !!item;
+      if (skuEl) skuEl.readOnly = true;
       const itemDeleteBtn = document.getElementById("itemDelete");
       if (itemDeleteBtn) itemDeleteBtn.hidden = !item;
       if (itemEditor) itemEditor.hidden = false;
@@ -1153,7 +1153,11 @@
     const ordersTbody = document.getElementById("ordersTbody");
     const orderForm = document.getElementById("orderForm");
     const orderMsg = document.getElementById("orderMsg");
+    const orderLineTbody = document.getElementById("orderLineTbody");
+    const orderLineItemSelect = document.getElementById("orderLineItem");
     let editingV2OrderId = null;
+    let orderLineItems = [];
+
     function renderV2Orders() {
       if (!ordersTbody) return;
       const list = DK.getOrders().map(DK.enrichOrder);
@@ -1163,9 +1167,42 @@
       }).join("");
       ordersTbody.querySelectorAll(".btn-edit-order").forEach((btn) => btn.addEventListener("click", () => openV2OrderEditor(btn.getAttribute("data-id"))));
     }
+
+    function fillOrderLineItemSelect() {
+      if (!orderLineItemSelect) return;
+      const items = DK.getItems();
+      orderLineItemSelect.innerHTML = '<option value="">— 選擇品項 —</option>' + items.map((i) => `<option value="${v2Esc(i.id)}">${v2Esc(i.sku)} ${v2Esc(i.name || "")}</option>`).join("");
+    }
+    function renderOrderLineTbody() {
+      if (!orderLineTbody) return;
+      orderLineTbody.innerHTML = orderLineItems.map((line, i) => {
+        const cogsSub = (Number(line.cost_unit) || 0) * (Number(line.qty) || 0);
+        const priceSub = (Number(line.unit_price) || 0) * (Number(line.qty) || 0);
+        return `<tr><td>${v2Esc(line.sku)} ${v2Esc(line.name || "")}</td><td>${line.qty}</td><td>${v2FmtNum(line.unit_price)}</td><td>${v2FmtNum(cogsSub)}</td><td><button type="button" class="btn btn-ghost btn-sm order-line-remove" data-i="${i}">移除</button></td></tr>`;
+      }).join("");
+      orderLineTbody.querySelectorAll(".order-line-remove").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          orderLineItems.splice(parseInt(btn.getAttribute("data-i"), 10), 1);
+          renderOrderLineTbody();
+          updateOrderTotalsFromLines();
+        });
+      });
+    }
+    function updateOrderTotalsFromLines() {
+      const saleSum = orderLineItems.reduce((s, l) => s + (Number(l.unit_price) || 0) * (Number(l.qty) || 0), 0);
+      const cogsSum = orderLineItems.reduce((s, l) => s + (Number(l.cost_unit) || 0) * (Number(l.qty) || 0), 0);
+      const saleEl = document.getElementById("orderTotalSale");
+      const cogsEl = document.getElementById("orderCogs");
+      if (saleEl) saleEl.value = saleSum;
+      if (cogsEl) cogsEl.value = cogsSum;
+      updateV2OrderGrossDisplay();
+    }
+
     function openV2OrderEditor(id) {
       editingV2OrderId = id || null;
       const o = id ? DK.getOrders().find((x) => x.id === id) : null;
+      orderLineItems = Array.isArray(o && o.items) ? o.items.map((l) => ({ ...l })) : [];
+      fillOrderLineItemSelect();
       const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
       set("orderNo", o ? o.order_no : DK.nextOrderNo());
       const orderNoEl = document.getElementById("orderNo");
@@ -1177,6 +1214,9 @@
       set("orderCogs", o ? o.cogs_total ?? 0 : 0);
       set("orderPayment", o ? o.payment_method ?? "transfer" : "transfer");
       set("orderStatus", o ? o.status ?? "pending" : "pending");
+      renderOrderLineTbody();
+      updateOrderTotalsFromLines();
+      if (orderLineItems.length) updateOrderTotalsFromLines();
       updateV2OrderGrossDisplay();
       if (orderForm) orderForm.hidden = false;
       v2Hide(orderMsg);
@@ -1195,6 +1235,21 @@
     ["orderTotalSale", "orderShipping", "orderDiscount", "orderCogs"].forEach((id) => document.getElementById(id)?.addEventListener("input", updateV2OrderGrossDisplay));
     document.getElementById("btnNewOrder")?.addEventListener("click", () => openV2OrderEditor(null));
     document.getElementById("orderCancel")?.addEventListener("click", () => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); });
+    document.getElementById("orderLineAdd")?.addEventListener("click", () => {
+      const itemId = orderLineItemSelect?.value;
+      const qty = Math.max(1, parseInt(document.getElementById("orderLineQty")?.value, 10) || 1);
+      const unitPrice = parseFloat(document.getElementById("orderLinePrice")?.value) || 0;
+      if (!itemId) return v2Show(orderMsg, "請選擇品項");
+      const item = DK.findItemById(itemId);
+      if (!item) return v2Show(orderMsg, "找不到該品項");
+      const onHand = Number(item.qty_on_hand) || 0;
+      const alreadyInOrder = orderLineItems.filter((l) => l.item_id === itemId).reduce((s, l) => s + (Number(l.qty) || 0), 0);
+      if (alreadyInOrder + qty > onHand) return v2Show(orderMsg, "庫存不足：" + item.sku + " 現有 " + onHand + "，明細已選 " + alreadyInOrder + "，再加 " + qty + " 會超過");
+      orderLineItems.push({ item_id: item.id, sku: item.sku, name: item.name, qty: qty, unit_price: unitPrice, cost_unit: Number(item.cost_unit) || 0 });
+      renderOrderLineTbody();
+      updateOrderTotalsFromLines();
+      v2Hide(orderMsg);
+    });
     document.getElementById("orderSave")?.addEventListener("click", () => {
       const orderNo = String(document.getElementById("orderNo")?.value || "").trim();
       const totalSale = parseFloat(document.getElementById("orderTotalSale")?.value) || 0;
@@ -1203,7 +1258,7 @@
       const orders = DK.getOrders();
       const existing = orders.find((x) => x.order_no === orderNo && x.id !== editingV2OrderId);
       if (existing) return v2Show(orderMsg, "訂單編號重複");
-      const payload = { order_no: orderNo, customer_name: document.getElementById("orderCustomer")?.value || "", total_sale: totalSale, shipping_income: parseFloat(document.getElementById("orderShipping")?.value) || 0, discount: parseFloat(document.getElementById("orderDiscount")?.value) || 0, payment_method: document.getElementById("orderPayment")?.value || "transfer", status: document.getElementById("orderStatus")?.value || "pending", cogs_total: cogsTotal, created_at: nowISO() };
+      const payload = { order_no: orderNo, customer_name: document.getElementById("orderCustomer")?.value || "", total_sale: totalSale, shipping_income: parseFloat(document.getElementById("orderShipping")?.value) || 0, discount: parseFloat(document.getElementById("orderDiscount")?.value) || 0, payment_method: document.getElementById("orderPayment")?.value || "transfer", status: document.getElementById("orderStatus")?.value || "pending", cogs_total: cogsTotal, created_at: nowISO(), items: orderLineItems };
       if (editingV2OrderId) {
         const idx = orders.findIndex((x) => x.id === editingV2OrderId);
         if (idx < 0) return v2Show(orderMsg, "找不到訂單");
@@ -1214,9 +1269,18 @@
         payload.id = "ord-" + Date.now();
         orders.unshift(payload);
         DK.saveOrders(orders);
-        v2Show(orderMsg, "已新增");
+        for (let i = 0; i < orderLineItems.length; i++) {
+          const line = orderLineItems[i];
+          const res = DK.addLedgerEntry({ item_id: line.item_id, type: "OUT", qty: line.qty, ref_type: "ORDER", ref_id: payload.id, note: "訂單 " + orderNo });
+          if (!res.ok) {
+            v2Show(orderMsg, "扣庫存失敗：" + (res.error || line.sku));
+            return;
+          }
+        }
+        v2Show(orderMsg, "已新增並已扣庫存");
       }
       renderV2Orders();
+      renderV2Items();
       renderV2Reports();
       setTimeout(() => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); }, 800);
     });
