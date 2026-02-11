@@ -46,233 +46,221 @@
 
         <section id="panel" hidden>
           <div class="tabs">
-            <button class="tab active" data-tab="inv" type="button">庫存管理</button>
+            <button class="tab active" data-tab="inv" type="button">庫存＋記帳</button>
             <button class="tab" data-tab="publish" type="button">上架管理</button>
-            <button class="tab" data-tab="orders" type="button">訂單管理</button>
-            <button class="tab" data-tab="reports" type="button">報表管理</button>
             <button class="tab" data-tab="frontend" type="button">前台管理</button>
           </div>
 
-          <!-- ① 庫存管理（Inventory Management） -->
+          <!-- ① 庫存＋記帳（Items / Ledger / Orders / Expenses / 報表） -->
           <section id="tab-inv" class="card">
-            <div class="section-head" style="margin-bottom: 10px">
+            <div class="tabs v2-sub-tabs" style="margin-bottom:12px">
+              <button class="tab v2-tab active" data-v2="items" type="button">庫存 Items</button>
+              <button class="tab v2-tab" data-v2="ledger" type="button">流水帳</button>
+              <button class="tab v2-tab" data-v2="orders" type="button">訂單</button>
+              <button class="tab v2-tab" data-v2="expenses" type="button">支出</button>
+              <button class="tab v2-tab" data-v2="reports" type="button">報表</button>
+            </div>
+
+            <!-- 庫存 Items -->
+            <div id="v2-items" class="v2-panel">
+            <div class="section-head">
               <div>
-                <h2 class="h2">庫存管理（Inventory Management）</h2>
-                <p class="muted">CRUD + 批次匯入 + 自動計算可售數量（在庫才可售）。</p>
+                <h2 class="h2">庫存品項</h2>
+                <p class="muted">category / sku / 入庫日 / 放多久 / 庫存價值；可篩選、排序</p>
               </div>
               <div class="section-actions">
-                <button id="invNewBtn" class="btn btn-primary" type="button">新增商品</button>
-                <button id="invScanBtn" class="btn btn-ghost" type="button">掃描規格（拍照辨識）</button>
-                <button id="invBatchBtn" class="btn btn-ghost" type="button">批次匯入</button>
+                <button id="btnNewItem" class="btn btn-primary" type="button">新增品項</button>
+                <button id="btnDeleteSelectedItems" class="btn btn-ghost" type="button" style="color:var(--danger,#c00)">刪除所選</button>
+                <button id="btnSeed" class="btn btn-ghost" type="button">載入測試資料</button>
               </div>
             </div>
-
-            <div id="invScanModal" class="inv-scan-modal" hidden>
-              <div class="inv-scan-backdrop"></div>
-              <div class="inv-scan-box">
-                <div class="inv-scan-head">
-                  <h3 class="h3" style="margin:0">掃描產品規格</h3>
-                  <button id="invScanCloseBtn" class="btn btn-ghost" type="button" aria-label="關閉">×</button>
-                </div>
-                <p class="muted small">對準產品標籤或規格貼紙，按下「拍照辨識」即可辨識文字。</p>
-                <div class="inv-scan-preview-wrap">
-                  <video id="invScanVideo" class="inv-scan-video" autoplay playsinline muted></video>
-                  <canvas id="invScanCanvas" class="inv-scan-canvas" hidden></canvas>
-                </div>
-                <div class="inv-scan-actions">
-                  <button id="invScanCaptureBtn" class="btn btn-primary" type="button">拍照辨識</button>
-                  <button id="invScanCloseBtn2" class="btn btn-ghost" type="button">取消</button>
-                </div>
-                <div id="invScanResultWrap" class="inv-scan-result-wrap" hidden>
-                  <label class="small">辨識結果（可編輯後再填入）</label>
-                  <textarea id="invScanResultText" class="inv-scan-result-text" rows="4" placeholder="辨識出的文字會顯示在這裡"></textarea>
-                  <div class="inv-scan-fill-actions">
-                    <button id="invScanFillNameBtn" class="btn btn-primary btn-sm" type="button">填入商品名稱</button>
-                    <button id="invScanFillNoteBtn" class="btn btn-ghost btn-sm" type="button">填入備註</button>
-                  </div>
-                </div>
-                <div id="invScanStatus" class="muted small" style="margin-top:8px"></div>
-              </div>
+            <label class="search">
+              <span class="search-label">搜尋</span>
+              <input id="itemsSearch" type="search" placeholder="SKU / 名稱 / spec" autocomplete="off" />
+            </label>
+            <div class="filters">
+              <select id="itemsCategory">
+                <option value="">全部品類</option>
+                <option value="PC">電腦</option>
+                <option value="GPU">顯卡</option>
+                <option value="PART">零件</option>
+                <option value="CONSUMABLE">耗材</option>
+              </select>
+              <select id="itemsStatus">
+                <option value="">全部狀態</option>
+                <option value="READY">可售</option>
+                <option value="TESTING">待測</option>
+                <option value="PREP">待整理</option>
+                <option value="RESERVED">保留</option>
+                <option value="CLEARANCE">待出清</option>
+                <option value="SCRAP">報廢拆料</option>
+              </select>
             </div>
-
-            <div class="toolbar">
-              <label class="search">
-                <span class="search-label">搜尋（ID / 名稱 / 類別 / 批次來源）</span>
-                <input id="invSearch" type="search" placeholder="例如：GPU-3060TI / 3060Ti / 網咖" autocomplete="off" />
-              </label>
-              <div class="filters">
-                <div class="inv-kind-btns" role="group" aria-label="類別快速篩選">
-                  <button type="button" class="btn-inv-kind active" data-kind="全部">全部</button>
-                  <button type="button" class="btn-inv-kind" data-kind="處理器">處理器</button>
-                  <button type="button" class="btn-inv-kind" data-kind="主機板">主機板</button>
-                  <button type="button" class="btn-inv-kind" data-kind="記憶體">記憶體</button>
-                  <button type="button" class="btn-inv-kind" data-kind="硬碟">硬碟</button>
-                  <button type="button" class="btn-inv-kind" data-kind="顯示卡">顯示卡</button>
-                  <button type="button" class="btn-inv-kind" data-kind="電源供應器">電源供應器</button>
-                  <button type="button" class="btn-inv-kind" data-kind="機殼">機殼</button>
-                  <button type="button" class="btn-inv-kind" data-kind="作業系統">作業系統</button>
-                  <button type="button" class="btn-inv-kind" data-kind="其他">其他</button>
-                </div>
-                <div class="select">
-                  <label class="select-label" for="invStatusFilter">狀態</label>
-                  <select id="invStatusFilter">
-                    <option value="全部">全部</option>
-                    <option value="在庫">在庫</option>
-                    <option value="測試中">測試中</option>
-                    <option value="已預定">已預定</option>
-                    <option value="已售出">已售出</option>
-                    <option value="不良品">不良品</option>
-                  </select>
-                </div>
-              </div>
             </div>
-
-            <table class="table">
-              <thead>
-                <tr>
-                  <th class="nowrap">ID</th>
-                  <th>名稱</th>
-                  <th class="nowrap">類別</th>
-                  <th class="nowrap">庫存</th>
-                  <th class="nowrap">可售</th>
-                  <th class="nowrap">狀態</th>
-                  <th class="nowrap">成本</th>
-                  <th class="nowrap">建議</th>
-                  <th class="nowrap">實際</th>
-                  <th class="nowrap">清潔</th>
-                  <th>批次來源</th>
-                  <th class="nowrap" style="text-align:right">操作</th>
-                </tr>
-              </thead>
-              <tbody id="invTbody"></tbody>
-            </table>
-
-            <div id="invEditor" class="card" style="margin-top: 12px" hidden>
-              <div class="section-head" style="margin-bottom: 10px">
-                <div>
-                  <h3 class="h3" style="margin: 0">新增 / 編輯商品</h3>
-                  <div id="invEditorTitle" class="muted"></div>
-                </div>
-                <div class="section-actions">
-                  <button id="invCloseBtn" class="btn btn-ghost" type="button">關閉</button>
-                </div>
-              </div>
-
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width:2.5em"><input type="checkbox" id="itemsSelectAll" title="全選/取消全選" /></th>
+                    <th>SKU</th>
+                    <th>名稱</th>
+                    <th>品類</th>
+                    <th>狀態</th>
+                    <th>數量</th>
+                    <th>成本</th>
+                    <th>建議價</th>
+                    <th>最低價</th>
+                    <th>入庫日</th>
+                    <th>庫齡(天)</th>
+                    <th>滯留(天)</th>
+                    <th>庫存價值</th>
+                    <th>提醒</th>
+                    <th style="text-align:right">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="itemsTbody"></tbody>
+              </table>
+            </div>
+            <div id="itemEditor" class="card" style="margin-top:12px" hidden>
+              <h3 class="h3">新增 / 編輯品項</h3>
               <div class="form-grid">
-                <div class="field full">
-                  <label>ID（自動生成）</label>
-                  <div id="invIdPreview" class="muted">-</div>
+                <div class="field full" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+                  <span class="muted small" style="width:100%;margin-bottom:4px">辨識條碼／型號：</span>
+                  <label for="itemScanCamera" class="btn btn-primary" style="margin:0">📷 開啟相機拍照</label>
+                  <input id="itemScanCamera" type="file" accept="image/*" capture="environment" style="display:none" />
+                  <label for="itemScanImage" class="btn btn-ghost" style="margin:0">🖼 從相簿選擇</label>
+                  <input id="itemScanImage" type="file" accept="image/*" style="display:none" />
+                  <span id="itemScanStatus" class="muted small"></span>
                 </div>
-                <div class="field">
-                  <label for="invIdPrefix">ID 前綴（例如 GPU）</label>
-                  <input id="invIdPrefix" type="text" placeholder="GPU" />
-                </div>
-                <div class="field">
-                  <label for="invIdModel">型號碼（用於 ID，例如 3060TI）</label>
-                  <input id="invIdModel" type="text" placeholder="3060TI" />
-                </div>
-                <div class="field full">
-                  <label for="invName">商品名稱</label>
-                  <input id="invName" type="text" />
-                </div>
-                <div class="field">
-                  <label for="invCategory">商品類別</label>
-                  <select id="invCategory">
-                    <option value="">— 請選擇 —</option>
-                    <option value="處理器">處理器</option>
-                    <option value="主機板">主機板</option>
-                    <option value="記憶體">記憶體</option>
-                    <option value="硬碟">硬碟</option>
-                    <option value="顯示卡">顯示卡</option>
-                    <option value="電源供應器">電源供應器</option>
-                    <option value="機殼">機殼</option>
-                    <option value="作業系統">作業系統</option>
-                    <option value="主機">主機</option>
-                    <option value="周邊">周邊</option>
-                    <option value="其他">其他</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="invQty">庫存數量</label>
-                  <input id="invQty" type="number" min="0" step="1" />
-                </div>
-                <div class="field">
-                  <label for="invCost">成本（單價）</label>
-                  <input id="invCost" type="number" min="0" step="1" />
-                </div>
-                <div class="field">
-                  <label for="invSuggested">建議售價</label>
-                  <input id="invSuggested" type="number" min="0" step="1" />
-                </div>
-                <div class="field">
-                  <label for="invActual">實際售價（售出時填）</label>
-                  <input id="invActual" type="number" min="0" step="1" />
-                </div>
-                <div class="field">
-                  <label for="invStatus">商品狀態</label>
-                  <select id="invStatus">
-                    <option value="在庫">在庫</option>
-                    <option value="測試中">測試中</option>
-                    <option value="已預定">已預定</option>
-                    <option value="已售出">已售出</option>
-                    <option value="不良品">不良品</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="invCleaning">清潔狀態</label>
-                  <select id="invCleaning">
-                    <option value="未清潔">未清潔</option>
-                    <option value="已清潔">已清潔</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="invBatchSource">批次來源</label>
-                  <input id="invBatchSource" type="text" placeholder="網咖 / 客收 / 通路..." />
-                </div>
-                <div class="field full">
-                  <label for="invNote">備註</label>
-                  <input id="invNote" type="text" />
-                </div>
-                <div class="field">
-                  <label for="invBench">測試：跑分</label>
-                  <input id="invBench" type="text" placeholder="3DMark 12500" />
-                </div>
-                <div class="field">
-                  <label for="invTemp">測試：溫度</label>
-                  <input id="invTemp" type="text" placeholder="78°C" />
-                </div>
-                <div class="field full">
-                  <label for="invVideoUrl">測試：影片 URL</label>
-                  <input id="invVideoUrl" type="text" placeholder="https://..." />
-                </div>
+                <div class="field"><label for="itemBrand">品牌（選填）</label><input id="itemBrand" type="text" placeholder="例：Kingston" /></div>
+                <div class="field"><label for="itemSku">SKU（唯一）</label><input id="itemSku" type="text" placeholder="PC-001" /></div>
+                <div class="field"><label for="itemCategory">品類</label><select id="itemCategory"><option value="PC">電腦</option><option value="GPU">顯卡</option><option value="PART">零件</option><option value="CONSUMABLE">耗材</option></select></div>
+                <div class="field full"><label for="itemName">名稱</label><input id="itemName" type="text" placeholder="型號或產品名稱" /></div>
+                <div class="field full"><label for="itemSpec">規格</label><input id="itemSpec" type="text" placeholder="例：480GB、3060Ti 8G" /></div>
+                <div class="field"><label for="itemCondition">成色</label><select id="itemCondition"><option value="NEW">全新</option><option value="USED">二手</option><option value="REFURB">整新</option></select></div>
+                <div class="field"><label for="itemStatus">狀態</label><select id="itemStatus"><option value="READY">可售</option><option value="TESTING">待測</option><option value="PREP">待整理</option><option value="RESERVED">保留</option><option value="CLEARANCE">待出清</option><option value="SCRAP">報廢拆料</option></select></div>
+                <div class="field"><label for="itemQty">現貨數量</label><input id="itemQty" type="number" min="0" value="0" /></div>
+                <div class="field"><label for="itemCost">單位成本</label><input id="itemCost" type="number" min="0" step="1" value="0" /></div>
+                <div class="field"><label for="itemPriceList">建議售價</label><input id="itemPriceList" type="number" min="0" step="1" /></div>
+                <div class="field"><label for="itemPriceFloor">最低價</label><input id="itemPriceFloor" type="number" min="0" step="1" /></div>
+                <div class="field"><label for="itemInboundDate">入庫日</label><input id="itemInboundDate" type="date" /></div>
+                <div class="field"><label for="itemReorderPoint">補貨警戒（耗材）</label><input id="itemReorderPoint" type="number" min="0" value="0" /></div>
+                <div class="field"><label for="itemLocation">位置</label><input id="itemLocation" type="text" placeholder="櫃/箱/架" /></div>
+                <div class="field full"><label for="itemNotes">備註</label><input id="itemNotes" type="text" /></div>
+                <div class="full actions"><button id="itemSave" class="btn btn-primary" type="button">儲存</button><button id="itemCancel" class="btn btn-ghost" type="button">取消</button><button id="itemDelete" class="btn btn-ghost" type="button" style="margin-left:auto;color:var(--danger, #c00)">刪除品項</button></div>
+              </div>
+              <div id="itemMsg" class="muted" hidden></div>
+            </div>
+            </div>
 
-                <div class="full actions">
-                  <button id="invSaveBtn" class="btn btn-primary" type="button">儲存</button>
-                  <button id="invDeleteBtn" class="btn btn-danger" type="button" hidden>刪除</button>
+            <!-- 流水帳 -->
+            <div id="v2-ledger" class="v2-panel" hidden>
+              <div class="section-head">
+                <div><h2 class="h2">進出庫流水帳</h2><p class="muted">IN / OUT / ADJUST；入庫會更新品項數量與 last_moved_at</p></div>
+                <button id="btnNewLedger" class="btn btn-primary" type="button">新增一筆</button>
+              </div>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr><th>時間</th><th>品項</th><th>類型</th><th>數量</th><th>單位成本</th><th>參考類型</th><th>參考單號</th><th>備註</th></tr>
+                  </thead>
+                  <tbody id="ledgerTbody"></tbody>
+                </table>
+              </div>
+              <div id="ledgerForm" class="card" style="margin-top:12px" hidden>
+                <h3 class="h3">新增流水</h3>
+                <div class="form-grid">
+                  <div class="field"><label for="ledgerItemId">品項</label><select id="ledgerItemId"></select></div>
+                  <div class="field"><label for="ledgerType">類型</label><select id="ledgerType"><option value="IN">入庫</option><option value="OUT">出庫</option><option value="ADJUST">調整</option></select></div>
+                  <div class="field"><label for="ledgerQty">數量</label><input id="ledgerQty" type="number" /></div>
+                  <div class="field"><label for="ledgerUnitCost">單位成本（入庫必填）</label><input id="ledgerUnitCost" type="number" min="0" step="1" /></div>
+                  <div class="field"><label for="ledgerRefType">參考類型</label><select id="ledgerRefType"><option value="PURCHASE">進貨</option><option value="ORDER">訂單</option><option value="RMA">退換</option><option value="SCRAP">報廢</option><option value="MOVE">移倉</option><option value="ADJUST">調整</option></select></div>
+                  <div class="field"><label for="ledgerRefId">參考單號</label><input id="ledgerRefId" type="text" placeholder="訂單號/進貨單號" /></div>
+                  <div class="field full"><label for="ledgerNote">備註</label><input id="ledgerNote" type="text" /></div>
+                  <div class="full actions"><button id="ledgerSubmit" class="btn btn-primary" type="button">送出</button><button id="ledgerCancel" class="btn btn-ghost" type="button">取消</button></div>
                 </div>
-                <div id="invMsg" class="full muted" hidden></div>
+                <div id="ledgerMsg" class="muted" hidden></div>
               </div>
             </div>
 
-            <div id="invBatch" class="card" style="margin-top: 12px" hidden>
-              <div class="section-head" style="margin-bottom: 10px">
-                <div>
-                  <h3 class="h3" style="margin: 0">批次匯入（一次增加大量商品）</h3>
-                  <div class="muted">每行一筆：前綴,型號碼,名稱,類別,數量,成本,建議售價,批次來源</div>
-                </div>
-                <div class="section-actions">
-                  <button id="invBatchCloseBtn" class="btn btn-ghost" type="button">關閉</button>
-                </div>
+            <!-- 訂單 -->
+            <div id="v2-orders" class="v2-panel" hidden>
+              <div class="section-head">
+                <div><h2 class="h2">訂單（收入＆毛利）</h2><p class="muted">整單成本 cogs_total；gross_profit / gross_margin 自動計算</p></div>
+                <button id="btnNewOrder" class="btn btn-primary" type="button">新增訂單</button>
               </div>
-              <div class="form-grid">
-                <div class="field full">
-                  <label for="invBatchText">貼上批次資料</label>
-                  <textarea id="invBatchText" rows="6" placeholder="GPU,3060TI,RTX 3060 Ti 8G,顯卡,20,6500,7900,網咖"></textarea>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr><th>訂單編號</th><th>客戶</th><th>售價</th><th>運費</th><th>折扣</th><th>成本</th><th>毛利</th><th>毛利率</th><th>狀態</th><th>日期</th><th style="text-align:right">操作</th></tr>
+                  </thead>
+                  <tbody id="ordersTbody"></tbody>
+                </table>
+              </div>
+              <div id="orderForm" class="card" style="margin-top:12px" hidden>
+                <h3 class="h3">新增 / 編輯訂單</h3>
+                <div class="form-grid">
+                  <div class="field"><label for="orderNo">訂單編號</label><input id="orderNo" type="text" placeholder="自動產生" /></div>
+                  <div class="field full"><label for="orderCustomer">客戶</label><input id="orderCustomer" type="text" /></div>
+                  <div class="field"><label for="orderTotalSale">售價合計</label><input id="orderTotalSale" type="number" min="0" value="0" /></div>
+                  <div class="field"><label for="orderShipping">運費收入</label><input id="orderShipping" type="number" min="0" value="0" /></div>
+                  <div class="field"><label for="orderDiscount">折扣</label><input id="orderDiscount" type="number" min="0" value="0" /></div>
+                  <div class="field"><label for="orderCogs">整單成本 cogs_total</label><input id="orderCogs" type="number" min="0" value="0" /></div>
+                  <div class="field"><label for="orderPayment">付款方式</label><select id="orderPayment"><option value="cash">現金</option><option value="transfer">轉帳</option><option value="card">刷卡</option></select></div>
+                  <div class="field"><label for="orderStatus">狀態</label><select id="orderStatus"><option value="pending">待處理</option><option value="paid">已付款</option><option value="shipped">已出貨</option><option value="completed">已完成</option><option value="refunded">已退貨</option></select></div>
+                  <div class="field full"><label>毛利（自動）</label><div id="orderGrossProfitDisplay" class="muted">-</div></div>
+                  <div class="field full actions"><button id="orderSave" class="btn btn-primary" type="button">儲存</button><button id="orderCancel" class="btn btn-ghost" type="button">取消</button></div>
                 </div>
-                <div class="full actions">
-                  <button id="invBatchImportBtn" class="btn btn-primary" type="button">匯入</button>
+                <div id="orderMsg" class="muted" hidden></div>
+              </div>
+            </div>
+
+            <!-- 支出 -->
+            <div id="v2-expenses" class="v2-panel" hidden>
+              <div class="section-head">
+                <div><h2 class="h2">支出</h2><p class="muted">COGS / OPEX / OTHER</p></div>
+                <button id="btnNewExpense" class="btn btn-primary" type="button">新增支出</button>
+              </div>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr><th>日期</th><th>類型</th><th>類別</th><th>金額</th><th>備註</th><th style="text-align:right">操作</th></tr>
+                  </thead>
+                  <tbody id="expensesTbody"></tbody>
+                </table>
+              </div>
+              <div id="expenseForm" class="card" style="margin-top:12px" hidden>
+                <h3 class="h3">新增支出</h3>
+                <div class="form-grid">
+                  <div class="field"><label for="expenseDate">日期</label><input id="expenseDate" type="date" /></div>
+                  <div class="field"><label for="expenseType">類型</label><select id="expenseType"><option value="COGS">銷貨成本</option><option value="OPEX">營業費用</option><option value="OTHER">其他</option></select></div>
+                  <div class="field"><label for="expenseCategory">類別</label><input id="expenseCategory" type="text" placeholder="進貨/運費/包材..." /></div>
+                  <div class="field"><label for="expenseAmount">金額</label><input id="expenseAmount" type="number" min="0" step="1" /></div>
+                  <div class="field full"><label for="expenseNote">備註</label><input id="expenseNote" type="text" /></div>
+                  <div class="full actions"><button id="expenseSave" class="btn btn-primary" type="button">儲存</button><button id="expenseCancel" class="btn btn-ghost" type="button">取消</button></div>
                 </div>
-                <div id="invBatchMsg" class="full muted" hidden></div>
+                <div id="expenseMsg" class="muted" hidden></div>
+              </div>
+            </div>
+
+            <!-- 報表 -->
+            <div id="v2-reports" class="v2-panel" hidden>
+              <div class="section-head"><h2 class="h2">報表</h2><p class="muted">庫齡排行、待整理/待測、待出清、本週摘要</p></div>
+              <div class="card" style="margin-bottom:12px">
+                <h3 class="h3">本週毛利摘要</h3>
+                <div id="reportWeekly" class="two-col"></div>
+              </div>
+              <div class="card" style="margin-bottom:12px">
+                <h3 class="h3">庫齡排行 Top 20（idle_days 最大）</h3>
+                <div id="reportTop20" class="table-wrap"></div>
+              </div>
+              <div class="card" style="margin-bottom:12px">
+                <h3 class="h3">待整理 / 待測（TESTING, PREP）</h3>
+                <div id="reportTestingPrep" class="table-wrap"></div>
+              </div>
+              <div class="card" style="margin-bottom:12px">
+                <h3 class="h3">待出清（CLEARANCE 或 PC/GPU 滯留&gt;30 天）</h3>
+                <div id="reportClearance" class="table-wrap"></div>
               </div>
             </div>
           </section>
@@ -529,115 +517,6 @@
             </div>
           </section>
 
-          <!-- ③ 訂單管理（Order Management） -->
-          <section id="tab-orders" class="card" hidden>
-            <div class="section-head" style="margin-bottom: 10px">
-              <div>
-                <h2 class="h2">訂單管理（Order Management）</h2>
-                <p class="muted">成本自動帶入、毛利自動計算，成交後自動扣庫存。</p>
-              </div>
-              <div class="section-actions">
-                <button id="ordNewBtn" class="btn btn-primary" type="button">新增訂單</button>
-              </div>
-            </div>
-
-            <div class="toolbar">
-              <label class="search">
-                <span class="search-label">搜尋（訂單號 / 客戶 / 商品ID）</span>
-                <input id="ordSearch" type="search" placeholder="例如：ORD-20260201 / GPU-3060TI" autocomplete="off" />
-              </label>
-              <div class="filters">
-                <div class="select">
-                  <label class="select-label" for="ordShipFilter">出貨</label>
-                  <select id="ordShipFilter">
-                    <option value="全部">全部</option>
-                    <option value="未出貨">未出貨</option>
-                    <option value="已出貨">已出貨</option>
-                    <option value="已取消">已取消</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <table class="table">
-              <thead>
-                <tr>
-                  <th class="nowrap">訂單編號</th>
-                  <th class="nowrap">成交日期</th>
-                  <th>客戶</th>
-                  <th class="nowrap">商品 ID</th>
-                  <th class="nowrap">數量</th>
-                  <th class="nowrap">售價</th>
-                  <th class="nowrap">成本</th>
-                  <th class="nowrap">毛利</th>
-                  <th class="nowrap">出貨</th>
-                  <th class="nowrap" style="text-align:right">操作</th>
-                </tr>
-              </thead>
-              <tbody id="ordTbody"></tbody>
-            </table>
-
-            <div id="ordEditor" class="card" style="margin-top: 12px" hidden>
-              <div class="section-head" style="margin-bottom: 10px">
-                <div>
-                  <h3 class="h3" style="margin: 0">新增 / 編輯訂單</h3>
-                  <div id="ordEditorTitle" class="muted"></div>
-                </div>
-                <div class="section-actions">
-                  <button id="ordCloseBtn" class="btn btn-ghost" type="button">關閉</button>
-                </div>
-              </div>
-              <div class="form-grid">
-                <div class="field">
-                  <label for="ordDate">成交日期</label>
-                  <input id="ordDate" type="date" />
-                </div>
-                <div class="field">
-                  <label for="ordShip">出貨狀態</label>
-                  <select id="ordShip">
-                    <option value="未出貨">未出貨</option>
-                    <option value="已出貨">已出貨</option>
-                    <option value="已取消">已取消</option>
-                  </select>
-                </div>
-                <div class="field full">
-                  <label for="ordCustomer">客戶資訊</label>
-                  <input id="ordCustomer" type="text" placeholder="名稱/暱稱/電話/LINE..." />
-                </div>
-                <div class="field">
-                  <label for="ordItemId">商品 ID</label>
-                  <input id="ordItemId" type="text" placeholder="例如：GPU-3060TI-001" />
-                </div>
-                <div class="field">
-                  <label for="ordQty">數量</label>
-                  <input id="ordQty" type="number" min="1" step="1" />
-                </div>
-                <div class="field">
-                  <label for="ordPrice">售價（總額）</label>
-                  <input id="ordPrice" type="number" min="0" step="1" />
-                </div>
-                <div class="field">
-                  <label>成本（自動）</label>
-                  <div id="ordCost" class="muted">-</div>
-                </div>
-                <div class="field">
-                  <label>毛利（自動）</label>
-                  <div id="ordProfit" class="muted">-</div>
-                </div>
-                <div class="field full">
-                  <label for="ordNote">備註</label>
-                  <input id="ordNote" type="text" />
-                </div>
-
-                <div class="full actions">
-                  <button id="ordSaveBtn" class="btn btn-primary" type="button">儲存</button>
-                  <button id="ordDeleteBtn" class="btn btn-danger" type="button" hidden>刪除</button>
-                </div>
-                <div id="ordMsg" class="full muted" hidden></div>
-              </div>
-            </div>
-          </section>
-
           <!-- ⑤ 前台管理（外觀／文字） -->
           <section id="tab-frontend" class="card" hidden>
             <div class="section-head" style="margin-bottom: 10px">
@@ -798,7 +677,17 @@
               </div>
               <div class="field full">
                 <label for="feLineUrl">LINE 官方帳連結</label>
-                <input id="feLineUrl" type="text" placeholder="https://lin.ee/zWYz2KH7" />
+                <input id="feLineUrl" type="text" placeholder="https://lin.ee/VcxP0QO" />
+              </div>
+              <div class="field full">
+                <label for="feLineCtaText">LINE 按鈕文案（全站）</label>
+                <input id="feLineCtaText" type="text" placeholder="加 LINE 快速配單／看現貨" />
+                <small class="muted">導航、浮動按鈕、整機頁 CTA 等都會顯示這段文字。</small>
+              </div>
+              <div class="field full">
+                <label for="feFooterLineSentence">每頁底部一句話</label>
+                <textarea id="feFooterLineSentence" rows="3" placeholder="不確定怎麼選？直接加 LINE：@315PEPPL，我用你的用途/預算給你最划算的配置或現貨選項。"></textarea>
+                <small class="muted">顯示在首頁、整機、表單、FAQ、售後保固的頁尾與整機頁 CTA 區。</small>
               </div>
 
               <div class="full actions">
@@ -809,52 +698,6 @@
             </div>
           </section>
 
-          <!-- ④ 報表管理（Report Dashboard） -->
-          <section id="tab-reports" class="card" hidden>
-            <div class="section-head" style="margin-bottom: 10px">
-              <div>
-                <h2 class="h2">報表管理（Report Dashboard）</h2>
-                <p class="muted">日 / 週 / 月營收、毛利、銷售量；最熱賣品項、最佳毛利批次、滯銷商品提醒；庫存分佈圖、低庫存警示。</p>
-              </div>
-              <div class="section-actions">
-                <div class="select">
-                  <label class="select-label" for="repRange">區間</label>
-                  <select id="repRange">
-                    <option value="day">日</option>
-                    <option value="week">週</option>
-                    <option value="month" selected>月</option>
-                  </select>
-                </div>
-                <button id="repRefreshBtn" class="btn btn-primary" type="button">更新報表</button>
-              </div>
-            </div>
-
-            <div id="repWrap" class="two-col"></div>
-            <div class="card" style="margin-top: 12px">
-              <h3 class="h3">庫存分佈圖</h3>
-              <div id="repInvDist" style="margin-top: 10px"></div>
-            </div>
-            <div class="card" style="margin-top: 12px">
-              <div class="section-head" style="margin-bottom: 10px">
-                <div>
-                  <h3 class="h3">低庫存警示</h3>
-                  <div class="muted">可售數量 ≤ 門檻</div>
-                </div>
-                <div class="section-actions">
-                  <div class="select">
-                    <label class="select-label" for="repLowThreshold">門檻</label>
-                    <input id="repLowThreshold" type="number" min="0" step="1" value="2" />
-                  </div>
-                </div>
-              </div>
-              <div id="repLowStock"></div>
-            </div>
-            <div class="card" style="margin-top: 12px">
-              <h3 class="h3">滯銷商品提醒</h3>
-              <div class="muted">在庫且 30 天內無成交</div>
-              <div id="repSlow" style="margin-top: 10px"></div>
-            </div>
-          </section>
         </section>
 
         <!-- 舊版後台：保留但不顯示（避免你過去資料/版面衝突） -->
@@ -1836,6 +1679,9 @@
     </main>
 
     <script src="./shared.js?v=20260201"></script>
+    <script src="./inventory-ledger.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script src="./admin3.js?v=20260201"></script>
   </body>
 </html>

@@ -8,9 +8,13 @@
     seq: "dk_im_seq_v1",
   };
 
-  const INV_STATUSES = ["在庫", "測試中", "已預定", "已售出", "不良品"];
+  const INV_STATUSES = ["可售", "待測", "待整理", "保留", "待出清", "報廢拆料", "已售出"];
+  const INV_STATUS_LEGACY_MAP = { "在庫": "可售", "測試中": "待測", "已預定": "保留", "不良品": "報廢拆料" };
+  const INV_PRODUCT_TYPES = ["成品", "核心零件", "耗材", "維修待處理"];
   const CLEAN_STATUSES = ["未清潔", "已清潔"];
   const SHIP_STATUSES = ["未出貨", "已出貨", "已取消"];
+  const ORD_INCOME_TYPES = ["整新主機銷售", "顯卡銷售", "零件/耗材銷售", "維修/安裝服務費", "運費收入", "加購升級費", "其他"];
+  const INV_AGE_DAYS = { normal: 14, attention: 30, warning: 60 }; // 0-14 正常, 15-30 注意, 31-60 警戒, 60+ 出清
 
   function safeParse(v, fallback) {
     try {
@@ -98,7 +102,30 @@
   function sellableQty(it) {
     const qty = Number(it?.qty || 0);
     if (!Number.isFinite(qty) || qty <= 0) return 0;
-    return it?.status === "在庫" ? qty : 0;
+    const s = normalizeInvStatus(it?.status);
+    return s === "可售" ? qty : 0;
+  }
+
+  function normalizeInvStatus(s) {
+    return INV_STATUS_LEGACY_MAP[s] || s || "可售";
+  }
+
+  function getDaysOnHand(it) {
+    const d = String(it?.dateIn || it?.createdAt || "").slice(0, 10);
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+    const then = new Date(d);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    then.setHours(0, 0, 0, 0);
+    return Math.floor((today - then) / (24 * 60 * 60 * 1000));
+  }
+
+  function getAgeLevel(days) {
+    if (days == null || days < 0) return null;
+    if (days <= INV_AGE_DAYS.normal) return "normal";
+    if (days <= INV_AGE_DAYS.attention) return "attention";
+    if (days <= INV_AGE_DAYS.warning) return "warning";
+    return "clearout";
   }
 
   // ---------- DOM ----------
@@ -110,59 +137,11 @@
   const usernameEl = document.getElementById("username");
   const passwordEl = document.getElementById("password");
 
-  const tabs = Array.from(document.querySelectorAll(".tab"));
+  // 只針對主 tab（有 data-tab 的）做切換，避免點 v2 子 tab 把整個 panel 關掉
+  const tabs = Array.from(document.querySelectorAll(".tab[data-tab]"));
   const tabInv = document.getElementById("tab-inv");
   const tabPublish = document.getElementById("tab-publish");
-  const tabOrders = document.getElementById("tab-orders");
-  const tabReports = document.getElementById("tab-reports");
   const tabFrontend = document.getElementById("tab-frontend");
-
-  // inventory
-  const invNewBtn = document.getElementById("invNewBtn");
-  const invBatchBtn = document.getElementById("invBatchBtn");
-  const invSearch = document.getElementById("invSearch");
-  const invStatusFilter = document.getElementById("invStatusFilter");
-  const invTbody = document.getElementById("invTbody");
-  const invEditor = document.getElementById("invEditor");
-  const invEditorTitle = document.getElementById("invEditorTitle");
-  const invCloseBtn = document.getElementById("invCloseBtn");
-  const invIdPreview = document.getElementById("invIdPreview");
-  const invIdPrefix = document.getElementById("invIdPrefix");
-  const invIdModel = document.getElementById("invIdModel");
-  const invName = document.getElementById("invName");
-  const invCategory = document.getElementById("invCategory");
-  const invQty = document.getElementById("invQty");
-  const invCost = document.getElementById("invCost");
-  const invSuggested = document.getElementById("invSuggested");
-  const invActual = document.getElementById("invActual");
-  const invStatus = document.getElementById("invStatus");
-  const invCleaning = document.getElementById("invCleaning");
-  const invBatchSource = document.getElementById("invBatchSource");
-  const invNote = document.getElementById("invNote");
-  const invBench = document.getElementById("invBench");
-  const invTemp = document.getElementById("invTemp");
-  const invVideoUrl = document.getElementById("invVideoUrl");
-  const invSaveBtn = document.getElementById("invSaveBtn");
-  const invDeleteBtn = document.getElementById("invDeleteBtn");
-  const invMsg = document.getElementById("invMsg");
-
-  const invBatch = document.getElementById("invBatch");
-  const invBatchCloseBtn = document.getElementById("invBatchCloseBtn");
-  const invBatchText = document.getElementById("invBatchText");
-  const invBatchImportBtn = document.getElementById("invBatchImportBtn");
-  const invBatchMsg = document.getElementById("invBatchMsg");
-  const invScanBtn = document.getElementById("invScanBtn");
-  const invScanModal = document.getElementById("invScanModal");
-  const invScanCloseBtn = document.getElementById("invScanCloseBtn");
-  const invScanCloseBtn2 = document.getElementById("invScanCloseBtn2");
-  const invScanVideo = document.getElementById("invScanVideo");
-  const invScanCanvas = document.getElementById("invScanCanvas");
-  const invScanCaptureBtn = document.getElementById("invScanCaptureBtn");
-  const invScanResultWrap = document.getElementById("invScanResultWrap");
-  const invScanResultText = document.getElementById("invScanResultText");
-  const invScanFillNameBtn = document.getElementById("invScanFillNameBtn");
-  const invScanFillNoteBtn = document.getElementById("invScanFillNoteBtn");
-  const invScanStatus = document.getElementById("invScanStatus");
 
   // publish
   const publishSubmitBtn = document.getElementById("publishSubmitBtn");
@@ -202,44 +181,9 @@
     { key: "os", category: "作業系統", prefix: "OS", selectId: "publishOs", customId: "publishOsCustom", infoId: "publishOsInfo", conditionId: "publishOsCondition", remarkId: "publishOsRemark", priceId: "publishOsPrice" },
   ];
 
-  // orders
-  const ordNewBtn = document.getElementById("ordNewBtn");
-  const ordSearch = document.getElementById("ordSearch");
-  const ordShipFilter = document.getElementById("ordShipFilter");
-  const ordTbody = document.getElementById("ordTbody");
-  const ordEditor = document.getElementById("ordEditor");
-  const ordEditorTitle = document.getElementById("ordEditorTitle");
-  const ordCloseBtn = document.getElementById("ordCloseBtn");
-  const ordDate = document.getElementById("ordDate");
-  const ordShip = document.getElementById("ordShip");
-  const ordCustomer = document.getElementById("ordCustomer");
-  const ordItemId = document.getElementById("ordItemId");
-  const ordQty = document.getElementById("ordQty");
-  const ordPrice = document.getElementById("ordPrice");
-  const ordCost = document.getElementById("ordCost");
-  const ordProfit = document.getElementById("ordProfit");
-  const ordNote = document.getElementById("ordNote");
-  const ordSaveBtn = document.getElementById("ordSaveBtn");
-  const ordDeleteBtn = document.getElementById("ordDeleteBtn");
-  const ordMsg = document.getElementById("ordMsg");
-
-  // reports
-  const repRange = document.getElementById("repRange");
-  const repRefreshBtn = document.getElementById("repRefreshBtn");
-  const repWrap = document.getElementById("repWrap");
-  const repInvDist = document.getElementById("repInvDist");
-  const repLowThreshold = document.getElementById("repLowThreshold");
-  const repLowStock = document.getElementById("repLowStock");
-  const repSlow = document.getElementById("repSlow");
-
   if (!loginCard || !panel) return;
 
   // ---------- state ----------
-  const INV_KIND_LIST = ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "作業系統"];
-  let invState = { q: "", status: "全部", kind: "全部" };
-  let ordState = { q: "", ship: "全部" };
-  let editingInvId = null;
-  let editingOrdId = null;
   let editingWebId = null;
   let publishPhotos = []; // data URLs
 
@@ -267,405 +211,25 @@
     for (const t of tabs) t.classList.toggle("active", t.dataset.tab === name);
     if (tabInv) tabInv.hidden = name !== "inv";
     if (tabPublish) tabPublish.hidden = name !== "publish";
-    if (tabOrders) tabOrders.hidden = name !== "orders";
-    if (tabReports) tabReports.hidden = name !== "reports";
     if (tabFrontend) tabFrontend.hidden = name !== "frontend";
-    if (name === "inv") renderInventory();
+    if (name === "inv") {
+      const doRefresh = () => {
+        if (typeof window.__adminV2Refresh === "function") window.__adminV2Refresh();
+      };
+      if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") {
+        window.DK.fetchV2DataFromSupabase().then(doRefresh).catch(doRefresh);
+      } else {
+        doRefresh();
+      }
+    }
     if (name === "publish") {
       if (publishFormCard) publishFormCard.hidden = true;
       renderPublish();
     }
-    if (name === "orders") renderOrders();
-    if (name === "reports") renderReports();
     if (name === "frontend") loadFrontendForm();
   }
 
-  // ---------- inventory ----------
-  function getItems() {
-    return loadArr(KEYS.items);
-  }
-
-  function saveItems(items) {
-    saveArr(KEYS.items, items);
-  }
-
-  function openInvEditor() {
-    if (!invEditor) return;
-    invEditor.hidden = false;
-    invEditor.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  function closeInvEditor() {
-    if (!invEditor) return;
-    invEditor.hidden = true;
-    hide(invMsg);
-  }
-
-  function updateInvIdPreview() {
-    if (!invIdPreview) return;
-    if (editingInvId) {
-      invIdPreview.textContent = editingInvId;
-      return;
-    }
-    const p = sanitizeCode(invIdPrefix?.value) || "ITEM";
-    const m = sanitizeCode(invIdModel?.value) || "X";
-    invIdPreview.textContent = `${p}-${m}-001（預覽）`;
-  }
-
-  function clearInvForm() {
-    editingInvId = null;
-    if (invDeleteBtn) invDeleteBtn.hidden = true;
-    if (invEditorTitle) invEditorTitle.textContent = "新增商品";
-    if (invIdPrefix) invIdPrefix.value = "GPU";
-    if (invIdModel) invIdModel.value = "";
-    if (invName) invName.value = "";
-    if (invCategory) invCategory.value = "";
-    if (invQty) invQty.value = "1";
-    if (invCost) invCost.value = "";
-    if (invSuggested) invSuggested.value = "";
-    if (invActual) invActual.value = "";
-    if (invStatus) invStatus.value = "在庫";
-    if (invCleaning) invCleaning.value = "未清潔";
-    if (invBatchSource) invBatchSource.value = "";
-    if (invNote) invNote.value = "";
-    if (invBench) invBench.value = "";
-    if (invTemp) invTemp.value = "";
-    if (invVideoUrl) invVideoUrl.value = "";
-    hide(invMsg);
-    updateInvIdPreview();
-  }
-
-  function fillInvForm(it) {
-    editingInvId = it.id;
-    if (invDeleteBtn) invDeleteBtn.hidden = false;
-    if (invEditorTitle) invEditorTitle.textContent = `編輯：${it.id}`;
-    if (invIdPrefix) invIdPrefix.value = it.idPrefix || "";
-    if (invIdModel) invIdModel.value = it.idModel || "";
-    if (invName) invName.value = it.name || "";
-    if (invCategory) invCategory.value = it.category || "";
-    if (invQty) invQty.value = String(it.qty ?? 0);
-    if (invCost) invCost.value = String(it.cost ?? "");
-    if (invSuggested) invSuggested.value = String(it.suggestedPrice ?? "");
-    if (invActual) invActual.value = String(it.actualPrice ?? "");
-    if (invStatus) invStatus.value = it.status || "在庫";
-    if (invCleaning) invCleaning.value = it.cleaningStatus || "未清潔";
-    if (invBatchSource) invBatchSource.value = it.batchSource || "";
-    if (invNote) invNote.value = it.note || "";
-    if (invBench) invBench.value = it.test?.bench || "";
-    if (invTemp) invTemp.value = it.test?.temp || "";
-    if (invVideoUrl) invVideoUrl.value = it.test?.videoUrl || "";
-    hide(invMsg);
-    updateInvIdPreview();
-  }
-
-  function invMatches(it) {
-    if (invState.status !== "全部" && it.status !== invState.status) return false;
-    const k = invState.kind;
-    if (k !== "全部") {
-      const cat = String(it.category || "").trim();
-      if (k === "其他") {
-        if (INV_KIND_LIST.some((c) => cat === c)) return false;
-      } else if (cat !== k) return false;
-    }
-    const q = norm(invState.q);
-    if (!q) return true;
-    const hay = [it.id, it.name, it.category, it.batchSource, it.note, it.test?.bench, it.test?.temp, it.test?.videoUrl]
-      .map(norm)
-      .join(" ");
-    return hay.includes(q);
-  }
-
-  function renderInventory() {
-    const items = getItems().filter(invMatches);
-    if (!invTbody) return;
-    invTbody.innerHTML = "";
-
-    for (const it of items) {
-      const tr = document.createElement("tr");
-      const sellable = sellableQty(it);
-      tr.innerHTML = `
-        <td class="nowrap"><span class="mono">${escapeHtml(it.id)}</span></td>
-        <td>${escapeHtml(it.name || "-")}<div class="muted">${escapeHtml(it.note || "")}</div></td>
-        <td class="nowrap">${escapeHtml(it.category || "-")}</td>
-        <td class="nowrap">${Number(it.qty || 0)}</td>
-        <td class="nowrap">${sellable}</td>
-        <td class="nowrap">${escapeHtml(it.status || "-")}</td>
-        <td class="nowrap"><span class="mono">NT$</span> ${formatNum(it.cost)}</td>
-        <td class="nowrap"><span class="mono">NT$</span> ${formatNum(it.suggestedPrice)}</td>
-        <td class="nowrap"><span class="mono">NT$</span> ${formatNum(it.actualPrice)}</td>
-        <td class="nowrap">${escapeHtml(it.cleaningStatus || "-")}</td>
-        <td>${escapeHtml(it.batchSource || "-")}</td>
-        <td class="nowrap" style="text-align:right">
-          <div class="row-actions">
-            <button class="btn btn-ghost btn-sm" type="button" data-act="edit">編輯</button>
-            <button class="btn btn-ghost btn-sm" type="button" data-act="del">刪除</button>
-          </div>
-        </td>
-      `;
-      tr.querySelector('[data-act="edit"]').addEventListener("click", () => {
-        fillInvForm(it);
-        openInvEditor();
-      });
-      tr.querySelector('[data-act="del"]').addEventListener("click", () => removeInv(it.id));
-      invTbody.appendChild(tr);
-    }
-  }
-
-  function saveInv() {
-    hide(invMsg);
-
-    const items = getItems();
-    const name = String(invName?.value || "").trim();
-    const category = String(invCategory?.value || "").trim();
-    const qty = toNum(invQty?.value);
-    const cost = toNum(invCost?.value);
-    const suggestedPrice = toNum(invSuggested?.value);
-    const actualPrice = toNum(invActual?.value);
-    const status = invStatus?.value || "在庫";
-    const cleaningStatus = invCleaning?.value || "未清潔";
-    const batchSource = String(invBatchSource?.value || "").trim();
-    const note = String(invNote?.value || "").trim();
-
-    const idPrefix = sanitizeCode(invIdPrefix?.value) || "ITEM";
-    const idModel = sanitizeCode(invIdModel?.value) || sanitizeCode(name) || "X";
-
-    if (!name) return show(invMsg, "商品名稱不能空白。");
-    if (!category) return show(invMsg, "商品類別不能空白。");
-    if (qty == null || qty < 0) return show(invMsg, "庫存數量需為 0 以上。");
-    if (cost == null || cost < 0) return show(invMsg, "成本需為 0 以上。");
-    if (!INV_STATUSES.includes(status)) return show(invMsg, "商品狀態不合法。");
-    if (!CLEAN_STATUSES.includes(cleaningStatus)) return show(invMsg, "清潔狀態不合法。");
-
-    const test = {
-      bench: String(invBench?.value || "").trim(),
-      temp: String(invTemp?.value || "").trim(),
-      videoUrl: String(invVideoUrl?.value || "").trim(),
-    };
-
-    const now = new Date().toISOString();
-
-    if (editingInvId) {
-      const idx = items.findIndex((x) => x.id === editingInvId);
-      if (idx < 0) return show(invMsg, "找不到此商品。");
-      const prev = items[idx];
-      items[idx] = {
-        ...prev,
-        name,
-        category,
-        qty,
-        cost,
-        suggestedPrice: suggestedPrice ?? null,
-        actualPrice: actualPrice ?? null,
-        status,
-        cleaningStatus,
-        batchSource,
-        note,
-        test,
-        updatedAt: now,
-      };
-      saveItems(items);
-      closeInvEditor();
-      renderInventory();
-      return;
-    }
-
-    const id = makeItemId(idPrefix, idModel);
-    const next = {
-      id,
-      idPrefix,
-      idModel,
-      name,
-      category,
-      qty,
-      cost,
-      suggestedPrice: suggestedPrice ?? null,
-      actualPrice: actualPrice ?? null,
-      status,
-      cleaningStatus,
-      batchSource,
-      note,
-      test,
-      createdAt: now,
-      updatedAt: now,
-    };
-    items.unshift(next);
-    saveItems(items);
-    closeInvEditor();
-    renderInventory();
-  }
-
-  function removeInv(id) {
-    const items = getItems();
-    const it = items.find((x) => x.id === id);
-    if (!it) return;
-    if (!confirm(`確定刪除「${it.id}」？`)) return;
-    saveItems(items.filter((x) => x.id !== id));
-    renderInventory();
-  }
-
-  function openBatch() {
-    if (!invBatch) return;
-    invBatch.hidden = false;
-    invBatch.scrollIntoView({ behavior: "smooth", block: "start" });
-    hide(invBatchMsg);
-  }
-
-  function closeBatch() {
-    if (!invBatch) return;
-    invBatch.hidden = true;
-    hide(invBatchMsg);
-  }
-
-  let invScanStream = null;
-  function openInvScan() {
-    if (!invScanModal || !invScanVideo) return;
-    invScanModal.hidden = false;
-    invScanModal.classList.add("open");
-    invScanResultWrap && (invScanResultWrap.hidden = true);
-    if (invScanResultText) invScanResultText.value = "";
-    setInvScanStatus("正在開啟相機…");
-    navigator.mediaDevices
-      ?.getUserMedia({ video: { facingMode: "environment" }, audio: false })
-      .then((stream) => {
-        invScanStream = stream;
-        invScanVideo.srcObject = stream;
-        invScanVideo.play().catch(() => {});
-        setInvScanStatus("對準產品規格後按「拍照辨識」");
-      })
-      .catch(() => setInvScanStatus("無法取得相機，請允許權限或改用上傳圖片"));
-  }
-  function closeInvScan() {
-    if (invScanStream) {
-      invScanStream.getTracks().forEach((t) => t.stop());
-      invScanStream = null;
-    }
-    if (invScanVideo) invScanVideo.srcObject = null;
-    if (invScanModal) {
-      invScanModal.classList.remove("open");
-      invScanModal.hidden = true;
-    }
-  }
-  function setInvScanStatus(msg) {
-    if (invScanStatus) invScanStatus.textContent = msg || "";
-  }
-  function loadTesseract() {
-    if (window.Tesseract) return Promise.resolve(window.Tesseract);
-    return new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
-      script.onload = () => resolve(window.Tesseract);
-      script.onerror = () => reject(new Error("無法載入 Tesseract.js"));
-      document.head.appendChild(script);
-    });
-  }
-  async function runInvScanOCR() {
-    if (!invScanVideo || !invScanCanvas || !invScanResultText || !invScanResultWrap) return;
-    const ctx = invScanCanvas.getContext("2d");
-    if (!ctx) return;
-    invScanCanvas.width = invScanVideo.videoWidth;
-    invScanCanvas.height = invScanVideo.videoHeight;
-    ctx.drawImage(invScanVideo, 0, 0);
-    setInvScanStatus("辨識中…");
-    invScanCaptureBtn && (invScanCaptureBtn.disabled = true);
-    try {
-      const Tesseract = await loadTesseract();
-      const blob = await new Promise((resolve) => invScanCanvas.toBlob(resolve, "image/jpeg", 0.92));
-      const { data } = await Tesseract.recognize(blob, "chi_tra+eng", {
-        logger: (m) => { if (m.status) setInvScanStatus(m.status); },
-      });
-      invScanResultText.value = (data?.text || "").trim() || "（未辨識到文字）";
-      invScanResultWrap.hidden = false;
-      setInvScanStatus("辨識完成，可填入商品名稱或備註");
-    } catch (e) {
-      invScanResultText.value = "";
-      setInvScanStatus("辨識失敗：" + (e?.message || String(e)));
-      invScanResultWrap.hidden = false;
-    }
-    invScanCaptureBtn && (invScanCaptureBtn.disabled = false);
-  }
-
-  function importBatch() {
-    hide(invBatchMsg);
-    const text = String(invBatchText?.value || "").trim();
-    if (!text) return show(invBatchMsg, "請貼上批次資料。");
-
-    const lines = text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-    if (lines.length === 0) return show(invBatchMsg, "沒有可匯入的行。");
-
-    const items = getItems();
-    const now = new Date().toISOString();
-    let ok = 0;
-    let fail = 0;
-
-    for (const line of lines) {
-      const parts = line.split(",").map((x) => x.trim());
-      if (parts.length < 7) {
-        fail++;
-        continue;
-      }
-      const [prefix, model, name, category, qtyStr, costStr, suggestedStr, batchSource = ""] = parts;
-      const qty = toNum(qtyStr);
-      const cost = toNum(costStr);
-      const suggestedPrice = toNum(suggestedStr);
-      if (!name || !category || qty == null || qty < 0 || cost == null || cost < 0) {
-        fail++;
-        continue;
-      }
-      const id = makeItemId(prefix, model || name);
-      items.unshift({
-        id,
-        idPrefix: sanitizeCode(prefix) || "ITEM",
-        idModel: sanitizeCode(model || name) || "X",
-        name,
-        category,
-        qty,
-        cost,
-        suggestedPrice: suggestedPrice ?? null,
-        actualPrice: null,
-        status: "在庫",
-        cleaningStatus: "未清潔",
-        batchSource,
-        note: "",
-        test: { bench: "", temp: "", videoUrl: "" },
-        createdAt: now,
-        updatedAt: now,
-      });
-      ok++;
-    }
-
-    saveItems(items);
-    renderInventory();
-    show(invBatchMsg, `已匯入 ${ok} 筆，失敗 ${fail} 筆。`);
-  }
-
-  function syncToWeb() {
-    // 將「在庫/已預定/測試中」同步到首頁現貨（沿用原本前台資料格式）
-    if (!window.DK?.saveInventory) return alert("找不到前台同步函式。");
-
-    const items = getItems();
-    const web = items
-      .filter((it) => it.status === "在庫" || it.status === "已預定" || it.status === "測試中")
-      .map((it) => ({
-        id: it.id,
-        name: it.name,
-        category: it.category || "其他",
-        stockStatus: it.status === "在庫" ? "現貨" : it.status === "已預定" ? "低庫存" : "低庫存",
-        cpu: "",
-        gpu: "",
-        ram: "",
-        ssd: "",
-        price: typeof it.suggestedPrice === "number" ? it.suggestedPrice : undefined,
-        tags: it.batchSource ? [it.batchSource] : [],
-        note: it.note || "",
-        photos: [],
-      }));
-    window.DK.saveInventory(web);
-    return web.length;
-  }
-
+  // ---------- 上架管理（publish）：renderPublish / submitPublish / 編輯／圖片壓縮 ----------
   function readFileAsDataUrl(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -674,7 +238,6 @@
       reader.readAsDataURL(file);
     });
   }
-
   function loadImage(src) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -683,7 +246,6 @@
       img.src = src;
     });
   }
-
   async function fileToCompressedDataUrl(file, opts = {}) {
     const { maxW = 1280, maxH = 1280, quality = 0.82 } = opts;
     const src = await readFileAsDataUrl(file);
@@ -701,698 +263,150 @@
     return canvas.toDataURL("image/jpeg", quality);
   }
 
+  const publishSpecPrices = {};
+  function setPublishSpecPrice(key, val) {
+    publishSpecPrices[key] = val;
+  }
+  function updatePublishSpecInfo() {}
+  function updatePublishTotalCost() {
+    const total = Object.values(publishSpecPrices).reduce((s, v) => s + (Number(v) || 0), 0);
+    const el = document.getElementById("publishTotalCost");
+    if (el) el.textContent = "NT$ " + (total || 0).toLocaleString("zh-TW");
+  }
+  function updatePublishSalePrice() {
+    const total = Object.values(publishSpecPrices).reduce((s, v) => s + (Number(v) || 0), 0);
+    const el = document.getElementById("publishPrice");
+    if (el) el.value = String(total || 0);
+  }
+
   function renderPublishPhotoStrip() {
     if (!publishPhotoStrip) return;
-    publishPhotoStrip.innerHTML = "";
-    const count = publishPhotos.length;
-    if (publishPhotoHint) {
-      publishPhotoHint.hidden = false;
-      publishPhotoHint.textContent = `目前 ${count}/5 張（選檔後自動壓縮轉成 URL，可選 1–5 張，選填）`;
-    }
-    for (let i = 0; i < publishPhotos.length; i++) {
-      const src = publishPhotos[i];
-      const wrap = document.createElement("div");
-      wrap.className = "thumb";
-      wrap.innerHTML = `<img alt="商品相片 ${i + 1}" /><button type="button" title="移除">×</button>`;
-      const img = wrap.querySelector("img");
-      img.src = src;
-      wrap.querySelector("button").addEventListener("click", () => {
-        publishPhotos.splice(i, 1);
+    publishPhotoStrip.innerHTML = publishPhotos.map((url, i) => `<span class="photo-thumb"><img src="${escapeHtml(url)}" alt="" /><button type="button" class="btn-remove-photo" data-i="${i}">×</button></span>`).join("");
+    publishPhotoStrip.querySelectorAll(".btn-remove-photo").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        publishPhotos.splice(Number(btn.getAttribute("data-i")), 1);
         renderPublishPhotoStrip();
       });
-      publishPhotoStrip.appendChild(wrap);
-    }
-  }
-
-  function getItemsByCategory(category) {
-    return getItems().filter((it) => (it.category || "").trim() === category);
-  }
-
-  function fillPublishSpecDropdowns() {
-    for (const spec of PUBLISH_SPECS) {
-      const sel = document.getElementById(spec.selectId);
-      if (!sel) continue;
-      const currentVal = sel.value;
-      sel.innerHTML = '<option value="">— 請選擇 —</option>';
-      const items = getItemsByCategory(spec.category);
-      for (const it of items) {
-        const opt = document.createElement("option");
-        opt.value = it.id;
-        opt.textContent = `${it.name || it.id}（庫存 ${Number(it.qty || 0)} / NT$ ${formatNum(it.cost)}）`;
-        opt.dataset.cost = String(it.cost ?? 0);
-        opt.dataset.qty = String(it.qty ?? 0);
-        sel.appendChild(opt);
-      }
-      if (currentVal && items.some((it) => it.id === currentVal)) sel.value = currentVal;
-      updatePublishSpecInfo(spec.key);
-      const v = getPublishSpecValue(spec.key);
-      if (!v.isCustom && v.id) setPublishSpecPrice(spec.key, v.cost);
-    }
-    updatePublishTotalCost();
-    updatePublishSalePrice();
-  }
-
-  function getPublishSpecCondition(specKey) {
-    const spec = PUBLISH_SPECS.find((s) => s.key === specKey);
-    if (!spec || !spec.conditionId) return "全新";
-    const v = document.getElementById(spec.conditionId)?.value;
-    return v === "二手" ? "二手" : "全新";
-  }
-
-  function getPublishSpecRemark(specKey) {
-    const spec = PUBLISH_SPECS.find((s) => s.key === specKey);
-    if (!spec || !spec.remarkId) return "";
-    return String(document.getElementById(spec.remarkId)?.value || "").trim();
-  }
-
-  function getPublishSpecPrice(specKey) {
-    const spec = PUBLISH_SPECS.find((s) => s.key === specKey);
-    if (!spec || !spec.priceId) return 0;
-    const v = toNum(document.getElementById(spec.priceId)?.value);
-    return v != null && v >= 0 ? v : 0;
-  }
-
-  function setPublishSpecPrice(specKey, value) {
-    const spec = PUBLISH_SPECS.find((s) => s.key === specKey);
-    if (!spec || !spec.priceId) return;
-    const el = document.getElementById(spec.priceId);
-    if (el) el.value = value != null && value >= 0 ? String(value) : "";
-  }
-
-  function updatePublishSalePrice() {
-    let sum = 0;
-    for (const spec of PUBLISH_SPECS) sum += getPublishSpecPrice(spec.key);
-    if (publishPrice) publishPrice.value = sum > 0 ? `NT$ ${formatNum(sum)}` : "";
-  }
-
-  function getPublishSpecValue(specKey) {
-    const spec = PUBLISH_SPECS.find((s) => s.key === specKey);
-    if (!spec) return { name: "", cost: 0, qty: 0, id: null, isCustom: false };
-    const sel = document.getElementById(spec.selectId);
-    const custom = document.getElementById(spec.customId);
-    const customText = String(custom?.value || "").trim();
-    if (customText) {
-      return { name: customText, cost: 0, qty: 0, id: null, isCustom: true };
-    }
-    const id = sel?.value || "";
-    if (!id) return { name: "", cost: 0, qty: 0, id: null, isCustom: false };
-    const it = findItemById(id);
-    if (!it) return { name: "", cost: 0, qty: 0, id: null, isCustom: false };
-    return {
-      name: it.name || it.id,
-      cost: Number(it.cost) || 0,
-      qty: Number(it.qty) || 0,
-      id: it.id,
-      isCustom: false,
-    };
-  }
-
-  function updatePublishSpecInfo(specKey) {
-    const spec = PUBLISH_SPECS.find((s) => s.key === specKey);
-    if (!spec) return;
-    const infoEl = document.getElementById(spec.infoId);
-    const v = getPublishSpecValue(specKey);
-    if (!infoEl) return;
-    if (!v.name) {
-      infoEl.textContent = "";
-      return;
-    }
-    if (v.isCustom) infoEl.textContent = `自訂顯示用（不會加入庫存，請至庫存管理手動新增）`;
-    else infoEl.textContent = `庫存 ${v.qty}／成本 NT$ ${formatNum(v.cost)}${v.qty === 0 ? " ※ 庫存為 0" : ""}`;
-  }
-
-  function updatePublishTotalCost() {
-    let total = 0;
-    for (const spec of PUBLISH_SPECS) total += getPublishSpecValue(spec.key).cost;
-    if (publishTotalCost) publishTotalCost.textContent = `NT$ ${formatNum(total)}`;
-  }
-
-  async function submitPublish() {
-    hide(publishMsg);
-    const productName = String(publishProductName?.value || "").trim();
-    if (!productName) {
-      show(publishMsg, "請填寫商品名稱。");
-      return;
-    }
-    const photoCount = publishPhotos.length;
-    if (photoCount > 5) {
-      show(publishMsg, "最多上傳 5 張商品照片。");
-      return;
-    }
-    if (!window.DK?.getInventory || !window.DK?.saveInventory) {
-      show(publishMsg, "找不到前台資料函式。");
-      return;
-    }
-
-    const specValues = {};
-    const zeroStockNames = [];
-
-    for (const spec of PUBLISH_SPECS) {
-      const v = getPublishSpecValue(spec.key);
-      specValues[spec.key] = v;
-      if (v.name && !v.isCustom && v.qty === 0) zeroStockNames.push(`${spec.category}：${v.name}`);
-    }
-
-    const cpu = specValues.cpu?.name || "";
-    const gpu = specValues.vga?.name || "";
-    const ram = specValues.ram?.name || "";
-    const ssd = specValues.hdd?.name || "";
-    const specParts = [];
-    for (const s of PUBLISH_SPECS) {
-      const name = specValues[s.key]?.name;
-      if (!name) continue;
-      const condition = getPublishSpecCondition(s.key);
-      const remark = getPublishSpecRemark(s.key);
-      let part = `${s.category}：${name}（${condition}）`;
-      if (remark) part += `；備注：${remark}`;
-      specParts.push(part);
-    }
-    const noteParts = [publishSpecSummary?.value?.trim()].filter(Boolean);
-    if (specParts.length) noteParts.push(specParts.join("｜"));
-
-    let salePrice = 0;
-    for (const s of PUBLISH_SPECS) salePrice += getPublishSpecPrice(s.key);
-
-    const currentInv = window.DK.getInventory();
-    const qtyNum = toNum(publishQty?.value);
-    const newItem = {
-      id: makeWebItemId(),
-      name: productName,
-      category: publishCategory?.value || "遊戲",
-      stockStatus: "現貨",
-      cpu,
-      gpu,
-      ram,
-      ssd,
-      price: salePrice,
-      qty: qtyNum != null && qtyNum >= 0 ? qtyNum : 1,
-      tags: [],
-      note: noteParts.join(" "),
-      photos: publishPhotos.slice(0, 5),
-    };
-    currentInv.unshift(newItem);
-    window.DK.saveInventory(currentInv);
-    // 同步到 Supabase
-    if (window.DK?.upsertInventoryItemToSupabase) {
-      try {
-        await window.DK.upsertInventoryItemToSupabase(newItem);
-      } catch (e) {
-        console.warn("同步新上架商品到 Supabase 失敗", e);
-      }
-    }
-
-    let msg = `已上架「${productName}」至前台（出售金額 NT$ ${formatNum(salePrice)}，${photoCount} 張照片）。`;
-    if (zeroStockNames.length) msg += ` 以下規格庫存為 0，請至庫存管理補齊：${zeroStockNames.join("、")}`;
-    show(publishMsg, msg);
-
-    publishPhotos = [];
-    renderPublishPhotoStrip();
-    if (publishPhotosInput) publishPhotosInput.value = "";
-    if (publishFormCard) publishFormCard.hidden = true;
-    renderPublish();
-  }
-
-  function getWebItems() {
-    return window.DK?.getInventory?.() || [];
-  }
-
-  function openPublishEditor() {
-    if (!publishEditor) return;
-    publishEditor.hidden = false;
-    publishEditor.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  function closePublishEditor() {
-    if (!publishEditor) return;
-    publishEditor.hidden = true;
-    editingWebId = null;
-    hide(publishEditorMsg);
-  }
-
-  function fillPublishEditor(it) {
-    editingWebId = it.id;
-    if (publishEditorTitle) publishEditorTitle.textContent = it.name || it.id || "";
-    if (webEditName) webEditName.value = it.name || "";
-    if (webEditCategory) webEditCategory.value = it.category || "遊戲";
-    if (webEditStockStatus) webEditStockStatus.value = it.stockStatus || "現貨";
-    if (webEditPrice) webEditPrice.value = typeof it.price === "number" ? String(it.price) : "";
-    if (webEditQty) webEditQty.value = typeof it.qty === "number" && it.qty >= 0 ? String(it.qty) : "1";
-    if (webEditNote) webEditNote.value = it.note || "";
-    hide(publishEditorMsg);
-  }
-
-  async function savePublishEditor() {
-    hide(publishEditorMsg);
-    if (!editingWebId || !window.DK?.getInventory || !window.DK?.saveInventory) return;
-    const items = getWebItems();
-    const idx = items.findIndex((x) => x.id === editingWebId);
-    if (idx < 0) {
-      show(publishEditorMsg, "找不到該商品。");
-      return;
-    }
-    const name = String(webEditName?.value || "").trim();
-    if (!name) {
-      show(publishEditorMsg, "請填寫商品名稱。");
-      return;
-    }
-    const qtyVal = toNum(webEditQty?.value);
-    items[idx] = {
-      ...items[idx],
-      name,
-      category: webEditCategory?.value || "遊戲",
-      stockStatus: webEditStockStatus?.value || "現貨",
-      price: toNum(webEditPrice?.value) ?? items[idx].price,
-      qty: qtyVal != null && qtyVal >= 0 ? qtyVal : items[idx].qty,
-      note: String(webEditNote?.value || "").trim(),
-    };
-    window.DK.saveInventory(items);
-    // 同步更新到 Supabase
-    if (window.DK?.upsertInventoryItemToSupabase) {
-      try {
-        await window.DK.upsertInventoryItemToSupabase(items[idx]);
-      } catch (e) {
-        console.warn("同步編輯後商品到 Supabase 失敗", e);
-      }
-    }
-    closePublishEditor();
-    renderPublish();
-  }
-
-  async function removeFromWeb(id) {
-    if (!window.DK?.getInventory || !window.DK?.saveInventory) return;
-    const items = getWebItems().filter((x) => x.id !== id);
-    window.DK.saveInventory(items);
-    // 從 Supabase 刪除
-    if (window.DK?.deleteInventoryItemFromSupabase) {
-      try {
-        await window.DK.deleteInventoryItemFromSupabase(id);
-      } catch (e) {
-        console.warn("從 Supabase 刪除商品失敗", e);
-      }
-    }
-    if (editingWebId === id) closePublishEditor();
-    renderPublish();
+    });
   }
 
   function renderPublish() {
-    fillPublishSpecDropdowns();
-    renderPublishPhotoStrip();
-    const webItems = getWebItems();
-    const publishWebEmpty = document.getElementById("publishWebEmpty");
+    const items = window.DK?.getInventory?.() || [];
+    const publishEmpty = document.getElementById("publishWebEmpty");
+    if (publishWebEmpty) publishEmpty.hidden = items.length > 0;
     if (!publishWebGrid) return;
-    publishWebGrid.innerHTML = "";
-    for (const it of webItems) {
-      const photos = Array.isArray(it.photos) ? it.photos : [];
-      const imgSrc = photos[0] || "";
-      const baseSpec = it.note
-        ? String(it.note).trim()
-        : [it.category, it.stockStatus, it.price != null ? `NT$ ${formatNum(it.price)}` : ""].filter(Boolean).join(" · ");
-      const qtyStr = typeof it.qty === "number" && it.qty >= 0 ? `剩餘 ${it.qty} 件` : "";
-      const specText = qtyStr ? (baseSpec ? `${baseSpec} · ${qtyStr}` : qtyStr) : baseSpec;
-      const card = document.createElement("div");
-      card.className = "publish-web-card";
-      card.innerHTML = `
-        <div class="publish-web-card-img">
-          ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(it.name || "")}" loading="lazy" />` : '<span class="publish-web-card-noimg">無圖片</span>'}
-        </div>
+    publishWebGrid.innerHTML = items.map((it) => {
+      const name = escapeHtml(it.name || it.id || "");
+      const cat = escapeHtml(it.category || "");
+      const price = typeof it.price === "number" ? it.price.toLocaleString("zh-TW") : "-";
+      return `<div class="publish-web-card" data-id="${escapeHtml(it.id)}">
         <div class="publish-web-card-body">
-          <div class="publish-web-card-name">${escapeHtml(it.name || "-")}</div>
-          <div class="publish-web-card-spec muted">${escapeHtml(specText || "-")}</div>
-          <div class="publish-web-card-actions">
-            <button class="btn btn-ghost btn-sm" type="button" data-act="edit">編輯</button>
-            <button class="btn btn-ghost btn-sm" type="button" data-act="off">下架</button>
-          </div>
+          <div class="publish-web-card-title">${name}</div>
+          <div class="muted">${cat} · NT$ ${price}</div>
         </div>
-      `;
-      card.querySelector('[data-act="edit"]').addEventListener("click", () => {
-        fillPublishEditor(it);
-        openPublishEditor();
+        <button type="button" class="btn btn-ghost btn-sm btn-edit-web">編輯</button>
+      </div>`;
+    }).join("");
+    publishWebGrid.querySelectorAll(".btn-edit-web").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.closest(".publish-web-card")?.getAttribute("data-id");
+        if (id) openPublishEditor(id);
       });
-      card.querySelector('[data-act="off"]').addEventListener("click", () => {
-        if (confirm(`確定將「${it.name || it.id}」下架？`)) removeFromWeb(it.id);
-      });
-      publishWebGrid.appendChild(card);
-    }
-    if (publishWebEmpty) publishWebEmpty.hidden = webItems.length > 0;
-    hide(publishMsg);
+    });
   }
 
-  // ---------- orders ----------
-  function getOrders() {
-    return loadArr(KEYS.orders);
+  function openPublishEditor(webId) {
+    editingWebId = webId || null;
+    const items = window.DK?.getInventory?.() || [];
+    const it = webId ? items.find((x) => x.id === webId) : null;
+    if (publishEditorTitle) publishEditorTitle.textContent = it ? "編輯：" + (it.name || it.id) : "";
+    if (webEditName) webEditName.value = it?.name ?? "";
+    if (webEditCategory) webEditCategory.value = it?.category ?? "文書";
+    if (webEditStockStatus) webEditStockStatus.value = it?.stockStatus ?? "現貨";
+    if (webEditPrice) webEditPrice.value = it?.price ?? "";
+    if (webEditQty) webEditQty.value = it?.qty ?? it?.stock ?? 1;
+    if (webEditNote) webEditNote.value = it?.note ?? "";
+    if (publishEditor) publishEditor.hidden = false;
+    if (publishEditorMsg) publishEditorMsg.hidden = true;
   }
 
-  function saveOrders(orders) {
-    saveArr(KEYS.orders, orders);
-    if (window.DK?.saveOrdersToSupabase) {
-      window.DK.saveOrdersToSupabase(orders).catch(function () {});
-    }
+  function closePublishEditor() {
+    if (publishEditor) publishEditor.hidden = true;
+    editingWebId = null;
   }
 
-  // 後台載入時從 Supabase 拉訂單，多裝置看到同一份
-  try {
-    const orders = await window.DK.fetchOrdersFromSupabase();
-    if (Array.isArray(orders)) saveArr(KEYS.orders, orders);
-  } catch (_) {}
-
-  function openOrdEditor() {
-    if (!ordEditor) return;
-    ordEditor.hidden = false;
-    ordEditor.scrollIntoView({ behavior: "smooth", block: "start" });
+  function savePublishEditor() {
+    if (!editingWebId) return;
+    const items = window.DK?.getInventory?.() || [];
+    const idx = items.findIndex((x) => x.id === editingWebId);
+    if (idx < 0) return;
+    items[idx] = {
+      ...items[idx],
+      name: webEditName?.value?.trim() ?? items[idx].name,
+      category: webEditCategory?.value ?? items[idx].category,
+      stockStatus: webEditStockStatus?.value ?? items[idx].stockStatus,
+      price: Number(webEditPrice?.value) || items[idx].price,
+      qty: Number(webEditQty?.value) ?? items[idx].qty,
+      note: webEditNote?.value?.trim() ?? items[idx].note,
+    };
+    window.DK?.saveInventory?.(items);
+    show(publishEditorMsg, "已儲存");
+    if (publishEditorMsg) publishEditorMsg.hidden = false;
+    renderPublish();
+    setTimeout(() => { closePublishEditor(); hide(publishEditorMsg); }, 800);
   }
 
-  function closeOrdEditor() {
-    if (!ordEditor) return;
-    ordEditor.hidden = true;
-    hide(ordMsg);
+  function removeFromWeb(webId) {
+    const items = (window.DK?.getInventory?.() || []).filter((x) => x.id !== webId);
+    window.DK?.saveInventory?.(items);
+    renderPublish();
+    closePublishEditor();
   }
 
-  function clearOrdForm() {
-    editingOrdId = null;
-    if (ordDeleteBtn) ordDeleteBtn.hidden = true;
-    if (ordEditorTitle) ordEditorTitle.textContent = "新增訂單";
-    if (ordDate) ordDate.value = isoDate();
-    if (ordShip) ordShip.value = "未出貨";
-    if (ordCustomer) ordCustomer.value = "";
-    if (ordItemId) ordItemId.value = "";
-    if (ordQty) ordQty.value = "1";
-    if (ordPrice) ordPrice.value = "";
-    if (ordNote) ordNote.value = "";
-    if (ordCost) ordCost.textContent = "-";
-    if (ordProfit) ordProfit.textContent = "-";
-    hide(ordMsg);
-  }
-
-  function fillOrdForm(o) {
-    editingOrdId = o.id;
-    if (ordDeleteBtn) ordDeleteBtn.hidden = false;
-    if (ordEditorTitle) ordEditorTitle.textContent = `編輯：${o.id}`;
-    if (ordDate) ordDate.value = o.date || isoDate();
-    if (ordShip) ordShip.value = o.shippingStatus || "未出貨";
-    if (ordCustomer) ordCustomer.value = o.customer || "";
-    if (ordItemId) ordItemId.value = o.itemId || "";
-    if (ordQty) ordQty.value = String(o.qty || 1);
-    if (ordPrice) ordPrice.value = String(o.price || 0);
-    if (ordNote) ordNote.value = o.note || "";
-    updateOrdCalc();
-    hide(ordMsg);
-  }
-
-  function ordMatches(o) {
-    if (ordState.ship !== "全部" && o.shippingStatus !== ordState.ship) return false;
-    const q = norm(ordState.q);
-    if (!q) return true;
-    const hay = [o.id, o.customer, o.itemId, o.note].map(norm).join(" ");
-    return hay.includes(q);
-  }
-
-  function renderOrders() {
-    const orders = getOrders().filter(ordMatches);
-    if (!ordTbody) return;
-    ordTbody.innerHTML = "";
-    for (const o of orders) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td class="nowrap"><span class="mono">${escapeHtml(o.id)}</span></td>
-        <td class="nowrap">${escapeHtml(o.date || "-")}</td>
-        <td>${escapeHtml(o.customer || "-")}<div class="muted">${escapeHtml(o.note || "")}</div></td>
-        <td class="nowrap"><span class="mono">${escapeHtml(o.itemId || "-")}</span></td>
-        <td class="nowrap">${Number(o.qty || 0)}</td>
-        <td class="nowrap"><span class="mono">NT$</span> ${formatNum(o.price)}</td>
-        <td class="nowrap"><span class="mono">NT$</span> ${formatNum(o.cost)}</td>
-        <td class="nowrap"><span class="mono">NT$</span> ${formatNum(o.profit)}</td>
-        <td class="nowrap">${escapeHtml(o.shippingStatus || "-")}</td>
-        <td class="nowrap" style="text-align:right">
-          <div class="row-actions">
-            <button class="btn btn-ghost btn-sm" type="button" data-act="edit">編輯</button>
-            <button class="btn btn-ghost btn-sm" type="button" data-act="del">刪除</button>
-          </div>
-        </td>
-      `;
-      tr.querySelector('[data-act="edit"]').addEventListener("click", () => {
-        fillOrdForm(o);
-        openOrdEditor();
-      });
-      tr.querySelector('[data-act="del"]').addEventListener("click", () => removeOrder(o.id));
-      ordTbody.appendChild(tr);
-    }
-  }
-
-  function findItemById(id) {
-    const items = getItems();
-    return items.find((x) => x.id === id) || null;
-  }
-
-  function updateOrdCalc() {
-    const itemId = String(ordItemId?.value || "").trim();
-    const qty = toNum(ordQty?.value) ?? 0;
-    const price = toNum(ordPrice?.value) ?? 0;
-    const it = itemId ? findItemById(itemId) : null;
-    const cost = it ? (Number(it.cost || 0) * (qty || 0)) : 0;
-    const profit = price - cost;
-    if (ordCost) ordCost.textContent = it ? `NT$ ${formatNum(cost)}` : "-";
-    if (ordProfit) ordProfit.textContent = it ? `NT$ ${formatNum(profit)}` : "-";
-  }
-
-  function saveOrder() {
-    hide(ordMsg);
-    const date = String(ordDate?.value || "").trim() || isoDate();
-    const shippingStatus = ordShip?.value || "未出貨";
-    const customer = String(ordCustomer?.value || "").trim();
-    const itemId = String(ordItemId?.value || "").trim();
-    const qty = toNum(ordQty?.value);
-    const price = toNum(ordPrice?.value);
-    const note = String(ordNote?.value || "").trim();
-
-    if (!SHIP_STATUSES.includes(shippingStatus)) return show(ordMsg, "出貨狀態不合法。");
-    if (!itemId) return show(ordMsg, "請填商品 ID。");
-    if (qty == null || qty <= 0) return show(ordMsg, "數量需為 1 以上。");
-    if (price == null || price < 0) return show(ordMsg, "售價需為 0 以上。");
-
-    const items = getItems();
-    const it = items.find((x) => x.id === itemId);
-    if (!it) return show(ordMsg, "找不到此商品 ID（請先在庫存建立）。");
-
-    const canSell = sellableQty(it);
-    if (!editingOrdId && qty > canSell) return show(ordMsg, `可售數量不足（可售 ${canSell}）。`);
-
-    const costTotal = Number(it.cost || 0) * qty;
-    const profit = price - costTotal;
-    const now = new Date().toISOString();
-
-    const orders = getOrders();
-    if (editingOrdId) {
-      const idx = orders.findIndex((x) => x.id === editingOrdId);
-      if (idx < 0) return show(ordMsg, "找不到此訂單。");
-      // 目前簡化：編輯不回沖庫存（避免出現複雜差額），建議刪除重建
-      orders[idx] = {
-        ...orders[idx],
-        date,
-        shippingStatus,
-        customer,
-        itemId,
-        qty,
-        price,
-        cost: costTotal,
-        profit,
-        note,
-        updatedAt: now,
-      };
-      saveOrders(orders);
-      closeOrdEditor();
-      renderOrders();
+  function submitPublish() {
+    const name = document.getElementById("publishProductName")?.value?.trim();
+    const category = document.getElementById("publishCategory")?.value ?? "文書";
+    const priceEl = document.getElementById("publishPrice");
+    const price = Number(priceEl?.value) || 0;
+    const qty = Number(document.getElementById("publishQty")?.value) || 1;
+    if (!name) {
+      show(publishMsg, "請填寫商品名稱");
+      if (publishMsg) publishMsg.hidden = false;
       return;
     }
-
-    const id = makeOrderId(date);
-    orders.unshift({
+    const id = makeWebItemId();
+    const item = {
       id,
-      date,
-      shippingStatus,
-      customer,
-      itemId,
-      qty,
-      price,
-      cost: costTotal,
-      profit,
-      batchSource: it.batchSource || "",
-      note,
-      createdAt: now,
-      updatedAt: now,
-    });
-    saveOrders(orders);
-
-    // 扣庫存
-    it.qty = Math.max(0, Number(it.qty || 0) - qty);
-    if (it.qty === 0) it.status = "已售出";
-    it.actualPrice = Math.round(price / qty);
-    it.updatedAt = now;
-    saveItems(items);
-
-    closeOrdEditor();
-    renderOrders();
-    renderInventory();
+      name,
+      category,
+      stockStatus: "現貨",
+      price: price || 0,
+      tags: [],
+      note: document.getElementById("publishSpecSummary")?.value?.trim() ?? "",
+      photos: [...publishPhotos],
+    };
+    const items = window.DK?.getInventory?.() || [];
+    items.push(item);
+    window.DK?.saveInventory?.(items);
+    publishPhotos.length = 0;
+    renderPublishPhotoStrip();
+    if (publishFormCard) publishFormCard.hidden = true;
+    show(publishMsg, "已上架：" + name);
+    if (publishMsg) publishMsg.hidden = false;
+    renderPublish();
+    setTimeout(() => hide(publishMsg), 3000);
   }
 
-  function removeOrder(id) {
-    const orders = getOrders();
-    const o = orders.find((x) => x.id === id);
-    if (!o) return;
-    if (!confirm(`確定刪除訂單「${o.id}」？（不會回沖庫存）`)) return;
-    saveOrders(orders.filter((x) => x.id !== id));
-    renderOrders();
+  for (const t of tabs) {
+    t.addEventListener("click", () => switchTab(t.dataset.tab));
   }
 
-  // ---------- reports ----------
-  function parseDate(s) {
-    const v = String(s || "").trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
-    const d = new Date(v + "T00:00:00");
-    return Number.isFinite(d.getTime()) ? d : null;
-  }
-
-  function daysAgo(n) {
-    const d = new Date();
-    d.setDate(d.getDate() - n);
-    return d;
-  }
-
-  function inRange(dateStr, from, to) {
-    const d = parseDate(dateStr);
-    if (!d) return false;
-    return d >= from && d <= to;
-  }
-
-  function topEntries(map, limit = 5) {
-    return [...map.entries()].sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, limit);
-  }
-
-  function renderReports() {
-    if (!repWrap) return;
-    const range = repRange?.value || "month";
-
-    const to = new Date();
-    const from = range === "day" ? daysAgo(0) : range === "week" ? daysAgo(6) : daysAgo(29);
-    const fromStr = isoDate(from);
-    const toStr = isoDate(to);
-
-    const orders = getOrders().filter((o) => o.shippingStatus !== "已取消" && inRange(o.date, from, to));
-    const revenue = orders.reduce((s, o) => s + (Number(o.price) || 0), 0);
-    const profit = orders.reduce((s, o) => s + (Number(o.profit) || 0), 0);
-    const qty = orders.reduce((s, o) => s + (Number(o.qty) || 0), 0);
-
-    const hot = new Map();
-    const bestBatch = new Map();
-    for (const o of orders) {
-      const k = o.itemId || "-";
-      hot.set(k, (hot.get(k) || 0) + (Number(o.qty) || 0));
-      const b = String(o.batchSource || "未填").trim() || "未填";
-      bestBatch.set(b, (bestBatch.get(b) || 0) + (Number(o.profit) || 0));
-    }
-
-    const items = getItems();
-    const recentOrdersByItem = new Set(
-      getOrders()
-        .filter((o) => o.shippingStatus !== "已取消" && inRange(o.date, daysAgo(29), new Date()))
-        .map((o) => o.itemId),
-    );
-    const slow = items.filter((it) => it.status === "在庫" && sellableQty(it) > 0 && !recentOrdersByItem.has(it.id));
-
-    repWrap.innerHTML = `
-      <div class="card">
-        <h3 class="h3">營運報表（${escapeHtml(rangeLabel(range))}）</h3>
-        <div class="muted" style="margin-top:8px">區間：${escapeHtml(fromStr)} ～ ${escapeHtml(toStr)}</div>
-        <div class="spec" style="margin-top:10px">
-          <div class="row"><div class="k">營收</div><div class="v"><span class="mono">NT$</span> ${formatNum(revenue)}</div></div>
-          <div class="row"><div class="k">毛利</div><div class="v"><span class="mono">NT$</span> ${formatNum(profit)}</div></div>
-          <div class="row"><div class="k">銷售量</div><div class="v">${qty}</div></div>
-        </div>
-      </div>
-      <div class="card">
-        <h3 class="h3">商品報表</h3>
-        <div class="muted" style="margin-top:8px">最熱賣品項（依銷售量）</div>
-        <div style="margin-top:10px">${renderList(topEntries(hot, 5).map(([k, v]) => `${escapeHtml(k)}：${v}`), "本區間無銷售")}</div>
-        <div class="muted" style="margin-top:14px">最佳毛利批次（依毛利總和）</div>
-        <div style="margin-top:10px">${renderList(topEntries(bestBatch, 5).map(([k, v]) => `${escapeHtml(k)}：NT$ ${formatNum(v)}`), "本區間無資料")}</div>
-      </div>
-    `;
-
-    // 庫存分佈：依狀態
-    if (repInvDist) {
-      const byStatus = new Map();
-      for (const it of items) byStatus.set(it.status || "未填", (byStatus.get(it.status || "未填") || 0) + (Number(it.qty) || 0));
-      repInvDist.innerHTML = renderBars(byStatus);
-    }
-
-    // 低庫存
-    const th = toNum(repLowThreshold?.value) ?? 2;
-    const low = items
-      .filter((it) => sellableQty(it) > 0 && sellableQty(it) <= th)
-      .map((it) => `${escapeHtml(it.id)}｜${escapeHtml(it.name || "-")}｜可售 ${sellableQty(it)}`);
-    if (repLowStock) repLowStock.innerHTML = renderList(low, "目前沒有低庫存。");
-
-    // 滯銷
-    const slowLines = slow.slice(0, 30).map((it) => `${escapeHtml(it.id)}｜${escapeHtml(it.name || "-")}｜庫存 ${Number(it.qty || 0)}`);
-    if (repSlow) repSlow.innerHTML = renderList(slowLines, "目前沒有滯銷提醒。");
-  }
-
-  function rangeLabel(v) {
-    if (v === "day") return "日";
-    if (v === "week") return "週";
-    return "月";
-  }
-
-  function renderList(lines, emptyText) {
-    if (!lines || lines.length === 0) return `<div class="muted">${escapeHtml(emptyText)}</div>`;
-    return `<ul class="ol" style="padding-left: 18px; margin: 0">${lines.map((x) => `<li style="margin:6px 0">${x}</li>`).join("")}</ul>`;
-  }
-
-  function renderBars(map) {
-    const entries = [...map.entries()].sort((a, b) => (b[1] || 0) - (a[1] || 0));
-    const max = Math.max(1, ...entries.map(([, v]) => Number(v) || 0));
-    return `
-      <div style="display:grid; gap:10px">
-        ${entries
-          .map(([k, v]) => {
-            const pct = Math.round(((Number(v) || 0) / max) * 100);
-            return `
-              <div style="display:grid; gap:6px">
-                <div class="muted" style="display:flex; justify-content:space-between; gap:10px">
-                  <span>${escapeHtml(k)}</span><span>${Number(v) || 0}</span>
-                </div>
-                <div style="height:10px; border-radius:999px; background: rgba(0,0,0,0.06); overflow:hidden">
-                  <div style="height:100%; width:${pct}%; background: rgba(0,113,227,0.75)"></div>
-                </div>
-              </div>
-            `;
-          })
-          .join("")}
-      </div>
-    `;
-  }
-
-  // ---------- small utils ----------
-  function escapeHtml(s) {
-    return String(s ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
-  function formatNum(n) {
-    if (typeof n !== "number" || Number.isNaN(n)) return "-";
-    return n.toLocaleString("zh-Hant-TW");
-  }
-
-  // ---------- events ----------
   function doLogin() {
     hide(loginError);
-    const cfg = window.DK?.getConfig?.();
+    const cfg = window.DK?.getConfig?.() || {};
     const u = String(usernameEl?.value || "").trim();
     const p = String(passwordEl?.value || "");
-    if (cfg && u === cfg.admin.username && p === cfg.admin.password) {
+    if (cfg?.admin && u === cfg.admin.username && p === cfg.admin.password) {
       window.DK?.setAdminAuthed?.(true);
       applyAuthUI();
       switchTab("inv");
@@ -1405,61 +419,9 @@
   passwordEl?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") doLogin();
   });
-
   logoutBtn?.addEventListener("click", () => {
     window.DK?.setAdminAuthed?.(false);
     applyAuthUI();
-  });
-
-  for (const t of tabs) {
-    t.addEventListener("click", () => switchTab(t.dataset.tab));
-  }
-
-  // inventory events
-  invNewBtn?.addEventListener("click", () => {
-    clearInvForm();
-    openInvEditor();
-  });
-  invCloseBtn?.addEventListener("click", closeInvEditor);
-  invSaveBtn?.addEventListener("click", saveInv);
-  invDeleteBtn?.addEventListener("click", () => {
-    if (!editingInvId) return;
-    removeInv(editingInvId);
-    closeInvEditor();
-  });
-  invIdPrefix?.addEventListener("input", updateInvIdPreview);
-  invIdModel?.addEventListener("input", updateInvIdPreview);
-  invSearch?.addEventListener("input", () => {
-    invState.q = invSearch.value;
-    renderInventory();
-  });
-  invStatusFilter?.addEventListener("change", () => {
-    invState.status = invStatusFilter.value;
-    renderInventory();
-  });
-  document.querySelectorAll(".btn-inv-kind").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const kind = btn.getAttribute("data-kind") || "全部";
-      invState.kind = kind;
-      document.querySelectorAll(".btn-inv-kind").forEach((b) => b.classList.toggle("active", (b.getAttribute("data-kind") || "全部") === kind));
-      renderInventory();
-    });
-  });
-  invBatchBtn?.addEventListener("click", openBatch);
-  invBatchCloseBtn?.addEventListener("click", closeBatch);
-  invBatchImportBtn?.addEventListener("click", importBatch);
-  invScanBtn?.addEventListener("click", openInvScan);
-  invScanCloseBtn?.addEventListener("click", closeInvScan);
-  invScanCloseBtn2?.addEventListener("click", closeInvScan);
-  invScanModal?.querySelector(".inv-scan-backdrop")?.addEventListener("click", closeInvScan);
-  invScanCaptureBtn?.addEventListener("click", runInvScanOCR);
-  invScanFillNameBtn?.addEventListener("click", () => {
-    const text = (invScanResultText?.value || "").trim();
-    if (invName) invName.value = text.split(/\r?\n/)[0] || text;
-  });
-  invScanFillNoteBtn?.addEventListener("click", () => {
-    const text = (invScanResultText?.value || "").trim();
-    if (invNote) invNote.value = text;
   });
 
   // publish events
@@ -1521,35 +483,6 @@
     priceEl?.addEventListener("input", updatePublishSalePrice);
   }
 
-  // orders events
-  ordNewBtn?.addEventListener("click", () => {
-    clearOrdForm();
-    openOrdEditor();
-  });
-  ordCloseBtn?.addEventListener("click", closeOrdEditor);
-  ordSaveBtn?.addEventListener("click", saveOrder);
-  ordDeleteBtn?.addEventListener("click", () => {
-    if (!editingOrdId) return;
-    removeOrder(editingOrdId);
-    closeOrdEditor();
-  });
-  ordSearch?.addEventListener("input", () => {
-    ordState.q = ordSearch.value;
-    renderOrders();
-  });
-  ordShipFilter?.addEventListener("change", () => {
-    ordState.ship = ordShipFilter.value;
-    renderOrders();
-  });
-  for (const el of [ordItemId, ordQty, ordPrice]) {
-    el?.addEventListener("input", updateOrdCalc);
-  }
-
-  // reports events
-  repRefreshBtn?.addEventListener("click", renderReports);
-  repRange?.addEventListener("change", renderReports);
-  repLowThreshold?.addEventListener("input", renderReports);
-
   // ---------- frontend (前台管理) ----------
   function loadFrontendForm() {
     const cfg = window.DK?.getConfig?.() || {};
@@ -1572,6 +505,10 @@
     document.getElementById("feMachinePageTitle").value = fe.machinePageTitle ?? def.machinePageTitle ?? "";
     document.getElementById("feMachinePageSub").value = fe.machinePageSub ?? def.machinePageSub ?? "";
     document.getElementById("feLineUrl").value = cfg.line?.url ?? "";
+    const feLineCta = document.getElementById("feLineCtaText");
+    if (feLineCta) feLineCta.value = cfg.line?.lineCtaText ?? (window.DK?.DEFAULT_CONFIG?.line?.lineCtaText ?? "");
+    const feFooterLine = document.getElementById("feFooterLineSentence");
+    if (feFooterLine) feFooterLine.value = cfg.line?.footerLineSentence ?? (window.DK?.DEFAULT_CONFIG?.line?.footerLineSentence ?? "");
     const catIds = ["office", "game-entry", "game-mid", "work", "peripherals"];
     const catImages = fe.catImages || {};
     catIds.forEach((cat) => {
@@ -1630,6 +567,8 @@
       line: {
         ...cfg.line,
         url: document.getElementById("feLineUrl").value?.trim() || cfg.line?.url,
+        lineCtaText: document.getElementById("feLineCtaText")?.value?.trim() ?? cfg.line?.lineCtaText,
+        footerLineSentence: document.getElementById("feFooterLineSentence")?.value?.trim() ?? cfg.line?.footerLineSentence,
       },
     };
     window.DK?.saveConfig?.(next);
@@ -1706,6 +645,658 @@
       updateCatImage(cat, null);
     });
   });
+
+  // ---------- 庫存+記帳 v2 子分頁：事件委派在 #panel 上，點擊一定有反應 ----------
+  (function () {
+    const v2Panels = ["items", "ledger", "orders", "expenses", "reports"];
+    function switchV2TabUIOnly(name) {
+      document.querySelectorAll(".v2-tab").forEach((t) => t.classList.toggle("active", (t.getAttribute("data-v2") || "") === name));
+      v2Panels.forEach((p) => {
+        const el = document.getElementById("v2-" + p);
+        if (el) el.hidden = p !== name;
+      });
+    }
+    window.__adminV2TabSwitch = function (fn) {
+      window.__adminV2Handler = fn || switchV2TabUIOnly;
+    };
+    window.__adminV2Handler = switchV2TabUIOnly;
+    panel.addEventListener("click", function (e) {
+      const t = e.target.closest(".v2-tab");
+      if (!t) return;
+      const name = (t.getAttribute("data-v2") || "items");
+      (window.__adminV2Handler || switchV2TabUIOnly)(name);
+    });
+  })();
+
+  // ---------- 庫存+記帳 v2 (DK)：渲染與表單 ----------
+  if (typeof window.DK !== "undefined") {
+    const DK = window.DK;
+    const todayStr = () => DK.todayStr();
+    const nowISO = () => DK.nowISO();
+
+    function v2Esc(s) {
+      if (s == null || s === undefined) return "";
+      const t = String(s);
+      const div = document.createElement("div");
+      div.textContent = t;
+      return div.innerHTML;
+    }
+    function v2FmtNum(n) {
+      if (n == null || !Number.isFinite(n)) return "-";
+      return Number(n).toLocaleString("zh-TW");
+    }
+    function v2Show(el, msg) {
+      if (!el) return;
+      el.textContent = msg || "";
+      el.hidden = !msg;
+    }
+    function v2Hide(el) {
+      if (el) el.hidden = true;
+    }
+
+    const v2Tabs = document.querySelectorAll(".v2-tab");
+    const v2Panels = ["items", "ledger", "orders", "expenses", "reports"];
+    function switchV2Tab(name) {
+      v2Tabs.forEach((t) => t.classList.toggle("active", (t.getAttribute("data-v2") || "") === name));
+      v2Panels.forEach((p) => {
+        const el = document.getElementById("v2-" + p);
+        if (el) el.hidden = p !== name;
+      });
+      if (name === "items") renderV2Items();
+      if (name === "ledger") renderV2Ledger();
+      if (name === "orders") renderV2Orders();
+      if (name === "expenses") renderV2Expenses();
+      if (name === "reports") renderV2Reports();
+    }
+    if (typeof window.__adminV2TabSwitch === "function") window.__adminV2TabSwitch(switchV2Tab);
+
+    const itemsTbody = document.getElementById("itemsTbody");
+    const itemsSearch = document.getElementById("itemsSearch");
+    const itemsCategory = document.getElementById("itemsCategory");
+    const itemsStatus = document.getElementById("itemsStatus");
+    const itemEditor = document.getElementById("itemEditor");
+    const itemMsg = document.getElementById("itemMsg");
+    let editingV2ItemId = null;
+    const CAT_LABEL = { PC: "電腦", GPU: "顯卡", PART: "零件", CONSUMABLE: "耗材" };
+    const STATUS_LABEL = { READY: "可售", TESTING: "待測", PREP: "待整理", RESERVED: "保留", CLEARANCE: "待出清", SCRAP: "報廢拆料" };
+    const CONDITION_LABEL = { NEW: "全新", USED: "二手", REFURB: "整新" };
+    const LEDGER_TYPE_LABEL = { IN: "入庫", OUT: "出庫", ADJUST: "調整" };
+    const REF_TYPE_LABEL = { PURCHASE: "進貨", ORDER: "訂單", RMA: "退換", SCRAP: "報廢", MOVE: "移倉", ADJUST: "調整" };
+    const ORDER_STATUS_LABEL = { pending: "待處理", paid: "已付款", shipped: "已出貨", completed: "已完成", refunded: "已退貨" };
+    const ORDER_PAYMENT_LABEL = { cash: "現金", transfer: "轉帳", card: "刷卡" };
+    const EXPENSE_TYPE_LABEL = { COGS: "銷貨成本", OPEX: "營業費用", OTHER: "其他" };
+
+    function renderV2Items() {
+      if (!itemsTbody) return;
+      let list = DK.getEnrichedItems();
+      const q = (itemsSearch?.value || "").trim().toLowerCase();
+      const cat = itemsCategory?.value || "";
+      const st = itemsStatus?.value || "";
+      if (q) list = list.filter((x) => [x.sku, x.name, x.spec].some((f) => String(f || "").toLowerCase().includes(q)));
+      if (cat) list = list.filter((x) => x.category === cat);
+      if (st) list = list.filter((x) => x.status === st);
+      itemsTbody.innerHTML = list.map((x) => {
+        const alert = DK.getItemAlert(x);
+        const alertText = alert ? alert.message : "-";
+        return `<tr>
+          <td><input type="checkbox" class="item-row-cb" data-id="${v2Esc(x.id)}" /></td>
+          <td class="nowrap">${v2Esc(x.sku)}</td>
+          <td>${v2Esc(x.name)}</td>
+          <td>${v2Esc(CAT_LABEL[x.category] || x.category)}</td>
+          <td>${v2Esc(STATUS_LABEL[x.status] || x.status)}</td>
+          <td>${x.qty_on_hand}</td>
+          <td>${v2FmtNum(x.cost_unit)}</td>
+          <td>${v2FmtNum(x.price_list)}</td>
+          <td>${v2FmtNum(x.price_floor)}</td>
+          <td>${v2Esc((x.inbound_date || "").toString().slice(0, 10))}</td>
+          <td>${x.age_days != null ? x.age_days : "-"}</td>
+          <td>${x.idle_days != null ? x.idle_days : "-"}</td>
+          <td>${v2FmtNum(x.inventory_value)}</td>
+          <td class="muted small">${v2Esc(alertText)}</td>
+          <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-item" data-id="${v2Esc(x.id)}">編輯</button></td>
+        </tr>`;
+      }).join("");
+      itemsTbody.querySelectorAll(".btn-edit-item").forEach((btn) => {
+        btn.addEventListener("click", () => openV2ItemEditor(btn.getAttribute("data-id")));
+      });
+      const selectAllEl = document.getElementById("itemsSelectAll");
+      if (selectAllEl) {
+        selectAllEl.checked = false;
+        selectAllEl.indeterminate = false;
+      }
+    }
+
+    function openV2ItemEditor(id) {
+      editingV2ItemId = id || null;
+      const item = id ? DK.findItemById(id) : null;
+      const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
+      set("itemBrand", "");
+      set("itemSku", item ? item.sku : "");
+      set("itemCategory", item ? item.category : "PC");
+      set("itemName", item ? item.name : "");
+      set("itemSpec", item ? item.spec : "");
+      set("itemCondition", item ? item.condition : "USED");
+      set("itemStatus", item ? item.status : "TESTING");
+      set("itemQty", item ? item.qty_on_hand : 0);
+      set("itemCost", item ? item.cost_unit : 0);
+      set("itemPriceList", item ? item.price_list ?? "" : "");
+      set("itemPriceFloor", item ? item.price_floor ?? "" : "");
+      set("itemInboundDate", item && item.inbound_date ? item.inbound_date.slice(0, 10) : todayStr());
+      set("itemReorderPoint", item ? (item.reorder_point ?? 0) : 0);
+      set("itemLocation", item ? item.location ?? "" : "");
+      set("itemNotes", item ? item.notes ?? "" : "");
+      const skuEl = document.getElementById("itemSku");
+      if (skuEl) skuEl.readOnly = !!item;
+      const itemDeleteBtn = document.getElementById("itemDelete");
+      if (itemDeleteBtn) itemDeleteBtn.hidden = !item;
+      if (itemEditor) itemEditor.hidden = false;
+      v2Hide(itemMsg);
+    }
+
+    function closeV2ItemEditor() {
+      if (itemEditor) itemEditor.hidden = true;
+      editingV2ItemId = null;
+      v2Hide(itemMsg);
+    }
+
+    document.getElementById("btnNewItem")?.addEventListener("click", () => openV2ItemEditor(null));
+    document.getElementById("itemCancel")?.addEventListener("click", closeV2ItemEditor);
+    document.getElementById("itemDelete")?.addEventListener("click", () => {
+      if (!editingV2ItemId) return;
+      if (!confirm("確定要刪除此品項？刪除後無法復原。")) return;
+      const items = DK.getItems().filter((x) => x.id !== editingV2ItemId);
+      DK.saveItems(items);
+      v2Show(itemMsg, "已刪除");
+      renderV2Items();
+      setTimeout(closeV2ItemEditor, 500);
+    });
+
+    function setItemScanStatus(text) {
+      const el = document.getElementById("itemScanStatus");
+      if (el) el.textContent = text;
+    }
+    // 條碼上網查詢（UPCItemDB 免費 API，約 100 次/日）；經 CORS 代理以支援 file:// 開啟
+    function lookupBarcodeOnline(barcode) {
+      const upc = String(barcode).replace(/\D/g, "").slice(0, 14);
+      if (upc.length < 12) return Promise.resolve(null);
+      const apiUrl = "https://api.upcitemdb.com/prod/trial/lookup?upc=" + encodeURIComponent(upc);
+      const url = "https://corsproxy.io/?" + encodeURIComponent(apiUrl);
+      return fetch(url)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.code !== "OK" || !data.items || data.items.length === 0) return null;
+          const it = data.items[0];
+          const brand = (it.brand || "").trim();
+          const title = (it.title || it.description || "").trim();
+          const capMatch = title.match(/(\d+)\s*GB|\b(\d+)\s*TB\b|(\d+)\s*G\b/i) || title.match(/(\d+)\s*MB\b/i);
+          let spec = (it.size || "").trim();
+          if (capMatch) {
+            if (capMatch[1]) spec = (spec ? spec + " " : "") + capMatch[1] + "GB";
+            else if (capMatch[2]) spec = (spec ? spec + " " : "") + capMatch[2] + "TB";
+            else if (capMatch[3]) spec = (spec ? spec + " " : "") + capMatch[3] + "GB";
+            else if (capMatch[4]) spec = (spec ? spec + " " : "") + capMatch[4] + "MB";
+          }
+          const brandZh = /TEAMGROUP|TEAM\s*GROUP/i.test(brand) ? "十銓" : /Kingston/i.test(brand) ? "金士頓" : /Samsung/i.test(brand) ? "三星" : /WD|Western/i.test(brand) ? "WD" : /Crucial|Micron/i.test(brand) ? "美光" : /SanDisk/i.test(brand) ? "SanDisk" : /Intel/i.test(brand) ? "Intel" : /ADATA/i.test(brand) ? "ADATA" : /Gigabyte/i.test(brand) ? "技嘉" : /MSI/i.test(brand) ? "微星" : /ASUS/i.test(brand) ? "華碩" : brand;
+          let name = title;
+          const capStr = (spec || "").match(/\d+\s*[GT]B|\d+\s*[GM]B/i);
+          if (capStr && /VULCAN|A400|870\s*EVO|980\s*PRO|SN770|MX500|Barracuda/i.test(title)) {
+            const seriesMatch = title.match(/(VULCAN\s*Z|A400|A500|870\s*EVO|980\s*PRO|990\s*PRO|SN770|MX500|Barracuda|T-Force[^0-9]*)/i) || title.match(/([A-Za-z0-9][A-Za-z0-9\s\-]{2,20}?)(?:\s*\d+\s*TB|\s*\d+\s*GB|\s*\d+G\b)/i);
+            if (seriesMatch) name = (seriesMatch[1].trim() + " " + capStr[0]).trim();
+          }
+          if (name.length > 80) name = name.slice(0, 77) + "...";
+          return { brand: brandZh || brand, name, spec: spec || ("條碼:" + upc) };
+        })
+        .catch(() => null);
+    }
+    // 型號前綴 → 品牌、系列（用於辨識後自動帶入）
+    const PRODUCT_MODEL_MAP = [
+      { pattern: /SA400|A400/i, brand: "金士頓", series: "A400", type: "SSD" },
+      { pattern: /SA500|A500/i, brand: "金士頓", series: "A500", type: "SSD" },
+      { pattern: /KC600|UV500/i, brand: "金士頓", series: "KC600", type: "SSD" },
+      { pattern: /FURY|Fury/i, brand: "金士頓", series: "FURY", type: "SSD/RAM" },
+      { pattern: /870\s*EVO|870EVO/i, brand: "三星", series: "870 EVO", type: "SSD" },
+      { pattern: /980\s*PRO|980PRO/i, brand: "三星", series: "980 PRO", type: "SSD" },
+      { pattern: /990\s*PRO|990PRO/i, brand: "三星", series: "990 PRO", type: "SSD" },
+      { pattern: /WD\s*Blue|WDBlue|WDS/i, brand: "WD", series: "Blue", type: "SSD" },
+      { pattern: /WD\s*Black|WDBlack/i, brand: "WD", series: "Black", type: "SSD" },
+      { pattern: /SN770|SN850|SN580/i, brand: "WD", series: "SN 系列", type: "SSD" },
+      { pattern: /MX500|BX500|P3|P5/i, brand: "美光", series: "Crucial", type: "SSD" },
+      { pattern: /SanDisk|sandisk|Ultra|Extreme/i, brand: "SanDisk", series: "", type: "SSD" },
+      { pattern: /SEAGATE|Barracuda|IronWolf/i, brand: "Seagate", series: "Barracuda", type: "HDD" },
+      { pattern: /ADATA|XPG|SU800|SX8200/i, brand: "ADATA", series: "XPG", type: "SSD" },
+      { pattern: /Transcend|TS\d+/i, brand: "Transcend", series: "", type: "SSD" },
+      { pattern: /Team\s*Group|TEAMGROUP|T-Force/i, brand: "Team Group", series: "T-Force", type: "SSD/RAM" },
+      { pattern: /Intel\s*6\d{2}[pP]|Intel\s*7\d{2}[pP]|6\d{2}[pP]|7\d{2}[pP]/i, brand: "Intel", series: "SSD", type: "SSD" },
+      { pattern: /RTX\s*30|3060|3070|3080|3090/i, brand: "NVIDIA", series: "RTX 30", type: "顯卡" },
+      { pattern: /RTX\s*40|4060|4070|4080|4090/i, brand: "NVIDIA", series: "RTX 40", type: "顯卡" },
+      { pattern: /GTX\s*16|1650|1660/i, brand: "NVIDIA", series: "GTX 16", type: "顯卡" },
+    ];
+    function parseScannedText(text) {
+      if (!text || typeof text !== "string") return {};
+      const t = text.trim();
+      const out = { spec: "", name: "", brand: "" };
+      // 容量：480G、240GB、1T、2TB、512MB 等
+      const capG = t.match(/(\d+)\s*[Gg](?:[Bb]?\b|\/)/);
+      const capT = t.match(/(\d+)\s*[Tt][Bb]?\b/);
+      const capM = t.match(/(\d+)\s*[Mm][Bb]?\b/);
+      if (capG) {
+        out.spec = (out.spec ? out.spec + " " : "") + capG[1] + "GB";
+      } else if (capT) {
+        out.spec = (out.spec ? out.spec + " " : "") + capT[1] + "TB";
+      } else if (capM) {
+        out.spec = (out.spec ? out.spec + " " : "") + capM[1] + "MB";
+      }
+      let capacityStr = out.spec || "";
+      // 型號/容量一起出現：如 SA400S37/480G、XXX/240G
+      const modelCap = t.match(/([A-Za-z0-9][A-Za-z0-9\-\.]+)\/(\d+)[Gg]/i);
+      if (modelCap) {
+        if (!capacityStr) capacityStr = modelCap[2] + "GB";
+        if (!out.spec) out.spec = modelCap[2] + "GB";
+        // 先比對已知型號，帶入品牌與系列
+        for (const row of PRODUCT_MODEL_MAP) {
+          if (row.pattern.test(modelCap[1])) {
+            if (row.brand && !out.brand) out.brand = row.brand;
+            const seriesPart = row.series ? row.series + " " : "";
+            out.name = (seriesPart + capacityStr).trim() || modelCap[1] + "/" + modelCap[2] + "G";
+            break;
+          }
+        }
+        if (!out.name) out.name = modelCap[1] + "/" + modelCap[2] + "G";
+      }
+      // 若尚未有 name，再試從整段文字找已知型號
+      if (!out.name) {
+        for (const row of PRODUCT_MODEL_MAP) {
+          if (row.pattern.test(t)) {
+            if (row.brand && !out.brand) out.brand = row.brand;
+            const seriesPart = row.series ? row.series + " " : "";
+            out.name = (seriesPart + (capacityStr || "")).trim();
+            if (out.name) break;
+          }
+        }
+      }
+      if (!out.name) {
+        const modelMatch = t.match(/([A-Za-z0-9][A-Za-z0-9\-\.\/]+)/);
+        if (modelMatch) out.name = modelMatch[1].replace(/\s+/g, " ").trim();
+      }
+      if (out.name && capacityStr && !out.spec) out.spec = capacityStr;
+      // 品牌：先依型號表，再關鍵字
+      if (!out.brand) {
+        const brandMatch = t.match(/(kingston|金士頓|samsung|三星|wd|western digital|seagate|美光|crucial|sandisk|intel|adata|gigabyte|msi|asus|transcend|team group)/i);
+        if (brandMatch) {
+          const b = brandMatch[1].toLowerCase();
+          if (/kingston|金士頓/.test(b)) out.brand = "金士頓";
+          else if (/samsung|三星/.test(b)) out.brand = "三星";
+          else if (/wd|western digital/.test(b)) out.brand = "WD";
+          else if (/seagate/.test(b)) out.brand = "Seagate";
+          else if (/crucial|美光/.test(b)) out.brand = "美光";
+          else if (/sandisk/.test(b)) out.brand = "SanDisk";
+          else if (/intel/.test(b)) out.brand = "Intel";
+          else if (/adata/.test(b)) out.brand = "ADATA";
+          else if (/gigabyte/.test(b)) out.brand = "技嘉";
+          else if (/msi/.test(b)) out.brand = "微星";
+          else if (/asus/.test(b)) out.brand = "華碩";
+          else if (/transcend/.test(b)) out.brand = "Transcend";
+          else if (/team group/.test(b)) out.brand = "Team Group";
+          else out.brand = brandMatch[1];
+        }
+      }
+      return out;
+    }
+    function handleItemScanFile(file) {
+      if (!file || !file.type.startsWith("image/")) return;
+      setItemScanStatus("辨識中…");
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const dataUrl = e.target.result;
+        const img = new Image();
+        img.onload = function () {
+          const canvas = document.createElement("canvas");
+          const max = 1200;
+          let w = img.width, h = img.height;
+          if (w > max || h > max) {
+            if (w > h) { h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; }
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, w, h);
+          const imageData = ctx.getImageData(0, 0, w, h);
+          let barcodeText = "";
+          let qrText = "";
+          if (typeof window.jsQR === "function") {
+            try {
+              const qr = window.jsQR(imageData.data, w, h);
+              if (qr && qr.data) qrText = qr.data;
+            } catch (err) {}
+          }
+          function applyDecoded() {
+          const combined = [qrText, barcodeText].filter(Boolean).join(" ").trim();
+          const barcodeOnly = combined.replace(/\s/g, "");
+          const isBarcodeOnly = /^\d{12,14}$/.test(barcodeOnly);
+          const brandEl = document.getElementById("itemBrand");
+          const nameEl = document.getElementById("itemName");
+          const specEl = document.getElementById("itemSpec");
+          function fillForm(parsed) {
+            if (brandEl) brandEl.value = (parsed.brand != null && parsed.brand !== undefined) ? parsed.brand : "";
+            if (nameEl) nameEl.value = (parsed.name != null && parsed.name !== undefined) ? parsed.name : "";
+            if (specEl) specEl.value = (parsed.spec != null && parsed.spec !== undefined) ? parsed.spec : (barcodeText ? "條碼:" + barcodeText : "");
+          }
+          if (isBarcodeOnly) {
+            setItemScanStatus("正在查詢網路…");
+            lookupBarcodeOnline(barcodeOnly).then(function (parsed) {
+              if (parsed) {
+                fillForm(parsed);
+                setItemScanStatus("已從網路帶入，請核對後儲存");
+              } else {
+                fillForm({ brand: "", name: "", spec: "條碼:" + barcodeOnly });
+                setItemScanStatus("僅辨識到條碼，網路查無商品，請手動輸入名稱與規格");
+              }
+            }).catch(function () {
+              fillForm({ brand: "", name: "", spec: "條碼:" + barcodeOnly });
+              setItemScanStatus("僅辨識到條碼，網路查詢失敗，請手動輸入名稱與規格");
+            });
+            return;
+          }
+          const parsed = parseScannedText(combined);
+          fillForm(parsed);
+          setItemScanStatus(combined ? "已辨識，請核對後儲存" : "未辨識到條碼／QR，可手動輸入");
+        }
+          if (typeof window.Quagga !== "undefined" && window.Quagga.decodeSingle) {
+            window.Quagga.decodeSingle({
+              src: dataUrl,
+              numOfWorkers: 0,
+              inputStream: { size: Math.max(w, h) },
+              decoder: { readers: ["ean_reader", "ean_8_reader", "code_128_reader", "upc_reader", "upc_e_reader"] }
+            }, function (result) {
+              if (result && result.codeResult && result.codeResult.code) barcodeText = result.codeResult.code;
+              applyDecoded();
+            });
+            setTimeout(applyDecoded, 2500);
+          } else {
+            applyDecoded();
+          }
+        };
+        img.onerror = function () {
+          setItemScanStatus("無法讀取圖片");
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+    }
+    document.getElementById("itemScanImage")?.addEventListener("change", function (e) {
+      const file = e.target?.files?.[0];
+      e.target.value = "";
+      if (file) handleItemScanFile(file);
+    });
+    document.getElementById("itemScanCamera")?.addEventListener("change", function (e) {
+      const file = e.target?.files?.[0];
+      e.target.value = "";
+      if (file) handleItemScanFile(file);
+    });
+
+    document.getElementById("itemSave")?.addEventListener("click", () => {
+      const brand = String(document.getElementById("itemBrand")?.value || "").trim();
+      const sku = String(document.getElementById("itemSku")?.value || "").trim().toUpperCase();
+      const nameRaw = String(document.getElementById("itemName")?.value || "").trim();
+      const name = brand ? brand + " " + nameRaw : nameRaw;
+      if (!sku) return v2Show(itemMsg, "SKU 必填");
+      if (!name) return v2Show(itemMsg, "名稱必填");
+      const items = DK.getItems();
+      const existing = items.find((x) => x.sku.toUpperCase() === sku);
+      if (!editingV2ItemId && existing) return v2Show(itemMsg, "SKU 已存在");
+      if (editingV2ItemId && existing && existing.id !== editingV2ItemId) return v2Show(itemMsg, "SKU 已存在");
+      const payload = {
+        sku,
+        category: document.getElementById("itemCategory")?.value,
+        name,
+        spec: document.getElementById("itemSpec")?.value || "",
+        condition: document.getElementById("itemCondition")?.value || "USED",
+        status: document.getElementById("itemStatus")?.value || "TESTING",
+        qty_on_hand: Math.max(0, parseInt(document.getElementById("itemQty")?.value, 10) || 0),
+        cost_unit: parseFloat(document.getElementById("itemCost")?.value) || 0,
+        price_list: parseFloat(document.getElementById("itemPriceList")?.value) || null,
+        price_floor: parseFloat(document.getElementById("itemPriceFloor")?.value) || null,
+        inbound_date: document.getElementById("itemInboundDate")?.value || null,
+        reorder_point: Math.max(0, parseInt(document.getElementById("itemReorderPoint")?.value, 10) || 0),
+        location: document.getElementById("itemLocation")?.value || "",
+        notes: document.getElementById("itemNotes")?.value || "",
+        updated_at: nowISO(),
+      };
+      if (editingV2ItemId) {
+        const idx = items.findIndex((x) => x.id === editingV2ItemId);
+        if (idx < 0) return v2Show(itemMsg, "找不到品項");
+        items[idx] = { ...items[idx], ...payload };
+        DK.saveItems(items);
+        v2Show(itemMsg, "已更新");
+      } else {
+        payload.id = "i-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9);
+        payload.last_moved_at = payload.inbound_date ? payload.inbound_date + "T12:00:00Z" : null;
+        payload.created_at = nowISO();
+        items.unshift(payload);
+        DK.saveItems(items);
+        v2Show(itemMsg, "已新增");
+      }
+      renderV2Items();
+      setTimeout(closeV2ItemEditor, 800);
+    });
+    itemsSearch?.addEventListener("input", renderV2Items);
+    itemsCategory?.addEventListener("change", renderV2Items);
+    itemsStatus?.addEventListener("change", renderV2Items);
+    document.getElementById("btnDeleteSelectedItems")?.addEventListener("click", () => {
+      const checked = document.querySelectorAll("#itemsTbody .item-row-cb:checked");
+      const ids = Array.from(checked).map((cb) => cb.getAttribute("data-id")).filter(Boolean);
+      if (ids.length === 0) {
+        alert("請先勾選要刪除的品項。");
+        return;
+      }
+      if (!confirm("確定要刪除所選的 " + ids.length + " 筆品項？刪除後無法復原。")) return;
+      const items = DK.getItems().filter((x) => !ids.includes(x.id));
+      DK.saveItems(items);
+      renderV2Items();
+    });
+    document.getElementById("itemsSelectAll")?.addEventListener("change", function () {
+      itemsTbody?.querySelectorAll(".item-row-cb").forEach((cb) => { cb.checked = this.checked; });
+    });
+    itemsTbody?.addEventListener("change", function (e) {
+      if (!e.target.classList.contains("item-row-cb")) return;
+      const rowCbs = itemsTbody.querySelectorAll(".item-row-cb");
+      const checked = itemsTbody.querySelectorAll(".item-row-cb:checked").length;
+      const sel = document.getElementById("itemsSelectAll");
+      if (sel) {
+        sel.checked = checked === rowCbs.length;
+        sel.indeterminate = checked > 0 && checked < rowCbs.length;
+      }
+    });
+    document.getElementById("btnSeed")?.addEventListener("click", () => {
+      const r = DK.seed();
+      alert("已載入測試資料：Items " + r.items + "、Ledger " + r.ledger + "、Orders " + r.orders + "、Expenses " + r.expenses);
+      renderV2Items();
+      renderV2Ledger();
+      renderV2Orders();
+      renderV2Expenses();
+      renderV2Reports();
+    });
+
+    const ledgerTbody = document.getElementById("ledgerTbody");
+    const ledgerForm = document.getElementById("ledgerForm");
+    const ledgerMsg = document.getElementById("ledgerMsg");
+    function renderV2Ledger() {
+      if (!ledgerTbody) return;
+      const list = DK.getLedger();
+      const items = DK.getItems();
+      const byId = Object.fromEntries(items.map((i) => [i.id, i]));
+      ledgerTbody.innerHTML = list.slice(0, 100).map((r) => {
+        const name = byId[r.item_id] ? (byId[r.item_id].name || byId[r.item_id].sku) : r.item_id;
+        return `<tr><td class="nowrap">${v2Esc((r.created_at || "").toString().slice(0, 19))}</td><td>${v2Esc(name)}</td><td>${v2Esc(LEDGER_TYPE_LABEL[r.type] || r.type)}</td><td>${r.qty}</td><td>${v2FmtNum(r.unit_cost)}</td><td>${v2Esc(REF_TYPE_LABEL[r.ref_type] || r.ref_type)}</td><td>${v2Esc(r.ref_id)}</td><td class="muted">${v2Esc(r.note)}</td></tr>`;
+      }).join("");
+    }
+    document.getElementById("btnNewLedger")?.addEventListener("click", () => {
+      const sel = document.getElementById("ledgerItemId");
+      if (sel) sel.innerHTML = DK.getItems().map((i) => `<option value="${v2Esc(i.id)}">${v2Esc(i.sku)} ${v2Esc(i.name)}</option>`).join("");
+      document.getElementById("ledgerType").value = "IN";
+      document.getElementById("ledgerQty").value = "1";
+      document.getElementById("ledgerUnitCost").value = "";
+      document.getElementById("ledgerRefType").value = "PURCHASE";
+      document.getElementById("ledgerRefId").value = "";
+      document.getElementById("ledgerNote").value = "";
+      if (ledgerForm) ledgerForm.hidden = false;
+      v2Hide(ledgerMsg);
+    });
+    document.getElementById("ledgerCancel")?.addEventListener("click", () => { if (ledgerForm) ledgerForm.hidden = true; v2Hide(ledgerMsg); });
+    document.getElementById("ledgerSubmit")?.addEventListener("click", () => {
+      const itemId = document.getElementById("ledgerItemId")?.value;
+      const type = document.getElementById("ledgerType")?.value;
+      const qty = parseInt(document.getElementById("ledgerQty")?.value, 10);
+      const unitCost = parseFloat(document.getElementById("ledgerUnitCost")?.value) || 0;
+      const refType = document.getElementById("ledgerRefType")?.value || "";
+      const refId = document.getElementById("ledgerRefId")?.value || "";
+      const note = document.getElementById("ledgerNote")?.value || "";
+      if (!itemId) return v2Show(ledgerMsg, "請選擇品項");
+      if (!Number.isFinite(qty) || (type === "IN" && qty <= 0) || (type === "OUT" && qty <= 0)) return v2Show(ledgerMsg, "數量需大於 0");
+      if (type === "IN" && unitCost < 0) return v2Show(ledgerMsg, "入庫請填單位成本");
+      const result = DK.addLedgerEntry({ item_id: itemId, type, qty: type === "ADJUST" ? qty : Math.abs(qty), unit_cost: unitCost, ref_type: refType, ref_id: refId, note });
+      if (!result.ok) return v2Show(ledgerMsg, result.error || "失敗");
+      v2Show(ledgerMsg, "已寫入流水並更新品項");
+      renderV2Ledger();
+      renderV2Items();
+      setTimeout(() => { if (ledgerForm) ledgerForm.hidden = true; v2Hide(ledgerMsg); }, 1000);
+    });
+
+    const ordersTbody = document.getElementById("ordersTbody");
+    const orderForm = document.getElementById("orderForm");
+    const orderMsg = document.getElementById("orderMsg");
+    let editingV2OrderId = null;
+    function renderV2Orders() {
+      if (!ordersTbody) return;
+      const list = DK.getOrders().map(DK.enrichOrder);
+      ordersTbody.innerHTML = list.map((o) => {
+        const margin = o.gross_margin != null ? (o.gross_margin * 100).toFixed(1) + "%" : "-";
+        return `<tr><td class="nowrap">${v2Esc(o.order_no)}</td><td>${v2Esc(o.customer_name)}</td><td>${v2FmtNum(o.total_sale)}</td><td>${v2FmtNum(o.shipping_income)}</td><td>${v2FmtNum(o.discount)}</td><td>${v2FmtNum(o.cogs_total)}</td><td>${v2FmtNum(o.gross_profit)}</td><td>${margin}</td><td>${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</td><td class="nowrap">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td></tr>`;
+      }).join("");
+      ordersTbody.querySelectorAll(".btn-edit-order").forEach((btn) => btn.addEventListener("click", () => openV2OrderEditor(btn.getAttribute("data-id"))));
+    }
+    function openV2OrderEditor(id) {
+      editingV2OrderId = id || null;
+      const o = id ? DK.getOrders().find((x) => x.id === id) : null;
+      const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
+      set("orderNo", o ? o.order_no : DK.nextOrderNo());
+      const orderNoEl = document.getElementById("orderNo");
+      if (orderNoEl) orderNoEl.readOnly = !!o;
+      set("orderCustomer", o ? o.customer_name ?? "" : "");
+      set("orderTotalSale", o ? o.total_sale ?? 0 : 0);
+      set("orderShipping", o ? o.shipping_income ?? 0 : 0);
+      set("orderDiscount", o ? o.discount ?? 0 : 0);
+      set("orderCogs", o ? o.cogs_total ?? 0 : 0);
+      set("orderPayment", o ? o.payment_method ?? "transfer" : "transfer");
+      set("orderStatus", o ? o.status ?? "pending" : "pending");
+      updateV2OrderGrossDisplay();
+      if (orderForm) orderForm.hidden = false;
+      v2Hide(orderMsg);
+    }
+    function updateV2OrderGrossDisplay() {
+      const sale = parseFloat(document.getElementById("orderTotalSale")?.value) || 0;
+      const ship = parseFloat(document.getElementById("orderShipping")?.value) || 0;
+      const disc = parseFloat(document.getElementById("orderDiscount")?.value) || 0;
+      const cogs = parseFloat(document.getElementById("orderCogs")?.value) || 0;
+      const profit = sale + ship - disc - cogs;
+      const rev = sale + ship - disc;
+      const margin = rev > 0 ? ((profit / rev) * 100).toFixed(1) + "%" : "-";
+      const el = document.getElementById("orderGrossProfitDisplay");
+      if (el) el.textContent = "毛利 " + v2FmtNum(profit) + " / 毛利率 " + margin;
+    }
+    ["orderTotalSale", "orderShipping", "orderDiscount", "orderCogs"].forEach((id) => document.getElementById(id)?.addEventListener("input", updateV2OrderGrossDisplay));
+    document.getElementById("btnNewOrder")?.addEventListener("click", () => openV2OrderEditor(null));
+    document.getElementById("orderCancel")?.addEventListener("click", () => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); });
+    document.getElementById("orderSave")?.addEventListener("click", () => {
+      const orderNo = String(document.getElementById("orderNo")?.value || "").trim();
+      const totalSale = parseFloat(document.getElementById("orderTotalSale")?.value) || 0;
+      const cogsTotal = parseFloat(document.getElementById("orderCogs")?.value) || 0;
+      if (!orderNo) return v2Show(orderMsg, "訂單編號必填");
+      const orders = DK.getOrders();
+      const existing = orders.find((x) => x.order_no === orderNo && x.id !== editingV2OrderId);
+      if (existing) return v2Show(orderMsg, "訂單編號重複");
+      const payload = { order_no: orderNo, customer_name: document.getElementById("orderCustomer")?.value || "", total_sale: totalSale, shipping_income: parseFloat(document.getElementById("orderShipping")?.value) || 0, discount: parseFloat(document.getElementById("orderDiscount")?.value) || 0, payment_method: document.getElementById("orderPayment")?.value || "transfer", status: document.getElementById("orderStatus")?.value || "pending", cogs_total: cogsTotal, created_at: nowISO() };
+      if (editingV2OrderId) {
+        const idx = orders.findIndex((x) => x.id === editingV2OrderId);
+        if (idx < 0) return v2Show(orderMsg, "找不到訂單");
+        orders[idx] = { ...orders[idx], ...payload, updated_at: nowISO() };
+        DK.saveOrders(orders);
+        v2Show(orderMsg, "已更新");
+      } else {
+        payload.id = "ord-" + Date.now();
+        orders.unshift(payload);
+        DK.saveOrders(orders);
+        v2Show(orderMsg, "已新增");
+      }
+      renderV2Orders();
+      renderV2Reports();
+      setTimeout(() => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); }, 800);
+    });
+
+    const expensesTbody = document.getElementById("expensesTbody");
+    const expenseForm = document.getElementById("expenseForm");
+    const expenseMsg = document.getElementById("expenseMsg");
+    function renderV2Expenses() {
+      if (!expensesTbody) return;
+      const list = DK.getExpenses();
+      expensesTbody.innerHTML = list.slice(0, 100).map((e) => `<tr><td>${v2Esc(e.date)}</td><td>${v2Esc(EXPENSE_TYPE_LABEL[e.type] || e.type)}</td><td>${v2Esc(e.category)}</td><td>${v2FmtNum(e.amount)}</td><td class="muted">${v2Esc(e.note)}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-del-expense" data-id="${v2Esc(e.id)}">刪除</button></td></tr>`).join("");
+      expensesTbody.querySelectorAll(".btn-del-expense").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (!confirm("確定刪除？")) return;
+          const id = btn.getAttribute("data-id");
+          const rows = DK.getExpenses().filter((x) => x.id !== id);
+          DK.saveExpenses(rows);
+          renderV2Expenses();
+          renderV2Reports();
+        });
+      });
+    }
+    document.getElementById("btnNewExpense")?.addEventListener("click", () => {
+      document.getElementById("expenseDate").value = todayStr();
+      document.getElementById("expenseType").value = "OPEX";
+      document.getElementById("expenseCategory").value = "";
+      document.getElementById("expenseAmount").value = "";
+      document.getElementById("expenseNote").value = "";
+      if (expenseForm) expenseForm.hidden = false;
+      v2Hide(expenseMsg);
+    });
+    document.getElementById("expenseCancel")?.addEventListener("click", () => { if (expenseForm) expenseForm.hidden = true; v2Hide(expenseMsg); });
+    document.getElementById("expenseSave")?.addEventListener("click", () => {
+      const date = document.getElementById("expenseDate")?.value;
+      const amount = parseFloat(document.getElementById("expenseAmount")?.value);
+      if (!date) return v2Show(expenseMsg, "請選日期");
+      if (!Number.isFinite(amount) || amount < 0) return v2Show(expenseMsg, "請填金額");
+      const rows = DK.getExpenses();
+      rows.unshift({ id: "ex-" + Date.now(), date, type: document.getElementById("expenseType")?.value, category: document.getElementById("expenseCategory")?.value || "", amount, note: document.getElementById("expenseNote")?.value || "", ref_item_id: "", created_at: nowISO() });
+      DK.saveExpenses(rows);
+      v2Show(expenseMsg, "已新增");
+      renderV2Expenses();
+      renderV2Reports();
+      setTimeout(() => { if (expenseForm) expenseForm.hidden = true; v2Hide(expenseMsg); }, 800);
+    });
+
+    function renderV2Reports() {
+      const w = DK.reportWeeklySummary();
+      const elWeekly = document.getElementById("reportWeekly");
+      if (elWeekly) elWeekly.innerHTML = `<div><strong>本週 ${w.weekFrom} ~ ${w.weekTo}</strong></div><div>訂單毛利合計：NT$ ${v2FmtNum(w.ordersProfit)}（${w.ordersCount} 筆）</div><div>支出合計：NT$ ${v2FmtNum(w.expensesTotal)}（${w.expensesCount} 筆）</div><div>庫存總成本：NT$ ${v2FmtNum(w.inventoryValue)}</div>`;
+      const top20 = DK.reportTop20IdleDays();
+      const elTop20 = document.getElementById("reportTop20");
+      if (elTop20) elTop20.innerHTML = top20.length ? `<table class="table"><thead><tr><th>SKU</th><th>名稱</th><th>品類</th><th>滯留天</th><th>庫存價值</th></tr></thead><tbody>${top20.map((x) => `<tr><td>${v2Esc(x.sku)}</td><td>${v2Esc(x.name)}</td><td>${v2Esc(x.category)}</td><td>${x.idle_days}</td><td>${v2FmtNum(x.inventory_value)}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無資料</p>";
+      const testingPrep = DK.reportTestingPrep();
+      const elTesting = document.getElementById("reportTestingPrep");
+      if (elTesting) elTesting.innerHTML = testingPrep.length ? `<table class="table"><thead><tr><th>SKU</th><th>名稱</th><th>狀態</th><th>數量</th></tr></thead><tbody>${testingPrep.map((x) => `<tr><td>${v2Esc(x.sku)}</td><td>${v2Esc(x.name)}</td><td>${v2Esc(STATUS_LABEL[x.status] || x.status)}</td><td>${x.qty_on_hand}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無</p>";
+      const clearance = DK.reportClearance();
+      const elClear = document.getElementById("reportClearance");
+      if (elClear) elClear.innerHTML = clearance.length ? `<table class="table"><thead><tr><th>SKU</th><th>名稱</th><th>品類</th><th>滯留天</th><th>庫存價值</th></tr></thead><tbody>${clearance.map((x) => `<tr><td>${v2Esc(x.sku)}</td><td>${v2Esc(x.name)}</td><td>${v2Esc(x.category)}</td><td>${x.idle_days}</td><td>${v2FmtNum(x.inventory_value)}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無</p>";
+    }
+
+    window.__adminV2Refresh = function () {
+      const active = document.querySelector(".v2-tab.active");
+      const name = (active && active.getAttribute("data-v2")) || "items";
+      switchV2Tab(name);
+    };
+    switchV2Tab("items");
+  }
 
   // ---------- init ----------
   applyAuthUI();

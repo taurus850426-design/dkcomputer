@@ -462,72 +462,34 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
   font-weight: 600;
 }
 
-/* 掃描規格（拍照辨識）彈窗：預設隱藏，只有 .open 時顯示 */
-.inv-scan-modal{
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  box-sizing: border-box;
-}
-.inv-scan-modal.open{
+.inv-product-type-btns,
+.inv-view-btns{
   display: flex;
-}
-.inv-scan-backdrop{
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-}
-.inv-scan-box{
-  position: relative;
-  background: #fff;
-  border-radius: 12px;
-  padding: 16px;
-  max-width: 420px;
-  width: 100%;
-  max-height: 90vh;
-  overflow: auto;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-}
-.inv-scan-head{
-  display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
   align-items: center;
-  margin-bottom: 8px;
+  gap: 6px 10px;
 }
-.inv-scan-head .btn{ font-size: 24px; line-height: 1; padding: 4px 8px; }
-.inv-scan-preview-wrap{
-  position: relative;
-  width: 100%;
-  aspect-ratio: 4/3;
-  background: #000;
-  border-radius: 8px;
-  overflow: hidden;
-  margin: 12px 0;
-}
-.inv-scan-video,
-.inv-scan-canvas{
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.inv-scan-actions{ display: flex; gap: 8px; margin-top: 12px; }
-.inv-scan-result-wrap{ margin-top: 12px; }
-.inv-scan-result-text{
-  width: 100%;
-  margin-top: 4px;
-  padding: 8px;
+.btn-inv-pt,
+.btn-inv-view{
+  padding: 4px 10px;
+  font-size: 12px;
   border: 1px solid rgba(17,24,39,0.15);
-  border-radius: 8px;
-  font-size: 14px;
-  resize: vertical;
-  box-sizing: border-box;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.9);
+  cursor: pointer;
 }
-.inv-scan-fill-actions{ display: flex; gap: 8px; margin-top: 8px; }
+.btn-inv-pt:hover,
+.btn-inv-view:hover{ background: rgba(17,24,39,0.06); }
+.btn-inv-pt.active,
+.btn-inv-view.active{
+  background: rgba(17,24,39,0.12);
+  font-weight: 600;
+}
+
+.inv-age-normal{ color: inherit; }
+.inv-age-attention{ color: #b8860b; font-weight: 600; }
+.inv-age-warning{ color: #c2410c; font-weight: 600; }
+.inv-age-clearout{ color: #b91c1c; font-weight: 700; }
 
 .segmented{
   display:inline-flex;
@@ -725,6 +687,48 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
 }
 .sticky-title{ font-weight:900; }
 .sticky-sub{ font-size:12px; }
+
+/* 每頁底部共用一句話 + 浮動加 LINE */
+.footer-col{ display:flex; flex-direction:column; gap:4px; }
+.footer-col .muted{ font-size: 13px; line-height: 1.45; }
+
+/* FAQ 頁 */
+.faq-list{ display:flex; flex-direction:column; gap: 20px; }
+.faq-item{ border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+.faq-q{ font-size: 15px; font-weight: 700; margin: 0 0 8px; line-height: 1.4; }
+.faq-a{ font-size: 14px; line-height: 1.6; }
+.faq-a br{ display: block; content: ""; margin-top: 6px; }
+
+/* 售後保固條款內文 */
+.warranty-content.prose{ line-height: 1.65; }
+.warranty-content.prose .h2{ margin-top: 24px; margin-bottom: 10px; font-size: 18px; }
+.warranty-content.prose ul, .warranty-content.prose ol{ margin: 8px 0 16px; padding-left: 1.4em; }
+.warranty-content.prose li{ margin-bottom: 6px; }
+
+/* 浮動加 LINE 按鈕（右下角，手機超有感） */
+.line-float-btn{
+  position: fixed;
+  right: 16px;
+  bottom: 88px;
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  height: 56px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #06c755, #00b900);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: 0 4px 16px rgba(0,185,0,0.35);
+  text-decoration: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.line-float-btn:hover{ color: #fff; transform: scale(1.05); box-shadow: 0 6px 20px rgba(0,185,0,0.45); }
+@media (min-width: 769px){ .line-float-btn{ bottom: 20px; right: 20px; } }
+@media (max-width: 768px){ .line-float-btn{ bottom: 80px; right: 12px; min-width: 52px; height: 52px; font-size: 13px; } }
 
 @media (max-width: 980px){
   .grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }

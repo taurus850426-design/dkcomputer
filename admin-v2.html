@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>後台｜庫存＋記帳</title>
+    <link rel="stylesheet" href="./styles.css?v=20260201" />
+  </head>
+  <body class="theme-apple">
+    <main class="admin-shell">
+      <div class="container">
+        <div class="admin-head">
+          <div>
+            <h1>庫存＋記帳</h1>
+            <p class="muted">庫齡提醒、每單毛利、庫存成本</p>
+          </div>
+          <div class="actions">
+            <a class="btn btn-ghost" href="./admin.html">回舊後台</a>
+            <a class="btn btn-ghost" href="./index.html">回網站</a>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="items" type="button">庫存 Items</button>
+          <button class="tab" data-tab="ledger" type="button">流水帳</button>
+          <button class="tab" data-tab="orders" type="button">訂單</button>
+          <button class="tab" data-tab="expenses" type="button">支出</button>
+          <button class="tab" data-tab="reports" type="button">報表</button>
+        </div>
+
+        <!-- ① 庫存 Items -->
+        <section id="tab-items" class="card">
+          <div class="section-head">
+            <div>
+              <h2 class="h2">庫存品項</h2>
+              <p class="muted">category / sku / 入庫日 / 放多久 / 庫存價值；可篩選、排序</p>
+            </div>
+            <div class="section-actions">
+              <button id="btnNewItem" class="btn btn-primary" type="button">新增品項</button>
+              <button id="btnSeed" class="btn btn-ghost" type="button">載入測試資料</button>
+            </div>
+          </div>
+          <div class="toolbar">
+            <label class="search">
+              <span class="search-label">搜尋</span>
+              <input id="itemsSearch" type="search" placeholder="SKU / 名稱 / spec" autocomplete="off" />
+            </label>
+            <div class="filters">
+              <select id="itemsCategory">
+                <option value="">全部品類</option>
+                <option value="PC">PC</option>
+                <option value="GPU">GPU</option>
+                <option value="PART">PART</option>
+                <option value="CONSUMABLE">CONSUMABLE</option>
+              </select>
+              <select id="itemsStatus">
+                <option value="">全部狀態</option>
+                <option value="READY">READY</option>
+                <option value="TESTING">TESTING</option>
+                <option value="PREP">PREP</option>
+                <option value="RESERVED">RESERVED</option>
+                <option value="CLEARANCE">CLEARANCE</option>
+                <option value="SCRAP">SCRAP</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>名稱</th>
+                  <th>品類</th>
+                  <th>狀態</th>
+                  <th>數量</th>
+                  <th>成本</th>
+                  <th>建議價</th>
+                  <th>最低價</th>
+                  <th>入庫日</th>
+                  <th>庫齡(天)</th>
+                  <th>滯留(天)</th>
+                  <th>庫存價值</th>
+                  <th>提醒</th>
+                  <th style="text-align:right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="itemsTbody"></tbody>
+            </table>
+          </div>
+          <div id="itemEditor" class="card" style="margin-top:12px" hidden>
+            <h3 class="h3">新增 / 編輯品項</h3>
+            <div class="form-grid">
+              <div class="field"><label for="itemSku">SKU（唯一）</label><input id="itemSku" type="text" placeholder="PC-001" /></div>
+              <div class="field"><label for="itemCategory">品類</label><select id="itemCategory"><option value="PC">PC</option><option value="GPU">GPU</option><option value="PART">PART</option><option value="CONSUMABLE">CONSUMABLE</option></select></div>
+              <div class="field full"><label for="itemName">名稱</label><input id="itemName" type="text" /></div>
+              <div class="field full"><label for="itemSpec">規格 spec</label><input id="itemSpec" type="text" placeholder="3060Ti 8G / i5-8400" /></div>
+              <div class="field"><label for="itemCondition">成色</label><select id="itemCondition"><option value="NEW">NEW</option><option value="USED">USED</option><option value="REFURB">REFURB</option></select></div>
+              <div class="field"><label for="itemStatus">狀態</label><select id="itemStatus"><option value="READY">READY</option><option value="TESTING">TESTING</option><option value="PREP">PREP</option><option value="RESERVED">RESERVED</option><option value="CLEARANCE">CLEARANCE</option><option value="SCRAP">SCRAP</option></select></div>
+              <div class="field"><label for="itemQty">現貨數量</label><input id="itemQty" type="number" min="0" value="0" /></div>
+              <div class="field"><label for="itemCost">單位成本</label><input id="itemCost" type="number" min="0" step="1" value="0" /></div>
+              <div class="field"><label for="itemPriceList">建議售價</label><input id="itemPriceList" type="number" min="0" step="1" /></div>
+              <div class="field"><label for="itemPriceFloor">最低價</label><input id="itemPriceFloor" type="number" min="0" step="1" /></div>
+              <div class="field"><label for="itemInboundDate">入庫日</label><input id="itemInboundDate" type="date" /></div>
+              <div class="field"><label for="itemReorderPoint">補貨警戒（耗材）</label><input id="itemReorderPoint" type="number" min="0" value="0" /></div>
+              <div class="field"><label for="itemLocation">位置</label><input id="itemLocation" type="text" placeholder="櫃/箱/架" /></div>
+              <div class="field full"><label for="itemNotes">備註</label><input id="itemNotes" type="text" /></div>
+              <div class="full actions">
+                <button id="itemSave" class="btn btn-primary" type="button">儲存</button>
+                <button id="itemCancel" class="btn btn-ghost" type="button">取消</button>
+              </div>
+            </div>
+            <div id="itemMsg" class="muted" hidden></div>
+          </div>
+        </section>
+
+        <!-- ② 流水帳 -->
+        <section id="tab-ledger" class="card" hidden>
+          <div class="section-head">
+            <div><h2 class="h2">進出庫流水帳</h2><p class="muted">IN / OUT / ADJUST；入庫會更新品項數量與 last_moved_at</p></div>
+            <button id="btnNewLedger" class="btn btn-primary" type="button">新增一筆</button>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>時間</th><th>品項</th><th>類型</th><th>數量</th><th>單位成本</th><th>ref_type</th><th>ref_id</th><th>備註</th></tr>
+              </thead>
+              <tbody id="ledgerTbody"></tbody>
+            </table>
+          </div>
+          <div id="ledgerForm" class="card" style="margin-top:12px" hidden>
+            <h3 class="h3">新增流水</h3>
+            <div class="form-grid">
+              <div class="field"><label for="ledgerItemId">品項</label><select id="ledgerItemId"></select></div>
+              <div class="field"><label for="ledgerType">類型</label><select id="ledgerType"><option value="IN">IN</option><option value="OUT">OUT</option><option value="ADJUST">ADJUST</option></select></div>
+              <div class="field"><label for="ledgerQty">數量</label><input id="ledgerQty" type="number" /></div>
+              <div class="field"><label for="ledgerUnitCost">單位成本（入庫必填）</label><input id="ledgerUnitCost" type="number" min="0" step="1" /></div>
+              <div class="field"><label for="ledgerRefType">ref_type</label><select id="ledgerRefType"><option value="PURCHASE">PURCHASE</option><option value="ORDER">ORDER</option><option value="RMA">RMA</option><option value="SCRAP">SCRAP</option><option value="MOVE">MOVE</option><option value="ADJUST">ADJUST</option></select></div>
+              <div class="field"><label for="ledgerRefId">ref_id</label><input id="ledgerRefId" type="text" placeholder="訂單號/進貨單號" /></div>
+              <div class="field full"><label for="ledgerNote">備註</label><input id="ledgerNote" type="text" /></div>
+              <div class="full actions"><button id="ledgerSubmit" class="btn btn-primary" type="button">送出</button><button id="ledgerCancel" class="btn btn-ghost" type="button">取消</button></div>
+            </div>
+            <div id="ledgerMsg" class="muted" hidden></div>
+          </div>
+        </section>
+
+        <!-- ③ 訂單 -->
+        <section id="tab-orders" class="card" hidden>
+          <div class="section-head">
+            <div><h2 class="h2">訂單（收入＆毛利）</h2><p class="muted">整單成本 cogs_total；gross_profit / gross_margin 自動計算</p></div>
+            <button id="btnNewOrder" class="btn btn-primary" type="button">新增訂單</button>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>訂單編號</th><th>客戶</th><th>售價</th><th>運費</th><th>折扣</th><th>成本</th><th>毛利</th><th>毛利率</th><th>狀態</th><th>日期</th><th style="text-align:right">操作</th></tr>
+              </thead>
+              <tbody id="ordersTbody"></tbody>
+            </table>
+          </div>
+          <div id="orderForm" class="card" style="margin-top:12px" hidden>
+            <h3 class="h3">新增 / 編輯訂單</h3>
+            <div class="form-grid">
+              <div class="field"><label for="orderNo">訂單編號</label><input id="orderNo" type="text" placeholder="自動產生" /></div>
+              <div class="field full"><label for="orderCustomer">客戶</label><input id="orderCustomer" type="text" /></div>
+              <div class="field"><label for="orderTotalSale">售價合計</label><input id="orderTotalSale" type="number" min="0" value="0" /></div>
+              <div class="field"><label for="orderShipping">運費收入</label><input id="orderShipping" type="number" min="0" value="0" /></div>
+              <div class="field"><label for="orderDiscount">折扣</label><input id="orderDiscount" type="number" min="0" value="0" /></div>
+              <div class="field"><label for="orderCogs">整單成本 cogs_total</label><input id="orderCogs" type="number" min="0" value="0" /></div>
+              <div class="field"><label for="orderPayment">付款方式</label><select id="orderPayment"><option value="cash">cash</option><option value="transfer">transfer</option><option value="card">card</option></select></div>
+              <div class="field"><label for="orderStatus">狀態</label><select id="orderStatus"><option value="pending">pending</option><option value="paid">paid</option><option value="shipped">shipped</option><option value="completed">completed</option><option value="refunded">refunded</option></select></div>
+              <div class="field full"><label>毛利（自動）</label><div id="orderGrossProfitDisplay" class="muted">-</div></div>
+              <div class="field full actions"><button id="orderSave" class="btn btn-primary" type="button">儲存</button><button id="orderCancel" class="btn btn-ghost" type="button">取消</button></div>
+            </div>
+            <div id="orderMsg" class="muted" hidden></div>
+          </div>
+        </section>
+
+        <!-- ④ 支出 -->
+        <section id="tab-expenses" class="card" hidden>
+          <div class="section-head">
+            <div><h2 class="h2">支出</h2><p class="muted">COGS / OPEX / OTHER</p></div>
+            <button id="btnNewExpense" class="btn btn-primary" type="button">新增支出</button>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>日期</th><th>類型</th><th>類別</th><th>金額</th><th>備註</th><th style="text-align:right">操作</th></tr>
+              </thead>
+              <tbody id="expensesTbody"></tbody>
+            </table>
+          </div>
+          <div id="expenseForm" class="card" style="margin-top:12px" hidden>
+            <h3 class="h3">新增支出</h3>
+            <div class="form-grid">
+              <div class="field"><label for="expenseDate">日期</label><input id="expenseDate" type="date" /></div>
+              <div class="field"><label for="expenseType">類型</label><select id="expenseType"><option value="COGS">COGS</option><option value="OPEX">OPEX</option><option value="OTHER">OTHER</option></select></div>
+              <div class="field"><label for="expenseCategory">類別</label><input id="expenseCategory" type="text" placeholder="進貨/運費/包材..." /></div>
+              <div class="field"><label for="expenseAmount">金額</label><input id="expenseAmount" type="number" min="0" step="1" /></div>
+              <div class="field full"><label for="expenseNote">備註</label><input id="expenseNote" type="text" /></div>
+              <div class="full actions"><button id="expenseSave" class="btn btn-primary" type="button">儲存</button><button id="expenseCancel" class="btn btn-ghost" type="button">取消</button></div>
+            </div>
+            <div id="expenseMsg" class="muted" hidden></div>
+          </div>
+        </section>
+
+        <!-- ⑤ 報表（4 個） -->
+        <section id="tab-reports" class="card" hidden>
+          <div class="section-head"><h2 class="h2">報表</h2><p class="muted">庫齡排行、待整理/待測、待出清、本週摘要</p></div>
+
+          <div class="card" style="margin-bottom:12px">
+            <h3 class="h3">本週毛利摘要</h3>
+            <div id="reportWeekly" class="two-col"></div>
+          </div>
+          <div class="card" style="margin-bottom:12px">
+            <h3 class="h3">庫齡排行 Top 20（idle_days 最大）</h3>
+            <div id="reportTop20" class="table-wrap"></div>
+          </div>
+          <div class="card" style="margin-bottom:12px">
+            <h3 class="h3">待整理 / 待測（TESTING, PREP）</h3>
+            <div id="reportTestingPrep" class="table-wrap"></div>
+          </div>
+          <div class="card" style="margin-bottom:12px">
+            <h3 class="h3">待出清（CLEARANCE 或 PC/GPU 滯留&gt;30 天）</h3>
+            <div id="reportClearance" class="table-wrap"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+    <script src="./inventory-ledger.js"></script>
+    <script src="./admin-v2.js"></script>
+  </body>
+</html>

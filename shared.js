@@ -22,9 +22,9 @@ const STORAGE_KEYS = {
 // const SUPABASE_URL = "https://xxxxx.supabase.co";
 // const SUPABASE_ANON_KEY = "sb_publishable_xxx...";
 //
-// 目前先留空，若沒填就會退回使用 localStorage 的舊行為。
-const SUPABASE_URL = "https://npynqrsmduukulwgylkz.supabase.co"; // TODO: 改成你的 Supabase Project URL
-const SUPABASE_ANON_KEY = "sb_publishable_K0fyhespfyQIP-56bTZEFg_Gq1PJG4F"; // TODO: 改成你的 Supabase Publishable key
+// 若留空會退回使用 localStorage。
+const SUPABASE_URL = "https://npynqrsmduukulwgylkz.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_K0fyhespfyQIP-56bTZEFg_Gq1PJG4F";
 const SUPABASE_INVENTORY_TABLE = "inventory";
 const SUPABASE_SITE_CONFIG_TABLE = "site_config";
 const SITE_CONFIG_ROW_ID = "default";
@@ -32,6 +32,9 @@ const SUPABASE_STOCK_DATA_TABLE = "stock_data";
 const STOCK_DATA_ROW_ID = "default";
 const SUPABASE_ORDERS_DATA_TABLE = "orders_data";
 const ORDERS_DATA_ROW_ID = "default";
+const SUPABASE_V2_DATA_TABLE = "v2_data";
+const V2_DATA_ROW_ID = "default";
+const V2_STORAGE_KEYS = { items: "dk_v2_items", ledger: "dk_v2_ledger", orders: "dk_v2_orders", expenses: "dk_v2_expenses" };
 
 const DEFAULT_CONFIG = {
   siteTitle: "二手電腦・實測交付｜依用途配機，不亂賣、不踩雷",
@@ -66,8 +69,10 @@ const DEFAULT_CONFIG = {
       "file:///C:/Users/Hi/.cursor/projects/c-Users-Hi-Desktop-2/assets/c__Users_Hi_AppData_Roaming_Cursor_User_workspaceStorage_fd07e6f51d41fe8bccbee3cc5dca28d0_images_S__5128195-53ab6056-6438-4d95-8ea3-209ff94139ed.png",
   },
   line: {
-    // 建議填：https://line.me/R/ti/p/@xxxx
-    url: "https://lin.ee/zWYz2KH7",
+    url: "https://lin.ee/VcxP0QO",
+    lineId: "@315PEPPL",
+    lineCtaText: "加 LINE 快速配單／看現貨",
+    footerLineSentence: "不確定怎麼選？直接加 LINE：@315PEPPL，我用你的用途/預算給你最划算的配置或現貨選項。",
     orderMessageTemplate: "你好，我想詢問：{name}",
   },
   admin: {
@@ -492,6 +497,79 @@ async function saveOrdersToSupabase(orders) {
   if (!res.ok) {
     console.warn("同步訂單到 Supabase 失敗", await res.text());
   }
+}
+
+// ===== Supabase：庫存＋記帳 v2（品項、流水帳、訂單、支出）讀寫 =====
+async function fetchV2DataFromSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_V2_DATA_TABLE}?id=eq.${encodeURIComponent(
+    V2_DATA_ROW_ID,
+  )}&select=data`;
+  const res = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  if (!res.ok) return null;
+  const rows = await res.json();
+  const raw = rows?.[0]?.data;
+  if (!raw || typeof raw !== "object") return null;
+  const items = Array.isArray(raw.items) ? raw.items : [];
+  const ledger = Array.isArray(raw.ledger) ? raw.ledger : [];
+  const orders = Array.isArray(raw.orders) ? raw.orders : [];
+  const expenses = Array.isArray(raw.expenses) ? raw.expenses : [];
+  try {
+    localStorage.setItem(V2_STORAGE_KEYS.items, JSON.stringify(items));
+    localStorage.setItem(V2_STORAGE_KEYS.ledger, JSON.stringify(ledger));
+    localStorage.setItem(V2_STORAGE_KEYS.orders, JSON.stringify(orders));
+    localStorage.setItem(V2_STORAGE_KEYS.expenses, JSON.stringify(expenses));
+  } catch (e) {
+    return null;
+  }
+  return { items, ledger, orders, expenses };
+}
+
+async function saveV2DataToSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+  let items = [];
+  let ledger = [];
+  let orders = [];
+  let expenses = [];
+  try {
+    items = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.items), []);
+    ledger = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.ledger), []);
+    orders = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.orders), []);
+    expenses = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.expenses), []);
+  } catch (e) {
+    return;
+  }
+  const payload = {
+    id: V2_DATA_ROW_ID,
+    data: { items, ledger, orders, expenses },
+  };
+  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_V2_DATA_TABLE}?on_conflict=id`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation,resolution=merge-duplicates",
+    },
+    body: JSON.stringify([payload]),
+  });
+  if (!res.ok) {
+    console.warn("同步庫存＋記帳到 Supabase 失敗", await res.text());
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.__syncV2ToSupabase = function () {
+    saveV2DataToSupabase().catch(function () {});
+  };
+  window.fetchV2DataFromSupabase = fetchV2DataFromSupabase;
+  window.saveV2DataToSupabase = saveV2DataToSupabase;
 }
 
 function getComputers() {
@@ -960,17 +1038,20 @@ function applyConfigToHomePage() {
     }
   }
 
+  const lineCtaText = cfg.line.lineCtaText || "加 LINE 快速配單／看現貨";
   const lineButtons = [
     document.getElementById("lineMainBtn"),
     document.getElementById("lineStickyBtn"),
     document.getElementById("navLineBtn"),
-    document.getElementById("heroBtn3"),
+    document.getElementById("lineFloatBtn"),
+    document.getElementById("lineCtaBlockBtn"),
   ].filter(Boolean);
 
   for (const btn of lineButtons) {
     btn.href = cfg.line.url || "#";
     btn.target = "_blank";
     btn.rel = "noreferrer";
+    if (btn.id !== "heroBtn3" && btn.textContent) btn.textContent = lineCtaText;
     if (!cfg.line.url) {
       btn.addEventListener("click", (e) => {
         e.preventDefault();
@@ -978,6 +1059,11 @@ function applyConfigToHomePage() {
       });
     }
   }
+
+  const footerLineSentence = document.getElementById("footerLineSentence");
+  if (footerLineSentence) footerLineSentence.textContent = cfg.line.footerLineSentence || "";
+  const footerLineSentenceFooter = document.getElementById("footerLineSentenceFooter");
+  if (footerLineSentenceFooter) footerLineSentenceFooter.textContent = cfg.line.footerLineSentence || "";
 }
 
 async function tryCopy(text) {
@@ -1084,7 +1170,7 @@ if (window.DK.fetchSiteConfigFromSupabase && window.DK.saveConfig) {
     .catch(function () {});
 }
 // 頁面載入時從 Supabase 拉庫存（stock + 類別 + 欄位），多裝置看到同一份（不觸發回寫）
-if (window.DK.fetchStockDataFromSupabase) {
+if (window.DK && window.DK.fetchStockDataFromSupabase) {
   window.DK
     .fetchStockDataFromSupabase()
     .then(function (data) {
@@ -1094,6 +1180,10 @@ if (window.DK.fetchStockDataFromSupabase) {
       if (Array.isArray(data.stockSchema)) window.DK.saveStockSchema(data.stockSchema, true);
     })
     .catch(function () {});
+}
+// 頁面載入時從 Supabase 拉庫存＋記帳 v2（品項、流水帳、訂單、支出），換電腦／換瀏覽器看到同一份
+if (window.fetchV2DataFromSupabase) {
+  window.fetchV2DataFromSupabase().catch(function () {});
 }
 
 // 手機選單（小螢幕可展開主選單/進後台）

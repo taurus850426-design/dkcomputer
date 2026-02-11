@@ -1,0 +1,7 @@
+# 依環境選擇性加入
+node_modules/
+.env
+.env.local
+*.log
+.DS_Store
+Thumbs.db
