@@ -151,6 +151,18 @@
   const invBatchText = document.getElementById("invBatchText");
   const invBatchImportBtn = document.getElementById("invBatchImportBtn");
   const invBatchMsg = document.getElementById("invBatchMsg");
+  const invScanBtn = document.getElementById("invScanBtn");
+  const invScanModal = document.getElementById("invScanModal");
+  const invScanCloseBtn = document.getElementById("invScanCloseBtn");
+  const invScanCloseBtn2 = document.getElementById("invScanCloseBtn2");
+  const invScanVideo = document.getElementById("invScanVideo");
+  const invScanCanvas = document.getElementById("invScanCanvas");
+  const invScanCaptureBtn = document.getElementById("invScanCaptureBtn");
+  const invScanResultWrap = document.getElementById("invScanResultWrap");
+  const invScanResultText = document.getElementById("invScanResultText");
+  const invScanFillNameBtn = document.getElementById("invScanFillNameBtn");
+  const invScanFillNoteBtn = document.getElementById("invScanFillNoteBtn");
+  const invScanStatus = document.getElementById("invScanStatus");
 
   // publish
   const publishSubmitBtn = document.getElementById("publishSubmitBtn");
@@ -502,6 +514,74 @@
     if (!invBatch) return;
     invBatch.hidden = true;
     hide(invBatchMsg);
+  }
+
+  let invScanStream = null;
+  function openInvScan() {
+    if (!invScanModal || !invScanVideo) return;
+    invScanModal.hidden = false;
+    invScanModal.classList.add("open");
+    invScanResultWrap && (invScanResultWrap.hidden = true);
+    if (invScanResultText) invScanResultText.value = "";
+    setInvScanStatus("正在開啟相機…");
+    navigator.mediaDevices
+      ?.getUserMedia({ video: { facingMode: "environment" }, audio: false })
+      .then((stream) => {
+        invScanStream = stream;
+        invScanVideo.srcObject = stream;
+        invScanVideo.play().catch(() => {});
+        setInvScanStatus("對準產品規格後按「拍照辨識」");
+      })
+      .catch(() => setInvScanStatus("無法取得相機，請允許權限或改用上傳圖片"));
+  }
+  function closeInvScan() {
+    if (invScanStream) {
+      invScanStream.getTracks().forEach((t) => t.stop());
+      invScanStream = null;
+    }
+    if (invScanVideo) invScanVideo.srcObject = null;
+    if (invScanModal) {
+      invScanModal.classList.remove("open");
+      invScanModal.hidden = true;
+    }
+  }
+  function setInvScanStatus(msg) {
+    if (invScanStatus) invScanStatus.textContent = msg || "";
+  }
+  function loadTesseract() {
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+      script.onload = () => resolve(window.Tesseract);
+      script.onerror = () => reject(new Error("無法載入 Tesseract.js"));
+      document.head.appendChild(script);
+    });
+  }
+  async function runInvScanOCR() {
+    if (!invScanVideo || !invScanCanvas || !invScanResultText || !invScanResultWrap) return;
+    const ctx = invScanCanvas.getContext("2d");
+    if (!ctx) return;
+    invScanCanvas.width = invScanVideo.videoWidth;
+    invScanCanvas.height = invScanVideo.videoHeight;
+    ctx.drawImage(invScanVideo, 0, 0);
+    setInvScanStatus("辨識中…");
+    invScanCaptureBtn && (invScanCaptureBtn.disabled = true);
+    try {
+      const Tesseract = await loadTesseract();
+      const blob = await new Promise((resolve) => invScanCanvas.toBlob(resolve, "image/jpeg", 0.92));
+      const { data } = await Tesseract.recognize(blob, "chi_tra+eng", {
+        logger: (m) => { if (m.status) setInvScanStatus(m.status); },
+      });
+      invScanResultText.value = (data?.text || "").trim() || "（未辨識到文字）";
+      invScanResultWrap.hidden = false;
+      setInvScanStatus("辨識完成，可填入商品名稱或備註");
+    } catch (e) {
+      invScanResultText.value = "";
+      setInvScanStatus("辨識失敗：" + (e?.message || String(e)));
+      invScanResultWrap.hidden = false;
+    }
+    invScanCaptureBtn && (invScanCaptureBtn.disabled = false);
   }
 
   function importBatch() {
@@ -1368,6 +1448,19 @@
   invBatchBtn?.addEventListener("click", openBatch);
   invBatchCloseBtn?.addEventListener("click", closeBatch);
   invBatchImportBtn?.addEventListener("click", importBatch);
+  invScanBtn?.addEventListener("click", openInvScan);
+  invScanCloseBtn?.addEventListener("click", closeInvScan);
+  invScanCloseBtn2?.addEventListener("click", closeInvScan);
+  invScanModal?.querySelector(".inv-scan-backdrop")?.addEventListener("click", closeInvScan);
+  invScanCaptureBtn?.addEventListener("click", runInvScanOCR);
+  invScanFillNameBtn?.addEventListener("click", () => {
+    const text = (invScanResultText?.value || "").trim();
+    if (invName) invName.value = text.split(/\r?\n/)[0] || text;
+  });
+  invScanFillNoteBtn?.addEventListener("click", () => {
+    const text = (invScanResultText?.value || "").trim();
+    if (invNote) invNote.value = text;
+  });
 
   // publish events
   publishSubmitBtn?.addEventListener("click", () => {

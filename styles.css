@@ -461,6 +461,74 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
   color: #062a1a;
   font-weight: 600;
 }
+
+/* 掃描規格（拍照辨識）彈窗：預設隱藏，只有 .open 時顯示 */
+.inv-scan-modal{
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.inv-scan-modal.open{
+  display: flex;
+}
+.inv-scan-backdrop{
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+}
+.inv-scan-box{
+  position: relative;
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  max-width: 420px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.inv-scan-head{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.inv-scan-head .btn{ font-size: 24px; line-height: 1; padding: 4px 8px; }
+.inv-scan-preview-wrap{
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4/3;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 12px 0;
+}
+.inv-scan-video,
+.inv-scan-canvas{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.inv-scan-actions{ display: flex; gap: 8px; margin-top: 12px; }
+.inv-scan-result-wrap{ margin-top: 12px; }
+.inv-scan-result-text{
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px;
+  border: 1px solid rgba(17,24,39,0.15);
+  border-radius: 8px;
+  font-size: 14px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.inv-scan-fill-actions{ display: flex; gap: 8px; margin-top: 8px; }
+
 .segmented{
   display:inline-flex;
   gap:6px;

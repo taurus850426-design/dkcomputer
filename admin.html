@@ -62,7 +62,36 @@
               </div>
               <div class="section-actions">
                 <button id="invNewBtn" class="btn btn-primary" type="button">新增商品</button>
+                <button id="invScanBtn" class="btn btn-ghost" type="button">掃描規格（拍照辨識）</button>
                 <button id="invBatchBtn" class="btn btn-ghost" type="button">批次匯入</button>
+              </div>
+            </div>
+
+            <div id="invScanModal" class="inv-scan-modal" hidden>
+              <div class="inv-scan-backdrop"></div>
+              <div class="inv-scan-box">
+                <div class="inv-scan-head">
+                  <h3 class="h3" style="margin:0">掃描產品規格</h3>
+                  <button id="invScanCloseBtn" class="btn btn-ghost" type="button" aria-label="關閉">×</button>
+                </div>
+                <p class="muted small">對準產品標籤或規格貼紙，按下「拍照辨識」即可辨識文字。</p>
+                <div class="inv-scan-preview-wrap">
+                  <video id="invScanVideo" class="inv-scan-video" autoplay playsinline muted></video>
+                  <canvas id="invScanCanvas" class="inv-scan-canvas" hidden></canvas>
+                </div>
+                <div class="inv-scan-actions">
+                  <button id="invScanCaptureBtn" class="btn btn-primary" type="button">拍照辨識</button>
+                  <button id="invScanCloseBtn2" class="btn btn-ghost" type="button">取消</button>
+                </div>
+                <div id="invScanResultWrap" class="inv-scan-result-wrap" hidden>
+                  <label class="small">辨識結果（可編輯後再填入）</label>
+                  <textarea id="invScanResultText" class="inv-scan-result-text" rows="4" placeholder="辨識出的文字會顯示在這裡"></textarea>
+                  <div class="inv-scan-fill-actions">
+                    <button id="invScanFillNameBtn" class="btn btn-primary btn-sm" type="button">填入商品名稱</button>
+                    <button id="invScanFillNoteBtn" class="btn btn-ghost btn-sm" type="button">填入備註</button>
+                  </div>
+                </div>
+                <div id="invScanStatus" class="muted small" style="margin-top:8px"></div>
               </div>
             </div>
 
@@ -148,7 +177,20 @@
                 </div>
                 <div class="field">
                   <label for="invCategory">商品類別</label>
-                  <input id="invCategory" type="text" placeholder="顯卡 / 主機 / 周邊..." />
+                  <select id="invCategory">
+                    <option value="">— 請選擇 —</option>
+                    <option value="處理器">處理器</option>
+                    <option value="主機板">主機板</option>
+                    <option value="記憶體">記憶體</option>
+                    <option value="硬碟">硬碟</option>
+                    <option value="顯示卡">顯示卡</option>
+                    <option value="電源供應器">電源供應器</option>
+                    <option value="機殼">機殼</option>
+                    <option value="作業系統">作業系統</option>
+                    <option value="主機">主機</option>
+                    <option value="周邊">周邊</option>
+                    <option value="其他">其他</option>
+                  </select>
                 </div>
                 <div class="field">
                   <label for="invQty">庫存數量</label>
