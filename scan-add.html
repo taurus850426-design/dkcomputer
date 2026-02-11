@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#7c5cff" />
+    <title>掃碼新增庫存｜後台</title>
+    <link rel="stylesheet" href="./styles.css?v=20260201" />
+    <style>
+      .scan-add-page { max-width: 520px; margin: 0 auto; padding: 16px; padding-bottom: 80px; }
+      .scan-add-page .back-link { display: inline-block; margin-bottom: 16px; color: var(--muted); font-size: 14px; }
+      .scan-add-page .scan-zone { background: var(--panel2); border: 2px dashed var(--border); border-radius: var(--radius); padding: 24px; text-align: center; margin-bottom: 16px; }
+      .scan-add-page .scan-zone .btn { margin: 4px; }
+      .scan-add-page #scanStatus { display: block; margin-top: 8px; font-size: 13px; }
+      .scan-add-page #scanForm { margin-top: 20px; }
+      .scan-add-page #scanForm .confidence-low { color: var(--warn, #c90); font-size: 13px; margin-bottom: 8px; }
+      .scan-add-page .form-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+      .scan-add-page #saveSummary { margin-top: 16px; padding: 12px; background: var(--panel2); border-radius: var(--radius-sm); }
+      .scan-add-page .sub-type-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      @media (max-width: 400px) { .scan-add-page .sub-type-row { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body class="theme-apple">
+    <div class="scan-add-page">
+      <a href="./admin.html" class="back-link">← 回到後台</a>
+      <h1 class="h1">掃碼新增庫存</h1>
+      <p class="muted" style="margin-bottom: 16px;">用手機相機或相簿掃描條碼／QR，自動帶入品類與規格，確認後入庫。</p>
+
+      <div class="scan-zone" id="scanZone">
+        <p class="muted small">掃描條碼或 QR 碼</p>
+        <label for="scanCamera" class="btn btn-primary">📷 開啟相機拍照</label>
+        <input id="scanCamera" type="file" accept="image/*" capture="environment" style="display:none" />
+        <label for="scanGallery" class="btn btn-ghost">🖼 從相簿選擇</label>
+        <input id="scanGallery" type="file" accept="image/*" style="display:none" />
+        <span id="scanStatus" class="muted small"></span>
+      </div>
+
+      <div id="scanForm" class="card" hidden>
+        <h3 class="h3">確認／編輯後儲存入庫</h3>
+        <p id="confidenceWarn" class="confidence-low" hidden>查不到或不太確定，請手動補齊後再儲存。</p>
+        <div class="form-grid">
+          <div class="field"><label for="scanCategory">品類</label><select id="scanCategory"><option value="PC">電腦</option><option value="GPU">顯卡</option><option value="PART">零件</option><option value="CONSUMABLE">耗材</option></select></div>
+          <div class="field full">
+            <label for="scanSubType">細分類</label>
+            <select id="scanSubType">
+              <option value="">— 選填 —</option>
+              <option value="CPU">CPU</option>
+              <option value="GPU">GPU</option>
+              <option value="SSD">SSD</option>
+              <option value="HDD">HDD</option>
+              <option value="RAM">RAM</option>
+              <option value="MOTHERBOARD">主機板</option>
+              <option value="PSU">電源</option>
+              <option value="CASE">機殼</option>
+              <option value="COOLER">散熱</option>
+              <option value="OTHER">其他</option>
+            </select>
+          </div>
+          <div class="field"><label for="scanBrand">品牌</label><input id="scanBrand" type="text" placeholder="例：MSI" /></div>
+          <div class="field"><label for="scanModel">型號</label><input id="scanModel" type="text" placeholder="例：RTX 3060 Ti" /></div>
+          <div class="field full"><label for="scanSpec">規格</label><input id="scanSpec" type="text" placeholder="例：8G / DDR4 16G / 512G NVMe" /></div>
+          <div class="field full"><label for="scanSku">SKU（唯一）</label><input id="scanSku" type="text" placeholder="系統會建議，可改" /></div>
+          <div class="field"><label for="scanCondition">成色</label><select id="scanCondition"><option value="NEW">全新</option><option value="USED" selected>二手</option><option value="REFURB">整新</option></select></div>
+          <div class="field"><label for="scanStatusSel">狀態</label><select id="scanStatusSel"><option value="TESTING" selected>待測</option><option value="READY">可售</option><option value="PREP">待整理</option><option value="RESERVED">保留</option><option value="CLEARANCE">待出清</option><option value="SCRAP">報廢拆料</option></select></div>
+          <div class="field"><label for="scanQty">數量</label><input id="scanQty" type="number" min="1" value="1" /></div>
+          <div class="field"><label for="scanCost">單位成本</label><input id="scanCost" type="number" min="0" step="1" value="0" /></div>
+          <div class="field"><label for="scanInboundDate">入庫日</label><input id="scanInboundDate" type="date" /></div>
+          <div class="field"><label for="scanLocation">位置</label><input id="scanLocation" type="text" placeholder="櫃/架" /></div>
+          <div class="field"><label for="scanReorderPoint">補貨警戒（耗材用）</label><input id="scanReorderPoint" type="number" min="0" value="0" /></div>
+          <div class="field full"><label for="scanNotes">備註（含 raw_code 方便追查）</label><input id="scanNotes" type="text" /></div>
+          <div class="field full form-actions">
+            <button id="scanSaveBtn" class="btn btn-primary" type="button">儲存入庫</button>
+            <button id="scanCancelBtn" class="btn btn-ghost" type="button">取消</button>
+          </div>
+        </div>
+        <div id="scanFormMsg" class="muted" hidden></div>
+      </div>
+
+      <div id="saveSummary" class="card" hidden>
+        <h3 class="h3">入庫完成</h3>
+        <p id="saveSummaryText"></p>
+        <button id="scanAgainBtn" class="btn btn-primary" type="button">再掃一筆</button>
+        <a href="./admin.html" class="btn btn-ghost">回庫存列表</a>
+      </div>
+    </div>
+
+    <script src="./shared.js?v=20260201"></script>
+    <script src="./inventory-ledger.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="./scan-add.js?v=20260201"></script>
+  </body>
+</html>
