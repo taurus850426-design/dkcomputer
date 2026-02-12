@@ -29,6 +29,12 @@
     if (el) el.hidden = true;
   }
 
+  const LEDGER_TYPE_LABEL = { IN: "入庫", OUT: "出庫", ADJUST: "調整" };
+  const REF_TYPE_LABEL = { PURCHASE: "進貨", ORDER: "訂單", RMA: "退換", SCRAP: "報廢", MOVE: "移倉", ADJUST: "調整" };
+  const ORDER_STATUS_LABEL = { pending: "待處理", paid: "已付款", shipped: "已出貨", completed: "已完成", refunded: "已退貨" };
+  const ITEM_STATUS_LABEL = { READY: "可售", TESTING: "待測", PREP: "待整理", RESERVED: "保留", CLEARANCE: "待出清", SCRAP: "報廢拆料" };
+  const EXPENSE_TYPE_LABEL = { COGS: "銷貨成本", OPEX: "營業費用", OTHER: "其他" };
+
   // ---------- Tabs ----------
   const tabs = document.querySelectorAll(".tab");
   const sections = document.querySelectorAll("[id^='tab-']");
@@ -71,7 +77,7 @@
         <td class="nowrap">${esc(x.sku)}</td>
         <td>${esc(x.name)}</td>
         <td>${esc(x.category)}</td>
-        <td>${esc(x.status)}</td>
+        <td>${esc(ITEM_STATUS_LABEL[x.status] || x.status)}</td>
         <td>${x.qty_on_hand}</td>
         <td>${fmtNum(x.cost_unit)}</td>
         <td>${fmtNum(x.price_list)}</td>
@@ -172,7 +178,7 @@
 
   document.getElementById("btnSeed")?.addEventListener("click", () => {
     const r = DK.seed();
-    alert("已載入測試資料：Items " + r.items + "、Ledger " + r.ledger + "、Orders " + r.orders + "、Expenses " + r.expenses);
+    alert("已載入測試資料：品項 " + r.items + "、流水 " + r.ledger + "、訂單 " + r.orders + "、支出 " + r.expenses);
     renderItems();
     renderLedger();
     renderOrders();
@@ -195,15 +201,75 @@
       return `<tr>
         <td class="nowrap">${esc((r.created_at || "").toString().slice(0, 19))}</td>
         <td>${esc(name)}</td>
-        <td>${esc(r.type)}</td>
+        <td>${esc(LEDGER_TYPE_LABEL[r.type] || r.type)}</td>
         <td>${r.qty}</td>
         <td>${fmtNum(r.unit_cost)}</td>
-        <td>${esc(r.ref_type)}</td>
+        <td>${esc(REF_TYPE_LABEL[r.ref_type] || r.ref_type)}</td>
         <td>${esc(r.ref_id)}</td>
         <td class="muted">${esc(r.note)}</td>
+        <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-del-ledger" data-id="${esc(r.id)}">刪除</button></td>
       </tr>`;
     }).join("");
   }
+
+  // 刪除流水：只允許刪除「該品項最新一筆」，避免庫存/成本不一致
+  ledgerTbody?.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.(".btn-del-ledger");
+    if (!btn) return;
+    const id = btn.getAttribute("data-id");
+    if (!id) return;
+
+    const ledger = DK.getLedger();
+    const row = ledger.find((x) => x.id === id);
+    if (!row) return;
+
+    const latestForItem = ledger.find((x) => x.item_id === row.item_id);
+    if (!latestForItem || latestForItem.id !== row.id) {
+      alert("目前僅支援刪除「該品項最新一筆」流水（避免庫存不一致）。");
+      return;
+    }
+    if (!confirm("確定刪除這筆流水？（會回復此筆對庫存數量/成本的影響）")) return;
+
+    // 回復庫存
+    const items = DK.getItems();
+    const item = items.find((x) => x.id === row.item_id);
+    if (item) {
+      const currentQty = Number(item.qty_on_hand) || 0;
+      const currentCost = Number(item.cost_unit) || 0;
+      const delta = Number(row.qty) || 0; // IN:+, OUT:-, ADJUST:差額
+
+      if (row.type === "IN") {
+        const added = Math.abs(delta);
+        const prevQty = Math.max(0, currentQty - added);
+        const unitCost = Number(row.unit_cost) || 0;
+        // 反推平均成本（若 prevQty=0，成本回到 0）
+        const prevCost = prevQty > 0 ? (currentQty * currentCost - added * unitCost) / prevQty : 0;
+        item.qty_on_hand = prevQty;
+        item.cost_unit = Number.isFinite(prevCost) ? prevCost : 0;
+      } else if (row.type === "OUT") {
+        // OUT 的 qty 是負數；刪除 OUT = 把數量加回去
+        item.qty_on_hand = Math.max(0, currentQty - delta);
+        // cost_unit 不變
+      } else if (row.type === "ADJUST") {
+        // ADJUST qty 是差額；刪除 ADJUST = 反向套用差額
+        item.qty_on_hand = Math.max(0, currentQty - delta);
+        // cost_unit 不變
+      } else {
+        // 未知類型：不動庫存
+      }
+
+      // last_moved_at 回到下一筆（刪除後的新最新）
+      const nextLatest = ledger.find((x) => x.item_id === row.item_id && x.id !== row.id);
+      item.last_moved_at = nextLatest?.created_at || item.last_moved_at || DK.nowISO();
+      item.updated_at = DK.nowISO();
+      DK.saveItems(items);
+    }
+
+    // 刪除流水
+    DK.saveLedger(ledger.filter((x) => x.id !== id));
+    renderLedger();
+    renderItems();
+  });
 
   document.getElementById("btnNewLedger")?.addEventListener("click", () => {
     const sel = document.getElementById("ledgerItemId");
@@ -257,7 +323,7 @@
         <td>${fmtNum(o.cogs_total)}</td>
         <td>${fmtNum(o.gross_profit)}</td>
         <td>${margin}</td>
-        <td>${esc(o.status)}</td>
+        <td>${esc(ORDER_STATUS_LABEL[o.status] || o.status)}</td>
         <td class="nowrap">${esc((o.created_at || "").toString().slice(0, 10))}</td>
         <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-order" data-id="${esc(o.id)}">編輯</button></td>
       </tr>`;
@@ -349,7 +415,7 @@
     expensesTbody.innerHTML = list.slice(0, 100).map((e) => `
       <tr>
         <td>${esc(e.date)}</td>
-        <td>${esc(e.type)}</td>
+        <td>${esc(EXPENSE_TYPE_LABEL[e.type] || e.type)}</td>
         <td>${esc(e.category)}</td>
         <td>${fmtNum(e.amount)}</td>
         <td class="muted">${esc(e.note)}</td>
@@ -425,7 +491,7 @@
     const elTesting = document.getElementById("reportTestingPrep");
     if (elTesting) {
       elTesting.innerHTML = testingPrep.length ? `<table class="table"><thead><tr><th>SKU</th><th>名稱</th><th>狀態</th><th>數量</th></tr></thead><tbody>${
-        testingPrep.map((x) => `<tr><td>${esc(x.sku)}</td><td>${esc(x.name)}</td><td>${esc(x.status)}</td><td>${x.qty_on_hand}</td></tr>`).join("")
+        testingPrep.map((x) => `<tr><td>${esc(x.sku)}</td><td>${esc(x.name)}</td><td>${esc(ITEM_STATUS_LABEL[x.status] || x.status)}</td><td>${x.qty_on_hand}</td></tr>`).join("")
       }</tbody></table>` : "<p class=\"muted\">無</p>";
     }
 

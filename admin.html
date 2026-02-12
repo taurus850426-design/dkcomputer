@@ -51,7 +51,7 @@
             <button class="tab" data-tab="frontend" type="button">前台管理</button>
           </div>
 
-          <!-- ① 庫存＋記帳（Items / Ledger / Orders / Expenses / 報表） -->
+          <!-- ① 庫存＋記帳（品項／流水帳／訂單／支出／報表） -->
           <section id="tab-inv" class="card">
             <div class="tabs v2-sub-tabs" style="margin-bottom:12px">
               <button class="tab v2-tab active" data-v2="items" type="button">庫存 Items</button>
@@ -60,13 +60,13 @@
               <button class="tab v2-tab" data-v2="expenses" type="button">支出</button>
               <button class="tab v2-tab" data-v2="reports" type="button">報表</button>
             </div>
-
+            <div class="v2-panels-wrap">
             <!-- 庫存 Items -->
             <div id="v2-items" class="v2-panel">
             <div class="section-head">
               <div>
                 <h2 class="h2">庫存品項</h2>
-                <p class="muted">category / sku / 入庫日 / 放多久 / 庫存價值；可篩選、排序</p>
+                <p class="muted">品類／編號／入庫日／放多久／庫存價值；可篩選、排序</p>
               </div>
               <div class="section-actions">
                 <a href="./photo-recognize-add.html" class="btn btn-primary" target="_blank" rel="noopener">📷 拍照辨識新增</a>
@@ -76,7 +76,7 @@
             </div>
             <label class="search">
               <span class="search-label">搜尋</span>
-              <input id="itemsSearch" type="search" placeholder="SKU / 名稱 / spec" autocomplete="off" />
+              <input id="itemsSearch" type="search" placeholder="編號／名稱／規格" autocomplete="off" />
             </label>
             <div class="filters">
               <select id="itemsCategory">
@@ -95,7 +95,6 @@
                 <option value="CLEARANCE">待出清</option>
                 <option value="SCRAP">報廢拆料</option>
               </select>
-            </div>
             </div>
             <div class="table-wrap">
               <table class="table">
@@ -124,7 +123,6 @@
             <div id="itemEditor" class="card" style="margin-top:12px" hidden>
               <h3 class="h3">新增 / 編輯品項</h3>
               <div class="form-grid">
-                <div class="field"><label for="itemBrand">品牌（選填）</label><input id="itemBrand" type="text" placeholder="例：Kingston" /></div>
                 <div class="field"><label for="itemSku">SKU（系統自動）</label><input id="itemSku" type="text" placeholder="系統自動帶入" /></div>
                 <div class="field"><label for="itemCategory">品類</label><select id="itemCategory"><option value="PC">電腦</option><option value="GPU">顯卡</option><option value="PART">零件</option><option value="CONSUMABLE">耗材</option></select></div>
                 <div class="field full"><label for="itemName">名稱</label><input id="itemName" type="text" placeholder="型號或產品名稱" /></div>
@@ -137,7 +135,6 @@
                 <div class="field"><label for="itemPriceFloor">最低價</label><input id="itemPriceFloor" type="number" min="0" step="1" /></div>
                 <div class="field"><label for="itemInboundDate">入庫日</label><input id="itemInboundDate" type="date" /></div>
                 <div class="field"><label for="itemReorderPoint">補貨警戒（耗材）</label><input id="itemReorderPoint" type="number" min="0" value="0" /></div>
-                <div class="field"><label for="itemLocation">位置</label><input id="itemLocation" type="text" placeholder="櫃/箱/架" /></div>
                 <div class="field full"><label for="itemNotes">備註</label><input id="itemNotes" type="text" /></div>
                 <div class="full actions"><button id="itemSave" class="btn btn-primary" type="button">儲存</button><button id="itemCancel" class="btn btn-ghost" type="button">取消</button><button id="itemDelete" class="btn btn-ghost" type="button" style="margin-left:auto;color:var(--danger, #c00)">刪除品項</button></div>
               </div>
@@ -148,7 +145,7 @@
             <!-- 流水帳 -->
             <div id="v2-ledger" class="v2-panel" hidden>
               <div class="section-head">
-                <div><h2 class="h2">進出庫流水帳</h2><p class="muted">IN / OUT / ADJUST；入庫會更新品項數量與 last_moved_at</p></div>
+                <div><h2 class="h2">進出庫流水帳</h2><p class="muted">入庫／出庫／調整；入庫會更新品項數量與最後異動時間</p></div>
                 <button id="btnNewLedger" class="btn btn-primary" type="button">新增一筆</button>
               </div>
               <div class="table-wrap">
@@ -178,7 +175,7 @@
             <!-- 訂單 -->
             <div id="v2-orders" class="v2-panel" hidden>
               <div class="section-head">
-                <div><h2 class="h2">訂單（收入＆毛利）</h2><p class="muted">整單成本 cogs_total；gross_profit / gross_margin 自動計算</p></div>
+                <div><h2 class="h2">訂單（收入＆毛利）</h2><p class="muted">整單成本；毛利與毛利率自動計算</p></div>
                 <button id="btnNewOrder" class="btn btn-primary" type="button">新增訂單</button>
               </div>
               <div class="table-wrap">
@@ -214,7 +211,7 @@
                   <div class="field"><label for="orderTotalSale">售價合計</label><input id="orderTotalSale" type="number" min="0" value="0" /></div>
                   <div class="field"><label for="orderShipping">運費收入</label><input id="orderShipping" type="number" min="0" value="0" /></div>
                   <div class="field"><label for="orderDiscount">折扣</label><input id="orderDiscount" type="number" min="0" value="0" /></div>
-                  <div class="field"><label for="orderCogs">整單成本 cogs_total</label><input id="orderCogs" type="number" min="0" value="0" /></div>
+                  <div class="field"><label for="orderCogs">整單成本</label><input id="orderCogs" type="number" min="0" value="0" /></div>
                   <div class="field"><label for="orderPayment">付款方式</label><select id="orderPayment"><option value="cash">現金</option><option value="transfer">轉帳</option><option value="card">刷卡</option></select></div>
                   <div class="field"><label for="orderStatus">狀態</label><select id="orderStatus"><option value="pending">待處理</option><option value="paid">已付款</option><option value="shipped">已出貨</option><option value="completed">已完成</option><option value="refunded">已退貨</option></select></div>
                   <div class="field full"><label>毛利（自動）</label><div id="orderGrossProfitDisplay" class="muted">-</div></div>
@@ -227,7 +224,7 @@
             <!-- 支出 -->
             <div id="v2-expenses" class="v2-panel" hidden>
               <div class="section-head">
-                <div><h2 class="h2">支出</h2><p class="muted">COGS / OPEX / OTHER</p></div>
+                <div><h2 class="h2">支出</h2><p class="muted">銷貨成本／營業費用／其他</p></div>
                 <button id="btnNewExpense" class="btn btn-primary" type="button">新增支出</button>
               </div>
               <div class="table-wrap">
@@ -260,17 +257,18 @@
                 <div id="reportWeekly" class="two-col"></div>
               </div>
               <div class="card" style="margin-bottom:12px">
-                <h3 class="h3">庫齡排行 Top 20（idle_days 最大）</h3>
+                <h3 class="h3">庫齡排行前 20（滯留天數最多）</h3>
                 <div id="reportTop20" class="table-wrap"></div>
               </div>
               <div class="card" style="margin-bottom:12px">
-                <h3 class="h3">待整理 / 待測（TESTING, PREP）</h3>
+                <h3 class="h3">待整理／待測</h3>
                 <div id="reportTestingPrep" class="table-wrap"></div>
               </div>
               <div class="card" style="margin-bottom:12px">
-                <h3 class="h3">待出清（CLEARANCE 或 PC/GPU 滯留&gt;30 天）</h3>
+                <h3 class="h3">待出清（電腦／顯卡滯留超過 30 天）</h3>
                 <div id="reportClearance" class="table-wrap"></div>
               </div>
+            </div>
             </div>
           </section>
 

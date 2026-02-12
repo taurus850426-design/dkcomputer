@@ -797,7 +797,8 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
   padding: 28px 0 40px;
 }
 .admin-shell .container{
-  --container: 1320px;
+  /* 後台頁面：避免超寬螢幕太空，閱讀更集中 */
+  --container: 1080px;
 }
 .admin-head{
   display:flex;
@@ -1017,6 +1018,13 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
   background: rgba(0,0,0,0.04);
   display: flex; align-items: center; justify-content: center;
   font-size: 12px;
+}
+
+.table-wrap{
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table{

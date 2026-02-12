@@ -779,7 +779,6 @@
       editingV2ItemId = id || null;
       const item = id ? DK.findItemById(id) : null;
       const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
-      set("itemBrand", "");
       set("itemSku", item ? item.sku : "ITEM-" + Date.now().toString(36).toUpperCase());
       set("itemCategory", item ? item.category : "PC");
       set("itemName", item ? item.name : "");
@@ -792,7 +791,6 @@
       set("itemPriceFloor", item ? item.price_floor ?? "" : "");
       set("itemInboundDate", item && item.inbound_date ? item.inbound_date.slice(0, 10) : todayStr());
       set("itemReorderPoint", item ? (item.reorder_point ?? 0) : 0);
-      set("itemLocation", item ? item.location ?? "" : "");
       set("itemNotes", item ? item.notes ?? "" : "");
       const skuEl = document.getElementById("itemSku");
       if (skuEl) skuEl.readOnly = true;
@@ -982,12 +980,13 @@
           const combined = [qrText, barcodeText].filter(Boolean).join(" ").trim();
           const barcodeOnly = combined.replace(/\s/g, "");
           const isBarcodeOnly = /^\d{12,14}$/.test(barcodeOnly);
-          const brandEl = document.getElementById("itemBrand");
           const nameEl = document.getElementById("itemName");
           const specEl = document.getElementById("itemSpec");
           function fillForm(parsed) {
-            if (brandEl) brandEl.value = (parsed.brand != null && parsed.brand !== undefined) ? parsed.brand : "";
-            if (nameEl) nameEl.value = (parsed.name != null && parsed.name !== undefined) ? parsed.name : "";
+            const parsedBrand = (parsed && parsed.brand != null) ? String(parsed.brand).trim() : "";
+            const parsedName = (parsed && parsed.name != null) ? String(parsed.name).trim() : "";
+            const mergedName = (parsedBrand ? (parsedBrand + " " + parsedName) : parsedName).trim();
+            if (nameEl) nameEl.value = mergedName;
             if (specEl) specEl.value = (parsed.spec != null && parsed.spec !== undefined) ? parsed.spec : (barcodeText ? "條碼:" + barcodeText : "");
           }
           if (isBarcodeOnly) {
@@ -997,7 +996,7 @@
                 fillForm(parsed);
                 setItemScanStatus("已從網路帶入，請核對後儲存");
               } else {
-                fillForm({ brand: "", name: "", spec: "條碼:" + barcodeOnly });
+              fillForm({ brand: "", name: "", spec: "條碼:" + barcodeOnly });
                 setItemScanStatus("僅辨識到條碼，網路查無商品，請手動輸入名稱與規格");
               }
             }).catch(function () {
@@ -1033,10 +1032,8 @@
       reader.readAsDataURL(file);
     }
     document.getElementById("itemSave")?.addEventListener("click", () => {
-      const brand = String(document.getElementById("itemBrand")?.value || "").trim();
       const sku = String(document.getElementById("itemSku")?.value || "").trim().toUpperCase();
-      const nameRaw = String(document.getElementById("itemName")?.value || "").trim();
-      const name = brand ? brand + " " + nameRaw : nameRaw;
+      const name = String(document.getElementById("itemName")?.value || "").trim();
       if (!sku) return v2Show(itemMsg, "SKU 必填");
       if (!name) return v2Show(itemMsg, "名稱必填");
       const items = DK.getItems();
@@ -1056,7 +1053,6 @@
         price_floor: parseFloat(document.getElementById("itemPriceFloor")?.value) || null,
         inbound_date: document.getElementById("itemInboundDate")?.value || null,
         reorder_point: Math.max(0, parseInt(document.getElementById("itemReorderPoint")?.value, 10) || 0),
-        location: document.getElementById("itemLocation")?.value || "",
         notes: document.getElementById("itemNotes")?.value || "",
         updated_at: nowISO(),
       };
