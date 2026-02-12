@@ -216,7 +216,6 @@
     var model = String(el("recModel").value || "").trim();
     var spec = String(el("recSpec").value || "").trim();
     var baseSku = String(el("recSku").value || "").trim() || suggestSKU({ category: category, sub_type: subType, brand: brand, model: model, spec: spec });
-    const DK = window.DK;
     var existing = DK && DK.findItemBySku ? DK.findItemBySku(baseSku) : null;
     var sku = existing ? baseSku : ensureUniqueSKU(baseSku);
     el("recSku").value = sku;
@@ -242,13 +241,13 @@
     }
 
     const items = DK.getItems();
-    const existing = DK.findItemBySku(sku);
+    const existingItem = DK.findItemBySku(sku);
     const now = nowISO();
 
-    if (existing) {
+    if (existingItem) {
       const inQty = qty;
       const result = DK.addLedgerEntry({
-        item_id: existing.id,
+        item_id: existingItem.id,
         type: "IN",
         qty: inQty,
         unit_cost: unitCost,
@@ -262,7 +261,7 @@
         return;
       }
       const totalCost = inQty * unitCost;
-      showSummary("已入庫：SKU " + sku + "，+" + inQty + " 件，成本小計 " + (totalCost ? "NT$ " + totalCost : "0") + "。品項現有數量 " + (existing.qty_on_hand + inQty) + "。");
+      showSummary("已入庫：SKU " + sku + "，+" + inQty + " 件，成本小計 " + (totalCost ? "NT$ " + totalCost : "0") + "。品項現有數量 " + (existingItem.qty_on_hand + inQty) + "。");
     } else {
       const newItem = {
         id: "i-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9),
