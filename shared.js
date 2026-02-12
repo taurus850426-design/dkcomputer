@@ -1047,7 +1047,6 @@ function applyConfigToHomePage() {
     document.getElementById("lineMainBtn"),
     document.getElementById("lineStickyBtn"),
     document.getElementById("navLineBtn"),
-    document.getElementById("lineFloatBtn"),
     document.getElementById("lineCtaBlockBtn"),
   ].filter(Boolean);
 

@@ -41,7 +41,7 @@
         <div class="container container-form">
           <div class="page-head">
             <h1 class="h1">不知道怎麼選？</h1>
-            <p class="lead muted">填完表單，加 LINE 傳給我。客人填完，你已經贏一半。</p>
+            <p class="lead muted">填完表單會自動複製你的需求並開啟 LINE，請在對話框貼上後傳送給我們。</p>
           </div>
 
           <form id="demandForm" class="form-card">
@@ -87,13 +87,40 @@
               <label>有沒有舊電腦</label>
               <div class="radio-row">
                 <label class="radio-wrap">
-                  <input type="radio" name="oldPC" value="有" />
+                  <input type="radio" name="oldPC" value="有" id="oldPCYes" />
                   <span>有</span>
                 </label>
                 <label class="radio-wrap">
-                  <input type="radio" name="oldPC" value="沒有" checked />
+                  <input type="radio" name="oldPC" value="沒有" id="oldPCNo" checked />
                   <span>沒有</span>
                 </label>
+              </div>
+            </div>
+
+            <div id="oldPcSpecBlock" class="old-pc-spec-block" hidden>
+              <div class="field">
+                <label class="fieldset-label">現有電腦配備規格</label>
+                <p class="muted" style="font-size:13px; margin:0 0 12px;">有舊電腦可填以下欄位，方便估價或升級建議（選填）</p>
+              </div>
+              <div class="field">
+                <label for="specCpu">CPU</label>
+                <input type="text" id="specCpu" placeholder="例：i5-8400、R5 3600" />
+              </div>
+              <div class="field">
+                <label for="specRam">記憶體</label>
+                <input type="text" id="specRam" placeholder="例：8G、16G DDR4" />
+              </div>
+              <div class="field">
+                <label for="specGpu">顯卡</label>
+                <input type="text" id="specGpu" placeholder="例：GTX 1060、內顯、無" />
+              </div>
+              <div class="field">
+                <label for="specStorage">硬碟／SSD</label>
+                <input type="text" id="specStorage" placeholder="例：256G SSD + 1T HDD" />
+              </div>
+              <div class="field">
+                <label for="specOther">其他（主機板／電源／機殼等）</label>
+                <input type="text" id="specOther" placeholder="例：B360、450W、可沿用機殼" />
               </div>
             </div>
 
@@ -108,7 +135,7 @@
             </div>
 
             <div class="form-actions">
-              <button type="submit" class="btn btn-primary btn-lg">填完，加 LINE 傳送</button>
+              <button type="submit" class="btn btn-primary btn-lg">複製需求並開啟 LINE（請在對話框貼上後傳送）</button>
             </div>
           </form>
         </div>
@@ -131,7 +158,6 @@
       </div>
     </footer>
 
-    <a id="lineFloatBtn" class="line-float-btn" href="#" target="_blank" rel="noreferrer" aria-label="加 LINE">加 LINE</a>
     <script src="./shared.js?v=20260201"></script>
     <script src="./form.js?v=20260201"></script>
   </body>
