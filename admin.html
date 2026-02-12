@@ -101,7 +101,6 @@
                 <thead>
                   <tr>
                     <th style="width:2.5em"><input type="checkbox" id="itemsSelectAll" title="全選/取消全選" /></th>
-                    <th>SKU</th>
                     <th>名稱</th>
                     <th>品類</th>
                     <th>狀態</th>
@@ -123,7 +122,6 @@
             <div id="itemEditor" class="card" style="margin-top:12px" hidden>
               <h3 class="h3">新增 / 編輯品項</h3>
               <div class="form-grid">
-                <div class="field"><label for="itemSku">SKU（系統自動）</label><input id="itemSku" type="text" placeholder="系統自動帶入" /></div>
                 <div class="field"><label for="itemCategory">品類</label><select id="itemCategory"><option value="PC">電腦</option><option value="GPU">顯卡</option><option value="PART">零件</option><option value="CONSUMABLE">耗材</option></select></div>
                 <div class="field full"><label for="itemName">名稱</label><input id="itemName" type="text" placeholder="型號或產品名稱" /></div>
                 <div class="field full"><label for="itemSpec">規格</label><input id="itemSpec" type="text" placeholder="例：480GB、3060Ti 8G" /></div>
@@ -203,7 +201,7 @@
                     </div>
                     <div class="table-wrap" style="margin-top:8px">
                       <table class="table">
-                        <thead><tr><th>SKU / 名稱</th><th>數量</th><th>單價</th><th>成本小計</th><th style="width:60px"></th></tr></thead>
+                        <thead><tr><th>名稱</th><th>數量</th><th>單價</th><th>成本小計</th><th style="width:60px"></th></tr></thead>
                         <tbody id="orderLineTbody"></tbody>
                       </table>
                     </div>

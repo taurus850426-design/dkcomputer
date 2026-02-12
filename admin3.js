@@ -749,7 +749,6 @@
         const alertText = alert ? alert.message : "-";
         return `<tr>
           <td><input type="checkbox" class="item-row-cb" data-id="${v2Esc(x.id)}" /></td>
-          <td class="nowrap">${v2Esc(x.sku)}</td>
           <td>${v2Esc(x.name)}</td>
           <td>${v2Esc(CAT_LABEL[x.category] || x.category)}</td>
           <td>${v2Esc(STATUS_LABEL[x.status] || x.status)}</td>
@@ -775,11 +774,18 @@
       }
     }
 
+    function generateUniqueSKU() {
+      let base = "ITEM-" + Date.now().toString(36).toUpperCase();
+      let sku = base;
+      let n = 0;
+      while (DK.findItemBySku(sku)) sku = base + "-" + (++n);
+      return sku;
+    }
+
     function openV2ItemEditor(id) {
       editingV2ItemId = id || null;
       const item = id ? DK.findItemById(id) : null;
       const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
-      set("itemSku", item ? item.sku : "ITEM-" + Date.now().toString(36).toUpperCase());
       set("itemCategory", item ? item.category : "PC");
       set("itemName", item ? item.name : "");
       set("itemSpec", item ? item.spec : "");
@@ -792,8 +798,6 @@
       set("itemInboundDate", item && item.inbound_date ? item.inbound_date.slice(0, 10) : todayStr());
       set("itemReorderPoint", item ? (item.reorder_point ?? 0) : 0);
       set("itemNotes", item ? item.notes ?? "" : "");
-      const skuEl = document.getElementById("itemSku");
-      if (skuEl) skuEl.readOnly = true;
       const itemDeleteBtn = document.getElementById("itemDelete");
       if (itemDeleteBtn) itemDeleteBtn.hidden = !item;
       if (itemEditor) itemEditor.hidden = false;
@@ -1032,14 +1036,11 @@
       reader.readAsDataURL(file);
     }
     document.getElementById("itemSave")?.addEventListener("click", () => {
-      const sku = String(document.getElementById("itemSku")?.value || "").trim().toUpperCase();
       const name = String(document.getElementById("itemName")?.value || "").trim();
-      if (!sku) return v2Show(itemMsg, "SKU 必填");
       if (!name) return v2Show(itemMsg, "名稱必填");
       const items = DK.getItems();
-      const existing = items.find((x) => x.sku.toUpperCase() === sku);
-      if (!editingV2ItemId && existing) return v2Show(itemMsg, "SKU 已存在");
-      if (editingV2ItemId && existing && existing.id !== editingV2ItemId) return v2Show(itemMsg, "SKU 已存在");
+      const editingItem = editingV2ItemId ? DK.findItemById(editingV2ItemId) : null;
+      const sku = editingItem ? editingItem.sku : generateUniqueSKU();
       const payload = {
         sku,
         category: document.getElementById("itemCategory")?.value,
@@ -1116,7 +1117,7 @@
     }
     document.getElementById("btnNewLedger")?.addEventListener("click", () => {
       const sel = document.getElementById("ledgerItemId");
-      if (sel) sel.innerHTML = DK.getItems().map((i) => `<option value="${v2Esc(i.id)}">${v2Esc(i.sku)} ${v2Esc(i.name)}</option>`).join("");
+      if (sel) sel.innerHTML = DK.getItems().map((i) => `<option value="${v2Esc(i.id)}">${v2Esc(i.name)}</option>`).join("");
       document.getElementById("ledgerType").value = "IN";
       document.getElementById("ledgerQty").value = "1";
       document.getElementById("ledgerUnitCost").value = "";
@@ -1167,14 +1168,14 @@
     function fillOrderLineItemSelect() {
       if (!orderLineItemSelect) return;
       const items = DK.getItems();
-      orderLineItemSelect.innerHTML = '<option value="">— 選擇品項 —</option>' + items.map((i) => `<option value="${v2Esc(i.id)}">${v2Esc(i.sku)} ${v2Esc(i.name || "")}</option>`).join("");
+      orderLineItemSelect.innerHTML = '<option value="">— 選擇品項 —</option>' + items.map((i) => `<option value="${v2Esc(i.id)}">${v2Esc(i.name || "")}</option>`).join("");
     }
     function renderOrderLineTbody() {
       if (!orderLineTbody) return;
       orderLineTbody.innerHTML = orderLineItems.map((line, i) => {
         const cogsSub = (Number(line.cost_unit) || 0) * (Number(line.qty) || 0);
         const priceSub = (Number(line.unit_price) || 0) * (Number(line.qty) || 0);
-        return `<tr><td>${v2Esc(line.sku)} ${v2Esc(line.name || "")}</td><td>${line.qty}</td><td>${v2FmtNum(line.unit_price)}</td><td>${v2FmtNum(cogsSub)}</td><td><button type="button" class="btn btn-ghost btn-sm order-line-remove" data-i="${i}">移除</button></td></tr>`;
+        return `<tr><td>${v2Esc(line.name || "")}</td><td>${line.qty}</td><td>${v2FmtNum(line.unit_price)}</td><td>${v2FmtNum(cogsSub)}</td><td><button type="button" class="btn btn-ghost btn-sm order-line-remove" data-i="${i}">移除</button></td></tr>`;
       }).join("");
       orderLineTbody.querySelectorAll(".order-line-remove").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -1329,13 +1330,13 @@
       if (elWeekly) elWeekly.innerHTML = `<div><strong>本週 ${w.weekFrom} ~ ${w.weekTo}</strong></div><div>訂單毛利合計：NT$ ${v2FmtNum(w.ordersProfit)}（${w.ordersCount} 筆）</div><div>支出合計：NT$ ${v2FmtNum(w.expensesTotal)}（${w.expensesCount} 筆）</div><div>庫存總成本：NT$ ${v2FmtNum(w.inventoryValue)}</div>`;
       const top20 = DK.reportTop20IdleDays();
       const elTop20 = document.getElementById("reportTop20");
-      if (elTop20) elTop20.innerHTML = top20.length ? `<table class="table"><thead><tr><th>SKU</th><th>名稱</th><th>品類</th><th>滯留天</th><th>庫存價值</th></tr></thead><tbody>${top20.map((x) => `<tr><td>${v2Esc(x.sku)}</td><td>${v2Esc(x.name)}</td><td>${v2Esc(x.category)}</td><td>${x.idle_days}</td><td>${v2FmtNum(x.inventory_value)}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無資料</p>";
+      if (elTop20) elTop20.innerHTML = top20.length ? `<table class="table"><thead><tr><th>名稱</th><th>品類</th><th>滯留天</th><th>庫存價值</th></tr></thead><tbody>${top20.map((x) => `<tr><td>${v2Esc(x.name)}</td><td>${v2Esc(x.category)}</td><td>${x.idle_days}</td><td>${v2FmtNum(x.inventory_value)}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無資料</p>";
       const testingPrep = DK.reportTestingPrep();
       const elTesting = document.getElementById("reportTestingPrep");
-      if (elTesting) elTesting.innerHTML = testingPrep.length ? `<table class="table"><thead><tr><th>SKU</th><th>名稱</th><th>狀態</th><th>數量</th></tr></thead><tbody>${testingPrep.map((x) => `<tr><td>${v2Esc(x.sku)}</td><td>${v2Esc(x.name)}</td><td>${v2Esc(STATUS_LABEL[x.status] || x.status)}</td><td>${x.qty_on_hand}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無</p>";
+      if (elTesting) elTesting.innerHTML = testingPrep.length ? `<table class="table"><thead><tr><th>名稱</th><th>狀態</th><th>數量</th></tr></thead><tbody>${testingPrep.map((x) => `<tr><td>${v2Esc(x.name)}</td><td>${v2Esc(STATUS_LABEL[x.status] || x.status)}</td><td>${x.qty_on_hand}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無</p>";
       const clearance = DK.reportClearance();
       const elClear = document.getElementById("reportClearance");
-      if (elClear) elClear.innerHTML = clearance.length ? `<table class="table"><thead><tr><th>SKU</th><th>名稱</th><th>品類</th><th>滯留天</th><th>庫存價值</th></tr></thead><tbody>${clearance.map((x) => `<tr><td>${v2Esc(x.sku)}</td><td>${v2Esc(x.name)}</td><td>${v2Esc(x.category)}</td><td>${x.idle_days}</td><td>${v2FmtNum(x.inventory_value)}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無</p>";
+      if (elClear) elClear.innerHTML = clearance.length ? `<table class="table"><thead><tr><th>名稱</th><th>品類</th><th>滯留天</th><th>庫存價值</th></tr></thead><tbody>${clearance.map((x) => `<tr><td>${v2Esc(x.name)}</td><td>${v2Esc(x.category)}</td><td>${x.idle_days}</td><td>${v2FmtNum(x.inventory_value)}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無</p>";
     }
 
     window.__adminV2Refresh = function () {

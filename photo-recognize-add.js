@@ -153,15 +153,12 @@
   }
 
   // ---------- 表單填寫與顯示 ----------
-  function fillForm(suggestion, ocrText, skuSuggestion) {
+  function fillForm(suggestion, ocrText) {
     el("recCategory").value = suggestion.category || "PART";
     el("recSubType").value = suggestion.sub_type || "";
     el("recBrand").value = suggestion.brand || "";
     el("recModel").value = suggestion.model || "";
     el("recSpec").value = suggestion.spec || "";
-    el("recSku").value = skuSuggestion || "";
-    var skuInput = el("recSku");
-    if (skuInput) skuInput.readOnly = true;
     el("recCondition").value = "USED";
     el("recStatusSel").value = "TESTING";
     el("recQty").value = "1";
@@ -215,10 +212,9 @@
     var brand = String(el("recBrand").value || "").trim();
     var model = String(el("recModel").value || "").trim();
     var spec = String(el("recSpec").value || "").trim();
-    var baseSku = String(el("recSku").value || "").trim() || suggestSKU({ category: category, sub_type: subType, brand: brand, model: model, spec: spec });
+    var baseSku = suggestSKU({ category: category, sub_type: subType, brand: brand, model: model, spec: spec });
     var existing = DK && DK.findItemBySku ? DK.findItemBySku(baseSku) : null;
     var sku = existing ? baseSku : ensureUniqueSKU(baseSku);
-    el("recSku").value = sku;
     const name = brand ? brand + " " + model : model || "未命名";
     const qty = Math.max(1, parseInt(el("recQty").value, 10) || 1);
     const unitCost = parseFloat(el("recCost").value) || 0;
@@ -261,7 +257,7 @@
         return;
       }
       const totalCost = inQty * unitCost;
-      showSummary("已入庫：SKU " + sku + "，+" + inQty + " 件，成本小計 " + (totalCost ? "NT$ " + totalCost : "0") + "。品項現有數量 " + (existingItem.qty_on_hand + inQty) + "。");
+      showSummary("已入庫：品項 " + (existingItem.name || sku) + "，+" + inQty + " 件，成本小計 " + (totalCost ? "NT$ " + totalCost : "0") + "。現有數量 " + (existingItem.qty_on_hand + inQty) + "。");
     } else {
       const newItem = {
         id: "i-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9),
@@ -304,7 +300,7 @@
         return;
       }
       const totalCost = qty * unitCost;
-      showSummary("已新增品項：SKU " + sku + "，" + name + "，數量 " + qty + "，成本小計 " + (totalCost ? "NT$ " + totalCost : "0") + "。");
+      showSummary("已新增品項：" + name + "，數量 " + qty + "，成本小計 " + (totalCost ? "NT$ " + totalCost : "0") + "。");
     }
   }
 
@@ -315,8 +311,7 @@
       return;
     }
     var suggestion = ruleEngine(text);
-    var skuSuggestion = suggestSKU(suggestion);
-    fillForm(suggestion, text, skuSuggestion);
+    fillForm(suggestion, text);
     setStatus("已依文字重新判斷，請確認表單後儲存。");
   }
 
@@ -345,8 +340,7 @@
           el("ocrText").value = trimmed;
           el("ocrTextBlock").hidden = false;
           var suggestion = ruleEngine(trimmed);
-          var skuSuggestion = suggestSKU(suggestion);
-          fillForm(suggestion, trimmed, skuSuggestion);
+          fillForm(suggestion, trimmed);
           setStatus("辨識完成，請確認系統判斷結果後儲存。");
         })
         .catch(function (err) {
