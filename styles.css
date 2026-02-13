@@ -1052,6 +1052,9 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
 .table .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
 .table .nowrap{ white-space: nowrap; }
 .table .row-actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+/* 庫存品項表格：滑鼠移過該列反白，方便辨識游標位置 */
+#itemsTbody tr:hover{ background: rgba(17,24,39,0.05); }
+#itemsTbody tr:hover td{ background: transparent; }
 
 @media (max-width: 900px){
   .form-grid{ grid-template-columns: 1fr; }
