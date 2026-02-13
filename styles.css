@@ -232,6 +232,29 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .old-pc-spec-block .field:last-of-type{ margin-bottom: 0; }
 .fieldset-label{ font-weight: 600; color: var(--text); }
 .form-actions{ margin-top: 24px; }
+
+/* 新增/編輯品項彈出視窗 */
+.item-editor-modal{
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0,0,0,0.45);
+  overflow-y: auto;
+}
+.item-editor-modal[hidden]{ display: none !important; }
+.item-editor-modal .item-editor-card{
+  margin: auto;
+  max-height: 90vh;
+  overflow-y: auto;
+  max-width: 520px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
 .radio-row{ display: flex; gap: 20px; flex-wrap: wrap; }
 .radio-wrap{ display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .radio-wrap input{ width: auto; }

@@ -722,11 +722,12 @@
     const itemsTbody = document.getElementById("itemsTbody");
     const itemsSearch = document.getElementById("itemsSearch");
     const itemsCategory = document.getElementById("itemsCategory");
+    const itemsCategoryQuick = document.getElementById("itemsCategoryQuick");
     const itemsStatus = document.getElementById("itemsStatus");
+    const itemEditorModal = document.getElementById("itemEditorModal");
     const itemEditor = document.getElementById("itemEditor");
     const itemMsg = document.getElementById("itemMsg");
     let editingV2ItemId = null;
-    const CAT_LABEL = { PC: "電腦", GPU: "顯卡", PART: "零件", CONSUMABLE: "耗材" };
     const STATUS_LABEL = { READY: "可售", TESTING: "待測", PREP: "待整理", RESERVED: "保留", CLEARANCE: "待出清", SCRAP: "報廢拆料" };
     const CONDITION_LABEL = { NEW: "全新", USED: "二手", REFURB: "整新" };
     const LEDGER_TYPE_LABEL = { IN: "入庫", OUT: "出庫", ADJUST: "調整" };
@@ -734,6 +735,27 @@
     const ORDER_STATUS_LABEL = { pending: "待處理", paid: "已付款", shipped: "已出貨", completed: "已完成", refunded: "已退貨" };
     const ORDER_PAYMENT_LABEL = { cash: "現金", transfer: "轉帳", card: "刷卡" };
     const EXPENSE_TYPE_LABEL = { COGS: "銷貨成本", OPEX: "營業費用", OTHER: "其他" };
+
+    function fillV2CategoryOptions() {
+      const cats = DK.getInventoryCategories ? DK.getInventoryCategories() : ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼"];
+      if (itemsCategory) {
+        itemsCategory.innerHTML = "<option value=\"\">全部品類</option>" + cats.map((c) => "<option value=\"" + v2Esc(c) + "\">" + v2Esc(c) + "</option>").join("");
+      }
+      const itemCategorySelect = document.getElementById("itemCategory");
+      if (itemCategorySelect) itemCategorySelect.innerHTML = cats.map((c) => "<option value=\"" + v2Esc(c) + "\">" + v2Esc(c) + "</option>").join("");
+      if (itemsCategoryQuick) {
+        itemsCategoryQuick.innerHTML = "<button type=\"button\" class=\"btn btn-ghost btn-sm seg seg-cat active\" data-cat=\"\">全部</button>" + cats.map((c) => "<button type=\"button\" class=\"btn btn-ghost btn-sm seg seg-cat\" data-cat=\"" + v2Esc(c) + "\">" + v2Esc(c) + "</button>").join("");
+        itemsCategoryQuick.querySelectorAll(".seg-cat").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const cat = btn.getAttribute("data-cat") || "";
+            if (itemsCategory) itemsCategory.value = cat;
+            itemsCategoryQuick.querySelectorAll(".seg-cat").forEach((b) => b.classList.remove("active"));
+            btn.classList.add("active");
+            renderV2Items();
+          });
+        });
+      }
+    }
 
     function renderV2Items() {
       if (!itemsTbody) return;
@@ -750,7 +772,8 @@
         return `<tr>
           <td><input type="checkbox" class="item-row-cb" data-id="${v2Esc(x.id)}" /></td>
           <td>${v2Esc(x.name)}</td>
-          <td>${v2Esc(CAT_LABEL[x.category] || x.category)}</td>
+          <td class="muted small">${v2Esc(x.spec || "")}</td>
+          <td>${v2Esc(x.category || "")}</td>
           <td>${v2Esc(STATUS_LABEL[x.status] || x.status)}</td>
           <td>${x.qty_on_hand}</td>
           <td>${v2FmtNum(x.cost_unit)}</td>
@@ -772,6 +795,8 @@
         selectAllEl.checked = false;
         selectAllEl.indeterminate = false;
       }
+      const catVal = itemsCategory?.value || "";
+      itemsCategoryQuick?.querySelectorAll(".seg-cat").forEach((b) => b.classList.toggle("active", (b.getAttribute("data-cat") || "") === catVal));
     }
 
     function generateUniqueSKU() {
@@ -786,11 +811,11 @@
       editingV2ItemId = id || null;
       const item = id ? DK.findItemById(id) : null;
       const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
-      set("itemCategory", item ? item.category : "PC");
+      set("itemCategory", item ? item.category : (DK.getInventoryCategories && DK.getInventoryCategories()[0]) || "處理器");
       set("itemName", item ? item.name : "");
       set("itemSpec", item ? item.spec : "");
       set("itemCondition", item ? item.condition : "USED");
-      set("itemStatus", item ? item.status : "TESTING");
+      set("itemStatus", item ? item.status : "READY");
       set("itemQty", item ? item.qty_on_hand : 0);
       set("itemCost", item ? item.cost_unit : 0);
       set("itemPriceList", item ? item.price_list ?? "" : "");
@@ -800,18 +825,19 @@
       set("itemNotes", item ? item.notes ?? "" : "");
       const itemDeleteBtn = document.getElementById("itemDelete");
       if (itemDeleteBtn) itemDeleteBtn.hidden = !item;
-      if (itemEditor) itemEditor.hidden = false;
+      if (itemEditorModal) itemEditorModal.hidden = false;
       v2Hide(itemMsg);
     }
 
     function closeV2ItemEditor() {
-      if (itemEditor) itemEditor.hidden = true;
+      if (itemEditorModal) itemEditorModal.hidden = true;
       editingV2ItemId = null;
       v2Hide(itemMsg);
     }
 
     document.getElementById("btnNewItem")?.addEventListener("click", () => openV2ItemEditor(null));
     document.getElementById("itemCancel")?.addEventListener("click", closeV2ItemEditor);
+    itemEditorModal?.addEventListener("click", (e) => { if (e.target === itemEditorModal) closeV2ItemEditor(); });
     document.getElementById("itemDelete")?.addEventListener("click", () => {
       if (!editingV2ItemId) return;
       if (!confirm("確定要刪除此品項？刪除後無法復原。")) return;
@@ -1047,7 +1073,7 @@
         name,
         spec: document.getElementById("itemSpec")?.value || "",
         condition: document.getElementById("itemCondition")?.value || "USED",
-        status: document.getElementById("itemStatus")?.value || "TESTING",
+        status: document.getElementById("itemStatus")?.value || "READY",
         qty_on_hand: Math.max(0, parseInt(document.getElementById("itemQty")?.value, 10) || 0),
         cost_unit: parseFloat(document.getElementById("itemCost")?.value) || 0,
         price_list: parseFloat(document.getElementById("itemPriceList")?.value) || null,
@@ -1344,6 +1370,7 @@
       const name = (active && active.getAttribute("data-v2")) || "items";
       switchV2Tab(name);
     };
+    fillV2CategoryOptions();
     switchV2Tab("items");
   }
 

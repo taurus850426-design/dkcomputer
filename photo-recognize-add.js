@@ -152,15 +152,41 @@
       });
   }
 
+  function getCategoryOptions() {
+    return (window.DK && DK.getInventoryCategories && DK.getInventoryCategories()) || ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼"];
+  }
+
+  function mapSuggestionToCategory(suggestion) {
+    const opts = getCategoryOptions();
+    const sub = (suggestion.sub_type || "").toUpperCase();
+    const cat = (suggestion.category || "").toUpperCase();
+    if (sub && opts.includes("顯示卡") && (sub === "GPU")) return "顯示卡";
+    if (sub && opts.includes("處理器") && (sub === "CPU")) return "處理器";
+    if (sub && opts.includes("記憶體") && (sub === "RAM")) return "記憶體";
+    if (sub && opts.includes("硬碟") && (sub === "SSD" || sub === "HDD")) return "硬碟";
+    if (sub && opts.includes("電源供應器") && (sub === "PSU")) return "電源供應器";
+    if (sub && opts.includes("機殼") && (sub === "CASE")) return "機殼";
+    if ((sub === "MOTHERBOARD" || sub === "主機板") && opts.includes("主機板")) return "主機板";
+    if (cat === "GPU" && opts.includes("顯示卡")) return "顯示卡";
+    return opts[0] || "處理器";
+  }
+
+  function fillRecCategorySelect() {
+    const sel = el("recCategory");
+    if (!sel) return;
+    const opts = getCategoryOptions();
+    sel.innerHTML = opts.map(function (c) { return "<option value=\"" + c.replace(/"/g, "&quot;") + "\">" + c + "</option>"; }).join("");
+  }
+
   // ---------- 表單填寫與顯示 ----------
   function fillForm(suggestion, ocrText) {
-    el("recCategory").value = suggestion.category || "PART";
+    el("recCategory").value = mapSuggestionToCategory(suggestion);
     el("recSubType").value = suggestion.sub_type || "";
     el("recBrand").value = suggestion.brand || "";
     el("recModel").value = suggestion.model || "";
     el("recSpec").value = suggestion.spec || "";
     el("recCondition").value = "USED";
-    el("recStatusSel").value = "TESTING";
+    el("recStatusSel").value = "READY";
     el("recQty").value = "1";
     el("recCost").value = "0";
     el("recInboundDate").value = todayStr();
@@ -207,7 +233,7 @@
   // ---------- 儲存入庫：建立/更新 Item + Ledger IN ----------
   function savePhotoRecInbound() {
     var DK = window.DK;
-    var category = el("recCategory").value || "PART";
+    var category = el("recCategory").value || (getCategoryOptions()[0]) || "處理器";
     var subType = el("recSubType").value || "";
     var brand = String(el("recBrand").value || "").trim();
     var model = String(el("recModel").value || "").trim();
@@ -221,7 +247,7 @@
     const location = String(el("recLocation").value || "").trim();
     const notes = String(el("recNotes").value || "").trim();
     const condition = el("recCondition").value || "USED";
-    const status = el("recStatusSel").value || "TESTING";
+    const status = el("recStatusSel").value || "READY";
     const inboundDate = el("recInboundDate").value || todayStr();
     const reorderPoint = Math.max(0, parseInt(el("recReorderPoint") && el("recReorderPoint").value, 10) || 0);
     if (!name || name === "未命名") {
@@ -368,4 +394,5 @@
   el("recAgainBtn").addEventListener("click", showUploadZone);
 
   el("recInboundDate").value = todayStr();
+  fillRecCategorySelect();
 })();

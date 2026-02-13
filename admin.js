@@ -296,6 +296,26 @@
     }
   }
 
+  let currentInventoryCategories = [];
+
+  function renderInventoryCategoriesTable() {
+    const tbody = document.getElementById("inventoryCategoriesTbody");
+    const searchEl = document.getElementById("inventoryCategorySearch");
+    if (!tbody) return;
+    const q = (searchEl && searchEl.value || "").trim().toLowerCase();
+    const list = q ? currentInventoryCategories.filter(function (c) { return String(c).toLowerCase().includes(q); }) : currentInventoryCategories;
+    tbody.innerHTML = list.map(function (cat) {
+      return "<tr><td>" + DK.escapeHtml(cat) + "</td><td style=\"text-align:right\"><button type=\"button\" class=\"btn btn-ghost btn-sm btn-remove-inventory-cat\" data-cat=\"" + DK.escapeHtml(cat) + "\">移除</button></td></tr>";
+    }).join("");
+    tbody.querySelectorAll(".btn-remove-inventory-cat").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const cat = btn.getAttribute("data-cat");
+        currentInventoryCategories = currentInventoryCategories.filter(function (c) { return c !== cat; });
+        renderInventoryCategoriesTable();
+      });
+    });
+  }
+
   function loadSettingsForm() {
     const cfg = DK.getConfig();
     siteTitle.value = cfg.siteTitle ?? "";
@@ -311,6 +331,8 @@
     lineTplInput.value = cfg.line?.orderMessageTemplate ?? "";
     adminUserInput.value = cfg.admin?.username ?? "";
     adminPassInput.value = cfg.admin?.password ?? "";
+    currentInventoryCategories = (cfg.inventoryCategories && cfg.inventoryCategories.length) ? cfg.inventoryCategories.slice() : (DK.DEFAULT_CONFIG.inventoryCategories || []).slice();
+    renderInventoryCategoriesTable();
   }
 
   function saveSettings() {
@@ -342,6 +364,7 @@
         username: adminUserInput.value.trim() || "admin",
         password: adminPassInput.value.trim() || "admin123",
       },
+      inventoryCategories: currentInventoryCategories.slice(),
     };
     DK.saveConfig(next);
     hideMsg(settingsMsg);
@@ -1306,6 +1329,21 @@
   }
 
   saveSettingsBtn?.addEventListener("click", saveSettings);
+
+  const inventoryCategorySearch = document.getElementById("inventoryCategorySearch");
+  const newInventoryCategory = document.getElementById("newInventoryCategory");
+  const addInventoryCategoryBtn = document.getElementById("addInventoryCategoryBtn");
+  if (inventoryCategorySearch) inventoryCategorySearch.addEventListener("input", renderInventoryCategoriesTable);
+  if (addInventoryCategoryBtn && newInventoryCategory) {
+    addInventoryCategoryBtn.addEventListener("click", function () {
+      const name = newInventoryCategory.value.trim();
+      if (!name) return;
+      if (currentInventoryCategories.indexOf(name) >= 0) return;
+      currentInventoryCategories.push(name);
+      newInventoryCategory.value = "";
+      renderInventoryCategoriesTable();
+    });
+  }
   resetBtn?.addEventListener("click", () => {
     if (!confirm("確定要重置為預設？（設定 + 庫存 + 電腦/顯卡/記帳都會重置）")) return;
     resetAll();

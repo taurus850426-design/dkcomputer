@@ -45,13 +45,13 @@
               <span class="search-label">搜尋</span>
               <input id="itemsSearch" type="search" placeholder="編號／名稱／規格" autocomplete="off" />
             </label>
+            <div class="filters" style="flex-wrap: wrap; gap: 8px">
+              <span class="search-label" style="width: 100%">品類快速篩選</span>
+              <div id="itemsCategoryQuick" style="display: flex; flex-wrap: wrap; gap: 6px"></div>
+            </div>
             <div class="filters">
               <select id="itemsCategory">
                 <option value="">全部品類</option>
-                <option value="PC">PC</option>
-                <option value="GPU">GPU</option>
-                <option value="PART">PART</option>
-                <option value="CONSUMABLE">耗材</option>
               </select>
               <select id="itemsStatus">
                 <option value="">全部狀態</option>
@@ -69,6 +69,7 @@
               <thead>
                 <tr>
                   <th>名稱</th>
+                  <th>規格</th>
                   <th>品類</th>
                   <th>狀態</th>
                   <th>數量</th>
@@ -86,10 +87,11 @@
               <tbody id="itemsTbody"></tbody>
             </table>
           </div>
-          <div id="itemEditor" class="card" style="margin-top:12px" hidden>
-            <h3 class="h3">新增 / 編輯品項</h3>
+          <div id="itemEditorModal" class="item-editor-modal" hidden>
+            <div id="itemEditor" class="card item-editor-card" role="dialog" aria-modal="true" aria-labelledby="itemEditorTitle">
+            <h3 id="itemEditorTitle" class="h3">新增 / 編輯品項</h3>
             <div class="form-grid">
-              <div class="field"><label for="itemCategory">品類</label><select id="itemCategory"><option value="PC">PC</option><option value="GPU">GPU</option><option value="PART">PART</option><option value="CONSUMABLE">耗材</option></select></div>
+              <div class="field"><label for="itemCategory">品類</label><select id="itemCategory"></select></div>
               <div class="field full"><label for="itemName">名稱</label><input id="itemName" type="text" /></div>
               <div class="field full"><label for="itemSpec">規格</label><input id="itemSpec" type="text" placeholder="例：3060Ti 8G / i5-8400" /></div>
               <div class="field"><label for="itemCondition">成色</label><select id="itemCondition"><option value="NEW">全新</option><option value="USED">二手</option><option value="REFURB">整新</option></select></div>
@@ -108,6 +110,7 @@
               </div>
             </div>
             <div id="itemMsg" class="muted" hidden></div>
+            </div>
           </div>
         </section>
 

@@ -10,7 +10,6 @@
     expenses: "dk_v2_expenses",
   };
 
-  const ITEM_CATEGORIES = ["PC", "GPU", "PART", "CONSUMABLE"];
   const ITEM_CONDITIONS = ["NEW", "USED", "REFURB"];
   const ITEM_STATUSES = ["READY", "TESTING", "PREP", "RESERVED", "CLEARANCE", "SCRAP"];
   const LEDGER_TYPES = ["IN", "OUT", "ADJUST"];
@@ -114,29 +113,21 @@
     return getItems().map(enrichItem);
   }
 
-  // 規則引擎：放太久提醒 / 自動標記
+  // 規則引擎：放太久提醒 / 自動標記（品類由後台設定，這裡只依 耗材/其他 與滯留天數判斷）
   function getItemAlert(item) {
-    const cat = item.category;
+    const cat = String(item.category || "");
     const idle = itemIdleDays(item);
     const qty = Number(item.qty_on_hand) || 0;
     const reorder = Number(item.reorder_point) || 0;
 
-    if (cat === "CONSUMABLE") {
+    if (cat === "耗材") {
       if (reorder > 0 && qty < reorder) return { type: "REORDER", message: "低於警戒，需補貨" };
       return null;
     }
 
-    if (cat === "PART") {
-      if (idle != null && idle > RULES.PART_ALERT_DAYS) return { type: "PART_OLD", message: "建議組成品或降價" };
-      return null;
-    }
-
-    if (cat === "PC" || cat === "GPU") {
-      if (idle != null && idle >= RULES.PC_GPU_FORCE_CLEAR_DAYS) return { type: "FORCE_CLEAR", message: "強制出清" };
-      if (idle != null && idle > RULES.PC_GPU_CLEARANCE_DAYS) return { type: "CLEARANCE", message: "待出清" };
-      return null;
-    }
-
+    if (idle != null && idle >= RULES.PC_GPU_FORCE_CLEAR_DAYS) return { type: "FORCE_CLEAR", message: "強制出清" };
+    if (idle != null && idle > RULES.PC_GPU_CLEARANCE_DAYS) return { type: "CLEARANCE", message: "待出清" };
+    if (idle != null && idle > RULES.PART_ALERT_DAYS) return { type: "PART_OLD", message: "建議組成品或降價" };
     return null;
   }
 
@@ -322,12 +313,12 @@
     };
 
     const items = [
-      { id: id(), sku: "PC-001", category: "PC", name: "文書整新機", spec: "i5-8400/8G/256G", condition: "REFURB", status: "READY", qty_on_hand: 2, cost_unit: 4500, price_list: 6990, price_floor: 5500, inbound_date: past(45), last_moved_at: past(5) + "T10:00:00Z", reorder_point: 0, location: "A櫃", notes: "", created_at: nowISO(), updated_at: nowISO() },
-      { id: id(), sku: "PC-002", category: "PC", name: "遊戲主機", spec: "i5-12400/16G/512G/3060", condition: "REFURB", status: "TESTING", qty_on_hand: 1, cost_unit: 12000, price_list: 18900, price_floor: 15000, inbound_date: past(15), last_moved_at: past(15) + "T10:00:00Z", reorder_point: 0, location: "A櫃", notes: "", created_at: nowISO(), updated_at: nowISO() },
-      { id: id(), sku: "GPU-3060TI", category: "GPU", name: "RTX 3060 Ti 8G", spec: "3060Ti 8G", condition: "USED", status: "READY", qty_on_hand: 3, cost_unit: 5500, price_list: 7500, price_floor: 6500, inbound_date: past(35), last_moved_at: past(35) + "T10:00:00Z", reorder_point: 0, location: "顯卡區", notes: "", created_at: nowISO(), updated_at: nowISO() },
-      { id: id(), sku: "GPU-3070", category: "GPU", name: "RTX 3070 8G", spec: "3070 8G", condition: "USED", status: "CLEARANCE", qty_on_hand: 1, cost_unit: 8000, price_list: 9500, price_floor: 8500, inbound_date: past(50), last_moved_at: past(50) + "T10:00:00Z", reorder_point: 0, location: "顯卡區", notes: "", created_at: nowISO(), updated_at: nowISO() },
-      { id: id(), sku: "RAM-DDR4-8", category: "PART", name: "DDR4 8G", spec: "DDR4 2666 8G", condition: "USED", status: "READY", qty_on_hand: 10, cost_unit: 350, price_list: 499, price_floor: 400, inbound_date: past(20), last_moved_at: past(3) + "T10:00:00Z", reorder_point: 0, location: "零件區", notes: "", created_at: nowISO(), updated_at: nowISO() },
-      { id: id(), sku: "SSD-512", category: "CONSUMABLE", name: "SSD 512G SATA", spec: "512G SATA", condition: "NEW", status: "READY", qty_on_hand: 2, cost_unit: 650, price_list: 899, price_floor: 750, inbound_date: past(10), last_moved_at: past(10) + "T10:00:00Z", reorder_point: 3, location: "耗材區", notes: "", created_at: nowISO(), updated_at: nowISO() },
+      { id: id(), sku: "PC-001", category: "處理器", name: "文書整新機", spec: "i5-8400/8G/256G", condition: "REFURB", status: "READY", qty_on_hand: 2, cost_unit: 4500, price_list: 6990, price_floor: 5500, inbound_date: past(45), last_moved_at: past(5) + "T10:00:00Z", reorder_point: 0, location: "A櫃", notes: "", created_at: nowISO(), updated_at: nowISO() },
+      { id: id(), sku: "PC-002", category: "處理器", name: "遊戲主機", spec: "i5-12400/16G/512G/3060", condition: "REFURB", status: "TESTING", qty_on_hand: 1, cost_unit: 12000, price_list: 18900, price_floor: 15000, inbound_date: past(15), last_moved_at: past(15) + "T10:00:00Z", reorder_point: 0, location: "A櫃", notes: "", created_at: nowISO(), updated_at: nowISO() },
+      { id: id(), sku: "GPU-3060TI", category: "顯示卡", name: "RTX 3060 Ti 8G", spec: "3060Ti 8G", condition: "USED", status: "READY", qty_on_hand: 3, cost_unit: 5500, price_list: 7500, price_floor: 6500, inbound_date: past(35), last_moved_at: past(35) + "T10:00:00Z", reorder_point: 0, location: "顯卡區", notes: "", created_at: nowISO(), updated_at: nowISO() },
+      { id: id(), sku: "GPU-3070", category: "顯示卡", name: "RTX 3070 8G", spec: "3070 8G", condition: "USED", status: "CLEARANCE", qty_on_hand: 1, cost_unit: 8000, price_list: 9500, price_floor: 8500, inbound_date: past(50), last_moved_at: past(50) + "T10:00:00Z", reorder_point: 0, location: "顯卡區", notes: "", created_at: nowISO(), updated_at: nowISO() },
+      { id: id(), sku: "RAM-DDR4-8", category: "記憶體", name: "DDR4 8G", spec: "DDR4 2666 8G", condition: "USED", status: "READY", qty_on_hand: 10, cost_unit: 350, price_list: 499, price_floor: 400, inbound_date: past(20), last_moved_at: past(3) + "T10:00:00Z", reorder_point: 0, location: "零件區", notes: "", created_at: nowISO(), updated_at: nowISO() },
+      { id: id(), sku: "SSD-512", category: "硬碟", name: "SSD 512G SATA", spec: "512G SATA", condition: "NEW", status: "READY", qty_on_hand: 2, cost_unit: 650, price_list: 899, price_floor: 750, inbound_date: past(10), last_moved_at: past(10) + "T10:00:00Z", reorder_point: 3, location: "耗材區", notes: "", created_at: nowISO(), updated_at: nowISO() },
     ];
     saveItems(items);
 
@@ -357,7 +348,6 @@
   if (global.saveV2DataToSupabase) DK.saveV2DataToSupabase = global.saveV2DataToSupabase;
   Object.assign(DK, {
     KEYS,
-    ITEM_CATEGORIES,
     ITEM_CONDITIONS,
     ITEM_STATUSES,
     LEDGER_TYPES,

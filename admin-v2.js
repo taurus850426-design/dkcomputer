@@ -56,9 +56,33 @@
   const itemsSearch = document.getElementById("itemsSearch");
   const itemsCategory = document.getElementById("itemsCategory");
   const itemsStatus = document.getElementById("itemsStatus");
+  const itemEditorModal = document.getElementById("itemEditorModal");
   const itemEditor = document.getElementById("itemEditor");
   const itemMsg = document.getElementById("itemMsg");
   let editingItemId = null;
+
+  const itemsCategoryQuick = document.getElementById("itemsCategoryQuick");
+
+  function fillCategoryOptions() {
+    const cats = DK.getInventoryCategories ? DK.getInventoryCategories() : ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼"];
+    if (itemsCategory) {
+      itemsCategory.innerHTML = "<option value=\"\">全部品類</option>" + cats.map((c) => "<option value=\"" + esc(c) + "\">" + esc(c) + "</option>").join("");
+    }
+    const itemCategoryEl = document.getElementById("itemCategory");
+    if (itemCategoryEl) itemCategoryEl.innerHTML = cats.map((c) => "<option value=\"" + esc(c) + "\">" + esc(c) + "</option>").join("");
+    if (itemsCategoryQuick) {
+      itemsCategoryQuick.innerHTML = "<button type=\"button\" class=\"btn btn-ghost btn-sm seg seg-cat active\" data-cat=\"\">全部</button>" + cats.map((c) => "<button type=\"button\" class=\"btn btn-ghost btn-sm seg seg-cat\" data-cat=\"" + esc(c) + "\">" + esc(c) + "</button>").join("");
+      itemsCategoryQuick.querySelectorAll(".seg-cat").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const cat = btn.getAttribute("data-cat") || "";
+          if (itemsCategory) itemsCategory.value = cat;
+          itemsCategoryQuick.querySelectorAll(".seg-cat").forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          renderItems();
+        });
+      });
+    }
+  }
 
   function renderItems() {
     if (!itemsTbody) return;
@@ -75,6 +99,7 @@
       const alertText = alert ? alert.message : "-";
       return `<tr>
         <td>${esc(x.name)}</td>
+        <td class="muted small">${esc(x.spec || "")}</td>
         <td>${esc(x.category)}</td>
         <td>${esc(ITEM_STATUS_LABEL[x.status] || x.status)}</td>
         <td>${x.qty_on_hand}</td>
@@ -93,6 +118,8 @@
     itemsTbody.querySelectorAll(".btn-edit-item").forEach((btn) => {
       btn.addEventListener("click", () => openItemEditor(btn.getAttribute("data-id")));
     });
+    const catVal = itemsCategory?.value || "";
+    itemsCategoryQuick?.querySelectorAll(".seg-cat").forEach((b) => b.classList.toggle("active", (b.getAttribute("data-cat") || "") === catVal));
   }
 
   function generateUniqueSKU() {
@@ -106,11 +133,11 @@
   function openItemEditor(id) {
     editingItemId = id || null;
     const item = id ? DK.findItemById(id) : null;
-    document.getElementById("itemCategory").value = item ? item.category : "PC";
+    document.getElementById("itemCategory").value = item ? item.category : (DK.getInventoryCategories && DK.getInventoryCategories()[0]) || "處理器";
     document.getElementById("itemName").value = item ? item.name : "";
     document.getElementById("itemSpec").value = item ? item.spec : "";
     document.getElementById("itemCondition").value = item ? item.condition : "USED";
-    document.getElementById("itemStatus").value = item ? item.status : "TESTING";
+    document.getElementById("itemStatus").value = item ? item.status : "READY";
     document.getElementById("itemQty").value = item ? item.qty_on_hand : 0;
     document.getElementById("itemCost").value = item ? item.cost_unit : 0;
     document.getElementById("itemPriceList").value = item ? item.price_list ?? "" : "";
@@ -119,18 +146,19 @@
     document.getElementById("itemReorderPoint").value = item ? (item.reorder_point ?? 0) : 0;
     document.getElementById("itemLocation").value = item ? item.location ?? "" : "";
     document.getElementById("itemNotes").value = item ? item.notes ?? "" : "";
-    itemEditor.hidden = false;
+    if (itemEditorModal) itemEditorModal.hidden = false;
     hide(itemMsg);
   }
 
   function closeItemEditor() {
-    itemEditor.hidden = true;
+    if (itemEditorModal) itemEditorModal.hidden = true;
     editingItemId = null;
     hide(itemMsg);
   }
 
   document.getElementById("btnNewItem")?.addEventListener("click", () => openItemEditor(null));
   document.getElementById("itemCancel")?.addEventListener("click", closeItemEditor);
+  itemEditorModal?.addEventListener("click", (e) => { if (e.target === itemEditorModal) closeItemEditor(); });
   document.getElementById("itemSave")?.addEventListener("click", () => {
     const name = String(document.getElementById("itemName").value || "").trim();
     if (!name) return show(itemMsg, "名稱必填");
@@ -507,5 +535,6 @@
   }
 
   // Init
+  fillCategoryOptions();
   renderItems();
 })();

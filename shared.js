@@ -79,6 +79,8 @@ const DEFAULT_CONFIG = {
     username: "admin",
     password: "admin123",
   },
+  // 庫存品項品類（可於後台新增/移除）
+  inventoryCategories: ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼"],
 };
 
 const DEFAULT_INVENTORY = [
@@ -291,6 +293,13 @@ function saveConfig(nextConfig) {
   if (window.DK?.saveSiteConfigToSupabase) {
     window.DK.saveSiteConfigToSupabase(nextConfig).catch(() => {});
   }
+}
+
+function getInventoryCategories() {
+  const cfg = getConfig();
+  const list = cfg.inventoryCategories;
+  if (Array.isArray(list) && list.length > 0) return list;
+  return DEFAULT_CONFIG.inventoryCategories.slice();
 }
 
 function getInventory() {
@@ -1114,6 +1123,7 @@ window.DK = {
   DEFAULT_INVENTORY,
   getConfig,
   saveConfig,
+  getInventoryCategories,
   getInventory,
   saveInventory,
   fetchInventoryFromSupabase,
@@ -1247,4 +1257,3 @@ if (window.fetchV2DataFromSupabase) {
 if (document.getElementById("copyrightYear") || document.getElementById("lineMainBtn") || document.getElementById("navLineBtn")) {
   applyConfigToHomePage();
 }
-
