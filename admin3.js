@@ -177,7 +177,8 @@
     { key: "vga", category: "顯示卡", prefix: "VGA", selectId: "publishVga", customId: "publishVgaCustom", infoId: "publishVgaInfo", conditionId: "publishVgaCondition", remarkId: "publishVgaRemark", priceId: "publishVgaPrice" },
     { key: "psu", category: "電源供應器", prefix: "PSU", selectId: "publishPsu", customId: "publishPsuCustom", infoId: "publishPsuInfo", conditionId: "publishPsuCondition", remarkId: "publishPsuRemark", priceId: "publishPsuPrice" },
     { key: "case", category: "機殼", prefix: "CASE", selectId: "publishCase", customId: "publishCaseCustom", infoId: "publishCaseInfo", conditionId: "publishCaseCondition", remarkId: "publishCaseRemark", priceId: "publishCasePrice" },
-    { key: "monitor", category: "螢幕", prefix: "MON", selectId: "publishMonitor", customId: "publishMonitorCustom", infoId: "publishMonitorInfo", conditionId: "publishMonitorCondition", remarkId: "publishMonitorRemark", priceId: "publishMonitorPrice" },
+    { key: "peripherals", category: "周邊", prefix: "PER", selectId: "publishPeripherals", customId: "publishPeripheralsCustom", infoId: "publishPeripheralsInfo", conditionId: "publishPeripheralsCondition", remarkId: "publishPeripheralsRemark", priceId: "publishPeripheralsPrice" },
+    { key: "other", category: "其他", prefix: "OT", selectId: "publishOther", customId: "publishOtherCustom", infoId: "publishOtherInfo", conditionId: "publishOtherCondition", remarkId: "publishOtherRemark", priceId: "publishOtherPrice" },
     { key: "os", category: "作業系統", prefix: "OS", selectId: "publishOs", customId: "publishOsCustom", infoId: "publishOsInfo", conditionId: "publishOsCondition", remarkId: "publishOsRemark", priceId: "publishOsPrice" },
   ];
 
@@ -224,6 +225,7 @@
     }
     if (name === "publish") {
       if (publishFormCard) publishFormCard.hidden = true;
+      populatePublishSpecSelects();
       renderPublish();
     }
     if (name === "frontend") loadFrontendForm();
@@ -288,6 +290,21 @@
         renderPublishPhotoStrip();
       });
     });
+  }
+
+  function populatePublishSpecSelects() {
+    const items = (window.DK?.getItems?.() || []);
+    const esc = (s) => (window.DK?.escapeHtml ? window.DK.escapeHtml(String(s ?? "")) : String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c])));
+    for (const spec of PUBLISH_SPECS) {
+      const sel = document.getElementById(spec.selectId);
+      if (!sel) continue;
+      const matched = items.filter((i) => String(i.category || "").trim() === spec.category);
+      sel.innerHTML = '<option value="">— 請選擇 —</option>' + matched.map((i) => {
+        const label = i.spec ? `${i.name} (${i.spec})` : (i.name || "");
+        const cost = Number(i.cost_unit) || 0;
+        return `<option value="${esc(i.name || "")}" data-cost="${cost}">${esc(label)}</option>`;
+      }).join("");
+    }
   }
 
   function renderPublish() {
