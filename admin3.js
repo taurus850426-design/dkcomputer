@@ -276,9 +276,7 @@
     if (el) el.textContent = "NT$ " + (total || 0).toLocaleString("zh-TW");
   }
   function updatePublishSalePrice() {
-    const total = Object.values(publishSpecPrices).reduce((s, v) => s + (Number(v) || 0), 0);
-    const el = document.getElementById("publishPrice");
-    if (el) el.value = String(total || 0);
+    // 出售金額改為可自訂，由使用者自行輸入；預估成本僅供參考
   }
 
   function renderPublishPhotoStrip() {
