@@ -345,10 +345,11 @@ async function fetchInventoryFromSupabase() {
 }
 
 async function upsertInventoryItemToSupabase(item) {
-  if (!item || !item.id) return;
+  if (!item || !item.id) return { ok: true };
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.warn("[Supabase] 未設定 SUPABASE_URL 或 SUPABASE_ANON_KEY，上架僅存於本機，不會同步到 Supabase。請在 shared.js 填寫並重新部署。");
-    return;
+    const msg = "未設定 SUPABASE_URL 或 SUPABASE_ANON_KEY，上架僅存於本機。請在 shared.js 填寫並重新部署。";
+    console.warn("[Supabase]", msg);
+    return { ok: false, error: msg };
   }
   const payload = {
     id: String(item.id),
@@ -372,9 +373,11 @@ async function upsertInventoryItemToSupabase(item) {
     body: JSON.stringify([payload]),
   });
   if (!res.ok) {
-    var errText = await res.text();
+    const errText = await res.text();
     console.error("同步商品到 Supabase 失敗 (" + res.status + ")", errText);
+    return { ok: false, error: `HTTP ${res.status}：${errText.slice(0, 100)}` };
   }
+  return { ok: true };
 }
 
 async function deleteInventoryItemFromSupabase(id) {

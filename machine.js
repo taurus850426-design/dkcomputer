@@ -27,12 +27,19 @@
 
   if (!catCards.length || !productsSection || !productsGrid) return;
 
-  // 先從 Supabase 載入最新前台商品，覆蓋本機快取（若尚未設定 Supabase 則會退回本機資料）
+  // 先從 Supabase 載入最新前台商品；若有本機獨有品項（尚未同步成功）則一併保留顯示
   if (window.DK?.fetchInventoryFromSupabase && window.DK?.saveInventory) {
     try {
       const remoteItems = await DK.fetchInventoryFromSupabase();
-      if (Array.isArray(remoteItems) && remoteItems.length) {
-        DK.saveInventory(remoteItems);
+      const localItems = DK.getInventory?.() || [];
+      if (Array.isArray(remoteItems) && remoteItems.length > 0) {
+        const remoteIds = new Set(remoteItems.map((r) => r.id));
+        const localOnly = localItems.filter((l) => l?.id && !remoteIds.has(l.id));
+        const merged = [...remoteItems, ...localOnly];
+        DK.saveInventory(merged);
+      } else if (Array.isArray(localItems) && localItems.length > 0) {
+        // Supabase 回傳空，保留本機資料
+        DK.saveInventory(localItems);
       }
     } catch (e) {
       console.warn("載入 Supabase 商品失敗，改用本機資料", e);

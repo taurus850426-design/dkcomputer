@@ -352,7 +352,7 @@
     editingWebId = null;
   }
 
-  function savePublishEditor() {
+  async function savePublishEditor() {
     if (!editingWebId) return;
     const items = window.DK?.getInventory?.() || [];
     const idx = items.findIndex((x) => x.id === editingWebId);
@@ -367,13 +367,19 @@
       note: webEditNote?.value?.trim() ?? items[idx].note,
     };
     window.DK?.saveInventory?.(items);
+    let msg = "已儲存";
     if (window.DK?.upsertInventoryItemToSupabase) {
-      window.DK.upsertInventoryItemToSupabase(items[idx]).catch(function () {});
+      try {
+        const result = await window.DK.upsertInventoryItemToSupabase(items[idx]);
+        if (result && !result.ok && result?.error) msg = "已存本機，Supabase 同步失敗：" + result.error;
+      } catch (e) {
+        msg = "已存本機，Supabase 同步失敗：" + (e?.message || String(e));
+      }
     }
-    show(publishEditorMsg, "已儲存");
+    show(publishEditorMsg, msg);
     if (publishEditorMsg) publishEditorMsg.hidden = false;
     renderPublish();
-    setTimeout(() => { closePublishEditor(); hide(publishEditorMsg); }, 800);
+    setTimeout(() => { closePublishEditor(); hide(publishEditorMsg); }, 3000);
   }
 
   function removeFromWeb(webId) {
@@ -386,7 +392,7 @@
     closePublishEditor();
   }
 
-  function submitPublish() {
+  async function submitPublish() {
     const name = document.getElementById("publishProductName")?.value?.trim();
     const category = document.getElementById("publishCategory")?.value ?? "文書";
     const priceEl = document.getElementById("publishPrice");
@@ -411,16 +417,26 @@
     const items = window.DK?.getInventory?.() || [];
     items.push(item);
     window.DK?.saveInventory?.(items);
+    let syncOk = true;
     if (window.DK?.upsertInventoryItemToSupabase) {
-      window.DK.upsertInventoryItemToSupabase(item).catch(function () {});
+      try {
+        const result = await window.DK.upsertInventoryItemToSupabase(item);
+        syncOk = result && result.ok === true;
+        if (!syncOk && result?.error) {
+          show(publishMsg, "已存於本機，但 Supabase 同步失敗：" + result.error);
+        }
+      } catch (e) {
+        syncOk = false;
+        show(publishMsg, "已存於本機，Supabase 同步失敗：" + (e?.message || String(e)));
+      }
     }
     publishPhotos.length = 0;
     renderPublishPhotoStrip();
     if (publishFormCard) publishFormCard.hidden = true;
-    show(publishMsg, "已上架：" + name);
+    if (syncOk) show(publishMsg, "已上架：" + name);
     if (publishMsg) publishMsg.hidden = false;
     renderPublish();
-    setTimeout(() => hide(publishMsg), 3000);
+    setTimeout(() => hide(publishMsg), syncOk ? 3000 : 8000);
   }
 
   for (const t of tabs) {
