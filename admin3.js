@@ -160,6 +160,8 @@
   const webEditNote = document.getElementById("webEditNote");
   const webEditSaveBtn = document.getElementById("webEditSaveBtn");
   const webEditOffBtn = document.getElementById("webEditOffBtn");
+  const webEditPhotosInput = document.getElementById("webEditPhotosInput");
+  const webEditPhotoStrip = document.getElementById("webEditPhotoStrip");
   const publishQty = document.getElementById("publishQty");
   const publishProductName = document.getElementById("publishProductName");
   const publishCategory = document.getElementById("publishCategory");
@@ -187,6 +189,7 @@
   // ---------- state ----------
   let editingWebId = null;
   let publishPhotos = []; // data URLs
+  let editPhotos = []; // 編輯時的商品照片
 
   // ---------- helpers UI ----------
   function show(el, text) {
@@ -330,6 +333,17 @@
     });
   }
 
+  function renderEditPhotoStrip() {
+    if (!webEditPhotoStrip) return;
+    webEditPhotoStrip.innerHTML = editPhotos.map((url, i) => `<span class="photo-thumb"><img src="${escapeHtml(url)}" alt="" /><button type="button" class="btn-remove-photo" data-i="${i}">×</button></span>`).join("");
+    webEditPhotoStrip.querySelectorAll(".btn-remove-photo").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        editPhotos.splice(Number(btn.getAttribute("data-i")), 1);
+        renderEditPhotoStrip();
+      });
+    });
+  }
+
   function openPublishEditor(webId) {
     editingWebId = webId || null;
     const items = window.DK?.getInventory?.() || [];
@@ -341,6 +355,9 @@
     if (webEditPrice) webEditPrice.value = it?.price ?? "";
     if (webEditQty) webEditQty.value = it?.qty ?? it?.stock ?? 1;
     if (webEditNote) webEditNote.value = it?.note ?? "";
+    editPhotos = Array.isArray(it?.photos) ? [...it.photos] : [];
+    renderEditPhotoStrip();
+    if (webEditPhotosInput) webEditPhotosInput.value = "";
     if (publishEditor) publishEditor.hidden = false;
     if (publishEditorMsg) publishEditorMsg.hidden = true;
   }
@@ -363,6 +380,7 @@
       price: Number(webEditPrice?.value) || items[idx].price,
       qty: Number(webEditQty?.value) ?? items[idx].qty,
       note: webEditNote?.value?.trim() ?? items[idx].note,
+      photos: [...editPhotos],
     };
     window.DK?.saveInventory?.(items);
     let msg = "已儲存";
@@ -483,6 +501,29 @@
   webEditSaveBtn?.addEventListener("click", savePublishEditor);
   webEditOffBtn?.addEventListener("click", () => {
     if (editingWebId && confirm("確定下架此商品？")) removeFromWeb(editingWebId);
+  });
+  webEditPhotosInput?.addEventListener("change", async () => {
+    const files = Array.from(webEditPhotosInput.files || []).filter((f) => f && f.type && f.type.startsWith("image/"));
+    if (files.length === 0) return;
+    const remaining = 5 - editPhotos.length;
+    if (remaining <= 0) {
+      show(publishEditorMsg, "最多 5 張照片，請先移除再新增。");
+      if (publishEditorMsg) publishEditorMsg.hidden = false;
+      return;
+    }
+    const toAdd = files.slice(0, remaining);
+    try {
+      for (const file of toAdd) {
+        const url = await fileToCompressedDataUrl(file);
+        editPhotos.push(url);
+      }
+      renderEditPhotoStrip();
+      if (publishEditorMsg) publishEditorMsg.hidden = true;
+    } catch (e) {
+      show(publishEditorMsg, "相片處理失敗：" + (e?.message || String(e)));
+      if (publishEditorMsg) publishEditorMsg.hidden = false;
+    }
+    webEditPhotosInput.value = "";
   });
   publishPhotosInput?.addEventListener("change", async () => {
     const files = Array.from(publishPhotosInput.files || []).filter((f) => f && f.type && f.type.startsWith("image/"));

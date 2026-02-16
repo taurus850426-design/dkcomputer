@@ -324,15 +324,20 @@
                 </div>
                 <div class="field">
                   <label for="webEditPrice">售價（NT$）</label>
-                  <input id="webEditPrice" type="number" min="0" step="100" />
+                  <input id="webEditPrice" type="number" min="0" step="10" />
                 </div>
                 <div class="field">
                   <label for="webEditQty">剩餘數量</label>
                   <input id="webEditQty" type="number" min="0" step="1" />
                 </div>
                 <div class="field full">
-                  <label for="webEditNote">備注</label>
-                  <input id="webEditNote" type="text" />
+                  <label for="webEditNote">規格摘要／備注（選填）</label>
+                  <input id="webEditNote" type="text" placeholder="例如：高CP 2K 遊戲機、規格說明" />
+                </div>
+                <div class="field full">
+                  <label for="webEditPhotosInput">商品照片（1–5 張，選填）</label>
+                  <input id="webEditPhotosInput" type="file" accept="image/*" multiple />
+                  <div id="webEditPhotoStrip" class="photo-strip" style="margin-top: 8px"></div>
                 </div>
                 <div class="full actions">
                   <button id="webEditSaveBtn" class="btn btn-primary" type="button">儲存</button>
