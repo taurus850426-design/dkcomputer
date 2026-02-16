@@ -80,7 +80,7 @@ const DEFAULT_CONFIG = {
     password: "admin123",
   },
   // 庫存品項品類（可於後台新增/移除）
-  inventoryCategories: ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼"],
+  inventoryCategories: ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "周邊", "其他"],
 };
 
 const DEFAULT_INVENTORY = [
@@ -297,9 +297,14 @@ function saveConfig(nextConfig) {
 
 function getInventoryCategories() {
   const cfg = getConfig();
-  const list = cfg.inventoryCategories;
-  if (Array.isArray(list) && list.length > 0) return list;
-  return DEFAULT_CONFIG.inventoryCategories.slice();
+  let list = cfg.inventoryCategories;
+  if (!Array.isArray(list) || list.length === 0) list = DEFAULT_CONFIG.inventoryCategories.slice();
+  else list = list.slice();
+  const extra = ["周邊", "其他"];
+  for (const c of extra) {
+    if (!list.includes(c)) list.push(c);
+  }
+  return list;
 }
 
 function getInventory() {
