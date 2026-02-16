@@ -380,14 +380,23 @@
     setTimeout(() => { closePublishEditor(); hide(publishEditorMsg); }, 3000);
   }
 
-  function removeFromWeb(webId) {
+  async function removeFromWeb(webId) {
     const items = (window.DK?.getInventory?.() || []).filter((x) => x.id !== webId);
     window.DK?.saveInventory?.(items);
+    let syncOk = true;
     if (window.DK?.deleteInventoryItemFromSupabase) {
-      window.DK.deleteInventoryItemFromSupabase(webId).catch(function () {});
+      try {
+        const result = await window.DK.deleteInventoryItemFromSupabase(webId);
+        syncOk = result && result.ok === true;
+        if (!syncOk && result?.error) show(publishMsg, "已從本機下架，但 Supabase 同步刪除失敗：" + result.error);
+      } catch (e) {
+        syncOk = false;
+        show(publishMsg, "已從本機下架，Supabase 同步失敗：" + (e?.message || String(e)));
+      }
     }
     renderPublish();
     closePublishEditor();
+    if (syncOk && publishMsg) { show(publishMsg, "已下架"); publishMsg.hidden = false; setTimeout(() => hide(publishMsg), 2000); }
   }
 
   async function submitPublish() {
@@ -473,10 +482,7 @@
   publishEditorCloseBtn?.addEventListener("click", closePublishEditor);
   webEditSaveBtn?.addEventListener("click", savePublishEditor);
   webEditOffBtn?.addEventListener("click", () => {
-    if (editingWebId && confirm("確定下架此商品？")) {
-      removeFromWeb(editingWebId);
-      closePublishEditor();
-    }
+    if (editingWebId && confirm("確定下架此商品？")) removeFromWeb(editingWebId);
   });
   publishPhotosInput?.addEventListener("change", async () => {
     const files = Array.from(publishPhotosInput.files || []).filter((f) => f && f.type && f.type.startsWith("image/"));

@@ -381,7 +381,7 @@ async function upsertInventoryItemToSupabase(item) {
 }
 
 async function deleteInventoryItemFromSupabase(id) {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !id) return;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !id) return { ok: true };
   const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_INVENTORY_TABLE}?id=eq.${encodeURIComponent(
     String(id),
   )}`;
@@ -393,8 +393,11 @@ async function deleteInventoryItemFromSupabase(id) {
     },
   });
   if (!res.ok) {
-    console.warn("從 Supabase 刪除商品失敗", await res.text());
+    const errText = await res.text();
+    console.warn("從 Supabase 刪除商品失敗", errText);
+    return { ok: false, error: `HTTP ${res.status}：${errText.slice(0, 80)}` };
   }
+  return { ok: true };
 }
 
 // ===== Supabase：官網設定（site_config）讀寫 =====

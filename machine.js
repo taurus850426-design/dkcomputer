@@ -48,7 +48,7 @@
 
   // 用途分類對應
   const CAT_MAP = {
-    office: { title: "① 文書／上網／學生", categories: ["辦公", "文書"], minPrice: 3000, maxPrice: 6000 },
+    office: { title: "① 文書／上網／學生", categories: ["辦公", "文書"], minPrice: 0, maxPrice: 6000 },
     "game-entry": { title: "② 遊戲入門", categories: ["遊戲"], minPrice: 7000, maxPrice: 12000 },
     "game-mid": { title: "③ 遊戲中階（主力）", categories: ["遊戲"], minPrice: 13000, maxPrice: 20000 },
     work: { title: "④ 工作／效能取向", categories: ["剪輯", "辦公"], minPrice: 18000, maxPrice: 999999 },
