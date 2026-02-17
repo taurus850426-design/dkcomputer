@@ -91,11 +91,23 @@
     const price = item.price != null ? DK.formatPrice(item.price) : null;
     const priceText = price ? `約 NT$ ${price}` : "價格請加 LINE 詢問";
     const photos = Array.isArray(item.photos) ? item.photos : [];
-    const firstPhoto = photos[0] || "";
+
+    const photoCarouselHtml = photos.length > 0
+      ? `<div class="machine-card-photo-wrap">
+          ${photos.length > 1 ? `<button type="button" class="machine-card-arrow machine-card-arrow-prev" aria-label="上一張"></button>` : ""}
+          <div class="machine-card-photo machine-card-photo-carousel" data-photo-count="${photos.length}">
+            <div class="machine-card-photo-carousel-inner" style="width:${photos.length * 100}%">
+              ${photos.map((p, i) => `<div class="machine-card-photo-slide" style="flex:0 0 ${100 / photos.length}%"><img src="${DK.escapeHtml(p)}" alt="" loading="lazy" /></div>`).join("")}
+            </div>
+          </div>
+          ${photos.length > 1 ? `<button type="button" class="machine-card-arrow machine-card-arrow-next" aria-label="下一張"></button>` : ""}
+          ${photos.length > 1 ? `<div class="machine-card-dots">${photos.map((_, i) => `<button type="button" class="machine-card-dot${i === 0 ? " active" : ""}" aria-label="第${i + 1}張" data-i="${i}"></button>`).join("")}</div>` : ""}
+        </div>`
+      : "";
 
     return `
       <article class="machine-card">
-        ${firstPhoto ? `<div class="machine-card-photo"><img src="${DK.escapeHtml(firstPhoto)}" alt="" loading="lazy" /></div>` : ""}
+        ${photoCarouselHtml}
         <h3 class="machine-card-title">${name}</h3>
         <p class="machine-card-desc">${desc}</p>
         <div class="machine-card-price">${priceText}</div>
@@ -136,7 +148,58 @@
         const card = div.firstElementChild;
         const btn = card?.querySelector(".machine-line-btn");
         if (btn) btn.addEventListener("click", () => DK.openLineOrder(item));
-        if (card) productsGrid.appendChild(card);
+        if (card) {
+          productsGrid.appendChild(card);
+          const wrap = card.querySelector(".machine-card-photo-wrap");
+          const carousel = card.querySelector(".machine-card-photo-carousel");
+          if (carousel && wrap) {
+            const inner = carousel.querySelector(".machine-card-photo-carousel-inner");
+            const slides = carousel.querySelectorAll(".machine-card-photo-slide");
+            const n = slides.length;
+            const prevBtn = wrap.querySelector(".machine-card-arrow-prev");
+            const nextBtn = wrap.querySelector(".machine-card-arrow-next");
+            const dots = wrap.querySelectorAll(".machine-card-dot");
+            const setWidths = () => {
+              const w = carousel.offsetWidth;
+              if (w > 0 && inner) {
+                inner.style.width = w * n + "px";
+                slides.forEach((s) => { s.style.width = w + "px"; });
+              }
+            };
+            const scheduleSetWidths = () => {
+              requestAnimationFrame(() => requestAnimationFrame(setWidths));
+              setTimeout(setWidths, 100);
+              setTimeout(setWidths, 400);
+            };
+            const goTo = (index) => {
+              const i = Math.max(0, Math.min(index, n - 1));
+              if (inner && carousel.offsetWidth > 0) carousel.scrollLeft = i * carousel.offsetWidth;
+              dots.forEach((d, j) => d.classList.toggle("active", j === i));
+            };
+            const updateDots = () => {
+              if (n <= 0 || !carousel.offsetWidth) return;
+              const idx = Math.round(carousel.scrollLeft / carousel.offsetWidth);
+              const i = Math.max(0, Math.min(idx, n - 1));
+              dots.forEach((d, j) => d.classList.toggle("active", j === i));
+            };
+            if (n > 0 && inner) {
+              scheduleSetWidths();
+              if (typeof ResizeObserver !== "undefined") new ResizeObserver(setWidths).observe(carousel);
+            }
+            carousel.addEventListener("scroll", updateDots);
+            prevBtn?.addEventListener("click", () => {
+              const i = Math.round(carousel.scrollLeft / carousel.offsetWidth) - 1;
+              goTo(i);
+            });
+            nextBtn?.addEventListener("click", () => {
+              const i = Math.round(carousel.scrollLeft / carousel.offsetWidth) + 1;
+              goTo(i);
+            });
+            dots.forEach((d) => {
+              d.addEventListener("click", () => goTo(Number(d.getAttribute("data-i"))));
+            });
+          }
+        }
       }
     }
 

@@ -157,16 +157,21 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .cat-cards-row{
   display: flex;
   gap: 20px;
-  justify-content: center;
+  justify-content: flex-start;
   flex-wrap: nowrap;
   margin-bottom: 36px;
   overflow-x: auto;
+  overflow-y: hidden;
   padding-bottom: 8px;
+  padding-right: 16px;
   -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
 }
 .cat-card{
   position: relative;
   width: 280px;
+  flex: 0 0 280px;
+  min-width: 280px;
   aspect-ratio: 9 / 16;
   border-radius: var(--radius);
   border: 2px solid var(--border);
@@ -180,6 +185,7 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
   overflow: hidden;
   opacity: 0.78;
   transition: opacity 0.25s ease, border-color 0.2s, transform 0.25s ease;
+  scroll-snap-align: start;
 }
 .cat-card:hover{ opacity: 1; border-color: var(--primary); transform: translateY(-4px) scale(1.05); }
 .cat-card.active{ opacity: 1; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(0,0,0,0.06); }
@@ -213,8 +219,86 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 
 .machine-cards{ display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
 .machine-card{ background: rgba(255,255,255,0.92); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
-.machine-card-photo{ width: 100%; aspect-ratio: 4/3; border-radius: 12px; overflow: hidden; background: rgba(0,0,0,0.06); margin-bottom: 12px; }
-.machine-card-photo img{ width: 100%; height: 100%; object-fit: cover; }
+.machine-card-photo{ width: 100%; aspect-ratio: 4/3; min-height: 200px; border-radius: 12px; overflow: hidden; background: rgba(0,0,0,0.06); margin-bottom: 12px; }
+.machine-card-photo img{ width: 100%; height: 100%; object-fit: cover; display: block; }
+/* 整機販售／商品卡：多張照片可左右滑動（強制可捲動） */
+.machine-card-photo.machine-card-photo-carousel{
+  overflow-x: auto !important;
+  overflow-y: hidden;
+  touch-action: pan-x;
+}
+.machine-card-photo-carousel,
+.item-photo-carousel{
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  touch-action: pan-x;
+}
+.machine-card-photo-carousel::-webkit-scrollbar,
+.item-photo-carousel::-webkit-scrollbar{ display: none; }
+.machine-card-photo-carousel-inner,
+.item-photo-carousel-inner{
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  min-height: 100%;
+}
+.machine-card-photo-carousel .machine-card-photo-slide,
+.item-photo-carousel .item-photo-carousel-slide{
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+.machine-card-photo-carousel .machine-card-photo-slide img,
+.item-photo-carousel .item-photo-carousel-slide img{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.machine-card-photo-carousel-inner{ height: 100%; min-height: 0; }
+.machine-card-photo-carousel .machine-card-photo-slide{ height: 100%; }
+/* 輪播外層：箭頭 + 照片 + 點點 */
+.machine-card-photo-wrap{ position: relative; margin-bottom: 12px; }
+.machine-card-photo-wrap .machine-card-photo{ margin-bottom: 8px; }
+.machine-card-arrow{
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 28px; height: 28px; border: none; border-radius: 50%;
+  background: rgba(255,255,255,0.95); box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  cursor: pointer; z-index: 2; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.machine-card-arrow:hover{ background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.2); }
+.machine-card-arrow-prev{ left: 6px; }
+.machine-card-arrow-prev::before{
+  content: ""; width: 0; height: 0;
+  border-style: solid; border-width: 6px 8px 6px 0; border-color: transparent rgba(18,24,38,0.75) transparent transparent;
+  margin-left: -2px;
+}
+.machine-card-arrow-next{ right: 6px; }
+.machine-card-arrow-next::before{
+  content: ""; width: 0; height: 0;
+  border-style: solid; border-width: 6px 0 6px 8px; border-color: transparent transparent transparent rgba(18,24,38,0.75);
+  margin-right: -2px;
+}
+.machine-card-dots{
+  display: flex; justify-content: center; gap: 6px; flex-wrap: wrap;
+}
+.machine-card-dot{
+  width: 8px; height: 8px; border-radius: 50%;
+  border: none; padding: 0; cursor: pointer;
+  background: rgba(18,24,38,0.2); transition: background 0.2s;
+}
+.machine-card-dot:hover{ background: rgba(18,24,38,0.35); }
+.machine-card-dot.active{ background: var(--primary, #7c5cff); }
+.item-photo-carousel-inner .item-photo-carousel-slide{ height: 240px; }
+.mini-photo-wrap.item-photo-carousel{ width: 120px; flex-shrink: 0; border-radius: 14px; overflow: hidden; border: 1px solid rgba(17,24,39,0.10); }
+.mini-photo-wrap .item-photo-carousel-slide img{ width: 100%; height: 100%; object-fit: cover; }
 .machine-card-title{ font-size: 16px; font-weight: 800; margin: 0 0 10px; }
 .machine-card-desc{ font-size: 14px; color: var(--muted); line-height: 1.5; margin: 0 0 12px; }
 .machine-card-fit{ list-style: none; margin: 0 0 12px; padding: 0; font-size: 13px; color: var(--muted); }
@@ -574,6 +658,8 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
   background: #fff;
   overflow: hidden;
 }
+.item-photo-wrap.item-photo-carousel{ height: 240px; }
+.item-photo-wrap .item-photo-carousel-inner{ height: 240px; }
 .item-photo-wrap .item-photo{
   height: 100%;
 }
@@ -749,8 +835,8 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
   .hero-sub{ font-size: 16px; }
   .btn-hero{ min-width: 100%; }
   .contact-block{ flex-direction: column; align-items: stretch; text-align: center; }
-  .cat-cards-row{ overflow-x: auto; flex-wrap: nowrap; justify-content: flex-start; padding-bottom: 8px; -webkit-overflow-scrolling: touch; }
-  .cat-card{ flex: 0 0 200px; width: 200px; min-width: 200px; }
+  .cat-cards-row{ overflow-x: auto; flex-wrap: nowrap; justify-content: flex-start; padding-bottom: 8px; padding-right: 16px; -webkit-overflow-scrolling: touch; }
+  .cat-card{ flex: 0 0 200px; width: 200px; min-width: 200px; scroll-snap-align: start; }
   /* Hero 三塊特色：改成左→右滑動（手機） */
   .pill-row{
     display:flex;

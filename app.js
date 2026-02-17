@@ -63,9 +63,16 @@
       const photos = Array.isArray(item.photos) ? item.photos : [];
       const firstPhoto = photos[0] || "";
       const qty = typeof item.qty === "number" && item.qty >= 0 ? item.qty : null;
+      const photoCarouselHtml = photos.length > 0
+        ? `<div class="mini-photo-wrap item-photo-carousel" style="height:120px">
+            <div class="item-photo-carousel-inner" style="width:${photos.length * 100}%; height:120px">
+              ${photos.map((p) => `<div class="item-photo-carousel-slide" style="flex:0 0 ${100 / photos.length}%; height:120px"><img alt="${DK.escapeHtml(item.name)}" src="${DK.escapeHtml(p)}" loading="lazy" /></div>`).join("")}
+            </div>
+          </div>`
+        : "";
 
       el.innerHTML = `
-        ${firstPhoto ? `<img class="mini-photo" alt="${DK.escapeHtml(item.name)}" src="${firstPhoto}" loading="lazy" />` : ""}
+        ${photoCarouselHtml}
         <div class="mini-main">
           <div class="mini-top">
             <a class="mini-name" href="./product.html?id=${encodeURIComponent(item.id)}">${DK.escapeHtml(item.name)}</a>
@@ -168,8 +175,16 @@
         .map((t) => `<span class="badge tag">${DK.escapeHtml(t)}</span>`)
         .join("");
 
+      const photoCarouselHtml = photos.length > 0
+        ? `<div class="item-photo-wrap item-photo-carousel">
+            <div class="item-photo-carousel-inner" style="width:${photos.length * 100}%">
+              ${photos.map((p) => `<div class="item-photo-carousel-slide" style="flex:0 0 ${100 / photos.length}%"><img class="item-photo" alt="${DK.escapeHtml(item.name)}" src="${DK.escapeHtml(p)}" loading="lazy" /></div>`).join("")}
+            </div>
+          </div>`
+        : "";
+
       el.innerHTML = `
-        ${firstPhoto ? `<div class="item-photo-wrap"><img class="item-photo" alt="${DK.escapeHtml(item.name)}" src="${firstPhoto}" loading="lazy" /></div>` : ""}
+        ${photoCarouselHtml}
         <div class="item-top">
           <a class="item-name" href="./product.html?id=${encodeURIComponent(item.id)}">${DK.escapeHtml(item.name)}</a>
           <div class="badges">
