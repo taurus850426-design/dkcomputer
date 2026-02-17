@@ -212,15 +212,17 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 
 /* 各分類卡片背景圖：改由 HTML img 標籤載入 */
 
-.products-section{ margin-top: 24px; }
+.products-section{ margin-top: 24px; display: block; }
+.products-section[hidden]{ display: none !important; }
 .products-section-title{ margin-bottom: 16px; }
 .products-prompt{ text-align: center; padding: 20px; font-size: 15px; }
-.products-empty{ text-align: center; padding: 24px; font-size: 15px; }
+.products-empty{ text-align: center; padding: 24px; font-size: 15px; min-height: 120px; display: flex; align-items: center; justify-content: center; }
 
 .machine-cards{ display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.machine-cards:not(:empty){ min-height: 280px; }
 .machine-card{ background: rgba(255,255,255,0.92); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
 .machine-card-photo{ width: 100%; aspect-ratio: 4/3; min-height: 200px; border-radius: 12px; overflow: hidden; background: rgba(0,0,0,0.06); margin-bottom: 12px; }
-.machine-card-photo img{ width: 100%; height: 100%; object-fit: cover; display: block; }
+.machine-card-photo img{ width: 100%; height: 100%; object-fit: cover; display: block; -webkit-transform: translateZ(0); }
 /* 整機販售／商品卡：多張照片可左右滑動（強制可捲動） */
 .machine-card-photo.machine-card-photo-carousel{
   overflow-x: auto !important;
@@ -261,8 +263,8 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
   object-fit: cover;
   display: block;
 }
-.machine-card-photo-carousel-inner{ height: 100%; min-height: 0; }
-.machine-card-photo-carousel .machine-card-photo-slide{ height: 100%; }
+.machine-card-photo-carousel-inner{ height: 100%; min-height: 200px; }
+.machine-card-photo-carousel .machine-card-photo-slide{ height: 100%; min-height: 200px; }
 /* 輪播外層：箭頭 + 照片 + 點點 */
 .machine-card-photo-wrap{ position: relative; margin-bottom: 12px; }
 .machine-card-photo-wrap .machine-card-photo{ margin-bottom: 8px; }

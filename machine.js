@@ -90,7 +90,11 @@
     const desc = DK.escapeHtml(item.note || "可依用途客製，詳細配備請加 LINE 詢問。");
     const price = item.price != null ? DK.formatPrice(item.price) : null;
     const priceText = price ? `約 NT$ ${price}` : "價格請加 LINE 詢問";
-    const photos = Array.isArray(item.photos) ? item.photos : [];
+    const photosRaw = Array.isArray(item.photos) ? item.photos : [];
+    const photos = photosRaw
+      .filter((p) => typeof p === "string")
+      .map((p) => p.trim())
+      .filter((p) => p && (p.startsWith("data:image/") || p.startsWith("http://") || p.startsWith("https://") || p.startsWith("blob:")));
 
     const photoCarouselHtml = photos.length > 0
       ? `<div class="machine-card-photo-wrap">
@@ -122,13 +126,9 @@
     if (!cfg) return;
 
     const items = getItems();
-    const filtered = items.filter((it) => {
-      if (!categoryMatch(it, cfg.categories)) return false;
-      // 售價 0 或未填視為「價格請加 LINE 詢問」，仍顯示在該分類
-      const p = it.price;
-      if (p == null || p === "" || (typeof p === "number" && (Number.isNaN(p) || p <= 0))) return true;
-      return priceInRange(p, cfg.minPrice, cfg.maxPrice);
-    });
+    // 手機常見「看不到商品」原因：價格區間把商品過濾掉
+    // 改成：只要分類符合就顯示，價格僅用來顯示文字，不再當作篩選條件
+    const filtered = items.filter((it) => categoryMatch(it, cfg.categories));
 
     if (productsSectionTitle) productsSectionTitle.textContent = cfg.title;
     productsGrid.innerHTML = "";
@@ -205,6 +205,34 @@
 
     productsSection.hidden = false;
     if (productsPrompt) productsPrompt.hidden = true;
+
+    // iOS Safari：區塊剛顯示時版面可能尚未計算，延遲重算輪播寬度
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        productsGrid.querySelectorAll(".machine-card-photo-carousel").forEach((carousel) => {
+          const inner = carousel.querySelector(".machine-card-photo-carousel-inner");
+          const slides = carousel.querySelectorAll(".machine-card-photo-slide");
+          const n = slides.length;
+          const w = carousel.offsetWidth;
+          if (w > 0 && inner && n > 0) {
+            inner.style.width = w * n + "px";
+            slides.forEach((s) => { s.style.width = w + "px"; });
+          }
+        });
+      });
+    });
+    setTimeout(() => {
+      productsGrid.querySelectorAll(".machine-card-photo-carousel").forEach((carousel) => {
+        const inner = carousel.querySelector(".machine-card-photo-carousel-inner");
+        const slides = carousel.querySelectorAll(".machine-card-photo-slide");
+        const n = slides.length;
+        const w = carousel.offsetWidth;
+        if (w > 0 && inner && n > 0) {
+          inner.style.width = w * n + "px";
+          slides.forEach((s) => { s.style.width = w + "px"; });
+        }
+      });
+    }, 350);
 
     for (const card of catCards) {
       card.classList.toggle("active", card.dataset.cat === catKey);
