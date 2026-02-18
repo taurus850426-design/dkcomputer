@@ -156,7 +156,7 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .page-head{ margin-bottom: 28px; }
 .cat-cards-row{
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 20px;
   margin-bottom: 36px;
 }
@@ -199,6 +199,8 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .cat-card-num{ font-size: 18px; font-weight: 800; margin-bottom: 8px; }
 .cat-card-title{ font-size: 16px; font-weight: 700; text-align: center; line-height: 1.3; margin-bottom: 8px; }
 .cat-card-price{ font-size: 13px; opacity: 0.95; }
+.cat-card-all{ background: linear-gradient(180deg, rgba(124,92,255,0.15) 0%, rgba(124,92,255,0.08) 100%); }
+.cat-card-all .cat-card-num, .cat-card-all .cat-card-title, .cat-card-all .cat-card-price{ color: var(--text, #121826); text-shadow: none; }
 
 /* 各分類卡片背景圖：改由 HTML img 標籤載入 */
 

@@ -191,15 +191,19 @@
   }
 
   function showCategory(catKey) {
-    const cfg = CAT_MAP[catKey];
-    if (!cfg) return;
-
     const items = getItems();
-    // 手機常見「看不到商品」原因：價格區間把商品過濾掉
-    // 改成：只要分類符合就顯示，價格僅用來顯示文字，不再當作篩選條件
-    const filtered = items.filter((it) => categoryMatch(it, cfg.categories));
+    let filtered;
+    let title;
+    if (catKey === "all" || !CAT_MAP[catKey]) {
+      filtered = items;
+      title = "全部商品";
+    } else {
+      const cfg = CAT_MAP[catKey];
+      filtered = items.filter((it) => categoryMatch(it, cfg.categories));
+      title = cfg.title;
+    }
 
-    if (productsSectionTitle) productsSectionTitle.textContent = cfg.title;
+    if (productsSectionTitle) productsSectionTitle.textContent = title;
     productsGrid.innerHTML = "";
 
     if (filtered.length === 0) {
@@ -301,9 +305,10 @@
     setTimeout(recalcAllCarousels, 350);
     setTimeout(recalcAllCarousels, 800);
 
+    const selectedCat = catKey === "all" || !CAT_MAP[catKey] ? "all" : catKey;
     for (const card of catCards) {
-      card.classList.toggle("active", card.dataset.cat === catKey);
-      card.setAttribute("aria-selected", card.dataset.cat === catKey ? "true" : "false");
+      card.classList.toggle("active", card.dataset.cat === selectedCat);
+      card.setAttribute("aria-selected", card.dataset.cat === selectedCat ? "true" : "false");
     }
 
     productsSection.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -319,10 +324,12 @@
     productDetailModal.addEventListener("keydown", (e) => { if (e.key === "Escape") closeProductDetail(); });
   }
 
-  // 支援網址 hash：machine.html#office 直接顯示該分類
+  // 進入頁面先顯示全部商品；若有 hash 則顯示該分類
   const hash = window.location.hash.replace(/^#/, "");
   if (hash && CAT_MAP[hash]) {
     showCategory(hash);
+  } else {
+    showCategory("all");
   }
 
   // 套用 LINE 連結

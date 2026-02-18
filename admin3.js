@@ -601,6 +601,12 @@
     document.getElementById("feContactSub").value = fe.contactSub ?? def.contactSub ?? "";
     document.getElementById("feMachinePageTitle").value = fe.machinePageTitle ?? def.machinePageTitle ?? "";
     document.getElementById("feMachinePageSub").value = fe.machinePageSub ?? def.machinePageSub ?? "";
+    const catPriceDef = def.catPrices || {};
+    document.getElementById("feCatPriceOffice").value = fe.catPrices?.office ?? catPriceDef.office ?? "NT$ 3,000–6,000";
+    document.getElementById("feCatPriceGameEntry").value = fe.catPrices?.["game-entry"] ?? catPriceDef["game-entry"] ?? "NT$ 7,000–12,000";
+    document.getElementById("feCatPriceGameMid").value = fe.catPrices?.["game-mid"] ?? catPriceDef["game-mid"] ?? "NT$ 13,000–20,000";
+    document.getElementById("feCatPriceWork").value = fe.catPrices?.work ?? catPriceDef.work ?? "NT$ 18,000+";
+    document.getElementById("feCatPricePeripherals").value = fe.catPrices?.peripherals ?? catPriceDef.peripherals ?? "價格依品項";
     document.getElementById("feLineUrl").value = cfg.line?.url ?? "";
     const feLineCta = document.getElementById("feLineCtaText");
     if (feLineCta) feLineCta.value = cfg.line?.lineCtaText ?? (window.DK?.DEFAULT_CONFIG?.line?.lineCtaText ?? "");
@@ -659,6 +665,13 @@
         contactSub: document.getElementById("feContactSub").value?.trim(),
         machinePageTitle: document.getElementById("feMachinePageTitle").value?.trim(),
         machinePageSub: document.getElementById("feMachinePageSub").value?.trim(),
+        catPrices: {
+          office: document.getElementById("feCatPriceOffice").value?.trim() || undefined,
+          "game-entry": document.getElementById("feCatPriceGameEntry").value?.trim() || undefined,
+          "game-mid": document.getElementById("feCatPriceGameMid").value?.trim() || undefined,
+          work: document.getElementById("feCatPriceWork").value?.trim() || undefined,
+          peripherals: document.getElementById("feCatPricePeripherals").value?.trim() || undefined,
+        },
         catImages: cfg.frontend?.catImages || {},
       },
       line: {

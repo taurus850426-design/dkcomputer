@@ -45,8 +45,13 @@
             <p id="machinePageSub" class="lead muted">依用途分類，不寫一堆規格。價格是「約」，詳細配備請加 LINE 詢問。</p>
           </div>
 
-          <!-- 五張 9:16 分類卡片，橫向排列（背景圖為透明佔位，可改回 assets/cat-*.png 並上傳圖片） -->
+          <!-- 全部 + 五張分類卡片，點「全部商品」顯示全部，點分類則篩選該類別 -->
           <div class="cat-cards-row" role="tablist" aria-label="用途分類">
+            <button type="button" class="cat-card cat-card-all" data-cat="all" role="tab">
+              <span class="cat-card-num">全部</span>
+              <span class="cat-card-title">全部商品</span>
+              <span class="cat-card-price">—</span>
+            </button>
             <button type="button" class="cat-card" data-cat="office" role="tab">
               <img class="cat-card-bg-img" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" alt="" />
               <span class="cat-card-bg" aria-hidden="true"></span>

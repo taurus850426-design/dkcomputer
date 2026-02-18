@@ -57,6 +57,13 @@ const DEFAULT_CONFIG = {
     machinePageTitle: "整機販售",
     machinePageSub: "依用途分類，不寫一堆規格。價格是「約」，詳細配備請加 LINE 詢問。",
     catImages: {},
+    catPrices: {
+      office: "NT$ 3,000–6,000",
+      "game-entry": "NT$ 7,000–12,000",
+      "game-mid": "NT$ 13,000–20,000",
+      work: "NT$ 18,000+",
+      peripherals: "價格依品項",
+    },
   },
   shop: {
     name: "哈啦電競電腦維修",
@@ -1017,6 +1024,14 @@ function applyConfigToHomePage() {
   if (machinePageTitle) machinePageTitle.textContent = fe.machinePageTitle ?? "整機販售";
   const machinePageSub = document.getElementById("machinePageSub");
   if (machinePageSub) machinePageSub.textContent = fe.machinePageSub ?? "";
+  const catPrices = fe.catPrices || (typeof DK !== "undefined" && DK.DEFAULT_CONFIG?.frontend?.catPrices) || {};
+  const catPriceDefaults = { office: "NT$ 3,000–6,000", "game-entry": "NT$ 7,000–12,000", "game-mid": "NT$ 13,000–20,000", work: "NT$ 18,000+", peripherals: "價格依品項" };
+  document.querySelectorAll(".cat-card[data-cat]").forEach((card) => {
+    const cat = card.dataset.cat;
+    if (cat === "all") return;
+    const priceEl = card.querySelector(".cat-card-price");
+    if (priceEl) priceEl.textContent = (catPrices[cat] || catPriceDefaults[cat] || "").trim() || catPriceDefaults[cat];
+  });
 
   const shopName = document.getElementById("shopName");
   if (shopName) shopName.textContent = cfg.shop.name;
