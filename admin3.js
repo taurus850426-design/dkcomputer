@@ -204,6 +204,18 @@
     el.textContent = "";
   }
 
+  function showCenterToast(msg) {
+    const toast = document.getElementById("adminToast");
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.hidden = false;
+    requestAnimationFrame(() => toast.classList.add("show"));
+    setTimeout(() => {
+      toast.classList.remove("show");
+      setTimeout(() => { toast.hidden = true; }, 280);
+    }, 2500);
+  }
+
   function applyAuthUI() {
     const authed = window.DK?.isAdminAuthed?.() === true;
     loginCard.hidden = authed;
@@ -392,14 +404,8 @@
         msg = "已存本機，Supabase 同步失敗：" + (e?.message || String(e));
       }
     }
-    show(publishEditorMsg, msg);
-    if (publishEditorMsg) {
-      publishEditorMsg.hidden = false;
-      publishEditorMsg.classList.toggle("msg-success", msg === "已儲存");
-    }
     renderPublish();
-    // 只隱藏提示文字，不自動關閉編輯視窗，讓使用者清楚看到「已儲存」
-    setTimeout(() => { hide(publishEditorMsg); if (publishEditorMsg) publishEditorMsg.classList.remove("msg-success"); }, 3000);
+    showCenterToast(msg);
   }
 
   async function removeFromWeb(webId) {

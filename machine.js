@@ -24,6 +24,13 @@
   const productsGrid = document.getElementById("productsGrid");
   const productsEmpty = document.getElementById("productsEmpty");
   const productsPrompt = document.getElementById("productsPrompt");
+  const productDetailModal = document.getElementById("productDetailModal");
+  const productDetailClose = document.getElementById("productDetailClose");
+  const productDetailPhoto = document.getElementById("productDetailPhoto");
+  const productDetailTitle = document.getElementById("productDetailTitle");
+  const productDetailIntro = document.getElementById("productDetailIntro");
+  const productDetailPrice = document.getElementById("productDetailPrice");
+  const productDetailLineBtn = document.getElementById("productDetailLineBtn");
 
   if (!catCards.length || !productsSection || !productsGrid) return;
 
@@ -87,9 +94,8 @@
 
   function buildMachineCard(item) {
     const name = DK.escapeHtml(item.name || "整機");
-    const desc = DK.escapeHtml(item.note || "可依用途客製，詳細配備請加 LINE 詢問。");
     const price = item.price != null ? DK.formatPrice(item.price) : null;
-    const priceText = price ? `約 NT$ ${price}` : "價格請加 LINE 詢問";
+    const priceText = price ? `NT$ ${price}` : "價格請加 LINE 詢問";
     const photosRaw = Array.isArray(item.photos) ? item.photos : [];
     const photos = photosRaw
       .filter((p) => typeof p === "string")
@@ -110,15 +116,78 @@
       : "";
 
     return `
-      <article class="machine-card">
+      <article class="machine-card" data-item-id="${DK.escapeHtml(String(item.id))}" role="button" tabindex="0">
         ${photoCarouselHtml}
         <h3 class="machine-card-title">${name}</h3>
-        <p class="machine-card-desc">${desc}</p>
         <div class="machine-card-price">${priceText}</div>
-        <p class="machine-card-note">詳細配備請加 LINE 詢問</p>
         <button type="button" class="btn btn-primary machine-line-btn" data-id="${DK.escapeHtml(item.id)}">加 LINE 詢問</button>
       </article>
     `;
+  }
+
+  function openProductDetail(item) {
+    if (!item || !productDetailModal) return;
+    if (productDetailTitle) productDetailTitle.textContent = item.name || "商品";
+    if (productDetailIntro) {
+      productDetailIntro.textContent = item.note?.trim() || "（無產品介紹）";
+      productDetailIntro.style.whiteSpace = "pre-wrap";
+    }
+    const price = item.price != null ? DK.formatPrice(item.price) : null;
+    if (productDetailPrice) productDetailPrice.textContent = price ? `NT$ ${price}` : "價格請加 LINE 詢問";
+    if (productDetailPhoto) {
+      const photos = Array.isArray(item.photos) ? item.photos.filter((p) => typeof p === "string" && p.trim()) : [];
+      if (photos.length === 0) {
+        productDetailPhoto.innerHTML = "";
+        productDetailPhoto.hidden = true;
+      } else {
+        productDetailPhoto.hidden = false;
+        const n = photos.length;
+        const showArrows = n > 1;
+        const slidesHtml = photos.map((p, i) => `<div class="product-detail-photo-slide"><img src="${DK.escapeHtml(p)}" alt="" loading="lazy" /></div>`).join("");
+        productDetailPhoto.innerHTML = `
+          <div class="product-detail-photo-wrap">
+            ${showArrows ? `<button type="button" class="product-detail-arrow product-detail-arrow-prev" aria-label="上一張"></button>` : ""}
+            <div class="product-detail-photo-carousel" data-photo-count="${n}">
+              <div class="product-detail-photo-inner">${slidesHtml}</div>
+            </div>
+            ${showArrows ? `<button type="button" class="product-detail-arrow product-detail-arrow-next" aria-label="下一張"></button>` : ""}
+            ${showArrows ? `<div class="product-detail-dots">${photos.map((_, i) => `<button type="button" class="product-detail-dot${i === 0 ? " active" : ""}" aria-label="第${i + 1}張" data-i="${i}"></button>`).join("")}</div>` : ""}
+          </div>`;
+        if (n > 1) {
+          const wrap = productDetailPhoto.querySelector(".product-detail-photo-wrap");
+          const carousel = productDetailPhoto.querySelector(".product-detail-photo-carousel");
+          const inner = productDetailPhoto.querySelector(".product-detail-photo-inner");
+          const slides = productDetailPhoto.querySelectorAll(".product-detail-photo-slide");
+          const prevBtn = productDetailPhoto.querySelector(".product-detail-arrow-prev");
+          const nextBtn = productDetailPhoto.querySelector(".product-detail-arrow-next");
+          const dots = productDetailPhoto.querySelectorAll(".product-detail-dot");
+          const goTo = (index) => {
+            const i = Math.max(0, Math.min(index, n - 1));
+            if (carousel && carousel.offsetWidth > 0) carousel.scrollLeft = i * carousel.offsetWidth;
+            dots.forEach((d, j) => d.classList.toggle("active", j === i));
+          };
+          const updateDots = () => {
+            if (!carousel || !carousel.offsetWidth) return;
+            const idx = Math.round(carousel.scrollLeft / carousel.offsetWidth);
+            const i = Math.max(0, Math.min(idx, n - 1));
+            dots.forEach((d, j) => d.classList.toggle("active", j === i));
+          };
+          carousel.addEventListener("scroll", updateDots);
+          prevBtn?.addEventListener("click", () => goTo(Math.round(carousel.scrollLeft / carousel.offsetWidth) - 1));
+          nextBtn?.addEventListener("click", () => goTo(Math.round(carousel.scrollLeft / carousel.offsetWidth) + 1));
+          dots.forEach((d) => d.addEventListener("click", () => goTo(Number(d.getAttribute("data-i")))));
+        }
+      }
+    }
+    if (productDetailLineBtn) {
+      productDetailLineBtn.onclick = () => { DK.openLineOrder(item); closeProductDetail(); };
+    }
+    productDetailModal.hidden = false;
+    productDetailClose?.focus();
+  }
+
+  function closeProductDetail() {
+    if (productDetailModal) productDetailModal.hidden = true;
   }
 
   function showCategory(catKey) {
@@ -147,8 +216,15 @@
         div.innerHTML = buildMachineCard(item);
         const card = div.firstElementChild;
         const btn = card?.querySelector(".machine-line-btn");
-        if (btn) btn.addEventListener("click", () => DK.openLineOrder(item));
+        if (btn) btn.addEventListener("click", (e) => { e.stopPropagation(); DK.openLineOrder(item); });
         if (card) {
+          card.addEventListener("click", (e) => {
+            if (e.target.closest(".machine-line-btn")) return;
+            openProductDetail(item);
+          });
+          card.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openProductDetail(item); }
+          });
           productsGrid.appendChild(card);
           const wrap = card.querySelector(".machine-card-photo-wrap");
           const carousel = card.querySelector(".machine-card-photo-carousel");
@@ -165,11 +241,13 @@
                 inner.style.width = w * n + "px";
                 slides.forEach((s) => { s.style.width = w + "px"; });
               }
+              // w 為 0 時不寫入，保留 HTML 的 % 佈局（inner 200%、slide 50%）
             };
             const scheduleSetWidths = () => {
               requestAnimationFrame(() => requestAnimationFrame(setWidths));
               setTimeout(setWidths, 100);
               setTimeout(setWidths, 400);
+              setTimeout(setWidths, 800);
             };
             const goTo = (index) => {
               const i = Math.max(0, Math.min(index, n - 1));
@@ -206,22 +284,8 @@
     productsSection.hidden = false;
     if (productsPrompt) productsPrompt.hidden = true;
 
-    // iOS Safari：區塊剛顯示時版面可能尚未計算，延遲重算輪播寬度
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        productsGrid.querySelectorAll(".machine-card-photo-carousel").forEach((carousel) => {
-          const inner = carousel.querySelector(".machine-card-photo-carousel-inner");
-          const slides = carousel.querySelectorAll(".machine-card-photo-slide");
-          const n = slides.length;
-          const w = carousel.offsetWidth;
-          if (w > 0 && inner && n > 0) {
-            inner.style.width = w * n + "px";
-            slides.forEach((s) => { s.style.width = w + "px"; });
-          }
-        });
-      });
-    });
-    setTimeout(() => {
+    // 手機／iOS：區塊剛顯示時 offsetWidth 常為 0，多段延遲重算輪播寬度
+    function recalcAllCarousels() {
       productsGrid.querySelectorAll(".machine-card-photo-carousel").forEach((carousel) => {
         const inner = carousel.querySelector(".machine-card-photo-carousel-inner");
         const slides = carousel.querySelectorAll(".machine-card-photo-slide");
@@ -232,7 +296,10 @@
           slides.forEach((s) => { s.style.width = w + "px"; });
         }
       });
-    }, 350);
+    }
+    requestAnimationFrame(() => requestAnimationFrame(recalcAllCarousels));
+    setTimeout(recalcAllCarousels, 350);
+    setTimeout(recalcAllCarousels, 800);
 
     for (const card of catCards) {
       card.classList.toggle("active", card.dataset.cat === catKey);
@@ -244,6 +311,12 @@
 
   for (const card of catCards) {
     card.addEventListener("click", () => showCategory(card.dataset.cat));
+  }
+
+  if (productDetailClose) productDetailClose.addEventListener("click", closeProductDetail);
+  if (productDetailModal) {
+    productDetailModal.addEventListener("click", (e) => { if (e.target === productDetailModal) closeProductDetail(); });
+    productDetailModal.addEventListener("keydown", (e) => { if (e.key === "Escape") closeProductDetail(); });
   }
 
   // 支援網址 hash：machine.html#office 直接顯示該分類

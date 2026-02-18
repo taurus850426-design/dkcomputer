@@ -331,8 +331,8 @@
                   <input id="webEditQty" type="number" min="0" step="1" />
                 </div>
                 <div class="field full">
-                  <label for="webEditNote">規格摘要／備注（選填）</label>
-                  <input id="webEditNote" type="text" placeholder="例如：高CP 2K 遊戲機、規格說明" />
+                  <label for="webEditNote">產品介紹（可換行、分段落）</label>
+                  <textarea id="webEditNote" rows="6" placeholder="可換行輸入，前台點擊商品時會顯示此介紹。" style="resize:vertical;min-height:100px"></textarea>
                 </div>
                 <div class="field full">
                   <label for="webEditPhotosInput">商品照片（1–5 張，選填）</label>
@@ -365,8 +365,8 @@
                   </select>
                 </div>
                 <div class="field full">
-                  <label for="publishSpecSummary">規格（選填，摘要說明）</label>
-                  <input id="publishSpecSummary" type="text" placeholder="例如：高CP 2K 遊戲機" />
+                  <label for="publishSpecSummary">產品介紹（選填，可換行分段落）</label>
+                  <textarea id="publishSpecSummary" rows="6" placeholder="可換行輸入，前台點擊商品時會顯示此介紹。" style="resize:vertical;min-height:100px"></textarea>
                 </div>
                 <div class="publish-specs-grid">
                 <div class="field publish-spec-block">
@@ -1733,6 +1733,7 @@
       </div>
     </main>
 
+    <div id="adminToast" class="admin-toast" aria-live="polite" hidden></div>
     <script src="./shared.js?v=20260217"></script>
     <script src="./inventory-ledger.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>

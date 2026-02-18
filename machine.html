@@ -92,6 +92,17 @@
           </div>
 
           <div id="productsPrompt" class="products-prompt muted">點選上方分類查看商品</div>
+          <!-- 產品介紹彈窗 -->
+          <div id="productDetailModal" class="product-detail-overlay" hidden aria-modal="true" aria-labelledby="productDetailTitle">
+            <div class="product-detail-dialog">
+              <button type="button" class="product-detail-close" aria-label="關閉" id="productDetailClose">&times;</button>
+              <div id="productDetailPhoto" class="product-detail-photo"></div>
+              <h2 id="productDetailTitle" class="product-detail-title"></h2>
+              <div id="productDetailIntro" class="product-detail-intro"></div>
+              <div id="productDetailPrice" class="product-detail-price"></div>
+              <button type="button" class="btn btn-primary product-detail-line-btn" id="productDetailLineBtn">加 LINE 詢問</button>
+            </div>
+          </div>
         </div>
       </section>
 
