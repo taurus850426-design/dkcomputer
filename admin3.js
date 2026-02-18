@@ -380,32 +380,56 @@
   }
 
   async function savePublishEditor() {
-    if (!editingWebId) return;
+    if (!editingWebId) {
+      showCenterToast("請先選擇要編輯的商品");
+      return;
+    }
     const items = window.DK?.getInventory?.() || [];
     const idx = items.findIndex((x) => x.id === editingWebId);
-    if (idx < 0) return;
-    items[idx] = {
-      ...items[idx],
-      name: webEditName?.value?.trim() ?? items[idx].name,
-      category: webEditCategory?.value ?? items[idx].category,
-      stockStatus: webEditStockStatus?.value ?? items[idx].stockStatus,
-      price: Number(webEditPrice?.value) || items[idx].price,
-      qty: Number(webEditQty?.value) ?? items[idx].qty,
-      note: webEditNote?.value?.trim() ?? items[idx].note,
-      photos: [...editPhotos],
-    };
-    window.DK?.saveInventory?.(items);
-    let msg = "已儲存";
-    if (window.DK?.upsertInventoryItemToSupabase) {
-      try {
-        const result = await window.DK.upsertInventoryItemToSupabase(items[idx]);
-        if (result && !result.ok && result?.error) msg = "已存本機，Supabase 同步失敗：" + result.error;
-      } catch (e) {
-        msg = "已存本機，Supabase 同步失敗：" + (e?.message || String(e));
+    if (idx < 0) {
+      showCenterToast("找不到該商品，請重新整理後再試");
+      return;
+    }
+    if (webEditSaveBtn) {
+      webEditSaveBtn.disabled = true;
+      webEditSaveBtn.textContent = "儲存中…";
+    }
+    showCenterToast("儲存中…");
+    try {
+      items[idx] = {
+        ...items[idx],
+        name: webEditName?.value?.trim() ?? items[idx].name,
+        category: webEditCategory?.value ?? items[idx].category,
+        stockStatus: webEditStockStatus?.value ?? items[idx].stockStatus,
+        price: Number(webEditPrice?.value) || items[idx].price,
+        qty: Number(webEditQty?.value) ?? items[idx].qty,
+        note: webEditNote?.value?.trim() ?? items[idx].note,
+        photos: [...editPhotos],
+      };
+      window.DK?.saveInventory?.(items);
+      let msg = "已儲存";
+      if (window.DK?.upsertInventoryItemToSupabase) {
+        try {
+          const result = await window.DK.upsertInventoryItemToSupabase(items[idx]);
+          if (result && !result.ok && result?.error) msg = "已存本機，Supabase 同步失敗：" + result.error;
+        } catch (e) {
+          msg = "已存本機，Supabase 同步失敗：" + (e?.message || String(e));
+        }
+      }
+      renderPublish();
+      showCenterToast(msg);
+    } catch (e) {
+      const isQuota = e && (e.name === "QuotaExceededError" || e.code === 22);
+      const msg = isQuota
+        ? "儲存空間不足，請減少照片張數或改用較小圖片"
+        : "儲存失敗：" + (e?.message || String(e));
+      showCenterToast(msg);
+    } finally {
+      if (webEditSaveBtn) {
+        webEditSaveBtn.disabled = false;
+        webEditSaveBtn.textContent = "儲存";
       }
     }
-    renderPublish();
-    showCenterToast(msg);
   }
 
   async function removeFromWeb(webId) {
@@ -522,6 +546,8 @@
       return;
     }
     const toAdd = files.slice(0, remaining);
+    show(publishEditorMsg, "正在處理相片…請稍候再按儲存。");
+    if (publishEditorMsg) publishEditorMsg.hidden = false;
     try {
       for (const file of toAdd) {
         const url = await fileToCompressedDataUrl(file);
