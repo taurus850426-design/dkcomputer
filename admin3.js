@@ -264,7 +264,7 @@
     });
   }
   async function fileToCompressedDataUrl(file, opts = {}) {
-    const { maxW = 1280, maxH = 1280, quality = 0.82 } = opts;
+    const { maxW = 960, maxH = 960, quality = 0.78 } = opts;
     const src = await readFileAsDataUrl(file);
     const img = await loadImage(src);
     const iw = img.naturalWidth || img.width;
@@ -329,10 +329,12 @@
       const name = escapeHtml(it.name || it.id || "");
       const cat = escapeHtml(it.category || "");
       const price = typeof it.price === "number" ? it.price.toLocaleString("zh-TW") : "-";
+      const photoCount = Array.isArray(it.photos) ? it.photos.length : 0;
+      const photoText = photoCount > 0 ? ` · ${photoCount} 張照片` : "";
       return `<div class="publish-web-card" data-id="${escapeHtml(it.id)}">
         <div class="publish-web-card-body">
           <div class="publish-web-card-title">${name}</div>
-          <div class="muted">${cat} · NT$ ${price}</div>
+          <div class="muted">${cat} · NT$ ${price}${photoText}</div>
         </div>
         <button type="button" class="btn btn-ghost btn-sm btn-edit-web">編輯</button>
       </div>`;
@@ -343,6 +345,27 @@
         if (id) openPublishEditor(id);
       });
     });
+    updatePublishStorageInfo(items);
+  }
+
+  async function updatePublishStorageInfo(items) {
+    const el = document.getElementById("publishStorageInfo");
+    if (!el) return;
+    const raw = window.DK?.getInventory ? window.DK.getInventory() : items;
+    const list = Array.isArray(raw) ? raw : [];
+    const jsonStr = JSON.stringify(list);
+    const bytes = new Blob([jsonStr]).size;
+    const kb = (bytes / 1024).toFixed(1);
+    let html = `商品資料約 ${kb} KB`;
+    try {
+      if (typeof navigator !== "undefined" && navigator.storage && typeof navigator.storage.estimate === "function") {
+        const est = await navigator.storage.estimate();
+        const used = (est.usage || 0) / 1024 / 1024;
+        const quota = (est.quota || 0) / 1024 / 1024;
+        html += ` · 本網站儲存已用約 ${used.toFixed(1)} MB / 上限約 ${quota.toFixed(0)} MB`;
+      }
+    } catch (_) {}
+    el.textContent = html;
   }
 
   function renderEditPhotoStrip() {
@@ -550,7 +573,7 @@
     if (publishEditorMsg) publishEditorMsg.hidden = false;
     try {
       for (const file of toAdd) {
-        const url = await fileToCompressedDataUrl(file);
+        const url = await fileToCompressedDataUrl(file, { maxW: 800, maxH: 1200, quality: 0.75 });
         editPhotos.push(url);
       }
       renderEditPhotoStrip();
@@ -573,7 +596,7 @@
     show(publishMsg, `正在處理相片…（${toAdd.length} 張）`);
     try {
       for (const file of toAdd) {
-        const url = await fileToCompressedDataUrl(file);
+        const url = await fileToCompressedDataUrl(file, { maxW: 800, maxH: 1200, quality: 0.75 });
         publishPhotos.push(url);
       }
       renderPublishPhotoStrip();
