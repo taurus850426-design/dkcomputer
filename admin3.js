@@ -393,9 +393,13 @@
       }
     }
     show(publishEditorMsg, msg);
-    if (publishEditorMsg) publishEditorMsg.hidden = false;
+    if (publishEditorMsg) {
+      publishEditorMsg.hidden = false;
+      publishEditorMsg.classList.toggle("msg-success", msg === "已儲存");
+    }
     renderPublish();
-    setTimeout(() => { closePublishEditor(); hide(publishEditorMsg); }, 3000);
+    // 只隱藏提示文字，不自動關閉編輯視窗，讓使用者清楚看到「已儲存」
+    setTimeout(() => { hide(publishEditorMsg); if (publishEditorMsg) publishEditorMsg.classList.remove("msg-success"); }, 3000);
   }
 
   async function removeFromWeb(webId) {

@@ -152,26 +152,17 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .contact-title{ font-weight: 800; font-size: 18px; margin-bottom: 4px; }
 .btn-lg{ padding: 12px 24px; font-size: 15px; }
 
-/* 整機販售頁：4 張 9:16 分類卡片 */
+/* 整機販售頁：5 張 9:16 分類卡片（電腦版一次顯示，手機版橫向滑動） */
 .page-head{ margin-bottom: 28px; }
 .cat-cards-row{
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
   gap: 20px;
-  justify-content: flex-start;
-  flex-wrap: nowrap;
   margin-bottom: 36px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 8px;
-  padding-right: 16px;
-  -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x proximity;
 }
 .cat-card{
   position: relative;
-  width: 280px;
-  flex: 0 0 280px;
-  min-width: 280px;
+  width: 100%;
   aspect-ratio: 9 / 16;
   border-radius: var(--radius);
   border: 2px solid var(--border);
@@ -185,7 +176,6 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
   overflow: hidden;
   opacity: 0.78;
   transition: opacity 0.25s ease, border-color 0.2s, transform 0.25s ease;
-  scroll-snap-align: start;
 }
 .cat-card:hover{ opacity: 1; border-color: var(--primary); transform: translateY(-4px) scale(1.05); }
 .cat-card.active{ opacity: 1; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(0,0,0,0.06); }
@@ -220,8 +210,12 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 
 .machine-cards{ display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
 .machine-cards:not(:empty){ min-height: 280px; }
+/* 桌面版：商品卡與上方五張分類卡同寬，照片大小一致 */
+@media (min-width: 981px){
+  .machine-cards{ grid-template-columns: repeat(5, 1fr); }
+}
 .machine-card{ background: rgba(255,255,255,0.92); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
-.machine-card-photo{ width: 100%; aspect-ratio: 4/3; min-height: 200px; border-radius: 12px; overflow: hidden; background: rgba(0,0,0,0.06); margin-bottom: 12px; }
+.machine-card-photo{ width: 100%; aspect-ratio: 9 / 16; border-radius: 12px; overflow: hidden; background: rgba(0,0,0,0.06); margin-bottom: 12px; }
 .machine-card-photo img{ width: 100%; height: 100%; object-fit: cover; display: block; -webkit-transform: translateZ(0); }
 /* 整機販售／商品卡：多張照片可左右滑動（強制可捲動） */
 .machine-card-photo.machine-card-photo-carousel{
@@ -263,8 +257,8 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
   object-fit: cover;
   display: block;
 }
-.machine-card-photo-carousel-inner{ height: 100%; min-height: 200px; }
-.machine-card-photo-carousel .machine-card-photo-slide{ height: 100%; min-height: 200px; }
+.machine-card-photo-carousel-inner{ height: 100%; min-height: 0; }
+.machine-card-photo-carousel .machine-card-photo-slide{ height: 100%; min-height: 0; }
 /* 輪播外層：箭頭 + 照片 + 點點 */
 .machine-card-photo-wrap{ position: relative; margin-bottom: 12px; }
 .machine-card-photo-wrap .machine-card-photo{ margin-bottom: 8px; }
@@ -452,6 +446,7 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .h3{ font-size:16px; margin:0 0 10px; }
 .lead{ color: rgba(18,24,38,0.78); margin:0 0 18px; max-width: 60ch;}
 .muted{ color: var(--muted); }
+.msg-success{ color: var(--ok, #0d7d2e); font-weight: 600; }
 
 .pill-row{ display:grid; gap:12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .pill{
@@ -823,7 +818,8 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
 @media (max-width: 980px){
   .grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .machine-cards{ grid-template-columns: 1fr; }
-  .cat-card{ width: 220px; }
+  .cat-cards-row{ display: flex; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; padding-right: 16px; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+  .cat-card{ width: 220px; min-width: 220px; flex: 0 0 220px; scroll-snap-align: start; }
   .pill-row{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .two-col{ grid-template-columns: 1fr; }
   .google-layout{ grid-template-columns: 1fr; }
