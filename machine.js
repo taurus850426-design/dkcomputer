@@ -74,12 +74,16 @@
   }
 
   function getItems() {
-    let items = DK.getInventory();
+    let items = (typeof DK.getInventoryForDisplay === "function" ? DK.getInventoryForDisplay() : DK.getInventory());
     if (items.length === 0 && typeof DK.getStock === "function") {
       items = DK.getStock()
         .filter((s) => s?.web?.publish && s?.status !== "已售出")
         .map((s) => {
           const w = s.web || {};
+          const qty = (() => {
+            const n = Number(w?.qty ?? s?.qty);
+            return Number.isFinite(n) && n >= 0 ? n : null;
+          })();
           return {
             id: s.id,
             name: w.name || s.modelSpec || s.stockNo,
@@ -87,6 +91,7 @@
             price: typeof w.price === "number" ? w.price : DK.toNumber?.(w.price) ?? null,
             note: w.note || "",
             photos: Array.isArray(w.photos) ? w.photos : [],
+            qty,
           };
         });
     }

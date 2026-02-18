@@ -95,7 +95,7 @@
   }
 
   function renderFocus() {
-    const items = DK.getInventory();
+    const items = (typeof DK.getInventoryForDisplay === "function" ? DK.getInventoryForDisplay() : DK.getInventory());
 
     const hot = pickHotItems(items);
     const game = pickGameItems(items);
@@ -151,7 +151,7 @@
   }
 
   function render() {
-    const items = DK.getInventory().filter(matches);
+    const items = (typeof DK.getInventoryForDisplay === "function" ? DK.getInventoryForDisplay() : DK.getInventory()).filter(matches);
     grid.innerHTML = "";
 
     if (items.length === 0) {
@@ -241,11 +241,11 @@
     setQuery("熱銷");
     render();
     // 若使用者沒有用「熱銷」標籤，試著退而求其次
-    if (DK.getInventory().filter(matches).length === 0) {
+    if ((typeof DK.getInventoryForDisplay === "function" ? DK.getInventoryForDisplay() : DK.getInventory()).filter(matches).length === 0) {
       setQuery("熱門");
       render();
     }
-    if (DK.getInventory().filter(matches).length === 0) {
+    if ((typeof DK.getInventoryForDisplay === "function" ? DK.getInventoryForDisplay() : DK.getInventory()).filter(matches).length === 0) {
       setQuery("推薦");
       render();
     }

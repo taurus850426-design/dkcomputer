@@ -322,6 +322,39 @@ function getInventory() {
   return saved;
 }
 
+/** 供前台顯示用：回傳上架商品列表，且「剩餘數量」優先從庫存連動（同 id 的庫存品項現有數量），不用手動輸入。 */
+function getInventoryForDisplay() {
+  const list = getInventory();
+  const out = list.map((it) => ({ ...it }));
+  const ids = new Set(out.map((i) => String(i?.id || "")));
+  if (ids.size === 0) return out;
+  if (typeof window !== "undefined" && window.DK) {
+    const DK = window.DK;
+    if (typeof DK.getItems === "function") {
+      const v2Items = DK.getItems();
+      for (const it of out) {
+        const v = v2Items.find((x) => String(x?.id || "") === String(it?.id || ""));
+        if (v != null && Number.isFinite(Number(v.qty_on_hand)) && Number(v.qty_on_hand) >= 0) {
+          it.qty = Number(v.qty_on_hand);
+        }
+      }
+    }
+    if (typeof DK.getStock === "function") {
+      const stockList = DK.getStock();
+      for (const it of out) {
+        if (it.qty != null) continue;
+        const s = stockList.find((x) => String(x?.id || "") === String(it?.id || ""));
+        if (s != null) {
+          const q = s.web?.qty ?? s.qty;
+          const n = Number(q);
+          if (Number.isFinite(n) && n >= 0) it.qty = n;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 function saveInventory(items) {
   localStorage.setItem(STORAGE_KEYS.inventory, JSON.stringify(items));
 }
@@ -1184,6 +1217,7 @@ window.DK = {
   saveConfig,
   getInventoryCategories,
   getInventory,
+  getInventoryForDisplay,
   saveInventory,
   fetchInventoryFromSupabase,
   upsertInventoryItemToSupabase,

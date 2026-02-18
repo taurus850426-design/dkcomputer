@@ -312,8 +312,17 @@
     const el = document.getElementById("publishTotalCost");
     if (el) el.textContent = "NT$ " + (total || 0).toLocaleString("zh-TW");
   }
+  /** 各項目「價」加總後寫入出售金額 */
   function updatePublishSalePrice() {
-    // 出售金額改為可自訂，由使用者自行輸入；預估成本僅供參考
+    let sum = 0;
+    for (const spec of PUBLISH_SPECS) {
+      const el = spec.priceId ? document.getElementById(spec.priceId) : null;
+      if (el) {
+        const n = Number(el.value);
+        if (Number.isFinite(n) && n >= 0) sum += n;
+      }
+    }
+    if (publishPrice) publishPrice.value = sum > 0 ? String(sum) : "";
   }
 
   function renderPublishPhotoStrip() {
@@ -458,12 +467,26 @@
     editingWebId = webId || null;
     const items = window.DK?.getInventory?.() || [];
     const it = webId ? items.find((x) => x.id === webId) : null;
+    const v2Item = webId && typeof window.DK?.getItems === "function" ? window.DK.getItems().find((x) => String(x?.id) === String(webId)) : null;
+    const qtyFromStock = v2Item != null && Number.isFinite(Number(v2Item.qty_on_hand)) ? Number(v2Item.qty_on_hand) : null;
     if (publishEditorTitle) publishEditorTitle.textContent = it ? "編輯：" + (it.name || it.id) : "";
     if (webEditName) webEditName.value = it?.name ?? "";
     if (webEditCategory) webEditCategory.value = it?.category ?? "文書";
     if (webEditStockStatus) webEditStockStatus.value = it?.stockStatus ?? "現貨";
     if (webEditPrice) webEditPrice.value = it?.price ?? "";
-    if (webEditQty) webEditQty.value = it?.qty ?? it?.stock ?? 1;
+    if (webEditQty) {
+      if (qtyFromStock != null) {
+        webEditQty.value = String(qtyFromStock);
+        webEditQty.readOnly = true;
+        webEditQty.title = "此商品對應庫存+記帳品項，數量由庫存+記帳自動帶入";
+      } else {
+        webEditQty.value = it?.qty ?? it?.stock ?? 1;
+        webEditQty.readOnly = false;
+        webEditQty.title = "";
+      }
+    }
+    const qtyHint = document.getElementById("webEditQtyHint");
+    if (qtyHint) qtyHint.style.display = qtyFromStock != null ? "block" : "none";
     if (webEditNote) webEditNote.value = it?.note ?? "";
     editPhotos = Array.isArray(it?.photos) ? [...it.photos] : [];
     renderEditPhotoStrip();
@@ -494,13 +517,15 @@
     }
     showCenterToast("儲存中…");
     try {
-      items[idx] = {
+    const v2Item = typeof window.DK?.getItems === "function" ? window.DK.getItems().find((x) => String(x?.id) === String(editingWebId)) : null;
+    const resolvedQty = v2Item != null && Number.isFinite(Number(v2Item.qty_on_hand)) ? Number(v2Item.qty_on_hand) : (Number(webEditQty?.value) ?? items[idx].qty);
+    items[idx] = {
         ...items[idx],
         name: webEditName?.value?.trim() ?? items[idx].name,
         category: webEditCategory?.value ?? items[idx].category,
         stockStatus: webEditStockStatus?.value ?? items[idx].stockStatus,
         price: Number(webEditPrice?.value) || items[idx].price,
-        qty: Number(webEditQty?.value) ?? items[idx].qty,
+        qty: resolvedQty,
         note: webEditNote?.value?.trim() ?? items[idx].note,
         photos: [...editPhotos],
       };
@@ -982,8 +1007,8 @@
       }
     }
 
-    function renderV2Items() {
-      if (!itemsTbody) return;
+    /** 取得目前篩選後的庫存品項列表（與畫面一致） */
+    function getV2ItemsFilteredList() {
       let list = DK.getEnrichedItems();
       const q = (itemsSearch?.value || "").trim().toLowerCase();
       const cat = itemsCategory?.value || "";
@@ -991,6 +1016,12 @@
       if (q) list = list.filter((x) => [x.sku, x.name, x.spec].some((f) => String(f || "").toLowerCase().includes(q)));
       if (cat) list = list.filter((x) => x.category === cat);
       if (st) list = list.filter((x) => x.status === st);
+      return list;
+    }
+
+    function renderV2Items() {
+      if (!itemsTbody) return;
+      const list = getV2ItemsFilteredList();
       itemsTbody.innerHTML = list.map((x) => {
         const alert = DK.getItemAlert(x);
         const alertText = alert ? alert.message : "-";
@@ -1060,7 +1091,47 @@
       v2Hide(itemMsg);
     }
 
+    /** 匯出目前篩選的庫存品項為 CSV（Excel 可開啟，UTF-8 BOM） */
+    function exportV2ItemsToExcel() {
+      const list = getV2ItemsFilteredList();
+      const escapeCsv = (v) => {
+        const s = v == null ? "" : String(v);
+        if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+        return s;
+      };
+      const headers = ["編號", "名稱", "規格", "品類", "狀態", "數量", "成本", "建議價", "最低價", "入庫日", "庫齡(天)", "滯留(天)", "庫存價值", "提醒"];
+      const rows = list.map((x) => {
+        const alert = DK.getItemAlert(x);
+        const alertText = alert ? alert.message : "";
+        return [
+          x.sku ?? "",
+          x.name ?? "",
+          x.spec ?? "",
+          x.category ?? "",
+          STATUS_LABEL[x.status] || x.status || "",
+          x.qty_on_hand ?? "",
+          x.cost_unit != null ? x.cost_unit : "",
+          x.price_list != null ? x.price_list : "",
+          x.price_floor != null ? x.price_floor : "",
+          (x.inbound_date || "").toString().slice(0, 10),
+          x.age_days != null ? x.age_days : "",
+          x.idle_days != null ? x.idle_days : "",
+          x.inventory_value != null ? x.inventory_value : "",
+          alertText,
+        ].map(escapeCsv);
+      });
+      const csv = "\uFEFF" + [headers.map(escapeCsv).join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "庫存品項_" + (DK.todayStr ? DK.todayStr() : new Date().toISOString().slice(0, 10)) + ".csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showCenterToast("已匯出 " + list.length + " 筆，請用 Excel 開啟 CSV 檔");
+    }
+
     document.getElementById("btnNewItem")?.addEventListener("click", () => openV2ItemEditor(null));
+    document.getElementById("btnExportItemsExcel")?.addEventListener("click", exportV2ItemsToExcel);
     document.getElementById("itemCancel")?.addEventListener("click", closeV2ItemEditor);
     itemEditorModal?.addEventListener("click", (e) => { if (e.target === itemEditorModal) closeV2ItemEditor(); });
     document.getElementById("itemDelete")?.addEventListener("click", () => {

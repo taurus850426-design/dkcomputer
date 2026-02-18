@@ -71,6 +71,7 @@
               <div class="section-actions">
                 <a href="./photo-recognize-add.html" class="btn btn-primary" target="_blank" rel="noopener">📷 拍照辨識新增</a>
                 <button id="btnNewItem" class="btn btn-primary" type="button">新增品項</button>
+                <button id="btnExportItemsExcel" class="btn btn-ghost" type="button">匯出 Excel</button>
                 <button id="btnDeleteSelectedItems" class="btn btn-ghost" type="button" style="color:var(--danger,#c00)">刪除所選</button>
               </div>
             </div>
@@ -330,6 +331,7 @@
                 <div class="field">
                   <label for="webEditQty">剩餘數量</label>
                   <input id="webEditQty" type="number" min="0" step="1" />
+                  <span id="webEditQtyHint" class="muted small" style="display:none;margin-top:4px">由庫存+記帳自動帶入，請至「庫存+記帳」維護數量</span>
                 </div>
                 <div class="field full">
                   <label for="webEditNote">產品介紹（可換行、分段落）</label>
