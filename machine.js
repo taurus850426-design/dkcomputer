@@ -30,6 +30,7 @@
   const productDetailTitle = document.getElementById("productDetailTitle");
   const productDetailIntro = document.getElementById("productDetailIntro");
   const productDetailPrice = document.getElementById("productDetailPrice");
+  const productDetailQty = document.getElementById("productDetailQty");
   const productDetailLineBtn = document.getElementById("productDetailLineBtn");
 
   if (!catCards.length || !productsSection || !productsGrid) return;
@@ -96,6 +97,7 @@
     const name = DK.escapeHtml(item.name || "整機");
     const price = item.price != null ? DK.formatPrice(item.price) : null;
     const priceText = price ? `NT$ ${price}` : "價格請加 LINE 詢問";
+    const qty = (() => { const n = typeof item.qty === "number" ? item.qty : Number(item.qty); return Number.isFinite(n) && n >= 0 ? n : null; })();
     const photosRaw = Array.isArray(item.photos) ? item.photos : [];
     const photos = photosRaw
       .filter((p) => typeof p === "string")
@@ -120,6 +122,7 @@
         ${photoCarouselHtml}
         <h3 class="machine-card-title">${name}</h3>
         <div class="machine-card-price">${priceText}</div>
+        ${qty != null ? `<div class="machine-card-qty">剩餘 ${qty} 件</div>` : ""}
         <button type="button" class="btn btn-primary machine-line-btn" data-id="${DK.escapeHtml(item.id)}">加 LINE 詢問</button>
       </article>
     `;
@@ -134,6 +137,11 @@
     }
     const price = item.price != null ? DK.formatPrice(item.price) : null;
     if (productDetailPrice) productDetailPrice.textContent = price ? `NT$ ${price}` : "價格請加 LINE 詢問";
+    const qty = typeof item.qty === "number" && item.qty >= 0 ? item.qty : null;
+    if (productDetailQty) {
+      productDetailQty.textContent = qty != null ? `剩餘 ${qty} 件` : "";
+      productDetailQty.hidden = qty == null;
+    }
     if (productDetailPhoto) {
       const photos = Array.isArray(item.photos) ? item.photos.filter((p) => typeof p === "string" && p.trim()) : [];
       if (photos.length === 0) {

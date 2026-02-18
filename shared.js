@@ -350,6 +350,7 @@ async function fetchInventoryFromSupabase() {
     price: typeof r.price === "number" ? r.price : toNumber(r.price) ?? null,
     note: String(r.note || ""),
     photos: Array.isArray(r.photos) ? r.photos : [],
+    qty: (() => { const n = typeof r.qty === "number" ? r.qty : Number(r.qty); return Number.isFinite(n) && n >= 0 ? n : null; })(),
   }));
 }
 
@@ -368,6 +369,7 @@ async function upsertInventoryItemToSupabase(item) {
     price: typeof item.price === "number" ? item.price : toNumber(item.price),
     note: String(item.note || ""),
     photos: Array.isArray(item.photos) ? item.photos : [],
+    qty: typeof item.qty === "number" && item.qty >= 0 ? item.qty : null,
   };
 
   const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_INVENTORY_TABLE}?on_conflict=id`;

@@ -327,7 +327,8 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .machine-card-desc{ font-size: 14px; color: var(--muted); line-height: 1.5; margin: 0 0 12px; }
 .machine-card-fit{ list-style: none; margin: 0 0 12px; padding: 0; font-size: 13px; color: var(--muted); }
 .machine-card-fit li{ margin: 4px 0; }
-.machine-card-price{ font-weight: 800; font-size: 18px; margin-bottom: 10px; }
+.machine-card-price{ font-weight: 800; font-size: 18px; margin-bottom: 4px; }
+.machine-card-qty{ font-size: 13px; color: var(--muted); margin-bottom: 10px; }
 .machine-card-note{ font-size: 12px; color: var(--muted); margin: 0 0 14px; }
 
 /* 產品介紹彈窗（點擊商品卡片開啟） */
@@ -382,7 +383,8 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .product-detail-dot.active{ background: var(--primary, #7c5cff); }
 .product-detail-title{ font-size: 20px; font-weight: 800; margin: 0 0 12px; }
 .product-detail-intro{ font-size: 15px; color: var(--muted); line-height: 1.6; margin: 0 0 16px; white-space: pre-wrap; }
-.product-detail-price{ font-weight: 800; font-size: 18px; margin-bottom: 16px; }
+.product-detail-price{ font-weight: 800; font-size: 18px; margin-bottom: 4px; }
+.product-detail-qty{ font-size: 14px; color: var(--muted); margin-bottom: 16px; }
 .product-detail-line-btn{ width: 100%; }
 
 /* 需求表單頁 */
