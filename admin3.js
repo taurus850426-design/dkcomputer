@@ -318,11 +318,37 @@
 
   function renderPublishPhotoStrip() {
     if (!publishPhotoStrip) return;
-    publishPhotoStrip.innerHTML = publishPhotos.map((url, i) => `<span class="photo-thumb"><img src="${escapeHtml(url)}" alt="" /><button type="button" class="btn-remove-photo" data-i="${i}">×</button></span>`).join("");
+    const n = publishPhotos.length;
+    publishPhotoStrip.innerHTML = publishPhotos.map((url, i) => `<span class="photo-thumb" data-i="${i}">
+      <img src="${escapeHtml(url)}" alt="" />
+      <button type="button" class="btn-remove-photo" data-i="${i}">×</button>
+      <div class="photo-thumb-order">
+        <button type="button" class="btn-move-photo btn-move-up" data-i="${i}" title="上移" ${i === 0 ? "disabled" : ""}>↑</button>
+        <button type="button" class="btn-move-photo btn-move-down" data-i="${i}" title="下移" ${i === n - 1 ? "disabled" : ""}>↓</button>
+      </div>
+    </span>`).join("");
     publishPhotoStrip.querySelectorAll(".btn-remove-photo").forEach((btn) => {
       btn.addEventListener("click", () => {
         publishPhotos.splice(Number(btn.getAttribute("data-i")), 1);
         renderPublishPhotoStrip();
+      });
+    });
+    publishPhotoStrip.querySelectorAll(".btn-move-up").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = Number(btn.getAttribute("data-i"));
+        if (i > 0) {
+          [publishPhotos[i - 1], publishPhotos[i]] = [publishPhotos[i], publishPhotos[i - 1]];
+          renderPublishPhotoStrip();
+        }
+      });
+    });
+    publishPhotoStrip.querySelectorAll(".btn-move-down").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = Number(btn.getAttribute("data-i"));
+        if (i < publishPhotos.length - 1) {
+          [publishPhotos[i], publishPhotos[i + 1]] = [publishPhotos[i + 1], publishPhotos[i]];
+          renderPublishPhotoStrip();
+        }
       });
     });
   }
@@ -351,12 +377,12 @@
       const name = escapeHtml(it.name || it.id || "");
       const cat = escapeHtml(it.category || "");
       const price = typeof it.price === "number" ? it.price.toLocaleString("zh-TW") : "-";
-      const photoCount = Array.isArray(it.photos) ? it.photos.length : 0;
-      const photoText = photoCount > 0 ? ` · ${photoCount} 張照片` : "";
+      const firstPhoto = Array.isArray(it.photos) && it.photos.length > 0 ? it.photos[0] : "";
       return `<div class="publish-web-card" data-id="${escapeHtml(it.id)}">
+        <div class="publish-web-card-img">${firstPhoto ? `<img src="${escapeHtml(firstPhoto)}" alt="" />` : "<span class=\"publish-web-card-noimg\">無圖片</span>"}</div>
         <div class="publish-web-card-body">
           <div class="publish-web-card-title">${name}</div>
-          <div class="muted">${cat} · NT$ ${price}${photoText}</div>
+          <div class="muted">${cat} · NT$ ${price}</div>
         </div>
         <button type="button" class="btn btn-ghost btn-sm btn-edit-web">編輯</button>
       </div>`;
@@ -393,11 +419,37 @@
 
   function renderEditPhotoStrip() {
     if (!webEditPhotoStrip) return;
-    webEditPhotoStrip.innerHTML = editPhotos.map((url, i) => `<span class="photo-thumb"><img src="${escapeHtml(url)}" alt="" /><button type="button" class="btn-remove-photo" data-i="${i}">×</button></span>`).join("");
+    const n = editPhotos.length;
+    webEditPhotoStrip.innerHTML = editPhotos.map((url, i) => `<span class="photo-thumb" data-i="${i}">
+      <img src="${escapeHtml(url)}" alt="" />
+      <button type="button" class="btn-remove-photo" data-i="${i}">×</button>
+      <div class="photo-thumb-order">
+        <button type="button" class="btn-move-photo btn-move-up" data-i="${i}" title="上移" ${i === 0 ? "disabled" : ""}>↑</button>
+        <button type="button" class="btn-move-photo btn-move-down" data-i="${i}" title="下移" ${i === n - 1 ? "disabled" : ""}>↓</button>
+      </div>
+    </span>`).join("");
     webEditPhotoStrip.querySelectorAll(".btn-remove-photo").forEach((btn) => {
       btn.addEventListener("click", () => {
         editPhotos.splice(Number(btn.getAttribute("data-i")), 1);
         renderEditPhotoStrip();
+      });
+    });
+    webEditPhotoStrip.querySelectorAll(".btn-move-up").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = Number(btn.getAttribute("data-i"));
+        if (i > 0) {
+          [editPhotos[i - 1], editPhotos[i]] = [editPhotos[i], editPhotos[i - 1]];
+          renderEditPhotoStrip();
+        }
+      });
+    });
+    webEditPhotoStrip.querySelectorAll(".btn-move-down").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = Number(btn.getAttribute("data-i"));
+        if (i < editPhotos.length - 1) {
+          [editPhotos[i], editPhotos[i + 1]] = [editPhotos[i + 1], editPhotos[i]];
+          renderEditPhotoStrip();
+        }
       });
     });
   }

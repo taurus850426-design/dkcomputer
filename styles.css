@@ -1126,6 +1126,8 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
   gap: 16px;
 }
 .publish-web-card{
+  display: flex;
+  flex-direction: column;
   border: 1px solid rgba(17,24,39,0.12);
   border-radius: var(--radius, 12px);
   overflow: hidden;
@@ -1213,6 +1215,16 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
   justify-content: center;
 }
 .photo-thumb .btn-remove-photo:hover{ background: #fff; }
+.photo-thumb-order{
+  position: absolute; left: 6px; bottom: 6px; display: flex; gap: 4px;
+}
+.photo-thumb-order .btn-move-photo{
+  width: 24px; height: 24px; padding: 0; border: none; border-radius: 6px;
+  background: rgba(0,0,0,0.5); color: #fff; cursor: pointer; font-size: 12px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.photo-thumb-order .btn-move-photo:hover:not(:disabled){ background: rgba(0,0,0,0.75); }
+.photo-thumb-order .btn-move-photo:disabled{ opacity: 0.4; cursor: not-allowed; }
 .thumb{
   position: relative;
   width: 110px;
