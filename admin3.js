@@ -280,6 +280,28 @@
     return canvas.toDataURL("image/jpeg", quality);
   }
 
+  function dataURLToBlob(dataUrl) {
+    const parts = dataUrl.split(",");
+    const mime = (parts[0].match(/:(.*?);/) || [])[1] || "image/jpeg";
+    const bin = atob(parts[1] || "");
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  }
+
+  /** 壓縮並取得照片 URL：若已設定 Supabase Storage bucket 則上傳到雲端回傳網址，否則回傳 data URL。 */
+  async function compressAndResolvePhotoUrl(file, opts = {}) {
+    const dataUrl = await fileToCompressedDataUrl(file, opts);
+    const upload = window.DK?.uploadImageToSupabaseStorage;
+    if (typeof upload === "function") {
+      const blob = dataURLToBlob(dataUrl);
+      const path = "products/" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + ".jpg";
+      const publicUrl = await upload(blob, path);
+      if (publicUrl) return publicUrl;
+    }
+    return dataUrl;
+  }
+
   const publishSpecPrices = {};
   function setPublishSpecPrice(key, val) {
     publishSpecPrices[key] = val;
@@ -365,6 +387,7 @@
         html += ` · 本網站儲存已用約 ${used.toFixed(1)} MB / 上限約 ${quota.toFixed(0)} MB`;
       }
     } catch (_) {}
+    html += "（本機約 5MB 上限，無法升級；若儲存失敗請減少照片或縮小圖）";
     el.textContent = html;
   }
 
@@ -444,7 +467,7 @@
     } catch (e) {
       const isQuota = e && (e.name === "QuotaExceededError" || e.code === 22);
       const msg = isQuota
-        ? "儲存空間不足，請減少照片張數或改用較小圖片"
+        ? "瀏覽器本機儲存已滿（約 5MB 上限，無法升級）。請減少照片張數或改用較小圖片後再儲存。"
         : "儲存失敗：" + (e?.message || String(e));
       showCenterToast(msg);
     } finally {
@@ -573,7 +596,7 @@
     if (publishEditorMsg) publishEditorMsg.hidden = false;
     try {
       for (const file of toAdd) {
-        const url = await fileToCompressedDataUrl(file, { maxW: 800, maxH: 1200, quality: 0.75 });
+        const url = await compressAndResolvePhotoUrl(file, { maxW: 640, maxH: 960, quality: 0.65 });
         editPhotos.push(url);
       }
       renderEditPhotoStrip();
@@ -596,7 +619,7 @@
     show(publishMsg, `正在處理相片…（${toAdd.length} 張）`);
     try {
       for (const file of toAdd) {
-        const url = await fileToCompressedDataUrl(file, { maxW: 800, maxH: 1200, quality: 0.75 });
+        const url = await compressAndResolvePhotoUrl(file, { maxW: 640, maxH: 960, quality: 0.65 });
         publishPhotos.push(url);
       }
       renderPublishPhotoStrip();

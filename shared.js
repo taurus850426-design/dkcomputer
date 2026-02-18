@@ -34,6 +34,8 @@ const SUPABASE_ORDERS_DATA_TABLE = "orders_data";
 const ORDERS_DATA_ROW_ID = "default";
 const SUPABASE_V2_DATA_TABLE = "v2_data";
 const V2_DATA_ROW_ID = "default";
+/** 若設定為 bucket 名稱（例如 "product-photos"），上傳商品照片時會改存 Supabase Storage，只在本機存網址，可避免 5MB 上限。請先在 Supabase 後台建立該 bucket 並設為 Public。 */
+const SUPABASE_STORAGE_BUCKET = "product-photos";
 const V2_STORAGE_KEYS = { items: "dk_v2_items", ledger: "dk_v2_ledger", orders: "dk_v2_orders", expenses: "dk_v2_expenses" };
 
 const DEFAULT_CONFIG = {
@@ -405,6 +407,35 @@ async function deleteInventoryItemFromSupabase(id) {
     return { ok: false, error: `HTTP ${res.status}：${errText.slice(0, 80)}` };
   }
   return { ok: true };
+}
+
+// ===== Supabase Storage：商品照片上傳（選用，可避免 localStorage 5MB 上限） =====
+/** 上傳圖片到 Supabase Storage，回傳公開網址；失敗或未設定 bucket 時回傳 null。 */
+async function uploadImageToSupabaseStorage(blob, pathOrFilename) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_STORAGE_BUCKET) return null;
+  const path = String(pathOrFilename || "img.jpg").replace(/^\/+/, "");
+  const url = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_STORAGE_BUCKET}/${path}`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": blob.type || "image/jpeg",
+        "x-upsert": "true",
+      },
+      body: blob,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.warn("[Supabase Storage] 上傳失敗", res.status, err.slice(0, 100));
+      return null;
+    }
+    return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_STORAGE_BUCKET}/${path}`;
+  } catch (e) {
+    console.warn("[Supabase Storage] 上傳錯誤", e?.message || e);
+    return null;
+  }
 }
 
 // ===== Supabase：官網設定（site_config）讀寫 =====
@@ -1155,6 +1186,7 @@ window.DK = {
   fetchInventoryFromSupabase,
   upsertInventoryItemToSupabase,
   deleteInventoryItemFromSupabase,
+  uploadImageToSupabaseStorage,
   fetchSiteConfigFromSupabase,
   saveSiteConfigToSupabase,
   fetchStockDataFromSupabase,
