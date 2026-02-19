@@ -161,8 +161,14 @@
               <div id="ledgerForm" class="card" style="margin-top:12px" hidden>
                 <h3 class="h3">新增流水</h3>
                 <div class="form-grid">
-                  <div class="field"><label for="ledgerItemId">品項</label><select id="ledgerItemId"></select></div>
-                  <div class="field"><label for="ledgerType">類型</label><select id="ledgerType"><option value="IN">入庫</option><option value="OUT">出庫</option><option value="ADJUST">調整</option></select></div>
+                  <div class="field"><label for="ledgerItemIdSearch">品項</label>
+                  <div class="searchable-select-wrap">
+                    <select id="ledgerItemId" aria-hidden="true" tabindex="-1"></select>
+                    <input id="ledgerItemIdSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋品項…" autocomplete="off" />
+                    <div id="ledgerItemIdDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
+                  </div>
+                </div>
+                <div class="field"><label for="ledgerType">類型</label><select id="ledgerType"><option value="IN">入庫</option><option value="OUT">出庫</option><option value="ADJUST">調整</option></select></div>
                   <div class="field"><label for="ledgerQty">數量</label><input id="ledgerQty" type="number" /></div>
                   <div class="field"><label for="ledgerUnitCost">單位成本（入庫必填）</label><input id="ledgerUnitCost" type="number" min="0" step="1" /></div>
                   <div class="field"><label for="ledgerRefType">參考類型</label><select id="ledgerRefType"><option value="PURCHASE">進貨</option><option value="ORDER">訂單</option><option value="RMA">退換</option><option value="SCRAP">報廢</option><option value="MOVE">移倉</option><option value="ADJUST">調整</option></select></div>
@@ -196,9 +202,13 @@
                   <div class="field full">
                     <label>訂單明細（出庫品項，儲存後自動扣庫存）</label>
                     <div class="form-grid" style="grid-template-columns: 1fr auto auto auto;">
-                      <select id="orderLineItem">
-                        <option value="">— 選擇品項 —</option>
-                      </select>
+                      <div class="searchable-select-wrap">
+                        <select id="orderLineItem" aria-hidden="true" tabindex="-1">
+                          <option value="">— 選擇品項 —</option>
+                        </select>
+                        <input id="orderLineItemSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋品項…" autocomplete="off" />
+                        <div id="orderLineItemDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
+                      </div>
                       <input id="orderLineQty" type="number" min="1" value="1" placeholder="數量" style="width:80px" />
                       <input id="orderLinePrice" type="number" min="0" step="1" placeholder="單價" style="width:90px" />
                       <button id="orderLineAdd" class="btn btn-ghost" type="button">加入明細</button>
@@ -376,7 +386,11 @@
                   <div class="publish-spec-box">
                     <label class="publish-spec-title">處理器 CPU</label>
                     <div class="publish-spec-row publish-spec-combo">
-                      <select id="publishCpu" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <div class="searchable-select-wrap">
+                        <select id="publishCpu" class="publish-spec-select" aria-hidden="true" tabindex="-1"><option value="">— 請選擇 —</option></select>
+                        <input id="publishCpuSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋…" autocomplete="off" />
+                        <div id="publishCpuDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
+                      </div>
                       <input id="publishCpuCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
                     </div>
                     <div class="publish-spec-row publish-spec-meta">
@@ -391,7 +405,11 @@
                   <div class="publish-spec-box">
                     <label class="publish-spec-title">主機板 MB</label>
                     <div class="publish-spec-row publish-spec-combo">
-                      <select id="publishMb" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <div class="searchable-select-wrap">
+                        <select id="publishMb" class="publish-spec-select" aria-hidden="true" tabindex="-1"><option value="">— 請選擇 —</option></select>
+                        <input id="publishMbSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋…" autocomplete="off" />
+                        <div id="publishMbDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
+                      </div>
                       <input id="publishMbCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
                     </div>
                     <div class="publish-spec-row publish-spec-meta">
@@ -406,7 +424,11 @@
                   <div class="publish-spec-box">
                     <label class="publish-spec-title">記憶體 RAM</label>
                     <div class="publish-spec-row publish-spec-combo">
-                      <select id="publishRam" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <div class="searchable-select-wrap">
+                        <select id="publishRam" class="publish-spec-select" aria-hidden="true" tabindex="-1"><option value="">— 請選擇 —</option></select>
+                        <input id="publishRamSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋…" autocomplete="off" />
+                        <div id="publishRamDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
+                      </div>
                       <input id="publishRamCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
                     </div>
                     <div class="publish-spec-row publish-spec-meta">
@@ -421,7 +443,11 @@
                   <div class="publish-spec-box">
                     <label class="publish-spec-title">硬碟</label>
                     <div class="publish-spec-row publish-spec-combo">
-                      <select id="publishHdd" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <div class="searchable-select-wrap">
+                        <select id="publishHdd" class="publish-spec-select" aria-hidden="true" tabindex="-1"><option value="">— 請選擇 —</option></select>
+                        <input id="publishHddSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋…" autocomplete="off" />
+                        <div id="publishHddDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
+                      </div>
                       <input id="publishHddCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
                     </div>
                     <div class="publish-spec-row publish-spec-meta">
@@ -436,7 +462,11 @@
                   <div class="publish-spec-box">
                     <label class="publish-spec-title">顯示卡 VGA</label>
                     <div class="publish-spec-row publish-spec-combo">
-                      <select id="publishVga" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <div class="searchable-select-wrap">
+                        <select id="publishVga" class="publish-spec-select" aria-hidden="true" tabindex="-1"><option value="">— 請選擇 —</option></select>
+                        <input id="publishVgaSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋…" autocomplete="off" />
+                        <div id="publishVgaDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
+                      </div>
                       <input id="publishVgaCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
                     </div>
                     <div class="publish-spec-row publish-spec-meta">
@@ -451,7 +481,11 @@
                   <div class="publish-spec-box">
                     <label class="publish-spec-title">電源供應器</label>
                     <div class="publish-spec-row publish-spec-combo">
-                      <select id="publishPsu" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <div class="searchable-select-wrap">
+                        <select id="publishPsu" class="publish-spec-select" aria-hidden="true" tabindex="-1"><option value="">— 請選擇 —</option></select>
+                        <input id="publishPsuSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋…" autocomplete="off" />
+                        <div id="publishPsuDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
+                      </div>
                       <input id="publishPsuCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
                     </div>
                     <div class="publish-spec-row publish-spec-meta">
@@ -466,7 +500,11 @@
                   <div class="publish-spec-box">
                     <label class="publish-spec-title">機殼</label>
                     <div class="publish-spec-row publish-spec-combo">
-                      <select id="publishCase" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <div class="searchable-select-wrap">
+                        <select id="publishCase" class="publish-spec-select" aria-hidden="true" tabindex="-1"><option value="">— 請選擇 —</option></select>
+                        <input id="publishCaseSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋…" autocomplete="off" />
+                        <div id="publishCaseDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
+                      </div>
                       <input id="publishCaseCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
                     </div>
                     <div class="publish-spec-row publish-spec-meta">
@@ -481,7 +519,11 @@
                   <div class="publish-spec-box">
                     <label class="publish-spec-title">周邊</label>
                     <div class="publish-spec-row publish-spec-combo">
-                      <select id="publishPeripherals" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <div class="searchable-select-wrap">
+                        <select id="publishPeripherals" class="publish-spec-select" aria-hidden="true" tabindex="-1"><option value="">— 請選擇 —</option></select>
+                        <input id="publishPeripheralsSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋…" autocomplete="off" />
+                        <div id="publishPeripheralsDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
+                      </div>
                       <input id="publishPeripheralsCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
                     </div>
                     <div class="publish-spec-row publish-spec-meta">
@@ -496,7 +538,11 @@
                   <div class="publish-spec-box">
                     <label class="publish-spec-title">其他</label>
                     <div class="publish-spec-row publish-spec-combo">
-                      <select id="publishOther" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <div class="searchable-select-wrap">
+                        <select id="publishOther" class="publish-spec-select" aria-hidden="true" tabindex="-1"><option value="">— 請選擇 —</option></select>
+                        <input id="publishOtherSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋…" autocomplete="off" />
+                        <div id="publishOtherDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
+                      </div>
                       <input id="publishOtherCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
                     </div>
                     <div class="publish-spec-row publish-spec-meta">
@@ -511,7 +557,11 @@
                   <div class="publish-spec-box">
                     <label class="publish-spec-title">作業系統</label>
                     <div class="publish-spec-row publish-spec-combo">
-                      <select id="publishOs" class="publish-spec-select"><option value="">— 請選擇 —</option></select>
+                      <div class="searchable-select-wrap">
+                        <select id="publishOs" class="publish-spec-select" aria-hidden="true" tabindex="-1"><option value="">— 請選擇 —</option></select>
+                        <input id="publishOsSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋…" autocomplete="off" />
+                        <div id="publishOsDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
+                      </div>
                       <input id="publishOsCustom" type="text" placeholder="或自訂" class="publish-spec-custom" />
                     </div>
                     <div class="publish-spec-row publish-spec-meta">
@@ -530,6 +580,10 @@
                 <div class="field full">
                   <label>出售金額（可自訂，預估成本僅供參考）</label>
                   <input id="publishPrice" type="number" min="0" step="10" placeholder="請輸入售價" class="publish-sale-total" />
+                </div>
+                <div class="field full">
+                  <label>預估毛利</label>
+                  <div id="publishGrossProfit" class="muted">NT$ 0（出售金額 − 預估成本）</div>
                 </div>
                 <div class="field">
                   <label for="publishQty">剩餘數量</label>

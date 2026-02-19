@@ -138,7 +138,7 @@
   const passwordEl = document.getElementById("password");
 
   // 只針對主 tab（有 data-tab 的）做切換，避免點 v2 子 tab 把整個 panel 關掉
-  const tabs = Array.from(document.querySelectorAll(".tab[data-tab]"));
+  const tabs = Array.from(document.querySelectorAll("#panel > .tabs > .tab[data-tab]"));
   const tabInv = document.getElementById("tab-inv");
   const tabPublish = document.getElementById("tab-publish");
   const tabFrontend = document.getElementById("tab-frontend");
@@ -223,8 +223,15 @@
     logoutBtn.hidden = !authed;
   }
 
+  const ADMIN_TAB_KEY = "dk_admin_tab";
+  const VALID_TABS = ["inv", "publish", "frontend"];
   function switchTab(name) {
-    for (const t of tabs) t.classList.toggle("active", t.dataset.tab === name);
+    try { sessionStorage.setItem(ADMIN_TAB_KEY, name); } catch (_) {}
+    if (VALID_TABS.includes(name)) try { location.hash = name; } catch (_) {}
+    for (const t of tabs) {
+      if (t.getAttribute("data-tab") === name) t.classList.add("active");
+      else t.classList.remove("active");
+    }
     if (tabInv) tabInv.hidden = name !== "inv";
     if (tabPublish) tabPublish.hidden = name !== "publish";
     if (tabFrontend) tabFrontend.hidden = name !== "frontend";
@@ -311,6 +318,7 @@
     const total = Object.values(publishSpecPrices).reduce((s, v) => s + (Number(v) || 0), 0);
     const el = document.getElementById("publishTotalCost");
     if (el) el.textContent = "NT$ " + (total || 0).toLocaleString("zh-TW");
+    updatePublishGrossProfit();
   }
   /** 各項目「價」加總後寫入出售金額 */
   function updatePublishSalePrice() {
@@ -323,6 +331,17 @@
       }
     }
     if (publishPrice) publishPrice.value = sum > 0 ? String(sum) : "";
+    updatePublishGrossProfit();
+  }
+  /** 上架表單：毛利 = 出售金額 − 預估成本，即時顯示 */
+  function updatePublishGrossProfit() {
+    const cost = Object.values(publishSpecPrices).reduce((s, v) => s + (Number(v) || 0), 0);
+    const sale = Number(publishPrice?.value) || 0;
+    const profit = sale - cost;
+    const el = document.getElementById("publishGrossProfit");
+    if (!el) return;
+    const fmt = (n) => (n == null || !Number.isFinite(n) ? "0" : n).toLocaleString("zh-TW");
+    el.textContent = "NT$ " + fmt(profit) + "（出售金額 − 預估成本）";
   }
 
   function renderPublishPhotoStrip() {
@@ -374,7 +393,65 @@
         const cost = Number(i.cost_unit) || 0;
         return `<option value="${esc(i.name || "")}" data-cost="${cost}">${esc(label)}</option>`;
       }).join("");
+      const searchInp = document.getElementById(spec.selectId + "Search");
+      if (searchInp) searchInp.value = "";
     }
+  }
+
+  /** 上架規格選單改為可關鍵字搜尋（依該品類庫存篩選） */
+  function makeSearchablePublishSpecSelect(spec) {
+    const select = document.getElementById(spec.selectId);
+    const input = document.getElementById(spec.selectId + "Search");
+    const dropdown = document.getElementById(spec.selectId + "Dropdown");
+    const custom = document.getElementById(spec.customId);
+    if (!select || !input || !dropdown) return;
+    const esc = (s) => (window.DK?.escapeHtml ? window.DK.escapeHtml(String(s ?? "")) : String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c])));
+    function getItemsInCategory() {
+      return (window.DK?.getItems?.() || []).filter((i) => String(i.category || "").trim() === spec.category);
+    }
+    function getFiltered() {
+      const q = (input.value || "").trim().toLowerCase();
+      const list = getItemsInCategory();
+      if (!q) return list;
+      return list.filter((i) =>
+        String(i.name || "").toLowerCase().includes(q) ||
+        String(i.sku || "").toLowerCase().includes(q) ||
+        String(i.spec || "").toLowerCase().includes(q)
+      );
+    }
+    function render() {
+      const list = getFiltered();
+      if (list.length === 0) {
+        dropdown.innerHTML = '<div class="searchable-select-empty">無符合的品項</div>';
+      } else {
+        dropdown.innerHTML = list.map((i) => {
+          const label = (i.spec ? i.name + " (" + i.spec + ")" : (i.name || "")).trim();
+          const cost = Number(i.cost_unit) || 0;
+          return `<div class="searchable-select-option" data-name="${esc(i.name || "")}" data-cost="${cost}">${esc(label)}</div>`;
+        }).join("");
+      }
+      dropdown.hidden = false;
+    }
+    function pick(dataName, cost) {
+      select.value = dataName;
+      input.value = (select.options[select.selectedIndex] && select.options[select.selectedIndex].textContent) || dataName;
+      dropdown.hidden = true;
+      if (custom) custom.value = "";
+      setPublishSpecPrice(spec.key, Number(cost) || 0);
+      updatePublishSpecInfo(spec.key);
+      updatePublishTotalCost();
+      updatePublishSalePrice();
+    }
+    input.addEventListener("focus", () => render());
+    input.addEventListener("input", () => render());
+    input.addEventListener("blur", () => setTimeout(() => { dropdown.hidden = true; }, 180));
+    dropdown.addEventListener("mousedown", (e) => {
+      const opt = e.target.closest(".searchable-select-option");
+      if (opt) {
+        e.preventDefault();
+        pick(opt.getAttribute("data-name"), opt.getAttribute("data-cost"));
+      }
+    });
   }
 
   function renderPublish() {
@@ -622,8 +699,26 @@
   }
 
   for (const t of tabs) {
-    t.addEventListener("click", () => switchTab(t.dataset.tab));
+    t.addEventListener("click", () => {
+      const toTab = t.dataset.tab;
+      if (toTab !== "publish" && tabPublish && !tabPublish.hidden && publishFormCard && !publishFormCard.hidden) {
+        if (!confirm("上架表單尚未送出，確定要離開？")) return;
+      }
+      const itemModal = document.getElementById("itemEditorModal");
+      if (toTab !== "inv" && tabInv && !tabInv.hidden && itemModal && !itemModal.hidden) {
+        if (!confirm("品項編輯尚未儲存，確定要離開？")) return;
+      }
+      switchTab(toTab);
+    });
   }
+  /* F5 重新整理後還原上次分頁：優先讀網址 #publish / #inv / #frontend，再 fallback sessionStorage */
+  function restoreAdminTab() {
+    const fromHash = (location.hash || "").replace(/^#/, "").trim().toLowerCase();
+    const saved = (VALID_TABS.includes(fromHash) ? fromHash : null) || (function () { try { return sessionStorage.getItem(ADMIN_TAB_KEY); } catch (_) { return null; } })();
+    if (saved && VALID_TABS.includes(saved)) switchTab(saved);
+  }
+  restoreAdminTab();
+  setTimeout(restoreAdminTab, 0);
 
   function doLogin() {
     hide(loginError);
@@ -633,7 +728,11 @@
     if (cfg?.admin && u === cfg.admin.username && p === cfg.admin.password) {
       window.DK?.setAdminAuthed?.(true);
       applyAuthUI();
-      switchTab("inv");
+      try {
+        const saved = sessionStorage.getItem(ADMIN_TAB_KEY);
+        if (saved === "publish" || saved === "inv" || saved === "frontend") switchTab(saved);
+        else switchTab("inv");
+      } catch (_) { switchTab("inv"); }
       return;
     }
     show(loginError, "帳號或密碼錯誤。");
@@ -720,6 +819,8 @@
     });
     custom?.addEventListener("input", () => {
       if (custom?.value?.trim()) sel.value = "";
+      const searchInp = document.getElementById(spec.selectId + "Search");
+      if (searchInp) searchInp.value = "";
       setPublishSpecPrice(spec.key, "");
       updatePublishSpecInfo(spec.key);
       updatePublishTotalCost();
@@ -727,7 +828,9 @@
     });
     const priceEl = spec.priceId ? document.getElementById(spec.priceId) : null;
     priceEl?.addEventListener("input", updatePublishSalePrice);
+    makeSearchablePublishSpecSelect(spec);
   }
+  publishPrice?.addEventListener("input", updatePublishGrossProfit);
 
   // ---------- frontend (前台管理) ----------
   function loadFrontendForm() {
@@ -1133,7 +1236,7 @@
     document.getElementById("btnNewItem")?.addEventListener("click", () => openV2ItemEditor(null));
     document.getElementById("btnExportItemsExcel")?.addEventListener("click", exportV2ItemsToExcel);
     document.getElementById("itemCancel")?.addEventListener("click", closeV2ItemEditor);
-    itemEditorModal?.addEventListener("click", (e) => { if (e.target === itemEditorModal) closeV2ItemEditor(); });
+    /* 不再點空白關閉：僅能按「取消」或「關閉」按鈕關閉，避免誤觸流失資料 */
     document.getElementById("itemDelete")?.addEventListener("click", () => {
       if (!editingV2ItemId) return;
       if (!confirm("確定要刪除此品項？刪除後無法復原。")) return;
@@ -1439,7 +1542,10 @@
     }
     document.getElementById("btnNewLedger")?.addEventListener("click", () => {
       const sel = document.getElementById("ledgerItemId");
-      if (sel) sel.innerHTML = DK.getItems().map((i) => `<option value="${v2Esc(i.id)}">${v2Esc(i.name)}</option>`).join("");
+      if (sel) sel.innerHTML = '<option value="">— 選擇品項 —</option>' + DK.getItems().map((i) => `<option value="${v2Esc(i.id)}">${v2Esc(i.name)}</option>`).join("");
+      sel.value = "";
+      const ledgerSearchInp = document.getElementById("ledgerItemIdSearch");
+      if (ledgerSearchInp) ledgerSearchInp.value = "";
       document.getElementById("ledgerType").value = "IN";
       document.getElementById("ledgerQty").value = "1";
       document.getElementById("ledgerUnitCost").value = "";
@@ -1477,6 +1583,48 @@
     let editingV2OrderId = null;
     let orderLineItems = [];
 
+    /** 將品項 select 改為可關鍵字搜尋：依名稱／編號／規格過濾，點選後寫回 select 的 value */
+    function makeSearchableItemSelect(selectId, searchInputId, dropdownId) {
+      const select = document.getElementById(selectId);
+      const input = document.getElementById(searchInputId);
+      const dropdown = document.getElementById(dropdownId);
+      if (!select || !input || !dropdown) return;
+      function getFiltered() {
+        const q = (input.value || "").trim().toLowerCase();
+        const items = DK.getItems();
+        if (!q) return items;
+        return items.filter((i) =>
+          String(i.name || "").toLowerCase().includes(q) ||
+          String(i.sku || "").toLowerCase().includes(q) ||
+          String(i.spec || "").toLowerCase().includes(q)
+        );
+      }
+      function render() {
+        const list = getFiltered();
+        if (list.length === 0) {
+          dropdown.innerHTML = '<div class="searchable-select-empty">無符合的品項</div>';
+        } else {
+          dropdown.innerHTML = list.map((i) => {
+            const label = (i.name || "") + (i.spec ? " (" + (i.spec || "") + ")" : "");
+            return `<div class="searchable-select-option" data-id="${v2Esc(i.id)}" data-name="${v2Esc(i.name || "")}">${v2Esc(label)}</div>`;
+          }).join("");
+        }
+        dropdown.hidden = false;
+      }
+      function pick(itemId, displayName) {
+        select.value = itemId;
+        input.value = displayName || "";
+        dropdown.hidden = true;
+      }
+      input.addEventListener("focus", () => render());
+      input.addEventListener("input", () => render());
+      input.addEventListener("blur", () => setTimeout(() => { dropdown.hidden = true; }, 180));
+      dropdown.addEventListener("mousedown", (e) => {
+        const opt = e.target.closest(".searchable-select-option");
+        if (opt) { e.preventDefault(); pick(opt.getAttribute("data-id"), opt.getAttribute("data-name")); }
+      });
+    }
+
     function renderV2Orders() {
       if (!ordersTbody) return;
       const list = DK.getOrders().map(DK.enrichOrder);
@@ -1491,6 +1639,8 @@
       if (!orderLineItemSelect) return;
       const items = DK.getItems();
       orderLineItemSelect.innerHTML = '<option value="">— 選擇品項 —</option>' + items.map((i) => `<option value="${v2Esc(i.id)}">${v2Esc(i.name || "")}</option>`).join("");
+      const searchInp = document.getElementById("orderLineItemSearch");
+      if (searchInp) { searchInp.value = ""; orderLineItemSelect.value = ""; }
     }
     function renderOrderLineTbody() {
       if (!orderLineTbody) return;
@@ -1588,6 +1738,7 @@
         payload.id = "ord-" + Date.now();
         orders.unshift(payload);
         DK.saveOrders(orders);
+        /* 新增訂單時自動扣庫存：每筆明細寫一筆出庫流水，庫存+記帳的數量會減少 */
         for (let i = 0; i < orderLineItems.length; i++) {
           const line = orderLineItems[i];
           const res = DK.addLedgerEntry({ item_id: line.item_id, type: "OUT", qty: line.qty, ref_type: "ORDER", ref_id: payload.id, note: "訂單 " + orderNo });
@@ -1603,6 +1754,9 @@
       renderV2Reports();
       setTimeout(() => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); }, 800);
     });
+
+    makeSearchableItemSelect("orderLineItem", "orderLineItemSearch", "orderLineItemDropdown");
+    makeSearchableItemSelect("ledgerItemId", "ledgerItemIdSearch", "ledgerItemIdDropdown");
 
     const expensesTbody = document.getElementById("expensesTbody");
     const expenseForm = document.getElementById("expenseForm");
