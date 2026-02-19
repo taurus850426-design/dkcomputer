@@ -78,7 +78,7 @@
   }
 
   function findItemById(id) {
-    return getItems().find((x) => x.id === id);
+    return getItems().find((x) => String(x.id) === String(id));
   }
 
   function itemAgeDays(item) {
@@ -150,7 +150,7 @@
   function addLedgerEntry(entry) {
     const { item_id, type, qty, unit_cost, ref_type, ref_id, note } = entry;
     const items = getItems();
-    const item = items.find((x) => x.id === item_id);
+    const item = items.find((x) => String(x.id) === String(item_id));
     if (!item) return { ok: false, error: "找不到品項" };
 
     const now = nowISO();

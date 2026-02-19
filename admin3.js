@@ -1583,8 +1583,9 @@
     let editingV2OrderId = null;
     let orderLineItems = [];
 
-    /** 將品項 select 改為可關鍵字搜尋：依名稱／編號／規格過濾，點選後寫回 select 的 value */
-    function makeSearchableItemSelect(selectId, searchInputId, dropdownId) {
+    /** 將品項 select 改為可關鍵字搜尋：依名稱／編號／規格過濾，點選後寫回 select 的 value。opts.showQty 時選單顯示庫存剩餘數量 */
+    function makeSearchableItemSelect(selectId, searchInputId, dropdownId, opts) {
+      opts = opts || {};
       const select = document.getElementById(selectId);
       const input = document.getElementById(searchInputId);
       const dropdown = document.getElementById(dropdownId);
@@ -1605,7 +1606,8 @@
           dropdown.innerHTML = '<div class="searchable-select-empty">無符合的品項</div>';
         } else {
           dropdown.innerHTML = list.map((i) => {
-            const label = (i.name || "") + (i.spec ? " (" + (i.spec || "") + ")" : "");
+            let label = (i.name || "") + (i.spec ? " (" + (i.spec || "") + ")" : "");
+            if (opts.showQty) label += " · 剩餘 " + (i.qty_on_hand ?? 0);
             return `<div class="searchable-select-option" data-id="${v2Esc(i.id)}" data-name="${v2Esc(i.name || "")}">${v2Esc(label)}</div>`;
           }).join("");
         }
@@ -1646,8 +1648,8 @@
       if (!orderLineTbody) return;
       orderLineTbody.innerHTML = orderLineItems.map((line, i) => {
         const cogsSub = (Number(line.cost_unit) || 0) * (Number(line.qty) || 0);
-        const priceSub = (Number(line.unit_price) || 0) * (Number(line.qty) || 0);
-        return `<tr><td>${v2Esc(line.name || "")}</td><td>${line.qty}</td><td>${v2FmtNum(line.unit_price)}</td><td>${v2FmtNum(cogsSub)}</td><td><button type="button" class="btn btn-ghost btn-sm order-line-remove" data-i="${i}">移除</button></td></tr>`;
+        const spec = line.spec != null ? line.spec : (DK.findItemById(line.item_id)?.spec ?? "");
+        return `<tr><td>${v2Esc(line.name || "")}</td><td class="muted small">${v2Esc(spec)}</td><td>${line.qty}</td><td>${v2FmtNum(line.unit_price)}</td><td>${v2FmtNum(cogsSub)}</td><td><button type="button" class="btn btn-ghost btn-sm order-line-remove" data-i="${i}">移除</button></td></tr>`;
       }).join("");
       orderLineTbody.querySelectorAll(".order-line-remove").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -1714,7 +1716,7 @@
       const onHand = Number(item.qty_on_hand) || 0;
       const alreadyInOrder = orderLineItems.filter((l) => l.item_id === itemId).reduce((s, l) => s + (Number(l.qty) || 0), 0);
       if (alreadyInOrder + qty > onHand) return v2Show(orderMsg, "庫存不足：" + item.sku + " 現有 " + onHand + "，明細已選 " + alreadyInOrder + "，再加 " + qty + " 會超過");
-      orderLineItems.push({ item_id: item.id, sku: item.sku, name: item.name, qty: qty, unit_price: unitPrice, cost_unit: Number(item.cost_unit) || 0 });
+      orderLineItems.push({ item_id: item.id, sku: item.sku, name: item.name, spec: item.spec || "", qty: qty, unit_price: unitPrice, cost_unit: Number(item.cost_unit) || 0 });
       renderOrderLineTbody();
       updateOrderTotalsFromLines();
       v2Hide(orderMsg);
@@ -1736,9 +1738,7 @@
         v2Show(orderMsg, "已更新");
       } else {
         payload.id = "ord-" + Date.now();
-        orders.unshift(payload);
-        DK.saveOrders(orders);
-        /* 新增訂單時自動扣庫存：每筆明細寫一筆出庫流水，庫存+記帳的數量會減少 */
+        /* 先扣庫存，全部成功後再存訂單，避免訂單已存但庫存未扣 */
         for (let i = 0; i < orderLineItems.length; i++) {
           const line = orderLineItems[i];
           const res = DK.addLedgerEntry({ item_id: line.item_id, type: "OUT", qty: line.qty, ref_type: "ORDER", ref_id: payload.id, note: "訂單 " + orderNo });
@@ -1747,6 +1747,8 @@
             return;
           }
         }
+        orders.unshift(payload);
+        DK.saveOrders(orders);
         v2Show(orderMsg, "已新增並已扣庫存");
       }
       renderV2Orders();
@@ -1755,7 +1757,7 @@
       setTimeout(() => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); }, 800);
     });
 
-    makeSearchableItemSelect("orderLineItem", "orderLineItemSearch", "orderLineItemDropdown");
+    makeSearchableItemSelect("orderLineItem", "orderLineItemSearch", "orderLineItemDropdown", { showQty: true });
     makeSearchableItemSelect("ledgerItemId", "ledgerItemIdSearch", "ledgerItemIdDropdown");
 
     const expensesTbody = document.getElementById("expensesTbody");
