@@ -1081,6 +1081,25 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
 .searchable-select-option:last-child{ border-bottom: none; }
 .searchable-select-empty{ padding: 12px 14px; color: var(--muted); font-size: 13px; }
 
+/* 手機版：訂單明細列改單列、下拉與選項可讀 */
+@media (max-width: 768px){
+  .order-detail-row{
+    grid-template-columns: 1fr !important;
+    gap: 8px;
+  }
+  .order-detail-row .searchable-select-wrap{ min-width: 0; }
+  .order-detail-row .searchable-select-dropdown{
+    left: 0; right: 0;
+    max-height: 240px;
+  }
+  .order-detail-row .searchable-select-option{
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    word-break: break-word;
+  }
+}
+
 .row-flex{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .row-flex .publish-spec-select{ flex:1; min-width: 180px; }
 .row-flex .publish-spec-custom{ flex:1; min-width: 200px; }
