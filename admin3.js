@@ -1672,7 +1672,7 @@
     function openV2OrderEditor(id) {
       editingV2OrderId = id || null;
       const o = id ? DK.getOrders().find((x) => x.id === id) : null;
-      orderLineItems = Array.isArray(o && o.items) ? o.items.map((l) => ({ ...l })) : [];
+      orderLineItems = (Array.isArray(o?.items) ? o.items : []).map((l) => ({ ...l, item_id: l.item_id ?? l.id }));
       fillOrderLineItemSelect();
       const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
       set("orderNo", o ? o.order_no : DK.nextOrderNo());
@@ -1714,6 +1714,7 @@
       const item = DK.findItemById(itemId);
       if (!item) return v2Show(orderMsg, "找不到該品項");
       const onHand = Number(item.qty_on_hand) || 0;
+      if (onHand === 0) return v2Show(orderMsg, "該品項庫存為 0，無法加入訂單");
       const alreadyInOrder = orderLineItems.filter((l) => l.item_id === itemId).reduce((s, l) => s + (Number(l.qty) || 0), 0);
       if (alreadyInOrder + qty > onHand) return v2Show(orderMsg, "庫存不足：" + item.sku + " 現有 " + onHand + "，明細已選 " + alreadyInOrder + "，再加 " + qty + " 會超過");
       orderLineItems.push({ item_id: item.id, sku: item.sku, name: item.name, spec: item.spec || "", qty: qty, unit_price: unitPrice, cost_unit: Number(item.cost_unit) || 0 });
@@ -1733,10 +1734,64 @@
       if (editingV2OrderId) {
         const idx = orders.findIndex((x) => x.id === editingV2OrderId);
         if (idx < 0) return v2Show(orderMsg, "找不到訂單");
-        orders[idx] = { ...orders[idx], ...payload, updated_at: nowISO() };
+        const existingOrder = orders[idx];
+        const orderId = existingOrder.id;
+        const orderNoDisplay = existingOrder.order_no || orderNo;
+        const oldItems = existingOrder.items || [];
+        const oldItemQty = {};
+        for (const line of oldItems) {
+          const id = String(line.item_id ?? line.id ?? "").trim();
+          if (!id) continue;
+          oldItemQty[id] = (oldItemQty[id] || 0) + (Number(line.qty) || 0);
+        }
+        const newItemQty = {};
+        for (const line of orderLineItems) {
+          const id = String(line.item_id ?? line.id ?? "").trim();
+          if (!id) continue;
+          newItemQty[id] = (newItemQty[id] || 0) + (Number(line.qty) || 0);
+        }
+        /* 1. 先加回：被移除或數量減少的明細（庫存 +1 等） */
+        for (const [item_id, oldQty] of Object.entries(oldItemQty)) {
+          const newQty = newItemQty[item_id] || 0;
+          const returnQty = oldQty - newQty;
+          if (returnQty > 0) {
+            const res = DK.addLedgerEntry({ item_id, type: "IN", qty: returnQty, ref_type: "ORDER", ref_id: orderId, note: "訂單編輯移除明細 " + orderNoDisplay });
+            if (!res.ok) {
+              v2Show(orderMsg, "加回庫存失敗：" + (res.error || item_id));
+              return;
+            }
+          }
+        }
+        /* 2. 再扣庫存：新增或數量增加的明細 */
+        for (const [item_id, newQty] of Object.entries(newItemQty)) {
+          const oldQty = oldItemQty[item_id] || 0;
+          const deductQty = newQty - oldQty;
+          if (deductQty > 0) {
+            const item = DK.findItemById(item_id);
+            const onHand = Number(item?.qty_on_hand) || 0;
+            if (deductQty > onHand) {
+              v2Show(orderMsg, "庫存不足：" + (item?.sku || item_id) + " 現有 " + onHand + "，需扣 " + deductQty);
+              return;
+            }
+            const res = DK.addLedgerEntry({ item_id, type: "OUT", qty: deductQty, ref_type: "ORDER", ref_id: orderId, note: "訂單編輯新增明細 " + orderNoDisplay });
+            if (!res.ok) {
+              v2Show(orderMsg, "扣庫存失敗：" + (res.error || item?.sku || item_id));
+              return;
+            }
+          }
+        }
+        orders[idx] = { ...existingOrder, ...payload, id: orderId, updated_at: nowISO() };
         DK.saveOrders(orders);
-        v2Show(orderMsg, "已更新");
+        v2Show(orderMsg, "已更新（庫存已同步）");
       } else {
+        /* 新增訂單：庫存為 0 的品項不能成立訂單 */
+        for (const line of orderLineItems) {
+          const item = DK.findItemById(line.item_id);
+          const onHand = Number(item?.qty_on_hand) || 0;
+          const need = Number(line.qty) || 0;
+          if (onHand === 0) return v2Show(orderMsg, "品項「" + (line.sku || line.name) + "」庫存為 0，無法成立訂單");
+          if (need > onHand) return v2Show(orderMsg, "品項「" + (line.sku || line.name) + "」庫存不足（現有 " + onHand + "，需要 " + need + "）");
+        }
         payload.id = "ord-" + Date.now();
         /* 先扣庫存，全部成功後再存訂單，避免訂單已存但庫存未扣 */
         for (let i = 0; i < orderLineItems.length; i++) {
