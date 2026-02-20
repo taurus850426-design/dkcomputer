@@ -393,6 +393,14 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .product-detail-dot.active{ background: var(--primary, #7c5cff); }
 .product-detail-title{ font-size: 20px; font-weight: 800; margin: 0 0 12px; }
 .product-detail-intro{ font-size: 15px; color: var(--muted); line-height: 1.6; margin: 0 0 16px; white-space: pre-wrap; }
+.product-detail-intro.product-detail-intro-html{ white-space: normal; }
+.product-detail-intro-html p{ margin: 0 0 8px; }
+.product-detail-intro-html p:last-child{ margin-bottom: 0; }
+.product-detail-intro-html h2,.product-detail-intro-html h3,.product-detail-intro-html h4{ margin: 12px 0 6px; font-size: 1em; font-weight: 700; }
+.product-detail-intro-html ul,.product-detail-intro-html ol{ margin: 8px 0; padding-left: 1.4em; }
+.product-detail-intro-html img{ max-width: 100%; height: auto; border-radius: 8px; display: block; margin: 8px 0; }
+.product-detail-intro-html a{ color: var(--primary, #7c5cff); text-decoration: none; }
+.product-detail-intro-html a:hover{ text-decoration: underline; }
 .product-detail-price{ font-weight: 800; font-size: 18px; margin-bottom: 4px; }
 .product-detail-qty{ font-size: 14px; color: var(--muted); margin-bottom: 16px; }
 .product-detail-line-btn{ width: 100%; }
@@ -1122,6 +1130,16 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
   gap: 12px 20px;
   margin-bottom: 4px;
 }
+/* 產品介紹富文本編輯器（Quill）外層 */
+.publish-rich-editor-wrap{
+  border: 1px solid var(--border, rgba(0,0,0,0.12));
+  border-radius: var(--radius-sm, 10px);
+  background: #fff;
+  overflow: hidden;
+}
+.publish-rich-editor-wrap .ql-editor{ min-height: 200px; }
+.publish-rich-editor-wrap .ql-container{ font-size: 15px; }
+
 .publish-spec-block{ margin-bottom: 0; min-width: 0; }
 /* 每個規格一個框框：淺灰透明底 */
 .publish-spec-box{

@@ -165,26 +165,39 @@
   const publishQty = document.getElementById("publishQty");
   const publishProductName = document.getElementById("publishProductName");
   const publishCategory = document.getElementById("publishCategory");
-  const publishSpecSummary = document.getElementById("publishSpecSummary");
-  const publishTotalCost = document.getElementById("publishTotalCost");
   const publishPrice = document.getElementById("publishPrice");
   const publishPhotosInput = document.getElementById("publishPhotosInput");
   const publishPhotoStrip = document.getElementById("publishPhotoStrip");
   const publishPhotoHint = document.getElementById("publishPhotoHint");
-  const PUBLISH_SPECS = [
-    { key: "cpu", category: "處理器", prefix: "CPU", selectId: "publishCpu", customId: "publishCpuCustom", infoId: "publishCpuInfo", conditionId: "publishCpuCondition", remarkId: "publishCpuRemark", priceId: "publishCpuPrice" },
-    { key: "mb", category: "主機板", prefix: "MB", selectId: "publishMb", customId: "publishMbCustom", infoId: "publishMbInfo", conditionId: "publishMbCondition", remarkId: "publishMbRemark", priceId: "publishMbPrice" },
-    { key: "ram", category: "記憶體", prefix: "RAM", selectId: "publishRam", customId: "publishRamCustom", infoId: "publishRamInfo", conditionId: "publishRamCondition", remarkId: "publishRamRemark", priceId: "publishRamPrice" },
-    { key: "hdd", category: "硬碟", prefix: "HDD", selectId: "publishHdd", customId: "publishHddCustom", infoId: "publishHddInfo", conditionId: "publishHddCondition", remarkId: "publishHddRemark", priceId: "publishHddPrice" },
-    { key: "vga", category: "顯示卡", prefix: "VGA", selectId: "publishVga", customId: "publishVgaCustom", infoId: "publishVgaInfo", conditionId: "publishVgaCondition", remarkId: "publishVgaRemark", priceId: "publishVgaPrice" },
-    { key: "psu", category: "電源供應器", prefix: "PSU", selectId: "publishPsu", customId: "publishPsuCustom", infoId: "publishPsuInfo", conditionId: "publishPsuCondition", remarkId: "publishPsuRemark", priceId: "publishPsuPrice" },
-    { key: "case", category: "機殼", prefix: "CASE", selectId: "publishCase", customId: "publishCaseCustom", infoId: "publishCaseInfo", conditionId: "publishCaseCondition", remarkId: "publishCaseRemark", priceId: "publishCasePrice" },
-    { key: "peripherals", category: "周邊", prefix: "PER", selectId: "publishPeripherals", customId: "publishPeripheralsCustom", infoId: "publishPeripheralsInfo", conditionId: "publishPeripheralsCondition", remarkId: "publishPeripheralsRemark", priceId: "publishPeripheralsPrice" },
-    { key: "other", category: "其他", prefix: "OT", selectId: "publishOther", customId: "publishOtherCustom", infoId: "publishOtherInfo", conditionId: "publishOtherCondition", remarkId: "publishOtherRemark", priceId: "publishOtherPrice" },
-    { key: "os", category: "作業系統", prefix: "OS", selectId: "publishOs", customId: "publishOsCustom", infoId: "publishOsInfo", conditionId: "publishOsCondition", remarkId: "publishOsRemark", priceId: "publishOsPrice" },
-  ];
-
   if (!loginCard || !panel) return;
+
+  // ---------- 產品介紹富文本編輯器（Quill）----------
+  let publishQuill = null;
+  let webEditQuill = null;
+  if (typeof Quill !== "undefined") {
+    try {
+      const SizeStyle = Quill.import("attributors/style/size");
+      if (SizeStyle) {
+        SizeStyle.whitelist = ["10px", "12px", "14px", "16px", "18px", "20px", "24px", "32px"];
+        Quill.register(SizeStyle, true);
+      }
+    } catch (_) {}
+    const toolbarOpt = [
+      [{ size: ["small", false, "large", "huge"] }],
+      ["bold", "italic", "underline"],
+      [{ list: "ordered" }, { list: "bullet" }],
+      ["link", "image"],
+      ["clean"],
+    ];
+    const publishEditorEl = document.getElementById("publishSpecSummaryEditor");
+    const webEditEditorEl = document.getElementById("webEditNoteEditor");
+    if (publishEditorEl) {
+      publishQuill = new Quill(publishEditorEl, { theme: "snow", modules: { toolbar: toolbarOpt } });
+    }
+    if (webEditEditorEl) {
+      webEditQuill = new Quill(webEditEditorEl, { theme: "snow", modules: { toolbar: toolbarOpt } });
+    }
+  }
 
   // ---------- state ----------
   let editingWebId = null;
@@ -247,7 +260,6 @@
     }
     if (name === "publish") {
       if (publishFormCard) publishFormCard.hidden = true;
-      populatePublishSpecSelects();
       renderPublish();
     }
     if (name === "frontend") loadFrontendForm();
@@ -309,41 +321,6 @@
     return dataUrl;
   }
 
-  const publishSpecPrices = {};
-  function setPublishSpecPrice(key, val) {
-    publishSpecPrices[key] = val;
-  }
-  function updatePublishSpecInfo() {}
-  function updatePublishTotalCost() {
-    const total = Object.values(publishSpecPrices).reduce((s, v) => s + (Number(v) || 0), 0);
-    const el = document.getElementById("publishTotalCost");
-    if (el) el.textContent = "NT$ " + (total || 0).toLocaleString("zh-TW");
-    updatePublishGrossProfit();
-  }
-  /** 各項目「價」加總後寫入出售金額 */
-  function updatePublishSalePrice() {
-    let sum = 0;
-    for (const spec of PUBLISH_SPECS) {
-      const el = spec.priceId ? document.getElementById(spec.priceId) : null;
-      if (el) {
-        const n = Number(el.value);
-        if (Number.isFinite(n) && n >= 0) sum += n;
-      }
-    }
-    if (publishPrice) publishPrice.value = sum > 0 ? String(sum) : "";
-    updatePublishGrossProfit();
-  }
-  /** 上架表單：毛利 = 出售金額 − 預估成本，即時顯示 */
-  function updatePublishGrossProfit() {
-    const cost = Object.values(publishSpecPrices).reduce((s, v) => s + (Number(v) || 0), 0);
-    const sale = Number(publishPrice?.value) || 0;
-    const profit = sale - cost;
-    const el = document.getElementById("publishGrossProfit");
-    if (!el) return;
-    const fmt = (n) => (n == null || !Number.isFinite(n) ? "0" : n).toLocaleString("zh-TW");
-    el.textContent = "NT$ " + fmt(profit) + "（出售金額 − 預估成本）";
-  }
-
   function renderPublishPhotoStrip() {
     if (!publishPhotoStrip) return;
     const n = publishPhotos.length;
@@ -378,79 +355,6 @@
           renderPublishPhotoStrip();
         }
       });
-    });
-  }
-
-  function populatePublishSpecSelects() {
-    const items = (window.DK?.getItems?.() || []);
-    const esc = (s) => (window.DK?.escapeHtml ? window.DK.escapeHtml(String(s ?? "")) : String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c])));
-    for (const spec of PUBLISH_SPECS) {
-      const sel = document.getElementById(spec.selectId);
-      if (!sel) continue;
-      const matched = items.filter((i) => String(i.category || "").trim() === spec.category);
-      sel.innerHTML = '<option value="">— 請選擇 —</option>' + matched.map((i) => {
-        const label = i.spec ? `${i.name} (${i.spec})` : (i.name || "");
-        const cost = Number(i.cost_unit) || 0;
-        return `<option value="${esc(i.name || "")}" data-cost="${cost}">${esc(label)}</option>`;
-      }).join("");
-      const searchInp = document.getElementById(spec.selectId + "Search");
-      if (searchInp) searchInp.value = "";
-    }
-  }
-
-  /** 上架規格選單改為可關鍵字搜尋（依該品類庫存篩選） */
-  function makeSearchablePublishSpecSelect(spec) {
-    const select = document.getElementById(spec.selectId);
-    const input = document.getElementById(spec.selectId + "Search");
-    const dropdown = document.getElementById(spec.selectId + "Dropdown");
-    const custom = document.getElementById(spec.customId);
-    if (!select || !input || !dropdown) return;
-    const esc = (s) => (window.DK?.escapeHtml ? window.DK.escapeHtml(String(s ?? "")) : String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c])));
-    function getItemsInCategory() {
-      return (window.DK?.getItems?.() || []).filter((i) => String(i.category || "").trim() === spec.category);
-    }
-    function getFiltered() {
-      const q = (input.value || "").trim().toLowerCase();
-      const list = getItemsInCategory();
-      if (!q) return list;
-      return list.filter((i) =>
-        String(i.name || "").toLowerCase().includes(q) ||
-        String(i.sku || "").toLowerCase().includes(q) ||
-        String(i.spec || "").toLowerCase().includes(q)
-      );
-    }
-    function render() {
-      const list = getFiltered();
-      if (list.length === 0) {
-        dropdown.innerHTML = '<div class="searchable-select-empty">無符合的品項</div>';
-      } else {
-        dropdown.innerHTML = list.map((i) => {
-          const label = (i.spec ? i.name + " (" + i.spec + ")" : (i.name || "")).trim();
-          const cost = Number(i.cost_unit) || 0;
-          return `<div class="searchable-select-option" data-name="${esc(i.name || "")}" data-cost="${cost}">${esc(label)}</div>`;
-        }).join("");
-      }
-      dropdown.hidden = false;
-    }
-    function pick(dataName, cost) {
-      select.value = dataName;
-      input.value = (select.options[select.selectedIndex] && select.options[select.selectedIndex].textContent) || dataName;
-      dropdown.hidden = true;
-      if (custom) custom.value = "";
-      setPublishSpecPrice(spec.key, Number(cost) || 0);
-      updatePublishSpecInfo(spec.key);
-      updatePublishTotalCost();
-      updatePublishSalePrice();
-    }
-    input.addEventListener("focus", () => render());
-    input.addEventListener("input", () => render());
-    input.addEventListener("blur", () => setTimeout(() => { dropdown.hidden = true; }, 180));
-    dropdown.addEventListener("mousedown", (e) => {
-      const opt = e.target.closest(".searchable-select-option");
-      if (opt) {
-        e.preventDefault();
-        pick(opt.getAttribute("data-name"), opt.getAttribute("data-cost"));
-      }
     });
   }
 
@@ -564,7 +468,7 @@
     }
     const qtyHint = document.getElementById("webEditQtyHint");
     if (qtyHint) qtyHint.style.display = qtyFromStock != null ? "block" : "none";
-    if (webEditNote) webEditNote.value = it?.note ?? "";
+    if (webEditQuill && webEditQuill.root) webEditQuill.root.innerHTML = it?.note?.trim() ?? "";
     editPhotos = Array.isArray(it?.photos) ? [...it.photos] : [];
     renderEditPhotoStrip();
     if (webEditPhotosInput) webEditPhotosInput.value = "";
@@ -603,7 +507,7 @@
         stockStatus: webEditStockStatus?.value ?? items[idx].stockStatus,
         price: Number(webEditPrice?.value) || items[idx].price,
         qty: resolvedQty,
-        note: webEditNote?.value?.trim() ?? items[idx].note,
+        note: (webEditQuill && webEditQuill.root ? webEditQuill.root.innerHTML.trim() : "") || items[idx].note,
         photos: [...editPhotos],
       };
       window.DK?.saveInventory?.(items);
@@ -670,7 +574,7 @@
       stockStatus: "現貨",
       price: price || 0,
       tags: [],
-      note: document.getElementById("publishSpecSummary")?.value?.trim() ?? "",
+      note: (publishQuill && publishQuill.root ? publishQuill.root.innerHTML.trim() : "") ?? "",
       photos: [...publishPhotos],
     };
     const items = window.DK?.getInventory?.() || [];
@@ -805,33 +709,6 @@
     }
     publishPhotosInput.value = "";
   });
-  for (const spec of PUBLISH_SPECS) {
-    const sel = document.getElementById(spec.selectId);
-    const custom = document.getElementById(spec.customId);
-    sel?.addEventListener("change", () => {
-      if (custom) custom.value = "";
-      const opt = sel.options[sel.selectedIndex];
-      if (opt?.value && opt.dataset.cost != null) setPublishSpecPrice(spec.key, Number(opt.dataset.cost) || 0);
-      else setPublishSpecPrice(spec.key, "");
-      updatePublishSpecInfo(spec.key);
-      updatePublishTotalCost();
-      updatePublishSalePrice();
-    });
-    custom?.addEventListener("input", () => {
-      if (custom?.value?.trim()) sel.value = "";
-      const searchInp = document.getElementById(spec.selectId + "Search");
-      if (searchInp) searchInp.value = "";
-      setPublishSpecPrice(spec.key, "");
-      updatePublishSpecInfo(spec.key);
-      updatePublishTotalCost();
-      updatePublishSalePrice();
-    });
-    const priceEl = spec.priceId ? document.getElementById(spec.priceId) : null;
-    priceEl?.addEventListener("input", updatePublishSalePrice);
-    makeSearchablePublishSpecSelect(spec);
-  }
-  publishPrice?.addEventListener("input", updatePublishGrossProfit);
-
   // ---------- frontend (前台管理) ----------
   function loadFrontendForm() {
     const cfg = window.DK?.getConfig?.() || {};

@@ -133,12 +133,54 @@
     `;
   }
 
+  /** 產品介紹 HTML 消毒：僅允許安全標籤與屬性，避免 XSS */
+  function sanitizeProductNote(html) {
+    if (!html || typeof html !== "string") return "";
+    const s = html.trim();
+    if (!s) return "";
+    if (s.indexOf("<") === -1) return DK.escapeHtml ? DK.escapeHtml(s).replace(/\n/g, "<br>") : s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+    const allowedTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "span", "h2", "h3", "h4", "ul", "ol", "li", "img", "a", "div", "blockquote"]);
+    const allowedAttrs = { img: ["src", "alt", "width", "height", "style"], a: ["href", "title", "target", "rel"] };
+    const div = document.createElement("div");
+    div.innerHTML = s;
+    function sanitizeNode(node) {
+      if (node.nodeType === Node.TEXT_NODE) return node.cloneNode(true);
+      if (node.nodeType !== Node.ELEMENT_NODE) return null;
+      const tag = node.tagName.toLowerCase();
+      if (!allowedTags.has(tag)) return null;
+      const el = document.createElement(tag);
+      const attrs = allowedAttrs[tag];
+      if (attrs && node.attributes)
+        for (const a of node.attributes) {
+          const name = a.name.toLowerCase();
+          if (attrs.indexOf(name) === -1) continue;
+          let val = a.value || "";
+          if (name === "href" && /^\s*javascript\s*:/i.test(val)) continue;
+          if (name === "src" && /^\s*javascript\s*:/i.test(val)) continue;
+          el.setAttribute(name, val);
+        }
+      for (let i = 0; i < node.childNodes.length; i++) {
+        const c = sanitizeNode(node.childNodes[i]);
+        if (c) el.appendChild(c);
+      }
+      return el;
+    }
+    const out = document.createElement("div");
+    for (let i = 0; i < div.childNodes.length; i++) {
+      const c = sanitizeNode(div.childNodes[i]);
+      if (c) out.appendChild(c);
+    }
+    return out.innerHTML;
+  }
+
   function openProductDetail(item) {
     if (!item || !productDetailModal) return;
     if (productDetailTitle) productDetailTitle.textContent = item.name || "商品";
     if (productDetailIntro) {
-      productDetailIntro.textContent = item.note?.trim() || "（無產品介紹）";
-      productDetailIntro.style.whiteSpace = "pre-wrap";
+      const note = item.note?.trim() || "";
+      productDetailIntro.innerHTML = note ? sanitizeProductNote(note) : "（無產品介紹）";
+      productDetailIntro.style.whiteSpace = "";
+      productDetailIntro.classList.add("product-detail-intro-html");
     }
     const price = item.price != null ? DK.formatPrice(item.price) : null;
     if (productDetailPrice) productDetailPrice.textContent = price ? `NT$ ${price}` : "價格請加 LINE 詢問";
