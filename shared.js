@@ -66,6 +66,14 @@ const DEFAULT_CONFIG = {
       work: "NT$ 18,000+",
       peripherals: "價格依品項",
     },
+    /** 篩選用價格區間（商品會依價格歸類到各區塊）。留空則用預設值 */
+    catPriceRanges: {
+      office: { min: 0, max: 6000 },
+      "game-entry": { min: 7000, max: 12000 },
+      "game-mid": { min: 13000, max: 20000 },
+      work: { min: 18000, max: 999999 },
+      peripherals: { min: 0, max: 999999 },
+    },
   },
   shop: {
     name: "哈啦電競電腦維修",
@@ -628,7 +636,9 @@ async function fetchV2DataFromSupabase() {
 }
 
 async function saveV2DataToSupabase() {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return { ok: false, error: "Supabase 未設定（請在 shared.js 填寫 SUPABASE_URL 與 SUPABASE_ANON_KEY）" };
+  }
   let items = [];
   let ledger = [];
   let orders = [];
@@ -639,31 +649,45 @@ async function saveV2DataToSupabase() {
     orders = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.orders), []);
     expenses = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.expenses), []);
   } catch (e) {
-    return;
+    return { ok: false, error: "讀取本機資料失敗" };
   }
   const payload = {
     id: V2_DATA_ROW_ID,
     data: { items, ledger, orders, expenses },
   };
   const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_V2_DATA_TABLE}?on_conflict=id`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation,resolution=merge-duplicates",
-    },
-    body: JSON.stringify([payload]),
-  });
-  if (!res.ok) {
-    console.warn("同步庫存＋記帳到 Supabase 失敗", await res.text());
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation,resolution=merge-duplicates",
+      },
+      body: JSON.stringify([payload]),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn("同步庫存＋記帳到 Supabase 失敗", errText);
+      return { ok: false, error: `HTTP ${res.status}：${(errText || "連線失敗").slice(0, 80)}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.warn("同步庫存＋記帳到 Supabase 失敗", e);
+    return { ok: false, error: String(e?.message || e || "網路連線失敗") };
   }
+}
+
+function isSupabaseConfigured() {
+  return !!(SUPABASE_URL && SUPABASE_ANON_KEY);
 }
 
 if (typeof window !== "undefined") {
   window.__syncV2ToSupabase = function () {
-    saveV2DataToSupabase().catch(function () {});
+    return saveV2DataToSupabase().catch(function (e) {
+      return { ok: false, error: String(e?.message || e || "同步失敗") };
+    });
   };
   window.fetchV2DataFromSupabase = fetchV2DataFromSupabase;
   window.saveV2DataToSupabase = saveV2DataToSupabase;
@@ -1265,6 +1289,7 @@ window.DK = {
   tryCopy,
   isAdminAuthed,
   setAdminAuthed,
+  isSupabaseConfigured,
 };
 
 // 頁面載入時從 Supabase 拉官網設定，覆蓋本機（大家看到同一份設定）

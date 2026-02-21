@@ -54,14 +54,27 @@
     }
   }
 
-  // 用途分類對應
-  const CAT_MAP = {
+  // 用途分類對應（價格區間可從後台設定，未設定則用此預設）
+  const CAT_MAP_DEFAULT = {
     office: { title: "① 文書／上網／學生", categories: ["辦公", "文書"], minPrice: 0, maxPrice: 6000 },
     "game-entry": { title: "② 遊戲入門", categories: ["遊戲"], minPrice: 7000, maxPrice: 12000 },
     "game-mid": { title: "③ 遊戲中階（主力）", categories: ["遊戲"], minPrice: 13000, maxPrice: 20000 },
     work: { title: "④ 工作／效能取向", categories: ["剪輯", "辦公"], minPrice: 18000, maxPrice: 999999 },
     peripherals: { title: "⑤ 電腦周邊", categories: ["周邊", "周邊配件", "配件"], minPrice: 0, maxPrice: 999999 },
   };
+  function getCatMap() {
+    const ranges = cfg.frontend?.catPriceRanges || {};
+    return Object.fromEntries(
+      Object.entries(CAT_MAP_DEFAULT).map(([k, v]) => [
+        k,
+        {
+          ...v,
+          minPrice: ranges[k]?.min != null ? Number(ranges[k].min) : v.minPrice,
+          maxPrice: ranges[k]?.max != null ? Number(ranges[k].max) : v.maxPrice,
+        },
+      ])
+    );
+  }
 
   function priceInRange(price, min, max) {
     if (typeof price !== "number" || !Number.isFinite(price)) return false;
@@ -247,15 +260,23 @@
 
   function showCategory(catKey) {
     const items = getItems();
+    const CAT_MAP = getCatMap();
     let filtered;
     let title;
     if (catKey === "all" || !CAT_MAP[catKey]) {
       filtered = items;
       title = "全部商品";
     } else {
-      const cfg = CAT_MAP[catKey];
-      filtered = items.filter((it) => categoryMatch(it, cfg.categories));
-      title = cfg.title;
+      const catCfg = CAT_MAP[catKey];
+      filtered = items.filter((it) => {
+        if (!categoryMatch(it, catCfg.categories)) return false;
+        if (catCfg.minPrice != null || catCfg.maxPrice != null) {
+          const price = typeof it.price === "number" ? it.price : (parseFloat(it.price) || 0);
+          if (!priceInRange(price, catCfg.minPrice ?? 0, catCfg.maxPrice ?? 999999)) return false;
+        }
+        return true;
+      });
+      title = catCfg.title;
     }
 
     if (productsSectionTitle) productsSectionTitle.textContent = title;
@@ -360,7 +381,7 @@
     setTimeout(recalcAllCarousels, 350);
     setTimeout(recalcAllCarousels, 800);
 
-    const selectedCat = catKey === "all" || !CAT_MAP[catKey] ? "all" : catKey;
+    const selectedCat = catKey === "all" || !getCatMap()[catKey] ? "all" : catKey;
     for (const card of catCards) {
       card.classList.toggle("active", card.dataset.cat === selectedCat);
       card.setAttribute("aria-selected", card.dataset.cat === selectedCat ? "true" : "false");
@@ -381,7 +402,7 @@
 
   // 進入頁面先顯示全部商品；若有 hash 則顯示該分類
   const hash = window.location.hash.replace(/^#/, "");
-  if (hash && CAT_MAP[hash]) {
+  if (hash && getCatMap()[hash]) {
     showCategory(hash);
   } else {
     showCategory("all");

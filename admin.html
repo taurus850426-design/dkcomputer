@@ -46,6 +46,9 @@
         </section>
 
         <section id="panel" hidden>
+          <div id="syncStatusBar" class="sync-status-bar" role="status" aria-live="polite">
+            <span id="syncStatusText" class="sync-status-text"></span>
+          </div>
           <div class="tabs">
             <button class="tab active" data-tab="inv" type="button">庫存＋記帳</button>
             <button class="tab" data-tab="publish" type="button">上架管理</button>
@@ -512,22 +515,27 @@
                 <div class="field">
                   <label for="feCatPriceOffice">① 文書／上網／學生</label>
                   <textarea id="feCatPriceOffice" rows="3" placeholder="NT$ 3,000–6,000&#10;可換行、分段填寫"></textarea>
+                  <div class="muted small" style="margin-top:4px">篩選區間：最低 <input id="feCatRangeOfficeMin" type="number" min="0" placeholder="0" style="width:70px" /> 最高 <input id="feCatRangeOfficeMax" type="number" min="0" placeholder="6000" style="width:70px" /> 元</div>
                 </div>
                 <div class="field">
                   <label for="feCatPriceGameEntry">② 遊戲入門</label>
                   <textarea id="feCatPriceGameEntry" rows="3" placeholder="NT$ 7,000–12,000&#10;可換行、分段填寫"></textarea>
+                  <div class="muted small" style="margin-top:4px">篩選區間：最低 <input id="feCatRangeGameEntryMin" type="number" min="0" placeholder="7000" style="width:70px" /> 最高 <input id="feCatRangeGameEntryMax" type="number" min="0" placeholder="12000" style="width:70px" /> 元</div>
                 </div>
                 <div class="field">
                   <label for="feCatPriceGameMid">③ 遊戲中階（主力）</label>
                   <textarea id="feCatPriceGameMid" rows="3" placeholder="NT$ 13,000–20,000&#10;可換行、分段填寫"></textarea>
+                  <div class="muted small" style="margin-top:4px">篩選區間：最低 <input id="feCatRangeGameMidMin" type="number" min="0" placeholder="13000" style="width:70px" /> 最高 <input id="feCatRangeGameMidMax" type="number" min="0" placeholder="20000" style="width:70px" /> 元</div>
                 </div>
                 <div class="field">
                   <label for="feCatPriceWork">④ 工作／效能取向</label>
                   <textarea id="feCatPriceWork" rows="3" placeholder="NT$ 18,000+&#10;可換行、分段填寫"></textarea>
+                  <div class="muted small" style="margin-top:4px">篩選區間：最低 <input id="feCatRangeWorkMin" type="number" min="0" placeholder="18000" style="width:70px" /> 最高 <input id="feCatRangeWorkMax" type="number" min="0" placeholder="999999" style="width:70px" /> 元</div>
                 </div>
                 <div class="field">
                   <label for="feCatPricePeripherals">⑤ 電腦周邊</label>
                   <textarea id="feCatPricePeripherals" rows="3" placeholder="價格依品項&#10;可換行、分段填寫"></textarea>
+                  <div class="muted small" style="margin-top:4px">篩選區間：最低 <input id="feCatRangePeripheralsMin" type="number" min="0" placeholder="0" style="width:70px" /> 最高 <input id="feCatRangePeripheralsMax" type="number" min="0" placeholder="999999" style="width:70px" /> 元</div>
                 </div>
               </div>
 

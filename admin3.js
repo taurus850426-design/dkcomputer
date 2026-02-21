@@ -229,11 +229,44 @@
     }, 2500);
   }
 
+  function updateSyncStatusBar() {
+    const bar = document.getElementById("syncStatusBar");
+    const txt = document.getElementById("syncStatusText");
+    if (!bar || !txt) return;
+    const configured = window.DK?.isSupabaseConfigured?.() === true;
+    if (!configured) {
+      bar.className = "sync-status-bar error";
+      txt.textContent = "⚠ Supabase 未設定，新增／編輯的資料僅存於本機，其他裝置無法看到。請在 shared.js 填寫 SUPABASE_URL 與 SUPABASE_ANON_KEY。";
+      return;
+    }
+    bar.className = "sync-status-bar";
+    txt.textContent = "✓ Supabase 已連線，儲存後會自動同步到雲端，其他裝置可看到。";
+  }
+
+  function showSyncToast(result, context) {
+    const ok = result && result.ok === true;
+    const msg = ok
+      ? (context ? context + " 已儲存並同步到 Supabase ✓" : "已同步到 Supabase ✓")
+      : "同步失敗，其他裝置無法看到： " + (result?.error || "未知錯誤");
+    showCenterToast(msg);
+    if (!ok) {
+      const bar = document.getElementById("syncStatusBar");
+      const txt = document.getElementById("syncStatusText");
+      if (bar && txt) {
+        bar.className = "sync-status-bar error";
+        txt.textContent = "⚠ 上次同步失敗：" + (result?.error || "").slice(0, 60);
+      }
+    } else {
+      updateSyncStatusBar();
+    }
+  }
+
   function applyAuthUI() {
     const authed = window.DK?.isAdminAuthed?.() === true;
     loginCard.hidden = authed;
     panel.hidden = !authed;
     logoutBtn.hidden = !authed;
+    if (authed) updateSyncStatusBar();
   }
 
   const ADMIN_TAB_KEY = "dk_admin_tab";
@@ -544,10 +577,14 @@
       try {
         const result = await window.DK.deleteInventoryItemFromSupabase(webId);
         syncOk = result && result.ok === true;
-        if (!syncOk && result?.error) show(publishMsg, "已從本機下架，但 Supabase 同步刪除失敗：" + result.error);
+        if (!syncOk) {
+          show(publishMsg, "已從本機下架，但 Supabase 同步刪除失敗：" + (result?.error || ""));
+          if (typeof showSyncToast === "function") showSyncToast({ ok: false, error: result?.error || "下架同步失敗" }, "下架");
+        }
       } catch (e) {
         syncOk = false;
         show(publishMsg, "已從本機下架，Supabase 同步失敗：" + (e?.message || String(e)));
+        if (typeof showSyncToast === "function") showSyncToast({ ok: false, error: e?.message || String(e) }, "下架");
       }
     }
     renderPublish();
@@ -585,12 +622,14 @@
       try {
         const result = await window.DK.upsertInventoryItemToSupabase(item);
         syncOk = result && result.ok === true;
-        if (!syncOk && result?.error) {
-          show(publishMsg, "已存於本機，但 Supabase 同步失敗：" + result.error);
+        if (!syncOk) {
+          show(publishMsg, "已存於本機，但 Supabase 同步失敗：" + (result?.error || ""));
+          if (typeof showSyncToast === "function") showSyncToast({ ok: false, error: result?.error || "上架同步失敗" }, "上架");
         }
       } catch (e) {
         syncOk = false;
         show(publishMsg, "已存於本機，Supabase 同步失敗：" + (e?.message || String(e)));
+        if (typeof showSyncToast === "function") showSyncToast({ ok: false, error: e?.message || String(e) }, "上架");
       }
     }
     publishPhotos.length = 0;
@@ -736,6 +775,19 @@
     document.getElementById("feCatPriceGameMid").value = fe.catPrices?.["game-mid"] ?? catPriceDef["game-mid"] ?? "NT$ 13,000–20,000";
     document.getElementById("feCatPriceWork").value = fe.catPrices?.work ?? catPriceDef.work ?? "NT$ 18,000+";
     document.getElementById("feCatPricePeripherals").value = fe.catPrices?.peripherals ?? catPriceDef.peripherals ?? "價格依品項";
+    const rangeDef = fe.catPriceRanges || def?.frontend?.catPriceRanges || {};
+    const setRange = (cat, minId, maxId) => {
+      const r = rangeDef[cat] || {};
+      const minEl = document.getElementById(minId);
+      const maxEl = document.getElementById(maxId);
+      if (minEl) minEl.value = r.min != null && r.min !== "" ? String(r.min) : "";
+      if (maxEl) maxEl.value = r.max != null && r.max !== "" ? String(r.max) : "";
+    };
+    setRange("office", "feCatRangeOfficeMin", "feCatRangeOfficeMax");
+    setRange("game-entry", "feCatRangeGameEntryMin", "feCatRangeGameEntryMax");
+    setRange("game-mid", "feCatRangeGameMidMin", "feCatRangeGameMidMax");
+    setRange("work", "feCatRangeWorkMin", "feCatRangeWorkMax");
+    setRange("peripherals", "feCatRangePeripheralsMin", "feCatRangePeripheralsMax");
     document.getElementById("feLineUrl").value = cfg.line?.url ?? "";
     const feLineCta = document.getElementById("feLineCtaText");
     if (feLineCta) feLineCta.value = cfg.line?.lineCtaText ?? (window.DK?.DEFAULT_CONFIG?.line?.lineCtaText ?? "");
@@ -800,6 +852,13 @@
           "game-mid": document.getElementById("feCatPriceGameMid").value?.trim() || undefined,
           work: document.getElementById("feCatPriceWork").value?.trim() || undefined,
           peripherals: document.getElementById("feCatPricePeripherals").value?.trim() || undefined,
+        },
+        catPriceRanges: {
+          office: { min: parseInt(document.getElementById("feCatRangeOfficeMin")?.value, 10) || 0, max: parseInt(document.getElementById("feCatRangeOfficeMax")?.value, 10) || 6000 },
+          "game-entry": { min: parseInt(document.getElementById("feCatRangeGameEntryMin")?.value, 10) || 7000, max: parseInt(document.getElementById("feCatRangeGameEntryMax")?.value, 10) || 12000 },
+          "game-mid": { min: parseInt(document.getElementById("feCatRangeGameMidMin")?.value, 10) || 13000, max: parseInt(document.getElementById("feCatRangeGameMidMax")?.value, 10) || 20000 },
+          work: { min: parseInt(document.getElementById("feCatRangeWorkMin")?.value, 10) || 18000, max: parseInt(document.getElementById("feCatRangeWorkMax")?.value, 10) || 999999 },
+          peripherals: { min: parseInt(document.getElementById("feCatRangePeripheralsMin")?.value, 10) || 0, max: parseInt(document.getElementById("feCatRangePeripheralsMax")?.value, 10) || 999999 },
         },
         catImages: cfg.frontend?.catImages || {},
       },
@@ -1363,15 +1422,17 @@
         const idx = items.findIndex((x) => x.id === editingV2ItemId);
         if (idx < 0) return v2Show(itemMsg, "找不到品項");
         items[idx] = { ...items[idx], ...payload };
-        DK.saveItems(items);
+        const syncP = DK.saveItems(items);
         v2Show(itemMsg, "已更新");
+        if (syncP) syncP.then((r) => showSyncToast(r, "品項"));
       } else {
         payload.id = "i-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9);
         payload.last_moved_at = payload.inbound_date ? payload.inbound_date + "T12:00:00Z" : null;
         payload.created_at = nowISO();
         items.unshift(payload);
-        DK.saveItems(items);
+        const syncP = DK.saveItems(items);
         v2Show(itemMsg, "已新增");
+        if (syncP) syncP.then((r) => showSyncToast(r, "品項"));
       }
       renderV2Items();
       setTimeout(closeV2ItemEditor, 800);
@@ -1388,8 +1449,9 @@
       }
       if (!confirm("確定要刪除所選的 " + ids.length + " 筆品項？刪除後無法復原。")) return;
       const items = DK.getItems().filter((x) => !ids.includes(x.id));
-      DK.saveItems(items);
+      const syncP = DK.saveItems(items);
       renderV2Items();
+      if (syncP) syncP.then((r) => showSyncToast(r, "品項刪除"));
     });
     document.getElementById("itemsSelectAll")?.addEventListener("change", function () {
       itemsTbody?.querySelectorAll(".item-row-cb").forEach((cb) => { cb.checked = this.checked; });
@@ -1447,6 +1509,7 @@
       const result = DK.addLedgerEntry({ item_id: itemId, type, qty: type === "ADJUST" ? qty : Math.abs(qty), unit_cost: unitCost, ref_type: refType, ref_id: refId, note });
       if (!result.ok) return v2Show(ledgerMsg, result.error || "失敗");
       v2Show(ledgerMsg, "已寫入流水並更新品項");
+      if (result.syncPromise) result.syncPromise.then((r) => showSyncToast(r, "流水帳"));
       renderV2Ledger();
       renderV2Items();
       setTimeout(() => { if (ledgerForm) ledgerForm.hidden = true; v2Hide(ledgerMsg); }, 1000);
@@ -1601,12 +1664,15 @@
       updateOrderTotalsFromLines();
       v2Hide(orderMsg);
     });
-    document.getElementById("orderSave")?.addEventListener("click", () => {
-      const orderNo = String(document.getElementById("orderNo")?.value || "").trim();
-      const totalSale = parseFloat(document.getElementById("orderTotalSale")?.value) || 0;
-      const cogsTotal = parseFloat(document.getElementById("orderCogs")?.value) || 0;
-      if (!orderNo) return v2Show(orderMsg, "訂單編號必填");
-      const orders = DK.getOrders();
+    document.getElementById("orderSave")?.addEventListener("click", async () => {
+      const g = typeof window !== "undefined" ? window : typeof globalThis !== "undefined" ? globalThis : {};
+      g._suppressV2Sync = true;
+      try {
+        const orderNo = String(document.getElementById("orderNo")?.value || "").trim();
+        const totalSale = parseFloat(document.getElementById("orderTotalSale")?.value) || 0;
+        const cogsTotal = parseFloat(document.getElementById("orderCogs")?.value) || 0;
+        if (!orderNo) { v2Show(orderMsg, "訂單編號必填"); return; }
+        const orders = DK.getOrders();
       const existing = orders.find((x) => x.order_no === orderNo && x.id !== editingV2OrderId);
       if (existing) return v2Show(orderMsg, "訂單編號重複");
       const payload = { order_no: orderNo, customer_name: document.getElementById("orderCustomer")?.value || "", total_sale: totalSale, shipping_income: parseFloat(document.getElementById("orderShipping")?.value) || 0, discount: parseFloat(document.getElementById("orderDiscount")?.value) || 0, payment_method: document.getElementById("orderPayment")?.value || "transfer", status: document.getElementById("orderStatus")?.value || "pending", cogs_total: cogsTotal, created_at: nowISO(), items: orderLineItems };
@@ -1689,6 +1755,14 @@
       renderV2Items();
       renderV2Reports();
       setTimeout(() => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); }, 800);
+      } finally {
+        g._suppressV2Sync = false;
+        const syncP = typeof g.__syncV2ToSupabase === "function" ? g.__syncV2ToSupabase() : null;
+        if (syncP) {
+          const result = await syncP;
+          showSyncToast(result, "訂單");
+        }
+      }
     });
 
     makeSearchableItemSelect("orderLineItem", "orderLineItemSearch", "orderLineItemDropdown", { showQty: true, showCost: true });
@@ -1706,7 +1780,8 @@
           if (!confirm("確定刪除？")) return;
           const id = btn.getAttribute("data-id");
           const rows = DK.getExpenses().filter((x) => x.id !== id);
-          DK.saveExpenses(rows);
+          const syncP = DK.saveExpenses(rows);
+          if (syncP) syncP.then((r) => showSyncToast(r, "支出刪除"));
           renderV2Expenses();
           renderV2Reports();
         });
@@ -1729,8 +1804,9 @@
       if (!Number.isFinite(amount) || amount < 0) return v2Show(expenseMsg, "請填金額");
       const rows = DK.getExpenses();
       rows.unshift({ id: "ex-" + Date.now(), date, type: document.getElementById("expenseType")?.value, category: document.getElementById("expenseCategory")?.value || "", amount, note: document.getElementById("expenseNote")?.value || "", ref_item_id: "", created_at: nowISO() });
-      DK.saveExpenses(rows);
+      const syncP = DK.saveExpenses(rows);
       v2Show(expenseMsg, "已新增");
+      if (syncP) syncP.then((r) => showSyncToast(r, "支出"));
       renderV2Expenses();
       renderV2Reports();
       setTimeout(() => { if (expenseForm) expenseForm.hidden = true; v2Hide(expenseMsg); }, 800);

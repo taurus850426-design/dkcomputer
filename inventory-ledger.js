@@ -70,7 +70,8 @@
 
   function saveItems(items) {
     save(KEYS.items, items);
-    if (typeof global.__syncV2ToSupabase === "function") global.__syncV2ToSupabase();
+    if (global._suppressV2Sync) return;
+    if (typeof global.__syncV2ToSupabase === "function") return global.__syncV2ToSupabase();
   }
 
   function findItemBySku(sku) {
@@ -144,7 +145,8 @@
 
   function saveLedger(rows) {
     save(KEYS.ledger, rows);
-    if (typeof global.__syncV2ToSupabase === "function") global.__syncV2ToSupabase();
+    if (global._suppressV2Sync) return;
+    if (typeof global.__syncV2ToSupabase === "function") return global.__syncV2ToSupabase();
   }
 
   function addLedgerEntry(entry) {
@@ -189,9 +191,9 @@
     item.last_moved_at = now;
     if (type === "IN" && !item.inbound_date) item.inbound_date = dateStr;
     item.updated_at = now;
-    saveItems(items);
+    const syncPromise = saveItems(items);
 
-    return { ok: true, row };
+    return { ok: true, row, syncPromise };
   }
 
   // ---------- Orders ----------
@@ -201,7 +203,8 @@
 
   function saveOrders(orders) {
     save(KEYS.orders, orders);
-    if (typeof global.__syncV2ToSupabase === "function") global.__syncV2ToSupabase();
+    if (global._suppressV2Sync) return;
+    if (typeof global.__syncV2ToSupabase === "function") return global.__syncV2ToSupabase();
   }
 
   function orderGrossProfit(o) {
@@ -244,8 +247,10 @@
 
   function saveExpenses(rows) {
     save(KEYS.expenses, rows);
-    if (typeof global.__syncV2ToSupabase === "function") global.__syncV2ToSupabase();
+    if (global._suppressV2Sync) return;
+    if (typeof global.__syncV2ToSupabase === "function") return global.__syncV2ToSupabase();
   }
+
 
   // ---------- Reports ----------
   function reportTop20IdleDays() {
