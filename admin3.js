@@ -1460,7 +1460,7 @@
     let editingV2OrderId = null;
     let orderLineItems = [];
 
-    /** 將品項 select 改為可關鍵字搜尋：依名稱／編號／規格過濾，點選後寫回 select 的 value。opts.showQty 時選單顯示庫存剩餘數量 */
+    /** 將品項 select 改為可關鍵字搜尋：依名稱／編號／規格過濾，點選後寫回 select 的 value。opts.showQty 時選單顯示庫存剩餘數量；opts.showCost 時顯示單位成本 */
     function makeSearchableItemSelect(selectId, searchInputId, dropdownId, opts) {
       opts = opts || {};
       const select = document.getElementById(selectId);
@@ -1485,6 +1485,7 @@
           dropdown.innerHTML = list.map((i) => {
             let label = (i.name || "") + (i.spec ? " (" + (i.spec || "") + ")" : "");
             if (opts.showQty) label += " · 剩餘 " + (i.qty_on_hand ?? 0);
+            if (opts.showCost && (i.cost_unit != null && i.cost_unit !== "")) label += " · 成本 " + v2FmtNum(Number(i.cost_unit) || 0);
             return `<div class="searchable-select-option" data-id="${v2Esc(i.id)}" data-name="${v2Esc(i.name || "")}">${v2Esc(label)}</div>`;
           }).join("");
         }
@@ -1524,9 +1525,10 @@
     function renderOrderLineTbody() {
       if (!orderLineTbody) return;
       orderLineTbody.innerHTML = orderLineItems.map((line, i) => {
-        const cogsSub = (Number(line.cost_unit) || 0) * (Number(line.qty) || 0);
+        const costUnit = Number(line.cost_unit) || 0;
+        const cogsSub = costUnit * (Number(line.qty) || 0);
         const spec = line.spec != null ? line.spec : (DK.findItemById(line.item_id)?.spec ?? "");
-        return `<tr><td>${v2Esc(line.name || "")}</td><td class="muted small">${v2Esc(spec)}</td><td>${line.qty}</td><td>${v2FmtNum(line.unit_price)}</td><td>${v2FmtNum(cogsSub)}</td><td><button type="button" class="btn btn-ghost btn-sm order-line-remove" data-i="${i}">移除</button></td></tr>`;
+        return `<tr><td>${v2Esc(line.name || "")}</td><td class="muted small">${v2Esc(spec)}</td><td>${line.qty}</td><td>${v2FmtNum(line.unit_price)}</td><td>${v2FmtNum(costUnit)}</td><td>${v2FmtNum(cogsSub)}</td><td><button type="button" class="btn btn-ghost btn-sm order-line-remove" data-i="${i}">移除</button></td></tr>`;
       }).join("");
       orderLineTbody.querySelectorAll(".order-line-remove").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -1689,7 +1691,7 @@
       setTimeout(() => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); }, 800);
     });
 
-    makeSearchableItemSelect("orderLineItem", "orderLineItemSearch", "orderLineItemDropdown", { showQty: true });
+    makeSearchableItemSelect("orderLineItem", "orderLineItemSearch", "orderLineItemDropdown", { showQty: true, showCost: true });
     makeSearchableItemSelect("ledgerItemId", "ledgerItemIdSearch", "ledgerItemIdDropdown");
 
     const expensesTbody = document.getElementById("expensesTbody");
