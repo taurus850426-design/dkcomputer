@@ -337,11 +337,56 @@
   const ordersTbody = document.getElementById("ordersTbody");
   const orderForm = document.getElementById("orderForm");
   const orderMsg = document.getElementById("orderMsg");
+  const orderSearchEl = document.getElementById("orderSearch");
+  const orderDateRangeEl = document.getElementById("orderDateRange");
+  const orderStatusFilterEl = document.getElementById("orderStatusFilter");
   let editingOrderId = null;
+
+  function getOrderDateStr(o) {
+    return (o.created_at || o.date || "").toString().slice(0, 10);
+  }
+
+  function getFilteredOrders() {
+    let list = DK.getOrders().map(DK.enrichOrder);
+    const q = (orderSearchEl?.value || "").trim().toLowerCase();
+    const range = orderDateRangeEl?.value || "";
+    const statusFilter = orderStatusFilterEl?.value || "";
+    if (q) {
+      list = list.filter((o) =>
+        [o.order_no, o.customer_name].some((v) => String(v || "").toLowerCase().includes(q))
+      );
+    }
+    if (range) {
+      const now = new Date();
+      let fromStr, toStr;
+      if (range === "month") {
+        const y = now.getFullYear(), m = now.getMonth();
+        fromStr = new Date(y, m, 1).toISOString().slice(0, 10);
+        toStr = new Date(y, m + 1, 0).toISOString().slice(0, 10);
+      } else if (range === "week") {
+        const day = now.getDay();
+        const start = new Date(now);
+        start.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+        start.setHours(0, 0, 0, 0);
+        fromStr = start.toISOString().slice(0, 10);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        toStr = end.toISOString().slice(0, 10);
+      }
+      if (fromStr && toStr) {
+        list = list.filter((o) => {
+          const d = getOrderDateStr(o);
+          return d >= fromStr && d <= toStr;
+        });
+      }
+    }
+    if (statusFilter) list = list.filter((o) => o.status === statusFilter);
+    return list;
+  }
 
   function renderOrders() {
     if (!ordersTbody) return;
-    const list = DK.getOrders().map(DK.enrichOrder);
+    const list = getFilteredOrders();
     ordersTbody.innerHTML = list.map((o) => {
       const margin = o.gross_margin != null ? (o.gross_margin * 100).toFixed(1) + "%" : "-";
       return `<tr>
@@ -362,6 +407,11 @@
       btn.addEventListener("click", () => openOrderEditor(btn.getAttribute("data-id")));
     });
   }
+
+  orderSearchEl?.addEventListener("input", renderOrders);
+  orderSearchEl?.addEventListener("search", renderOrders);
+  orderDateRangeEl?.addEventListener("change", renderOrders);
+  orderStatusFilterEl?.addEventListener("change", renderOrders);
 
   function openOrderEditor(id) {
     editingOrderId = id || null;
@@ -497,15 +547,70 @@
   });
 
   // ---------- Reports ----------
-  function renderReports() {
+  const reportPeriodBtns = document.querySelectorAll(".report-period-btn");
+  const reportCustomMonth = document.getElementById("reportCustomMonth");
+  const reportCustomYear = document.getElementById("reportCustomYear");
+  const reportMonthYearEl = document.getElementById("reportMonthYear");
+  const reportMonthMonthEl = document.getElementById("reportMonthMonth");
+  const reportYearYearEl = document.getElementById("reportYearYear");
+
+  function fillReportPeriodOptions() {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    for (let y = currentYear; y >= currentYear - 10; y--) years.push(y);
+    if (reportMonthYearEl) {
+      reportMonthYearEl.innerHTML = years.map((y) => `<option value="${y}"${y === currentYear ? " selected" : ""}>${y} 年</option>`).join("");
+    }
+    if (reportYearYearEl) {
+      reportYearYearEl.innerHTML = years.map((y) => `<option value="${y}"${y === currentYear ? " selected" : ""}>${y} 年</option>`).join("");
+    }
+    const currentMonth = new Date().getMonth() + 1;
+    if (reportMonthMonthEl) {
+      reportMonthMonthEl.innerHTML = Array.from({ length: 12 }, (_, i) => i + 1)
+        .map((m) => `<option value="${m}"${m === currentMonth ? " selected" : ""}>${m} 月</option>`).join("");
+    }
+  }
+
+  function getReportQueryParams() {
+    const period = document.querySelector(".report-period-btn.active")?.getAttribute("data-period") || "week";
+    const now = new Date();
+    let fromStr, toStr, label;
+    if (period === "week") {
+      const w = DK.reportWeeklySummary();
+      return { fromStr: w.weekFrom, toStr: w.weekTo, label: "本週" };
+    }
+    if (period === "month") {
+      const m = DK.reportMonthlySummary();
+      return { fromStr: m.monthFrom, toStr: m.monthTo, label: "本月" };
+    }
+    if (period === "customMonth" && reportMonthYearEl && reportMonthMonthEl) {
+      const y = parseInt(reportMonthYearEl.value, 10);
+      const m = parseInt(reportMonthMonthEl.value, 10);
+      fromStr = `${y}-${String(m).padStart(2, "0")}-01`;
+      const lastDay = new Date(y, m, 0).getDate();
+      toStr = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+      return { fromStr, toStr, label: `${y}年${m}月` };
+    }
+    if (period === "customYear" && reportYearYearEl) {
+      const y = parseInt(reportYearYearEl.value, 10);
+      fromStr = `${y}-01-01`;
+      toStr = `${y}-12-31`;
+      return { fromStr, toStr, label: `${y}年` };
+    }
     const w = DK.reportWeeklySummary();
-    const elWeekly = document.getElementById("reportWeekly");
-    if (elWeekly) {
-      elWeekly.innerHTML = `
-        <div><strong>本週 ${w.weekFrom} ~ ${w.weekTo}</strong></div>
-        <div>訂單毛利合計：NT$ ${fmtNum(w.ordersProfit)}（${w.ordersCount} 筆）</div>
-        <div>支出合計：NT$ ${fmtNum(w.expensesTotal)}（${w.expensesCount} 筆）</div>
-        <div>庫存總成本：NT$ ${fmtNum(w.inventoryValue)}</div>
+    return { fromStr: w.weekFrom, toStr: w.weekTo, label: "本週" };
+  }
+
+  function renderReports() {
+    const params = getReportQueryParams();
+    const summary = DK.reportSummaryByDateRange(params.fromStr, params.toStr);
+    const elResult = document.getElementById("reportQueryResult");
+    if (elResult) {
+      elResult.innerHTML = `
+        <div><strong>${params.label} ${summary.fromStr} ~ ${summary.toStr}</strong></div>
+        <div>訂單毛利合計：NT$ ${fmtNum(summary.ordersProfit)}（${summary.ordersCount} 筆）</div>
+        <div>支出合計：NT$ ${fmtNum(summary.expensesTotal)}（${summary.expensesCount} 筆）</div>
+        <div>庫存總成本：NT$ ${fmtNum(summary.inventoryValue)}</div>
       `;
     }
 
@@ -534,7 +639,52 @@
     }
   }
 
+  reportPeriodBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      reportPeriodBtns.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      reportCustomMonth.style.display = (btn.getAttribute("data-period") === "customMonth") ? "flex" : "none";
+      reportCustomYear.style.display = (btn.getAttribute("data-period") === "customYear") ? "flex" : "none";
+      renderReports();
+    });
+  });
+  reportMonthYearEl?.addEventListener("change", renderReports);
+  reportMonthMonthEl?.addEventListener("change", renderReports);
+  reportYearYearEl?.addEventListener("change", renderReports);
+
+  function csvCell(v) {
+    const s = v == null ? "" : String(v);
+    if (/[,"\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function exportReportCSV() {
+    const params = getReportQueryParams();
+    const summary = DK.reportSummaryByDateRange(params.fromStr, params.toStr);
+    const orders = (DK.getOrdersInDateRange && DK.getOrdersInDateRange(params.fromStr, params.toStr)) || DK.getOrders();
+    const enrichedOrders = orders.map((o) => DK.enrichOrder(o));
+    const headers = ["報表類型", "期間", "訂單毛利合計", "訂單筆數", "支出合計", "支出筆數", "庫存總成本"];
+    const rows = [[params.label, `${summary.fromStr} ~ ${summary.toStr}`, summary.ordersProfit, summary.ordersCount, summary.expensesTotal, summary.expensesCount, summary.inventoryValue]];
+    let csv = "\uFEFF" + headers.join(",") + "\n";
+    rows.forEach((r) => { csv += r.map(csvCell).join(",") + "\n"; });
+    csv += "\n訂單明細（查詢區間內）\n";
+    csv += "訂單編號,客戶,售價,運費,折扣,成本,毛利,毛利率,狀態,日期\n";
+    enrichedOrders.forEach((o) => {
+      const margin = o.gross_margin != null ? (o.gross_margin * 100).toFixed(1) + "%" : "";
+      csv += [o.order_no, o.customer_name, o.total_sale ?? "", o.shipping_income ?? "", o.discount ?? "", o.cogs_total ?? "", o.gross_profit ?? "", margin, o.status ?? "", (o.created_at || "").toString().slice(0, 10)].map(csvCell).join(",") + "\n";
+    });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "報表_" + new Date().toISOString().slice(0, 10) + ".csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  document.getElementById("btnExportReport")?.addEventListener("click", exportReportCSV);
+
   // Init
   fillCategoryOptions();
+  fillReportPeriodOptions();
   renderItems();
 })();

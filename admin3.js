@@ -1518,10 +1518,54 @@
     const ordersTbody = document.getElementById("ordersTbody");
     const orderForm = document.getElementById("orderForm");
     const orderMsg = document.getElementById("orderMsg");
+    const orderSearchEl = document.getElementById("orderSearch");
+    const orderDateRangeEl = document.getElementById("orderDateRange");
+    const orderStatusFilterEl = document.getElementById("orderStatusFilter");
     const orderLineTbody = document.getElementById("orderLineTbody");
     const orderLineItemSelect = document.getElementById("orderLineItem");
     let editingV2OrderId = null;
     let orderLineItems = [];
+
+    function getOrderDateStr(o) {
+      return (o.created_at || o.date || "").toString().slice(0, 10);
+    }
+    function getFilteredOrders() {
+      let list = DK.getOrders().map(DK.enrichOrder);
+      const q = (orderSearchEl?.value || "").trim().toLowerCase();
+      const range = orderDateRangeEl?.value || "";
+      const statusFilter = orderStatusFilterEl?.value || "";
+      if (q) {
+        list = list.filter((o) =>
+          [o.order_no, o.customer_name].some((v) => String(v || "").toLowerCase().includes(q))
+        );
+      }
+      if (range) {
+        const now = new Date();
+        let fromStr, toStr;
+        if (range === "month") {
+          const y = now.getFullYear(), m = now.getMonth();
+          fromStr = new Date(y, m, 1).toISOString().slice(0, 10);
+          toStr = new Date(y, m + 1, 0).toISOString().slice(0, 10);
+        } else if (range === "week") {
+          const day = now.getDay();
+          const start = new Date(now);
+          start.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+          start.setHours(0, 0, 0, 0);
+          fromStr = start.toISOString().slice(0, 10);
+          const end = new Date(start);
+          end.setDate(start.getDate() + 6);
+          toStr = end.toISOString().slice(0, 10);
+        }
+        if (fromStr && toStr) {
+          list = list.filter((o) => {
+            const d = getOrderDateStr(o);
+            return d >= fromStr && d <= toStr;
+          });
+        }
+      }
+      if (statusFilter) list = list.filter((o) => o.status === statusFilter);
+      return list;
+    }
 
     /** 將品項 select 改為可關鍵字搜尋：依名稱／編號／規格過濾，點選後寫回 select 的 value。opts.showQty 時選單顯示庫存剩餘數量；opts.showCost 時顯示單位成本 */
     function makeSearchableItemSelect(selectId, searchInputId, dropdownId, opts) {
@@ -1570,13 +1614,17 @@
 
     function renderV2Orders() {
       if (!ordersTbody) return;
-      const list = DK.getOrders().map(DK.enrichOrder);
+      const list = getFilteredOrders();
       ordersTbody.innerHTML = list.map((o) => {
         const margin = o.gross_margin != null ? (o.gross_margin * 100).toFixed(1) + "%" : "-";
         return `<tr><td class="nowrap">${v2Esc(o.order_no)}</td><td>${v2Esc(o.customer_name)}</td><td>${v2FmtNum(o.total_sale)}</td><td>${v2FmtNum(o.shipping_income)}</td><td>${v2FmtNum(o.discount)}</td><td>${v2FmtNum(o.cogs_total)}</td><td>${v2FmtNum(o.gross_profit)}</td><td>${margin}</td><td>${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</td><td class="nowrap">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td></tr>`;
       }).join("");
       ordersTbody.querySelectorAll(".btn-edit-order").forEach((btn) => btn.addEventListener("click", () => openV2OrderEditor(btn.getAttribute("data-id"))));
     }
+    orderSearchEl?.addEventListener("input", renderV2Orders);
+    orderSearchEl?.addEventListener("search", renderV2Orders);
+    orderDateRangeEl?.addEventListener("change", renderV2Orders);
+    orderStatusFilterEl?.addEventListener("change", renderV2Orders);
 
     function fillOrderLineItemSelect() {
       if (!orderLineItemSelect) return;
@@ -1812,10 +1860,52 @@
       setTimeout(() => { if (expenseForm) expenseForm.hidden = true; v2Hide(expenseMsg); }, 800);
     });
 
-    function renderV2Reports() {
+    const reportPeriodBtns = document.querySelectorAll(".report-period-btn");
+    const reportCustomMonth = document.getElementById("reportCustomMonth");
+    const reportCustomYear = document.getElementById("reportCustomYear");
+    const reportMonthYearEl = document.getElementById("reportMonthYear");
+    const reportMonthMonthEl = document.getElementById("reportMonthMonth");
+    const reportYearYearEl = document.getElementById("reportYearYear");
+
+    function fillReportPeriodOptions() {
+      const currentYear = new Date().getFullYear();
+      const years = [];
+      for (let y = currentYear; y >= currentYear - 10; y--) years.push(y);
+      if (reportMonthYearEl) reportMonthYearEl.innerHTML = years.map((y) => `<option value="${y}"${y === currentYear ? " selected" : ""}>${y} 年</option>`).join("");
+      if (reportYearYearEl) reportYearYearEl.innerHTML = years.map((y) => `<option value="${y}"${y === currentYear ? " selected" : ""}>${y} 年</option>`).join("");
+      const currentMonth = new Date().getMonth() + 1;
+      if (reportMonthMonthEl) reportMonthMonthEl.innerHTML = Array.from({ length: 12 }, (_, i) => i + 1).map((m) => `<option value="${m}"${m === currentMonth ? " selected" : ""}>${m} 月</option>`).join("");
+    }
+    function getReportQueryParams() {
+      const period = document.querySelector(".report-period-btn.active")?.getAttribute("data-period") || "week";
+      if (period === "week") {
+        const w = DK.reportWeeklySummary();
+        return { fromStr: w.weekFrom, toStr: w.weekTo, label: "本週" };
+      }
+      if (period === "month") {
+        const m = DK.reportMonthlySummary();
+        return { fromStr: m.monthFrom, toStr: m.monthTo, label: "本月" };
+      }
+      if (period === "customMonth" && reportMonthYearEl && reportMonthMonthEl) {
+        const y = parseInt(reportMonthYearEl.value, 10);
+        const m = parseInt(reportMonthMonthEl.value, 10);
+        const fromStr = `${y}-${String(m).padStart(2, "0")}-01`;
+        const toStr = `${y}-${String(m).padStart(2, "0")}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+        return { fromStr, toStr, label: `${y}年${m}月` };
+      }
+      if (period === "customYear" && reportYearYearEl) {
+        const y = parseInt(reportYearYearEl.value, 10);
+        return { fromStr: `${y}-01-01`, toStr: `${y}-12-31`, label: `${y}年` };
+      }
       const w = DK.reportWeeklySummary();
-      const elWeekly = document.getElementById("reportWeekly");
-      if (elWeekly) elWeekly.innerHTML = `<div><strong>本週 ${w.weekFrom} ~ ${w.weekTo}</strong></div><div>訂單毛利合計：NT$ ${v2FmtNum(w.ordersProfit)}（${w.ordersCount} 筆）</div><div>支出合計：NT$ ${v2FmtNum(w.expensesTotal)}（${w.expensesCount} 筆）</div><div>庫存總成本：NT$ ${v2FmtNum(w.inventoryValue)}</div>`;
+      return { fromStr: w.weekFrom, toStr: w.weekTo, label: "本週" };
+    }
+
+    function renderV2Reports() {
+      const params = getReportQueryParams();
+      const summary = DK.reportSummaryByDateRange(params.fromStr, params.toStr);
+      const elResult = document.getElementById("reportQueryResult");
+      if (elResult) elResult.innerHTML = `<div><strong>${params.label} ${summary.fromStr} ~ ${summary.toStr}</strong></div><div>訂單毛利合計：NT$ ${v2FmtNum(summary.ordersProfit)}（${summary.ordersCount} 筆）</div><div>支出合計：NT$ ${v2FmtNum(summary.expensesTotal)}（${summary.expensesCount} 筆）</div><div>庫存總成本：NT$ ${v2FmtNum(summary.inventoryValue)}</div>`;
       const top20 = DK.reportTop20IdleDays();
       const elTop20 = document.getElementById("reportTop20");
       if (elTop20) elTop20.innerHTML = top20.length ? `<table class="table"><thead><tr><th>名稱</th><th>品類</th><th>滯留天</th><th>庫存價值</th></tr></thead><tbody>${top20.map((x) => `<tr><td>${v2Esc(x.name)}</td><td>${v2Esc(x.category)}</td><td>${x.idle_days}</td><td>${v2FmtNum(x.inventory_value)}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無資料</p>";
@@ -1826,6 +1916,47 @@
       const elClear = document.getElementById("reportClearance");
       if (elClear) elClear.innerHTML = clearance.length ? `<table class="table"><thead><tr><th>名稱</th><th>品類</th><th>滯留天</th><th>庫存價值</th></tr></thead><tbody>${clearance.map((x) => `<tr><td>${v2Esc(x.name)}</td><td>${v2Esc(x.category)}</td><td>${x.idle_days}</td><td>${v2FmtNum(x.inventory_value)}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無</p>";
     }
+    reportPeriodBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        reportPeriodBtns.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        if (reportCustomMonth) reportCustomMonth.style.display = (btn.getAttribute("data-period") === "customMonth") ? "flex" : "none";
+        if (reportCustomYear) reportCustomYear.style.display = (btn.getAttribute("data-period") === "customYear") ? "flex" : "none";
+        renderV2Reports();
+      });
+    });
+    reportMonthYearEl?.addEventListener("change", renderV2Reports);
+    reportMonthMonthEl?.addEventListener("change", renderV2Reports);
+    reportYearYearEl?.addEventListener("change", renderV2Reports);
+
+    function csvCell(v) {
+      const s = v == null ? "" : String(v);
+      if (/[,"\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+    function exportReportCSV() {
+      const params = getReportQueryParams();
+      const summary = DK.reportSummaryByDateRange(params.fromStr, params.toStr);
+      const orders = (DK.getOrdersInDateRange && DK.getOrdersInDateRange(params.fromStr, params.toStr)) || DK.getOrders();
+      const enrichedOrders = orders.map((o) => DK.enrichOrder(o));
+      const headers = ["報表類型", "期間", "訂單毛利合計", "訂單筆數", "支出合計", "支出筆數", "庫存總成本"];
+      const rows = [[params.label, `${summary.fromStr} ~ ${summary.toStr}`, summary.ordersProfit, summary.ordersCount, summary.expensesTotal, summary.expensesCount, summary.inventoryValue]];
+      let csv = "\uFEFF" + headers.join(",") + "\n";
+      rows.forEach((r) => { csv += r.map(csvCell).join(",") + "\n"; });
+      csv += "\n訂單明細（查詢區間內）\n";
+      csv += "訂單編號,客戶,售價,運費,折扣,成本,毛利,毛利率,狀態,日期\n";
+      enrichedOrders.forEach((o) => {
+        const margin = o.gross_margin != null ? (o.gross_margin * 100).toFixed(1) + "%" : "";
+        csv += [o.order_no, o.customer_name, o.total_sale ?? "", o.shipping_income ?? "", o.discount ?? "", o.cogs_total ?? "", o.gross_profit ?? "", margin, o.status ?? "", getOrderDateStr(o)].map(csvCell).join(",") + "\n";
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "報表_" + new Date().toISOString().slice(0, 10) + ".csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+    document.getElementById("btnExportReport")?.addEventListener("click", exportReportCSV);
 
     window.__adminV2Refresh = function () {
       const active = document.querySelector(".v2-tab.active");
@@ -1833,6 +1964,7 @@
       switchV2Tab(name);
     };
     fillV2CategoryOptions();
+    fillReportPeriodOptions();
     switchV2Tab("items");
   }
 

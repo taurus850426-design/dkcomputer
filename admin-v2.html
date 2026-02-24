@@ -150,6 +150,29 @@
             <div><h2 class="h2">訂單（收入＆毛利）</h2><p class="muted">整單成本；毛利與毛利率自動計算</p></div>
             <button id="btnNewOrder" class="btn btn-primary" type="button">新增訂單</button>
           </div>
+          <div class="toolbar" style="margin-bottom:12px; flex-wrap: wrap; gap: 8px">
+            <label class="search">
+              <span class="search-label">搜尋</span>
+              <input id="orderSearch" type="search" placeholder="訂單編號／客戶名稱" autocomplete="off" />
+            </label>
+            <div class="filters" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+              <label>日期</label>
+              <select id="orderDateRange">
+                <option value="">全部</option>
+                <option value="month">本月</option>
+                <option value="week">本週</option>
+              </select>
+              <label>狀態</label>
+              <select id="orderStatusFilter">
+                <option value="">全部</option>
+                <option value="pending">待處理</option>
+                <option value="paid">已付款</option>
+                <option value="shipped">已出貨</option>
+                <option value="completed">已完成</option>
+                <option value="refunded">已退貨</option>
+              </select>
+            </div>
+          </div>
           <div class="table-wrap">
             <table class="table">
               <thead>
@@ -206,11 +229,34 @@
 
         <!-- ⑤ 報表（4 個） -->
         <section id="tab-reports" class="card" hidden>
-          <div class="section-head"><h2 class="h2">報表</h2><p class="muted">庫齡排行、待整理/待測、待出清、本週摘要</p></div>
+          <div class="section-head">
+            <div><h2 class="h2">報表</h2><p class="muted">庫齡排行、待整理/待測、待出清、區間查詢（本週／本月／指定月份／指定年度）</p></div>
+            <button id="btnExportReport" class="btn btn-primary" type="button">匯出報表 (CSV)</button>
+          </div>
+
+          <div class="toolbar card" style="margin-bottom:12px; flex-wrap: wrap; align-items: center; gap: 12px">
+            <span class="search-label">查詢區間</span>
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+              <button type="button" class="btn btn-ghost btn-sm report-period-btn active" data-period="week">本週</button>
+              <button type="button" class="btn btn-ghost btn-sm report-period-btn" data-period="month">本月</button>
+              <button type="button" class="btn btn-ghost btn-sm report-period-btn" data-period="customMonth">指定月份</button>
+              <button type="button" class="btn btn-ghost btn-sm report-period-btn" data-period="customYear">指定年度</button>
+            </div>
+            <div id="reportCustomMonth" style="display: none; align-items: center; gap: 6px">
+              <label>年份</label>
+              <select id="reportMonthYear"></select>
+              <label>月份</label>
+              <select id="reportMonthMonth"></select>
+            </div>
+            <div id="reportCustomYear" style="display: none; align-items: center; gap: 6px">
+              <label>年份</label>
+              <select id="reportYearYear"></select>
+            </div>
+          </div>
 
           <div class="card" style="margin-bottom:12px">
-            <h3 class="h3">本週毛利摘要</h3>
-            <div id="reportWeekly" class="two-col"></div>
+            <h3 class="h3">毛利摘要（查詢結果）</h3>
+            <div id="reportQueryResult" class="two-col"></div>
           </div>
           <div class="card" style="margin-bottom:12px">
             <h3 class="h3">庫齡排行前 20（滯留天數最多）</h3>

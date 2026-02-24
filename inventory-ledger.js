@@ -307,6 +307,70 @@
     };
   }
 
+  function reportMonthlySummary() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const start = new Date(y, m, 1);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(y, m + 1, 0);
+    end.setHours(23, 59, 59, 999);
+    const fromStr = start.toISOString().slice(0, 10);
+    const toStr = end.toISOString().slice(0, 10);
+
+    const orders = getOrders().filter((o) => {
+      const d = (o.created_at || o.date || "").toString().slice(0, 10);
+      return d >= fromStr && d <= toStr && o.status !== "refunded";
+    });
+    const ordersProfit = orders.reduce((s, o) => s + orderGrossProfit(o), 0);
+
+    const expenses = getExpenses().filter((e) => e.date >= fromStr && e.date <= toStr);
+    const expensesTotal = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+    const items = getItems();
+    const inventoryValue = items.reduce((s, i) => s + itemInventoryValue(i), 0);
+
+    return {
+      monthFrom: fromStr,
+      monthTo: toStr,
+      ordersProfit,
+      expensesTotal,
+      inventoryValue,
+      ordersCount: orders.length,
+      expensesCount: expenses.length,
+    };
+  }
+
+  /** 指定日期區間查詢報表（fromStr/toStr 格式 YYYY-MM-DD） */
+  function reportSummaryByDateRange(fromStr, toStr) {
+    const orders = getOrders().filter((o) => {
+      const d = (o.created_at || o.date || "").toString().slice(0, 10);
+      return d >= fromStr && d <= toStr && o.status !== "refunded";
+    });
+    const ordersProfit = orders.reduce((s, o) => s + orderGrossProfit(o), 0);
+    const expenses = getExpenses().filter((e) => e.date >= fromStr && e.date <= toStr);
+    const expensesTotal = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const items = getItems();
+    const inventoryValue = items.reduce((s, i) => s + itemInventoryValue(i), 0);
+    return {
+      fromStr,
+      toStr,
+      ordersProfit,
+      expensesTotal,
+      inventoryValue,
+      ordersCount: orders.length,
+      expensesCount: expenses.length,
+    };
+  }
+
+  /** 取得指定日期區間內的訂單（供匯出用） */
+  function getOrdersInDateRange(fromStr, toStr) {
+    return getOrders().filter((o) => {
+      const d = (o.created_at || o.date || "").toString().slice(0, 10);
+      return d >= fromStr && d <= toStr;
+    });
+  }
+
   // ---------- Seed ----------
   function seed() {
     const id = () => "i-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
@@ -386,6 +450,9 @@
     reportTestingPrep,
     reportClearance,
     reportWeeklySummary,
+    reportMonthlySummary,
+    reportSummaryByDateRange,
+    getOrdersInDateRange,
     todayStr,
     nowISO,
     seed,
