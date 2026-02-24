@@ -966,9 +966,12 @@
     });
   })();
 
-  // ---------- 庫存+記帳 v2 (DK)：渲染與表單 ----------
-  if (typeof window.DK !== "undefined") {
+  // ---------- 庫存+記帳 v2 (DK)：渲染與表單（延後初始化，確保 GitHub/部署環境下 DK 已載入）----------
+  function runV2DKBlock() {
+    if (window.__adminV2DKInitialized) return true;
+    if (typeof window.DK === "undefined") return false;
     const DK = window.DK;
+    if (typeof DK.getOrders !== "function" || typeof DK.reportSummaryByDateRange !== "function") return false;
     const todayStr = () => DK.todayStr();
     const nowISO = () => DK.nowISO();
 
@@ -1965,8 +1968,31 @@
     };
     fillV2CategoryOptions();
     fillReportPeriodOptions();
-    switchV2Tab("items");
+    var activeV2 = document.querySelector(".v2-tab.active");
+    var currentName = (activeV2 && activeV2.getAttribute("data-v2")) || "items";
+    switchV2Tab(currentName);
+    window.__adminV2DKInitialized = true;
+    return true;
   }
+
+  function tryInitV2DK(retriesLeft) {
+    if (retriesLeft == null) retriesLeft = 40;
+    if (runV2DKBlock()) return;
+    if (retriesLeft <= 0) {
+      console.warn("admin3: DK 未就緒，庫存+記帳（報表/訂單查詢）可能無法使用，請重新整理頁面。");
+      return;
+    }
+    if (document.readyState !== "complete") {
+      document.addEventListener("DOMContentLoaded", function onReady() {
+        document.removeEventListener("DOMContentLoaded", onReady);
+        if (runV2DKBlock()) return;
+        setTimeout(function () { tryInitV2DK(retriesLeft - 1); }, 150);
+      });
+      return;
+    }
+    setTimeout(function () { tryInitV2DK(retriesLeft - 1); }, 150);
+  }
+  tryInitV2DK();
 
   // ---------- init ----------
   applyAuthUI();
