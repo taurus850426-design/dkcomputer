@@ -1020,6 +1020,9 @@
     const itemEditor = document.getElementById("itemEditor");
     const itemMsg = document.getElementById("itemMsg");
     let editingV2ItemId = null;
+    /** 庫存品項表排序：key 為欄位名，dir 為 1 升序、-1 降序 */
+    let v2ItemsSortKey = null;
+    let v2ItemsSortDir = 1;
     const STATUS_LABEL = { READY: "可售", TESTING: "待測", PREP: "待整理", RESERVED: "保留", CLEARANCE: "待出清", SCRAP: "報廢拆料" };
     const CONDITION_LABEL = { NEW: "全新", USED: "二手", REFURB: "整新" };
     const LEDGER_TYPE_LABEL = { IN: "入庫", OUT: "出庫", ADJUST: "調整" };
@@ -1061,9 +1064,59 @@
       return list;
     }
 
+    /** 依目前排序設定回傳篩選並排序後的列表 */
+    function getV2ItemsSortedList() {
+      let list = getV2ItemsFilteredList();
+      if (!v2ItemsSortKey || !list.length) return list;
+      const key = v2ItemsSortKey;
+      const dir = v2ItemsSortDir;
+      const numKeys = ["qty_on_hand", "cost_unit", "price_list", "price_floor", "age_days", "idle_days", "inventory_value"];
+      const isNum = numKeys.includes(key);
+      const isDate = key === "inbound_date";
+      return list.slice().sort((a, b) => {
+        let va = a[key];
+        let vb = b[key];
+        if (isNum) {
+          va = va != null && va !== "" ? Number(va) : -Infinity;
+          vb = vb != null && vb !== "" ? Number(vb) : -Infinity;
+          return dir * (va - vb);
+        }
+        if (isDate) {
+          va = (va || "").toString().slice(0, 10);
+          vb = (vb || "").toString().slice(0, 10);
+          return dir * (va.localeCompare(vb));
+        }
+        va = (va != null ? String(va) : "").toLowerCase();
+        vb = (vb != null ? String(vb) : "").toLowerCase();
+        return dir * va.localeCompare(vb, "zh-TW");
+      });
+    }
+
+    function updateV2ItemsSortHeaders() {
+      const table = itemsTbody?.closest("table");
+      if (!table) return;
+      table.querySelectorAll("thead th[data-sort]").forEach((th) => {
+        th.classList.remove("sort-asc", "sort-desc");
+        if (th.getAttribute("data-sort") === v2ItemsSortKey) th.classList.add(v2ItemsSortDir === 1 ? "sort-asc" : "sort-desc");
+      });
+    }
+
+    (function bindV2ItemsSortClicks() {
+      const table = itemsTbody?.closest("table");
+      if (!table) return;
+      table.querySelectorAll("thead th[data-sort]").forEach((th) => {
+        th.addEventListener("click", () => {
+          const key = th.getAttribute("data-sort");
+          if (!key) return;
+          if (v2ItemsSortKey === key) v2ItemsSortDir *= -1; else { v2ItemsSortKey = key; v2ItemsSortDir = 1; }
+          renderV2Items();
+        });
+      });
+    })();
+
     function renderV2Items() {
       if (!itemsTbody) return;
-      const list = getV2ItemsFilteredList();
+      const list = getV2ItemsSortedList();
       itemsTbody.innerHTML = list.map((x) => {
         const alert = DK.getItemAlert(x);
         const alertText = alert ? alert.message : "-";
@@ -1095,6 +1148,7 @@
       }
       const catVal = itemsCategory?.value || "";
       itemsCategoryQuick?.querySelectorAll(".seg-cat").forEach((b) => b.classList.toggle("active", (b.getAttribute("data-cat") || "") === catVal));
+      updateV2ItemsSortHeaders();
     }
 
     function generateUniqueSKU() {
@@ -1133,9 +1187,9 @@
       v2Hide(itemMsg);
     }
 
-    /** 匯出目前篩選的庫存品項為 CSV（Excel 可開啟，UTF-8 BOM） */
+    /** 匯出目前篩選的庫存品項為 CSV（與畫面排序一致，Excel 可開啟，UTF-8 BOM） */
     function exportV2ItemsToExcel() {
-      const list = getV2ItemsFilteredList();
+      const list = getV2ItemsSortedList();
       const escapeCsv = (v) => {
         const s = v == null ? "" : String(v);
         if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
