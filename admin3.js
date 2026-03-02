@@ -1728,6 +1728,7 @@
       set("orderNo", o ? o.order_no : DK.nextOrderNo());
       const orderNoEl = document.getElementById("orderNo");
       if (orderNoEl) orderNoEl.readOnly = !!o;
+      set("orderDate", o && o.created_at ? (o.created_at || "").toString().slice(0, 10) : todayStr());
       set("orderCustomer", o ? o.customer_name ?? "" : "");
       set("orderTotalSale", o ? o.total_sale ?? 0 : 0);
       set("orderShipping", o ? o.shipping_income ?? 0 : 0);
@@ -1783,7 +1784,9 @@
         const orders = DK.getOrders();
       const existing = orders.find((x) => x.order_no === orderNo && x.id !== editingV2OrderId);
       if (existing) return v2Show(orderMsg, "訂單編號重複");
-      const payload = { order_no: orderNo, customer_name: document.getElementById("orderCustomer")?.value || "", total_sale: totalSale, shipping_income: parseFloat(document.getElementById("orderShipping")?.value) || 0, discount: parseFloat(document.getElementById("orderDiscount")?.value) || 0, payment_method: document.getElementById("orderPayment")?.value || "transfer", status: document.getElementById("orderStatus")?.value || "pending", cogs_total: cogsTotal, created_at: nowISO(), items: orderLineItems };
+      const orderDate = document.getElementById("orderDate")?.value || todayStr();
+      const createdAt = orderDate.includes("T") ? orderDate : orderDate + "T12:00:00.000Z";
+      const payload = { order_no: orderNo, customer_name: document.getElementById("orderCustomer")?.value || "", total_sale: totalSale, shipping_income: parseFloat(document.getElementById("orderShipping")?.value) || 0, discount: parseFloat(document.getElementById("orderDiscount")?.value) || 0, payment_method: document.getElementById("orderPayment")?.value || "transfer", status: document.getElementById("orderStatus")?.value || "pending", cogs_total: cogsTotal, created_at: createdAt, items: orderLineItems };
       if (editingV2OrderId) {
         const idx = orders.findIndex((x) => x.id === editingV2OrderId);
         if (idx < 0) return v2Show(orderMsg, "找不到訂單");
