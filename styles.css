@@ -1387,6 +1387,10 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
 #itemsTbody tr:hover{ background: rgba(17,24,39,0.05); }
 #itemsTbody tr:hover td{ background: transparent; }
 
+/* 庫存數量為 0 時整排紅字顯示 */
+.table tr.qty-zero-row td{ color: var(--danger, #c00) !important; }
+.searchable-select-option.qty-zero{ color: var(--danger, #c00) !important; }
+
 /* 庫存表頭可點擊排序 */
 .table th.sortable{ cursor: pointer; user-select: none; padding-right: 18px; }
 .table th.sortable:hover{ color: var(--primary, #0071e3); }

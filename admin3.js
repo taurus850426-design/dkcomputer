@@ -1120,7 +1120,8 @@
       itemsTbody.innerHTML = list.map((x) => {
         const alert = DK.getItemAlert(x);
         const alertText = alert ? alert.message : "-";
-        return `<tr>
+        const rowClass = (x.qty_on_hand ?? 0) === 0 ? " qty-zero-row" : "";
+        return `<tr class="${rowClass}">
           <td><input type="checkbox" class="item-row-cb" data-id="${v2Esc(x.id)}" /></td>
           <td>${v2Esc(x.name)}</td>
           <td class="muted small">${v2Esc(x.spec || "")}</td>
@@ -1648,9 +1649,11 @@
         } else {
           dropdown.innerHTML = list.map((i) => {
             let label = (i.name || "") + (i.spec ? " (" + (i.spec || "") + ")" : "");
-            if (opts.showQty) label += " · 剩餘 " + (i.qty_on_hand ?? 0);
+            const qty = i.qty_on_hand ?? 0;
+            if (opts.showQty) label += " · 剩餘 " + qty;
             if (opts.showCost && (i.cost_unit != null && i.cost_unit !== "")) label += " · 成本 " + v2FmtNum(Number(i.cost_unit) || 0);
-            return `<div class="searchable-select-option" data-id="${v2Esc(i.id)}" data-name="${v2Esc(i.name || "")}">${v2Esc(label)}</div>`;
+            const zeroClass = qty === 0 ? " qty-zero" : "";
+            return `<div class="searchable-select-option${zeroClass}" data-id="${v2Esc(i.id)}" data-name="${v2Esc(i.name || "")}">${v2Esc(label)}</div>`;
           }).join("");
         }
         dropdown.hidden = false;
