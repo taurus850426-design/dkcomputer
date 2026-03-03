@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="color-scheme" content="light" />
+    <title>商品詳情｜二手電腦・依用途配機</title>
+    <meta name="description" content="商品詳情。依用途配機，詳細配備請加 LINE 詢問。" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css?v=20260217" />
+  </head>
+  <body class="theme-apple">
+    <header class="site-header">
+      <div class="container header-inner">
+        <div class="brand">
+          <div id="brandMark" class="brand-mark" aria-hidden="true">DK</div>
+          <div class="brand-text">
+            <div id="brandTitle" class="brand-title">二手電腦・實測交付</div>
+            <div id="brandSubtitle" class="brand-subtitle">依用途配機，不亂賣、不踩雷</div>
+          </div>
+        </div>
+
+        <button id="mobileMenuBtn" class="btn btn-ghost btn-sm mobile-menu-btn" type="button" aria-controls="siteNav" aria-expanded="false">選單</button>
+
+        <nav id="siteNav" class="nav" aria-label="主選單">
+          <a href="./index.html">首頁</a>
+          <a href="./machine.html">整機販售</a>
+          <a href="./form.html">不知道怎麼選</a>
+          <a href="./faq.html">常見問題</a>
+          <a href="./warranty.html">售後保固</a>
+          <a id="navLineBtn" class="nav-cta" href="#">加 LINE</a>
+          <a class="nav-admin" href="./admin.html">管理員</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="section">
+        <div class="container">
+          <a href="./machine.html" class="product-page-back link muted" style="display:inline-block;margin-bottom:16px;font-size:14px;">← 返回整機販售</a>
+
+          <div id="productPageContent" class="product-page-detail" hidden>
+            <div id="productPagePhoto" class="product-detail-photo"></div>
+            <h1 id="productPageTitle" class="product-detail-title"></h1>
+            <div id="productPageIntro" class="product-detail-intro"></div>
+            <div id="productPagePrice" class="product-detail-price"></div>
+            <div id="productPageQty" class="product-detail-qty" hidden></div>
+            <button type="button" class="btn btn-primary product-detail-line-btn" id="productPageLineBtn">加 LINE 詢問</button>
+          </div>
+
+          <div id="productPageNotFound" class="product-page-not-found muted" hidden>
+            <p>找不到該商品，可能已下架或連結不正確。</p>
+            <a href="./machine.html" class="link">返回整機販售</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-soft" id="productPageCtaSection" hidden>
+        <div class="container">
+          <div class="contact-block">
+            <div>
+              <div class="contact-title">想詢問配備或報價？</div>
+              <div class="muted">加 LINE，把用途跟預算告訴我。</div>
+            </div>
+            <a id="lineMainBtn" class="btn btn-primary btn-lg">加 LINE</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <div class="footer-col">
+          <div class="muted">© <span id="copyrightYear"></span> 二手電腦・實測交付</div>
+          <p id="footerLineSentenceFooter" class="muted" style="margin-top:8px;max-width:420px;"></p>
+        </div>
+        <div class="footer-links muted">
+          <a href="./index.html">首頁</a>
+          <a href="./form.html">需求表單</a>
+          <a href="./faq.html">常見問題</a>
+          <a href="./warranty.html">售後保固</a>
+          <a href="./admin.html">管理員</a>
+        </div>
+      </div>
+    </footer>
+
+    <script src="./shared.js?v=20260217"></script>
+    <script src="./product.js?v=20260217"></script>
+  </body>
+</html>

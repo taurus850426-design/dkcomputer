@@ -1662,6 +1662,7 @@
         select.value = itemId;
         input.value = displayName || "";
         dropdown.hidden = true;
+        if (typeof opts.onPick === "function") opts.onPick(itemId);
       }
       input.addEventListener("focus", () => render());
       input.addEventListener("input", () => render());
@@ -1878,6 +1879,55 @@
 
     makeSearchableItemSelect("orderLineItem", "orderLineItemSearch", "orderLineItemDropdown", { showQty: true, showCost: true });
     makeSearchableItemSelect("ledgerItemId", "ledgerItemIdSearch", "ledgerItemIdDropdown");
+
+    const restockForm = document.getElementById("restockForm");
+    const restockMsg = document.getElementById("restockMsg");
+    makeSearchableItemSelect("restockItemId", "restockItemSearch", "restockItemDropdown", {
+      showQty: true,
+      showCost: true,
+      onPick: (itemId) => {
+        const item = DK.findItemById(itemId);
+        if (item) {
+          const costEl = document.getElementById("restockUnitCost");
+          if (costEl && (item.cost_unit != null && item.cost_unit !== "")) costEl.value = item.cost_unit;
+          const dateEl = document.getElementById("restockInboundDate");
+          if (dateEl) dateEl.value = item.inbound_date ? String(item.inbound_date).slice(0, 10) : todayStr();
+        }
+      }
+    });
+    document.getElementById("btnRestock")?.addEventListener("click", () => {
+      const sel = document.getElementById("restockItemId");
+      if (sel) sel.innerHTML = '<option value="">— 選擇品項 —</option>' + DK.getItems().map((i) => `<option value="${v2Esc(i.id)}">${v2Esc(i.name || "")}</option>`).join("");
+      sel.value = "";
+      const inp = document.getElementById("restockItemSearch");
+      if (inp) inp.value = "";
+      document.getElementById("restockQty").value = "1";
+      document.getElementById("restockUnitCost").value = "";
+      document.getElementById("restockInboundDate").value = todayStr();
+      if (restockForm) restockForm.hidden = false;
+      v2Hide(restockMsg);
+    });
+    document.getElementById("restockSubmit")?.addEventListener("click", () => {
+      const itemId = document.getElementById("restockItemId")?.value;
+      const qty = parseInt(document.getElementById("restockQty")?.value, 10);
+      const unitCost = parseFloat(document.getElementById("restockUnitCost")?.value) || 0;
+      const inboundDate = document.getElementById("restockInboundDate")?.value || "";
+      if (!itemId) return v2Show(restockMsg, "請選擇品項");
+      if (!Number.isFinite(qty) || qty <= 0) return v2Show(restockMsg, "數量需大於 0");
+      if (unitCost < 0) return v2Show(restockMsg, "請填單位成本");
+      const result = DK.addLedgerEntry({ item_id: itemId, type: "IN", qty, unit_cost: unitCost, ref_type: "PURCHASE", ref_id: "", note: "補貨", inbound_date: inboundDate || undefined });
+      if (!result.ok) return v2Show(restockMsg, result.error || "入庫失敗");
+      v2Show(restockMsg, "已入庫，入庫日已更新");
+      if (result.syncPromise) result.syncPromise.then((r) => showSyncToast(r, "補貨"));
+      renderV2Items();
+      renderV2Ledger();
+      if (restockForm) restockForm.hidden = true;
+      setTimeout(() => { v2Hide(restockMsg); }, 1500);
+    });
+    document.getElementById("restockGoNew")?.addEventListener("click", () => {
+      if (restockForm) restockForm.hidden = true;
+      openV2ItemEditor(null);
+    });
 
     const expensesTbody = document.getElementById("expensesTbody");
     const expenseForm = document.getElementById("expenseForm");

@@ -24,14 +24,6 @@
   const productsGrid = document.getElementById("productsGrid");
   const productsEmpty = document.getElementById("productsEmpty");
   const productsPrompt = document.getElementById("productsPrompt");
-  const productDetailModal = document.getElementById("productDetailModal");
-  const productDetailClose = document.getElementById("productDetailClose");
-  const productDetailPhoto = document.getElementById("productDetailPhoto");
-  const productDetailTitle = document.getElementById("productDetailTitle");
-  const productDetailIntro = document.getElementById("productDetailIntro");
-  const productDetailPrice = document.getElementById("productDetailPrice");
-  const productDetailQty = document.getElementById("productDetailQty");
-  const productDetailLineBtn = document.getElementById("productDetailLineBtn");
 
   if (!catCards.length || !productsSection || !productsGrid) return;
 
@@ -135,127 +127,18 @@
         </div>`
       : "";
 
+    const productUrl = "product.html?id=" + encodeURIComponent(String(item.id));
     return `
-      <article class="machine-card" data-item-id="${DK.escapeHtml(String(item.id))}" role="button" tabindex="0">
-        ${photoCarouselHtml}
-        <h3 class="machine-card-title">${name}</h3>
-        <div class="machine-card-price">${priceText}</div>
-        ${qty != null ? `<div class="machine-card-qty">剩餘 ${qty} 件</div>` : ""}
+      <article class="machine-card" data-item-id="${DK.escapeHtml(String(item.id))}">
+        <a href="${DK.escapeHtml(productUrl)}" class="machine-card-link">
+          ${photoCarouselHtml}
+          <h3 class="machine-card-title">${name}</h3>
+          <div class="machine-card-price">${priceText}</div>
+          ${qty != null ? `<div class="machine-card-qty">剩餘 ${qty} 件</div>` : ""}
+        </a>
         <button type="button" class="btn btn-primary machine-line-btn" data-id="${DK.escapeHtml(item.id)}">加 LINE 詢問</button>
       </article>
     `;
-  }
-
-  /** 產品介紹 HTML 消毒：僅允許安全標籤與屬性，避免 XSS */
-  function sanitizeProductNote(html) {
-    if (!html || typeof html !== "string") return "";
-    const s = html.trim();
-    if (!s) return "";
-    if (s.indexOf("<") === -1) return DK.escapeHtml ? DK.escapeHtml(s).replace(/\n/g, "<br>") : s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
-    const allowedTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "span", "h2", "h3", "h4", "ul", "ol", "li", "img", "a", "div", "blockquote"]);
-    const allowedAttrs = { img: ["src", "alt", "width", "height", "style"], a: ["href", "title", "target", "rel"] };
-    const div = document.createElement("div");
-    div.innerHTML = s;
-    function sanitizeNode(node) {
-      if (node.nodeType === Node.TEXT_NODE) return node.cloneNode(true);
-      if (node.nodeType !== Node.ELEMENT_NODE) return null;
-      const tag = node.tagName.toLowerCase();
-      if (!allowedTags.has(tag)) return null;
-      const el = document.createElement(tag);
-      const attrs = allowedAttrs[tag];
-      if (attrs && node.attributes)
-        for (const a of node.attributes) {
-          const name = a.name.toLowerCase();
-          if (attrs.indexOf(name) === -1) continue;
-          let val = a.value || "";
-          if (name === "href" && /^\s*javascript\s*:/i.test(val)) continue;
-          if (name === "src" && /^\s*javascript\s*:/i.test(val)) continue;
-          el.setAttribute(name, val);
-        }
-      for (let i = 0; i < node.childNodes.length; i++) {
-        const c = sanitizeNode(node.childNodes[i]);
-        if (c) el.appendChild(c);
-      }
-      return el;
-    }
-    const out = document.createElement("div");
-    for (let i = 0; i < div.childNodes.length; i++) {
-      const c = sanitizeNode(div.childNodes[i]);
-      if (c) out.appendChild(c);
-    }
-    return out.innerHTML;
-  }
-
-  function openProductDetail(item) {
-    if (!item || !productDetailModal) return;
-    if (productDetailTitle) productDetailTitle.textContent = item.name || "商品";
-    if (productDetailIntro) {
-      const note = item.note?.trim() || "";
-      productDetailIntro.innerHTML = note ? sanitizeProductNote(note) : "（無產品介紹）";
-      productDetailIntro.style.whiteSpace = "";
-      productDetailIntro.classList.add("product-detail-intro-html");
-    }
-    const price = item.price != null ? DK.formatPrice(item.price) : null;
-    if (productDetailPrice) productDetailPrice.textContent = price ? `NT$ ${price}` : "價格請加 LINE 詢問";
-    const qty = typeof item.qty === "number" && item.qty >= 0 ? item.qty : null;
-    if (productDetailQty) {
-      productDetailQty.textContent = qty != null ? `剩餘 ${qty} 件` : "";
-      productDetailQty.hidden = qty == null;
-    }
-    if (productDetailPhoto) {
-      const photos = Array.isArray(item.photos) ? item.photos.filter((p) => typeof p === "string" && p.trim()) : [];
-      if (photos.length === 0) {
-        productDetailPhoto.innerHTML = "";
-        productDetailPhoto.hidden = true;
-      } else {
-        productDetailPhoto.hidden = false;
-        const n = photos.length;
-        const showArrows = n > 1;
-        const slidesHtml = photos.map((p, i) => `<div class="product-detail-photo-slide"><img src="${DK.escapeHtml(p)}" alt="" loading="lazy" /></div>`).join("");
-        productDetailPhoto.innerHTML = `
-          <div class="product-detail-photo-wrap">
-            ${showArrows ? `<button type="button" class="product-detail-arrow product-detail-arrow-prev" aria-label="上一張"></button>` : ""}
-            <div class="product-detail-photo-carousel" data-photo-count="${n}">
-              <div class="product-detail-photo-inner">${slidesHtml}</div>
-            </div>
-            ${showArrows ? `<button type="button" class="product-detail-arrow product-detail-arrow-next" aria-label="下一張"></button>` : ""}
-            ${showArrows ? `<div class="product-detail-dots">${photos.map((_, i) => `<button type="button" class="product-detail-dot${i === 0 ? " active" : ""}" aria-label="第${i + 1}張" data-i="${i}"></button>`).join("")}</div>` : ""}
-          </div>`;
-        if (n > 1) {
-          const wrap = productDetailPhoto.querySelector(".product-detail-photo-wrap");
-          const carousel = productDetailPhoto.querySelector(".product-detail-photo-carousel");
-          const inner = productDetailPhoto.querySelector(".product-detail-photo-inner");
-          const slides = productDetailPhoto.querySelectorAll(".product-detail-photo-slide");
-          const prevBtn = productDetailPhoto.querySelector(".product-detail-arrow-prev");
-          const nextBtn = productDetailPhoto.querySelector(".product-detail-arrow-next");
-          const dots = productDetailPhoto.querySelectorAll(".product-detail-dot");
-          const goTo = (index) => {
-            const i = Math.max(0, Math.min(index, n - 1));
-            if (carousel && carousel.offsetWidth > 0) carousel.scrollLeft = i * carousel.offsetWidth;
-            dots.forEach((d, j) => d.classList.toggle("active", j === i));
-          };
-          const updateDots = () => {
-            if (!carousel || !carousel.offsetWidth) return;
-            const idx = Math.round(carousel.scrollLeft / carousel.offsetWidth);
-            const i = Math.max(0, Math.min(idx, n - 1));
-            dots.forEach((d, j) => d.classList.toggle("active", j === i));
-          };
-          carousel.addEventListener("scroll", updateDots);
-          prevBtn?.addEventListener("click", () => goTo(Math.round(carousel.scrollLeft / carousel.offsetWidth) - 1));
-          nextBtn?.addEventListener("click", () => goTo(Math.round(carousel.scrollLeft / carousel.offsetWidth) + 1));
-          dots.forEach((d) => d.addEventListener("click", () => goTo(Number(d.getAttribute("data-i")))));
-        }
-      }
-    }
-    if (productDetailLineBtn) {
-      productDetailLineBtn.onclick = () => { DK.openLineOrder(item); closeProductDetail(); };
-    }
-    productDetailModal.hidden = false;
-    productDetailClose?.focus();
-  }
-
-  function closeProductDetail() {
-    if (productDetailModal) productDetailModal.hidden = true;
   }
 
   function showCategory(catKey) {
@@ -296,15 +179,8 @@
         div.innerHTML = buildMachineCard(item);
         const card = div.firstElementChild;
         const btn = card?.querySelector(".machine-line-btn");
-        if (btn) btn.addEventListener("click", (e) => { e.stopPropagation(); DK.openLineOrder(item); });
+        if (btn) btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); DK.openLineOrder(item); });
         if (card) {
-          card.addEventListener("click", (e) => {
-            if (e.target.closest(".machine-line-btn")) return;
-            openProductDetail(item);
-          });
-          card.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openProductDetail(item); }
-          });
           productsGrid.appendChild(card);
           const wrap = card.querySelector(".machine-card-photo-wrap");
           const carousel = card.querySelector(".machine-card-photo-carousel");
@@ -392,12 +268,6 @@
 
   for (const card of catCards) {
     card.addEventListener("click", () => showCategory(card.dataset.cat));
-  }
-
-  if (productDetailClose) productDetailClose.addEventListener("click", closeProductDetail);
-  if (productDetailModal) {
-    productDetailModal.addEventListener("click", (e) => { if (e.target === productDetailModal) closeProductDetail(); });
-    productDetailModal.addEventListener("keydown", (e) => { if (e.key === "Escape") closeProductDetail(); });
   }
 
   // 進入頁面先顯示全部商品；若有 hash 則顯示該分類

@@ -150,7 +150,7 @@
   }
 
   function addLedgerEntry(entry) {
-    const { item_id, type, qty, unit_cost, ref_type, ref_id, note } = entry;
+    const { item_id, type, qty, unit_cost, ref_type, ref_id, note, inbound_date } = entry;
     const items = getItems();
     const item = items.find((x) => String(x.id) === String(item_id));
     if (!item) return { ok: false, error: "找不到品項" };
@@ -189,7 +189,10 @@
     item.qty_on_hand = newQty;
     item.cost_unit = newCostUnit;
     item.last_moved_at = now;
-    if (type === "IN" && !item.inbound_date) item.inbound_date = dateStr;
+    if (type === "IN") {
+      if (inbound_date && /^\d{4}-\d{2}-\d{2}/.test(String(inbound_date))) item.inbound_date = String(inbound_date).slice(0, 10);
+      else if (!item.inbound_date) item.inbound_date = dateStr;
+    }
     item.updated_at = now;
     const syncPromise = saveItems(items);
 

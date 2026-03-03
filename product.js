@@ -1,0 +1,199 @@
+/* product.js - 商品獨立頁：依 URL ?id= 顯示單一上架商品 */
+
+(function () {
+  const content = document.getElementById("productPageContent");
+  const notFound = document.getElementById("productPageNotFound");
+  const photoEl = document.getElementById("productPagePhoto");
+  const titleEl = document.getElementById("productPageTitle");
+  const introEl = document.getElementById("productPageIntro");
+  const priceEl = document.getElementById("productPagePrice");
+  const qtyEl = document.getElementById("productPageQty");
+  const lineBtn = document.getElementById("productPageLineBtn");
+  const ctaSection = document.getElementById("productPageCtaSection");
+
+  function getProductId() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("id")?.trim() || "";
+  }
+
+  /** 產品介紹 HTML 消毒（與 machine.js 一致） */
+  function sanitizeProductNote(html) {
+    if (!html || typeof html !== "string") return "";
+    const s = html.trim();
+    if (!s) return "";
+    if (s.indexOf("<") === -1) return DK.escapeHtml ? DK.escapeHtml(s).replace(/\n/g, "<br>") : s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+    const allowedTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "span", "h2", "h3", "h4", "ul", "ol", "li", "img", "a", "div", "blockquote"]);
+    const allowedAttrs = { img: ["src", "alt", "width", "height", "style"], a: ["href", "title", "target", "rel"] };
+    const div = document.createElement("div");
+    div.innerHTML = s;
+    function sanitizeNode(node) {
+      if (node.nodeType === Node.TEXT_NODE) return node.cloneNode(true);
+      if (node.nodeType !== Node.ELEMENT_NODE) return null;
+      const tag = node.tagName.toLowerCase();
+      if (!allowedTags.has(tag)) return null;
+      const el = document.createElement(tag);
+      const attrs = allowedAttrs[tag];
+      if (attrs && node.attributes)
+        for (const a of node.attributes) {
+          const name = a.name.toLowerCase();
+          if (attrs.indexOf(name) === -1) continue;
+          let val = a.value || "";
+          if (name === "href" && /^\s*javascript\s*:/i.test(val)) continue;
+          if (name === "src" && /^\s*javascript\s*:/i.test(val)) continue;
+          el.setAttribute(name, val);
+        }
+      for (let i = 0; i < node.childNodes.length; i++) {
+        const c = sanitizeNode(node.childNodes[i]);
+        if (c) el.appendChild(c);
+      }
+      return el;
+    }
+    const out = document.createElement("div");
+    for (let i = 0; i < div.childNodes.length; i++) {
+      const c = sanitizeNode(div.childNodes[i]);
+      if (c) out.appendChild(c);
+    }
+    return out.innerHTML;
+  }
+
+  function getItems() {
+    let items = (typeof DK.getInventoryForDisplay === "function" ? DK.getInventoryForDisplay() : DK.getInventory?.()) || [];
+    if (items.length === 0 && typeof DK.getStock === "function") {
+      items = DK.getStock()
+        .filter((s) => s?.web?.publish && s?.status !== "已售出")
+        .map((s) => {
+          const w = s.web || {};
+          const qty = (() => {
+            const n = Number(w?.qty ?? s?.qty);
+            return Number.isFinite(n) && n >= 0 ? n : null;
+          })();
+          return {
+            id: s.id,
+            name: w.name || s.modelSpec || s.stockNo,
+            category: w.category || "遊戲",
+            price: typeof w.price === "number" ? w.price : DK.toNumber?.(w.price) ?? null,
+            note: w.note || "",
+            photos: Array.isArray(w.photos) ? w.photos : [],
+            qty,
+          };
+        });
+    }
+    return items;
+  }
+
+  function renderProduct(item) {
+    if (!item) return;
+
+    if (titleEl) titleEl.textContent = item.name || "商品";
+    document.title = (item.name || "商品") + "｜二手電腦・依用途配機";
+
+    if (introEl) {
+      const note = item.note?.trim() || "";
+      introEl.innerHTML = note ? sanitizeProductNote(note) : "（無產品介紹）";
+      introEl.classList.add("product-detail-intro-html");
+    }
+
+    const priceStr = item.price != null ? (typeof DK.formatPrice === "function" ? DK.formatPrice(item.price) : String(item.price)) : null;
+    if (priceEl) priceEl.textContent = priceStr ? `NT$ ${priceStr}` : "價格請加 LINE 詢問";
+
+    const qty = typeof item.qty === "number" && item.qty >= 0 ? item.qty : null;
+    if (qtyEl) {
+      qtyEl.textContent = qty != null ? `剩餘 ${qty} 件` : "";
+      qtyEl.hidden = qty == null;
+    }
+
+    if (photoEl) {
+      const photos = Array.isArray(item.photos) ? item.photos.filter((p) => typeof p === "string" && p.trim()) : [];
+      if (photos.length === 0) {
+        photoEl.innerHTML = "";
+        photoEl.hidden = true;
+      } else {
+        photoEl.hidden = false;
+        const n = photos.length;
+        const showArrows = n > 1;
+        const slidesHtml = photos.map((p) => `<div class="product-detail-photo-slide"><img src="${DK.escapeHtml(p)}" alt="" loading="lazy" /></div>`).join("");
+        photoEl.innerHTML = `
+          <div class="product-detail-photo-wrap">
+            ${showArrows ? `<button type="button" class="product-detail-arrow product-detail-arrow-prev" aria-label="上一張"></button>` : ""}
+            <div class="product-detail-photo-carousel" data-photo-count="${n}">
+              <div class="product-detail-photo-inner">${slidesHtml}</div>
+            </div>
+            ${showArrows ? `<button type="button" class="product-detail-arrow product-detail-arrow-next" aria-label="下一張"></button>` : ""}
+            ${showArrows ? `<div class="product-detail-dots">${photos.map((_, i) => `<button type="button" class="product-detail-dot${i === 0 ? " active" : ""}" aria-label="第${i + 1}張" data-i="${i}"></button>`).join("")}</div>` : ""}
+          </div>`;
+        if (n > 1) {
+          const wrap = photoEl.querySelector(".product-detail-photo-wrap");
+          const carousel = photoEl.querySelector(".product-detail-photo-carousel");
+          const dots = photoEl.querySelectorAll(".product-detail-dot");
+          const goTo = (index) => {
+            const i = Math.max(0, Math.min(index, n - 1));
+            if (carousel && carousel.offsetWidth > 0) carousel.scrollLeft = i * carousel.offsetWidth;
+            dots.forEach((d, j) => d.classList.toggle("active", j === i));
+          };
+          const updateDots = () => {
+            if (!carousel || !carousel.offsetWidth) return;
+            const idx = Math.round(carousel.scrollLeft / carousel.offsetWidth);
+            const i = Math.max(0, Math.min(idx, n - 1));
+            dots.forEach((d, j) => d.classList.toggle("active", j === i));
+          };
+          carousel.addEventListener("scroll", updateDots);
+          wrap?.querySelector(".product-detail-arrow-prev")?.addEventListener("click", () => goTo(Math.round(carousel.scrollLeft / carousel.offsetWidth) - 1));
+          wrap?.querySelector(".product-detail-arrow-next")?.addEventListener("click", () => goTo(Math.round(carousel.scrollLeft / carousel.offsetWidth) + 1));
+          dots.forEach((d) => d.addEventListener("click", () => goTo(Number(d.getAttribute("data-i")))));
+        }
+      }
+    }
+
+    if (lineBtn) {
+      lineBtn.onclick = () => DK.openLineOrder(item);
+    }
+
+    if (content) content.hidden = false;
+    if (notFound) notFound.hidden = true;
+    if (ctaSection) ctaSection.hidden = false;
+  }
+
+  function showNotFound() {
+    if (content) content.hidden = true;
+    if (notFound) notFound.hidden = false;
+    if (ctaSection) ctaSection.hidden = true;
+  }
+
+  async function init() {
+    const id = getProductId();
+    if (!id) {
+      showNotFound();
+      return;
+    }
+
+    if (window.DK?.fetchInventoryFromSupabase && window.DK?.saveInventory) {
+      try {
+        const remoteItems = await DK.fetchInventoryFromSupabase();
+        const localItems = DK.getInventory?.() || [];
+        if (Array.isArray(remoteItems) && remoteItems.length > 0) {
+          const remoteIds = new Set(remoteItems.map((r) => r.id));
+          const localOnly = localItems.filter((l) => l?.id && !remoteIds.has(l.id));
+          DK.saveInventory([...remoteItems, ...localOnly]);
+        } else if (Array.isArray(localItems) && localItems.length > 0) {
+          DK.saveInventory(localItems);
+        }
+      } catch (e) {
+        console.warn("載入 Supabase 商品失敗，改用本機資料", e);
+      }
+    }
+
+    const items = getItems();
+    const item = items.find((it) => String(it?.id || "") === String(id));
+    if (item) {
+      renderProduct(item);
+    } else {
+      showNotFound();
+    }
+
+    if (typeof DK !== "undefined" && DK.applyConfigToHomePage) {
+      DK.applyConfigToHomePage();
+    }
+  }
+
+  init();
+})();

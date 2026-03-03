@@ -227,6 +227,8 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
   .machine-cards{ grid-template-columns: repeat(5, 1fr); }
 }
 .machine-card{ background: rgba(255,255,255,0.92); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+.machine-card-link{ display: block; color: inherit; text-decoration: none; margin-bottom: 12px; }
+.machine-card-link:hover .machine-card-title{ color: var(--primary, #7c5cff); }
 .machine-card-photo{ width: 100%; aspect-ratio: 9 / 16; border-radius: 12px; overflow: hidden; background: rgba(0,0,0,0.06); margin-bottom: 12px; }
 .machine-card-photo img{ width: 100%; height: 100%; object-fit: cover; display: block; -webkit-transform: translateZ(0); }
 /* 整機販售／商品卡：多張照片可左右滑動（強制可捲動） */
@@ -404,6 +406,11 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .product-detail-price{ font-weight: 800; font-size: 18px; margin-bottom: 4px; }
 .product-detail-qty{ font-size: 14px; color: var(--muted); margin-bottom: 16px; }
 .product-detail-line-btn{ width: 100%; }
+
+/* 商品獨立頁（非彈窗） */
+.product-page-detail{ max-width: 480px; margin: 0 auto; }
+.product-page-detail .product-detail-photo{ margin-bottom: 16px; }
+.product-page-not-found{ padding: 24px 0; }
 
 /* 需求表單頁 */
 .container-form{ max-width: 480px; }
