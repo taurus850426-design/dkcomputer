@@ -1121,7 +1121,7 @@
         const alert = DK.getItemAlert(x);
         const alertText = alert ? alert.message : "-";
         const rowClass = (x.qty_on_hand ?? 0) === 0 ? " qty-zero-row" : "";
-        const nameSpec = [x.name, x.spec].filter(Boolean).join(" ").trim();
+        const nameSpec = (x.name === x.spec || !String(x.spec || "").trim()) ? (x.name || x.spec || "") : [x.name, x.spec].filter(Boolean).join(" ").trim();
         return `<tr class="${rowClass}">
           <td><input type="checkbox" class="item-row-cb" data-id="${v2Esc(x.id)}" /></td>
           <td>${v2Esc(nameSpec)}</td>
@@ -1165,7 +1165,7 @@
       const item = id ? DK.findItemById(id) : null;
       const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
       set("itemCategory", item ? item.category : (DK.getInventoryCategories && DK.getInventoryCategories()[0]) || "處理器");
-      const nameSpec = item ? [item.name, item.spec].filter(Boolean).join(" ").trim() : "";
+      const nameSpec = item ? ((item.name === item.spec || !String(item.spec || "").trim()) ? (item.name || item.spec || "") : [item.name, item.spec].filter(Boolean).join(" ").trim()) : "";
       set("itemName", nameSpec);
       set("itemCondition", item ? item.condition : "USED");
       set("itemStatus", item ? item.status : "READY");
@@ -1200,7 +1200,7 @@
       const rows = list.map((x) => {
         const alert = DK.getItemAlert(x);
         const alertText = alert ? alert.message : "";
-        const nameSpec = [x.name, x.spec].filter(Boolean).join(" ").trim();
+        const nameSpec = (x.name === x.spec || !String(x.spec || "").trim()) ? (x.name || x.spec || "") : [x.name, x.spec].filter(Boolean).join(" ").trim();
         return [
           x.sku ?? "",
           nameSpec || "",
