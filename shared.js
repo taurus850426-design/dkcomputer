@@ -1322,10 +1322,16 @@ if (window.DK && window.DK.fetchStockDataFromSupabase) {
     })
     .catch(function () {});
 }
-// 頁面載入時從 Supabase 拉庫存＋記帳 v2（品項、流水帳、訂單、支出），換電腦／換瀏覽器看到同一份
-if (window.fetchV2DataFromSupabase) {
+// 頁面載入時：僅在「本機沒有 v2 資料」時才從 Supabase 拉取，避免剛補貨／編輯後按 F5 被雲端舊資料蓋掉
+(function tryFetchV2Once() {
+  if (typeof window.fetchV2DataFromSupabase !== "function") return;
+  try {
+    const itemsRaw = localStorage.getItem(V2_STORAGE_KEYS.items) || "";
+    const ledgerRaw = localStorage.getItem(V2_STORAGE_KEYS.ledger) || "";
+    if (itemsRaw.length > 2 || ledgerRaw.length > 2) return;
+  } catch (_) {}
   window.fetchV2DataFromSupabase().catch(function () {});
-}
+})();
 
 // 手機選單（小螢幕可展開主選單/進後台）
 (function initMobileMenu() {
