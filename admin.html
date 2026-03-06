@@ -123,8 +123,7 @@
                 <thead>
                   <tr>
                     <th style="width:2.5em"><input type="checkbox" id="itemsSelectAll" title="全選/取消全選" /></th>
-                    <th class="sortable" data-sort="name" title="點擊排序">名稱</th>
-                    <th class="sortable" data-sort="spec" title="點擊排序">規格</th>
+                    <th class="sortable" data-sort="name" title="點擊排序">名稱／規格</th>
                     <th class="sortable" data-sort="category" title="點擊排序">品類</th>
                     <th class="sortable" data-sort="status" title="點擊排序">狀態</th>
                     <th class="sortable" data-sort="qty_on_hand" title="點擊排序">數量</th>
@@ -147,8 +146,7 @@
               <h3 id="itemEditorTitle" class="h3">新增 / 編輯品項</h3>
               <div class="form-grid">
                 <div class="field"><label for="itemCategory">品類</label><select id="itemCategory"></select></div>
-                <div class="field full"><label for="itemName">名稱</label><input id="itemName" type="text" placeholder="型號或產品名稱" /></div>
-                <div class="field full"><label for="itemSpec">規格</label><input id="itemSpec" type="text" placeholder="例：480GB、3060Ti 8G" /></div>
+                <div class="field full"><label for="itemName">名稱／規格</label><input id="itemName" type="text" placeholder="型號、產品名稱或規格（例：RTX 3060 Ti 8G、480GB SSD）" /></div>
                 <div class="field"><label for="itemCondition">成色</label><select id="itemCondition"><option value="NEW">全新</option><option value="USED">二手</option><option value="REFURB">整新</option></select></div>
                 <div class="field"><label for="itemStatus">狀態</label><select id="itemStatus"><option value="READY">可售</option><option value="TESTING">待測</option><option value="PREP">待整理</option><option value="RESERVED">保留</option><option value="CLEARANCE">待出清</option><option value="SCRAP">報廢拆料</option></select></div>
                 <div class="field"><label for="itemQty">現貨數量</label><input id="itemQty" type="number" min="0" value="0" /></div>

@@ -1121,10 +1121,10 @@
         const alert = DK.getItemAlert(x);
         const alertText = alert ? alert.message : "-";
         const rowClass = (x.qty_on_hand ?? 0) === 0 ? " qty-zero-row" : "";
+        const nameSpec = [x.name, x.spec].filter(Boolean).join(" ").trim();
         return `<tr class="${rowClass}">
           <td><input type="checkbox" class="item-row-cb" data-id="${v2Esc(x.id)}" /></td>
-          <td>${v2Esc(x.name)}</td>
-          <td class="muted small">${v2Esc(x.spec || "")}</td>
+          <td>${v2Esc(nameSpec)}</td>
           <td>${v2Esc(x.category || "")}</td>
           <td>${v2Esc(STATUS_LABEL[x.status] || x.status)}</td>
           <td>${x.qty_on_hand}</td>
@@ -1165,8 +1165,8 @@
       const item = id ? DK.findItemById(id) : null;
       const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
       set("itemCategory", item ? item.category : (DK.getInventoryCategories && DK.getInventoryCategories()[0]) || "處理器");
-      set("itemName", item ? item.name : "");
-      set("itemSpec", item ? item.spec : "");
+      const nameSpec = item ? [item.name, item.spec].filter(Boolean).join(" ").trim() : "";
+      set("itemName", nameSpec);
       set("itemCondition", item ? item.condition : "USED");
       set("itemStatus", item ? item.status : "READY");
       set("itemQty", item ? item.qty_on_hand : 0);
@@ -1196,14 +1196,14 @@
         if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
         return s;
       };
-      const headers = ["編號", "名稱", "規格", "品類", "狀態", "數量", "成本", "建議價", "最低價", "入庫日", "庫齡(天)", "滯留(天)", "庫存價值", "提醒"];
+      const headers = ["編號", "名稱／規格", "品類", "狀態", "數量", "成本", "建議價", "最低價", "入庫日", "庫齡(天)", "滯留(天)", "庫存價值", "提醒"];
       const rows = list.map((x) => {
         const alert = DK.getItemAlert(x);
         const alertText = alert ? alert.message : "";
+        const nameSpec = [x.name, x.spec].filter(Boolean).join(" ").trim();
         return [
           x.sku ?? "",
-          x.name ?? "",
-          x.spec ?? "",
+          nameSpec || "",
           x.category ?? "",
           STATUS_LABEL[x.status] || x.status || "",
           x.qty_on_hand ?? "",
@@ -1404,13 +1404,12 @@
           const barcodeOnly = combined.replace(/\s/g, "");
           const isBarcodeOnly = /^\d{12,14}$/.test(barcodeOnly);
           const nameEl = document.getElementById("itemName");
-          const specEl = document.getElementById("itemSpec");
           function fillForm(parsed) {
             const parsedBrand = (parsed && parsed.brand != null) ? String(parsed.brand).trim() : "";
             const parsedName = (parsed && parsed.name != null) ? String(parsed.name).trim() : "";
-            const mergedName = (parsedBrand ? (parsedBrand + " " + parsedName) : parsedName).trim();
-            if (nameEl) nameEl.value = mergedName;
-            if (specEl) specEl.value = (parsed.spec != null && parsed.spec !== undefined) ? parsed.spec : (barcodeText ? "條碼:" + barcodeText : "");
+            const parsedSpec = (parsed && parsed.spec != null && parsed.spec !== undefined) ? String(parsed.spec).trim() : (barcodeText ? "條碼:" + barcodeText : "");
+            const merged = [parsedBrand ? parsedBrand + " " + parsedName : parsedName, parsedSpec].filter(Boolean).join(" ").trim();
+            if (nameEl) nameEl.value = merged;
           }
           if (isBarcodeOnly) {
             setItemScanStatus("正在查詢網路…");
@@ -1420,11 +1419,11 @@
                 setItemScanStatus("已從網路帶入，請核對後儲存");
               } else {
               fillForm({ brand: "", name: "", spec: "條碼:" + barcodeOnly });
-                setItemScanStatus("僅辨識到條碼，網路查無商品，請手動輸入名稱與規格");
+                setItemScanStatus("僅辨識到條碼，網路查無商品，請手動輸入名稱／規格");
               }
             }).catch(function () {
               fillForm({ brand: "", name: "", spec: "條碼:" + barcodeOnly });
-              setItemScanStatus("僅辨識到條碼，網路查詢失敗，請手動輸入名稱與規格");
+              setItemScanStatus("僅辨識到條碼，網路查詢失敗，請手動輸入名稱／規格");
             });
             return;
           }
@@ -1455,16 +1454,16 @@
       reader.readAsDataURL(file);
     }
     document.getElementById("itemSave")?.addEventListener("click", () => {
-      const name = String(document.getElementById("itemName")?.value || "").trim();
-      if (!name) return v2Show(itemMsg, "名稱必填");
+      const nameSpec = String(document.getElementById("itemName")?.value || "").trim();
+      if (!nameSpec) return v2Show(itemMsg, "名稱／規格必填");
       const items = DK.getItems();
       const editingItem = editingV2ItemId ? DK.findItemById(editingV2ItemId) : null;
       const sku = editingItem ? editingItem.sku : generateUniqueSKU();
       const payload = {
         sku,
         category: document.getElementById("itemCategory")?.value,
-        name,
-        spec: document.getElementById("itemSpec")?.value || "",
+        name: nameSpec,
+        spec: nameSpec,
         condition: document.getElementById("itemCondition")?.value || "USED",
         status: document.getElementById("itemStatus")?.value || "READY",
         qty_on_hand: Math.max(0, parseInt(document.getElementById("itemQty")?.value, 10) || 0),
