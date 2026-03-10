@@ -1683,14 +1683,16 @@
       const list = getFilteredOrders();
       ordersTbody.innerHTML = list.map((o) => {
         const margin = o.gross_margin != null ? (o.gross_margin * 100).toFixed(1) + "%" : "-";
-        return `<tr><td class="nowrap">${v2Esc(o.order_no)}</td><td>${v2Esc(o.customer_name)}</td><td>${v2FmtNum(o.total_sale)}</td><td>${v2FmtNum(o.shipping_income)}</td><td>${v2FmtNum(o.discount)}</td><td>${v2FmtNum(o.cogs_total)}</td><td>${v2FmtNum(o.gross_profit)}</td><td>${margin}</td><td>${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</td><td class="nowrap">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td></tr>`;
+        const statusKey = (o.status && ORDER_STATUS_LABEL[o.status]) ? o.status : "pending";
+        const statusClass = "order-status-badge order-status-" + statusKey;
+        return `<tr><td class="nowrap">${v2Esc(o.order_no)}</td><td>${v2Esc(o.customer_name)}</td><td>${v2FmtNum(o.total_sale)}</td><td>${v2FmtNum(o.shipping_income)}</td><td>${v2FmtNum(o.discount)}</td><td>${v2FmtNum(o.cogs_total)}</td><td>${v2FmtNum(o.gross_profit)}</td><td>${margin}</td><td><span class="${statusClass}">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</span></td><td class="nowrap">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td></tr>`;
       }).join("");
       ordersTbody.querySelectorAll(".btn-edit-order").forEach((btn) => btn.addEventListener("click", () => openV2OrderEditor(btn.getAttribute("data-id"))));
     }
     orderSearchEl?.addEventListener("input", renderV2Orders);
     orderSearchEl?.addEventListener("search", renderV2Orders);
     orderDateRangeEl?.addEventListener("change", renderV2Orders);
-    orderStatusFilterEl?.addEventListener("change", renderV2Orders);
+    orderStatusFilterEl?.addEventListener("change", () => { applyOrderStatusSelectClass(); renderV2Orders(); });
 
     function fillOrderLineItemSelect() {
       if (!orderLineItemSelect) return;
@@ -1728,7 +1730,12 @@
     function openV2OrderEditor(id) {
       editingV2OrderId = id || null;
       const o = id ? DK.getOrders().find((x) => x.id === id) : null;
-      orderLineItems = (Array.isArray(o?.items) ? o.items : []).map((l) => ({ ...l, item_id: l.item_id ?? l.id }));
+      orderLineItems = (Array.isArray(o?.items) ? o.items : []).map((l) => ({
+        ...l,
+        item_id: l.item_id ?? l.id,
+        unit_price: l.unit_price ?? l.unitPrice ?? 0,
+        cost_unit: l.cost_unit ?? l.costUnit ?? 0,
+      }));
       fillOrderLineItemSelect();
       const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
       set("orderNo", o ? o.order_no : DK.nextOrderNo());
@@ -1742,9 +1749,15 @@
       set("orderCogs", o ? o.cogs_total ?? 0 : 0);
       set("orderPayment", o ? o.payment_method ?? "transfer" : "transfer");
       set("orderStatus", o ? o.status ?? "pending" : "pending");
+      applyOrderStatusSelectClass();
       renderOrderLineTbody();
       updateOrderTotalsFromLines();
       if (orderLineItems.length) updateOrderTotalsFromLines();
+      // 編輯既有訂單時，若明細加總為 0 但訂單有 total_sale，保留訂單的售價合計，避免被覆寫成 0
+      if (o && (Number(o.total_sale) || 0) !== 0) {
+        const saleEl = document.getElementById("orderTotalSale");
+        if (saleEl && (parseFloat(saleEl.value) || 0) === 0) set("orderTotalSale", o.total_sale);
+      }
       updateV2OrderGrossDisplay();
       if (orderForm) orderForm.hidden = false;
       v2Hide(orderMsg);
@@ -1760,7 +1773,17 @@
       const el = document.getElementById("orderGrossProfitDisplay");
       if (el) el.textContent = "毛利 " + v2FmtNum(profit) + " / 毛利率 " + margin;
     }
+    function applyOrderStatusSelectClass() {
+      const statusKeys = ["pending", "paid", "shipped", "completed", "refunded"];
+      [document.getElementById("orderStatus"), document.getElementById("orderStatusFilter")].forEach((el) => {
+        if (!el) return;
+        statusKeys.forEach((k) => el.classList.remove("order-status-" + k));
+        const v = (el.value || "pending").trim();
+        if (v) el.classList.add("order-status-" + v);
+      });
+    }
     ["orderTotalSale", "orderShipping", "orderDiscount", "orderCogs"].forEach((id) => document.getElementById(id)?.addEventListener("input", updateV2OrderGrossDisplay));
+    document.getElementById("orderStatus")?.addEventListener("change", applyOrderStatusSelectClass);
     document.getElementById("btnNewOrder")?.addEventListener("click", () => openV2OrderEditor(null));
     document.getElementById("orderCancel")?.addEventListener("click", () => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); });
     document.getElementById("orderLineAdd")?.addEventListener("click", () => {

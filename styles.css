@@ -1404,6 +1404,20 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
 .table th.sort-asc::after{ content: " ▲"; font-size: 10px; opacity: 0.8; }
 .table th.sort-desc::after{ content: " ▼"; font-size: 10px; opacity: 0.8; }
 
+/* 訂單狀態顏色區分（列表與下拉選單） */
+.order-status-badge{ display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.order-status-pending{ background: rgba(191,72,0,0.14); color: #b34a00; }
+.order-status-paid{ background: rgba(0,113,227,0.14); color: #0066cc; }
+.order-status-shipped{ background: rgba(124,92,255,0.14); color: #5c4dbf; }
+.order-status-completed{ background: rgba(46,229,157,0.2); color: #0d9668; }
+.order-status-refunded{ background: rgba(215,0,21,0.12); color: #c00; }
+/* 訂單表單／篩選的下拉選單：依選中狀態顯示對應顏色 */
+#orderStatus.order-status-pending,#orderStatusFilter.order-status-pending{ background: rgba(191,72,0,0.1); color: #b34a00; }
+#orderStatus.order-status-paid,#orderStatusFilter.order-status-paid{ background: rgba(0,113,227,0.1); color: #0066cc; }
+#orderStatus.order-status-shipped,#orderStatusFilter.order-status-shipped{ background: rgba(124,92,255,0.1); color: #5c4dbf; }
+#orderStatus.order-status-completed,#orderStatusFilter.order-status-completed{ background: rgba(46,229,157,0.18); color: #0d9668; }
+#orderStatus.order-status-refunded,#orderStatusFilter.order-status-refunded{ background: rgba(215,0,21,0.1); color: #c00; }
+
 @media (max-width: 900px){
   .form-grid{ grid-template-columns: 1fr; }
 }
