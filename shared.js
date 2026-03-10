@@ -58,6 +58,10 @@ const DEFAULT_CONFIG = {
     contactSub: "只留 LINE 官方帳，入口越少你越不亂。",
     machinePageTitle: "整機販售",
     machinePageSub: "依用途分類，不寫一堆規格。價格是「約」，詳細配備請加 LINE 詢問。",
+    // 分享連結（LINE / Facebook）預設標題與說明、圖片（可在後台覆寫）
+    ogTitle: "二手電腦・實測交付｜依用途配機，不亂賣、不踩雷",
+    ogDescription: "依用途配機，不亂賣、不踩雷。買整機、不知道怎麼選、電腦維修，加 LINE 一次搞定。",
+    ogImageUrl: "",
     catImages: {},
     catPrices: {
       office: "NT$ 3,000–6,000",
@@ -1079,6 +1083,25 @@ function applyConfigToHomePage() {
   const heroTitle = document.getElementById("heroTitle");
   if (heroTitle) heroTitle.textContent = cfg.siteTitle;
   if (document.querySelector("title")) document.title = cfg.siteTitle || document.title;
+
+  // 更新分享用 meta（LINE / FB 預覽用）：og:title / og:description / og:image
+  try {
+    const fe = cfg.frontend || {};
+    const ogTitle = fe.ogTitle || cfg.siteTitle || DEFAULT_CONFIG.siteTitle;
+    const ogDescription = fe.ogDescription || fe.heroSub || cfg.brand.subtitle || "";
+    const ogImage =
+      fe.ogImageUrl && fe.ogImageUrl.trim()
+        ? fe.ogImageUrl.trim()
+        : (cfg.shop && cfg.shop.photoUrl && cfg.shop.photoUrl.trim()) || "";
+    const ogTitleMeta = document.querySelector('meta[property="og:title"]');
+    if (ogTitleMeta) ogTitleMeta.setAttribute("content", ogTitle);
+    const ogDescMeta = document.querySelector('meta[property="og:description"]');
+    if (ogDescMeta) ogDescMeta.setAttribute("content", ogDescription);
+    const ogImgMeta = document.querySelector('meta[property="og:image"]');
+    if (ogImgMeta && ogImage) ogImgMeta.setAttribute("content", ogImage);
+  } catch (e) {
+    // 安全失敗：若 meta 標籤不存在就略過，不中斷其他設定
+  }
 
   const brandMark = document.getElementById("brandMark");
   if (brandMark) brandMark.textContent = cfg.brand.mark;

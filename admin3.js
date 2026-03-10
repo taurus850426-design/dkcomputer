@@ -754,6 +754,9 @@
     const fe = cfg.frontend || {};
     const def = window.DK?.DEFAULT_CONFIG?.frontend || {};
     document.getElementById("feSiteTitle").value = cfg.siteTitle ?? "";
+    document.getElementById("feOgTitle").value = fe.ogTitle ?? cfg.siteTitle ?? def.ogTitle ?? "";
+    document.getElementById("feOgDescription").value = fe.ogDescription ?? def.ogDescription ?? "";
+    document.getElementById("feOgImageUrl").value = fe.ogImageUrl ?? "";
     document.getElementById("feBrandMark").value = cfg.brand?.mark ?? "";
     document.getElementById("feBrandTitle").value = cfg.brand?.title ?? "";
     document.getElementById("feBrandSubtitle").value = cfg.brand?.subtitle ?? "";
@@ -834,6 +837,9 @@
       },
       frontend: {
         ...cfg.frontend,
+        ogTitle: document.getElementById("feOgTitle").value?.trim(),
+        ogDescription: document.getElementById("feOgDescription").value?.trim(),
+        ogImageUrl: document.getElementById("feOgImageUrl").value?.trim(),
         heroTagline: document.getElementById("feHeroTagline").value?.trim(),
         heroSub: document.getElementById("feHeroSub").value?.trim(),
         heroBtn1: document.getElementById("feHeroBtn1").value?.trim(),
