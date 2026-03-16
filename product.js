@@ -145,7 +145,47 @@
     }
 
     if (lineBtn) {
-      lineBtn.onclick = () => DK.openLineOrder(item);
+      lineBtn.onclick = async (e) => {
+        try {
+          e?.preventDefault?.();
+        } catch (_) {}
+
+        const cfg = (window.DK && typeof window.DK.getConfig === "function") ? window.DK.getConfig() : {};
+        const lineUrl = cfg?.line?.url || "";
+
+        const name = String(item?.name || "").trim();
+        const cpu = String(item?.cpu || item?.spec_cpu || "未標示");
+        const gpu = String(item?.gpu || item?.spec_gpu || "未標示");
+        const currentUrl = String(window.location.href || "");
+
+        const priceVal = item?.price;
+        const priceText = (window.DK && typeof window.DK.formatPrice === "function")
+          ? window.DK.formatPrice(priceVal)
+          : (priceVal != null ? String(priceVal) : "");
+
+        const msg =
+          `我想詢問這個商品：\n` +
+          `名稱：${name}\n` +
+          `價格：${priceText}\n` +
+          `CPU：${cpu}\n` +
+          `GPU：${gpu}\n` +
+          `商品連結：${currentUrl}`;
+
+        try {
+          if (window.DK && typeof window.DK.tryCopy === "function") {
+            await window.DK.tryCopy(msg);
+          }
+        } catch (_) {}
+
+        if (lineUrl) {
+          window.open(lineUrl, "_blank", "noreferrer");
+        } else {
+          // fallback：維持既有行為
+          try {
+            window.DK?.openLineOrder?.(item);
+          } catch (_) {}
+        }
+      };
     }
 
     if (content) content.hidden = false;
@@ -185,6 +225,55 @@
     const items = getItems();
     const item = items.find((it) => String(it?.id || "") === String(id));
     if (item) {
+      // --- SEO: title / meta description / JSON-LD (Product) ---
+      try {
+        document.title = `${item.name || "商品"}｜DK Computer`;
+
+        const cpu = String(item?.cpu || item?.spec_cpu || "未標示");
+        const gpu = String(item?.gpu || item?.spec_gpu || "未標示");
+        const priceVal = item?.price;
+        const priceText = (window.DK && typeof window.DK.formatPrice === "function")
+          ? window.DK.formatPrice(priceVal)
+          : (priceVal != null ? String(priceVal) : "未標示");
+
+        const desc =
+          `台中電腦店 DK Computer 提供 ${item.name || ""}，` +
+          `價格：${priceText}，` +
+          `CPU：${cpu}，` +
+          `GPU：${gpu}，` +
+          `可LINE詢問與客製升級。`;
+
+        let meta = document.querySelector('meta[name="description"]');
+        if (!meta) {
+          meta = document.createElement("meta");
+          meta.setAttribute("name", "description");
+          document.head.appendChild(meta);
+        }
+        meta.setAttribute("content", desc);
+
+        const jsonLd = {
+          "@context": "https://schema.org",
+          "@type": "Product",
+          name: item.name || "",
+          description: item.description || item.note || "",
+          offers: {
+            "@type": "Offer",
+            price: item.price != null ? item.price : "",
+            priceCurrency: "TWD",
+            availability: "https://schema.org/InStock",
+          },
+        };
+
+        let script = document.getElementById("productJsonLd");
+        if (!script) {
+          script = document.createElement("script");
+          script.id = "productJsonLd";
+          script.type = "application/ld+json";
+          document.head.appendChild(script);
+        }
+        script.textContent = JSON.stringify(jsonLd);
+      } catch (_) {}
+
       renderProduct(item);
     } else {
       showNotFound();

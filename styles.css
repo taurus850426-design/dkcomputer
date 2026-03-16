@@ -1606,15 +1606,34 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
 }
 .thumb button:hover{ background:#fff; }
 
-.cat-image-slot{ width: 140px; }
-.cat-image-label{ font-size: 12px; font-weight: 700; margin-bottom: 6px; }
-.cat-image-preview{
-  width: 120px; height: 90px;
+body.admin-page .cat-image-slot{ width: 140px; }
+body.admin-page .cat-image-label{ font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+body.admin-page .cat-image-preview{
+  width: 140px;
+  height: 140px;
+  overflow: hidden;
   border: 1px solid rgba(17,24,39,0.12);
-  border-radius: 10px;
-  background: rgba(0,0,0,0.04);
-  display: flex; align-items: center; justify-content: center;
+  border-radius: 16px;
+  background: rgba(17,24,39,0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 12px;
+  margin-bottom: 10px;
+}
+body.admin-page .cat-image-preview img{
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  display: block;
+  object-fit: cover !important;
+  object-position: center;
+  border-radius: 0 !important;
+}
+/* 按鈕列：與預覽框保持間距 */
+body.admin-page .cat-image-slot > div[style*="margin-top:6px"]{
+  margin-top: 10px !important;
 }
 
 .table-wrap{
@@ -1637,6 +1656,40 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
   border-bottom: 1px solid rgba(17,24,39,0.08);
   vertical-align: top;
   font-size: 13px;
+}
+
+/* admin-v2 / admin 列表分頁 */
+.admin-shell .pagination{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px 0;
+  flex-wrap: wrap;
+  border-top: 1px solid rgba(17,24,39,0.1);
+  min-height: 44px;
+}
+.admin-shell .pagination .pagination-info{
+  font-size: 13px;
+  color: rgba(17,24,39,0.75);
+}
+.admin-shell .pagination .pagination-btns{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.admin-shell .pagination .page-btn{
+  min-width: 32px;
+}
+.admin-shell .pagination .page-btn.current{
+  background: rgba(59,130,246,0.12);
+  border-color: rgba(59,130,246,0.4);
+}
+.admin-shell .pagination .page-btn[disabled]{
+  opacity: 0.4;
+  cursor: default;
 }
 .table th{
   text-align:left;
@@ -2214,6 +2267,60 @@ body.admin-page .btn-ghost{
 }
 body.admin-page .btn-ghost:hover{ background: rgba(17,24,39,0.07); }
 body.admin-page .btn::before{ display:none; } /* 關掉掃光 */
+
+/* ===== 後台：前台管理可折疊區塊（僅 admin-page scope） ===== */
+body.admin-page .admin-collapsible{
+  grid-column: 1 / -1;
+  border: 1px solid rgba(17,24,39,0.14);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.92);
+  margin: 10px 0;
+  overflow: hidden;
+}
+body.admin-page .admin-collapsible-toggle{
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  font-weight: 800;
+  color: rgba(17,24,39,0.92);
+  cursor: pointer;
+  text-align: left;
+}
+body.admin-page .admin-collapsible-toggle::after{
+  content: "▾";
+  opacity: 0.8;
+  transform: rotate(-90deg);
+  transition: transform .16s ease;
+}
+body.admin-page .admin-collapsible.is-open .admin-collapsible-toggle::after{
+  transform: rotate(0deg);
+}
+body.admin-page .admin-collapsible-body{
+  display: none;
+  padding: 6px 14px 14px;
+  border-top: 1px solid rgba(17,24,39,0.10);
+}
+body.admin-page .admin-collapsible.is-open .admin-collapsible-body{
+  display: block;
+}
+
+/* 前台管理：全部展開/收合按鈕（沿用後台按鈕語感） */
+body.admin-page #tab-frontend .section-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+body.admin-page #frontendExpandAllBtn,
+body.admin-page #frontendCollapseAllBtn{
+  padding: 6px 10px;
+  font-weight: 800;
+}
 
 /* ===== 後台：首頁 Banner 管理區（僅 admin-page scope） ===== */
 body.admin-page .banner-list{

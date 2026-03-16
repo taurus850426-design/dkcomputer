@@ -802,7 +802,6 @@
     document.getElementById("feHeroSub").value = fe.heroSub ?? def.heroSub ?? "";
     document.getElementById("feHeroBtn1").value = fe.heroBtn1 ?? def.heroBtn1 ?? "";
     document.getElementById("feHeroBtn2").value = fe.heroBtn2 ?? def.heroBtn2 ?? "";
-    document.getElementById("feHeroBtn3").value = fe.heroBtn3 ?? def.heroBtn3 ?? "";
     document.getElementById("feTrustTitle").value = fe.trustTitle ?? def.trustTitle ?? "";
     document.getElementById("feTrustItems").value = Array.isArray(fe.trustItems) ? fe.trustItems.join("\n") : (def.trustItems || []).join("\n");
     document.getElementById("feTrustNote").value = fe.trustNote ?? def.trustNote ?? "";
@@ -932,7 +931,6 @@
         heroSub: document.getElementById("feHeroSub").value?.trim(),
         heroBtn1: document.getElementById("feHeroBtn1").value?.trim(),
         heroBtn2: document.getElementById("feHeroBtn2").value?.trim(),
-        heroBtn3: document.getElementById("feHeroBtn3").value?.trim(),
         trustTitle: document.getElementById("feTrustTitle").value?.trim(),
         trustItems: trustItems.length > 0 ? trustItems : (cfg.frontend?.trustItems || []),
         trustNote: document.getElementById("feTrustNote").value?.trim(),
@@ -986,26 +984,13 @@
           }
           return out;
         })(),
-        homeEntries: (function collectHomeEntries() {
-          const prev = Array.isArray(cfg.frontend?.homeEntries) ? cfg.frontend.homeEntries : [];
-          const rows = Array.from(document.querySelectorAll(".home-entry-row"));
-          if (!rows.length) return prev;
-          const next = prev.slice();
-          rows.forEach((row) => {
-            const idx = Number(row.getAttribute("data-entry-index") || "0");
-            const urlInput = row.querySelector(".entry-image-url");
-            if (!urlInput) return;
-            const image = (urlInput.value || "").trim();
-            const base = prev[idx] || {};
-            if (!next[idx]) next[idx] = { ...base };
-            if (image) {
-              next[idx] = { ...base, image };
-            } else {
-              next[idx] = { ...base };
-              delete next[idx].image;
-            }
-          });
-          return next;
+        homeEntries: (function () {
+          const listEl = document.getElementById("feHomeEntriesList");
+          const fromDom = collectHomeEntriesFromDom(listEl);
+          if (!fromDom.length) {
+            return Array.isArray(cfg.frontend?.homeEntries) ? cfg.frontend.homeEntries : [];
+          }
+          return fromDom;
         })(),
       },
       line: {
@@ -1079,7 +1064,7 @@
       const img = document.createElement("img");
       img.src = dataUrl;
       img.alt = "";
-      img.style.cssText = "max-width:100%;max-height:120px;object-fit:cover;border-radius:8px;";
+      img.style.cssText = "width:100%;height:100%;object-fit:cover;display:block;";
       el.appendChild(img);
     } else {
       el.textContent = "未設定";
@@ -1105,6 +1090,148 @@
       updateCatImage(cat, null);
     });
   });
+
+  // ---- 首頁第二區分類卡片：從 DOM 收集 homeEntries ----
+  function collectHomeEntriesFromDom(listEl) {
+    const container = listEl || document.getElementById("feHomeEntriesList");
+    if (!container) return [];
+
+    const rows = Array.from(container.querySelectorAll(".home-entry-row"));
+    const out = [];
+
+    rows.forEach((row) => {
+      const id = row.dataset.entryId || "";
+      const titleInput = row.querySelector(".entry-title");
+      const subtitleInput = row.querySelector(".entry-subtitle");
+      const linkInput = row.querySelector(".entry-link");
+      const imageInput = row.querySelector(".entry-image-url");
+      const themeInput = row.querySelector(".entry-theme");
+
+      let title = (titleInput?.value || "").trim();
+      const subtitle = (subtitleInput?.value || "").trim();
+      const link = (linkInput?.value || "").trim();
+      const image = (imageInput?.value || "").trim();
+      const theme = (themeInput?.value || "").trim();
+
+      if (!title && !subtitle && !link && !image) {
+        title = "未命名分類";
+      }
+
+      out.push({ id, title, subtitle, link, image, theme });
+    });
+
+    return out;
+  }
+
+  function renderHomeEntriesAdmin(listEl, entries) {
+    if (!listEl) return;
+
+    const safe = Array.isArray(entries) ? entries : [];
+    listEl.innerHTML = "";
+
+    safe.forEach((entry) => {
+      const id = entry?.id || ("home_" + Date.now() + "_" + Math.floor(Math.random() * 1000));
+      if (entry && !entry.id) entry.id = id;
+      const row = document.createElement("div");
+      row.className = "home-entry-row";
+      row.dataset.entryId = id;
+      row.setAttribute("draggable", "true");
+
+      row.innerHTML = `
+        <input class="entry-title" type="text" placeholder="標題" />
+        <input class="entry-subtitle" type="text" placeholder="說明" />
+        <input class="entry-link" type="url" placeholder="連結（例如 ./machine.html）" />
+        <input class="entry-image-url" type="url" placeholder="圖片網址" />
+        <select class="entry-theme">
+          <option value="">預設</option>
+          <option value="dark">深色</option>
+          <option value="light">淺色</option>
+          <option value="blue">藍色</option>
+        </select>
+        <input class="entry-image-file" type="file" accept="image/*" />
+        <button type="button" class="entry-delete-btn">刪除</button>
+      `;
+
+      const t = row.querySelector(".entry-title");
+      const s = row.querySelector(".entry-subtitle");
+      const l = row.querySelector(".entry-link");
+      const img = row.querySelector(".entry-image-url");
+      const theme = row.querySelector(".entry-theme");
+
+      if (t) t.value = entry?.title || "";
+      if (s) s.value = entry?.subtitle || "";
+      if (l) l.value = entry?.link || "";
+      if (img) img.value = entry?.image || "";
+      if (theme) theme.value = entry?.theme || "";
+
+      listEl.appendChild(row);
+    });
+  }
+
+  // 首頁第二區分類卡片：拖曳排序（原生 drag & drop，交換 DOM 順序）
+  if (!window.__dkHomeEntriesDnDBound) {
+    window.__dkHomeEntriesDnDBound = true;
+    let __draggingHomeEntryRow = null;
+
+    document.addEventListener("dragstart", function (e) {
+      const row = e.target && e.target.closest ? e.target.closest(".home-entry-row") : null;
+      if (!row) return;
+      __draggingHomeEntryRow = row;
+      try {
+        e.dataTransfer.effectAllowed = "move";
+        // 某些瀏覽器需要 setData 才會觸發 drop
+        e.dataTransfer.setData("text/plain", "home-entry-row");
+      } catch (_) {}
+    });
+
+    document.addEventListener("dragover", function (e) {
+      const row = e.target && e.target.closest ? e.target.closest(".home-entry-row") : null;
+      if (!row) return;
+      if (!__draggingHomeEntryRow) return;
+      // 允許 drop
+      e.preventDefault();
+      try {
+        e.dataTransfer.dropEffect = "move";
+      } catch (_) {}
+    });
+
+    document.addEventListener("drop", function (e) {
+      const targetRow = e.target && e.target.closest ? e.target.closest(".home-entry-row") : null;
+      if (!targetRow) return;
+      if (!__draggingHomeEntryRow) return;
+      e.preventDefault();
+
+      const from = __draggingHomeEntryRow;
+      const to = targetRow;
+      if (from === to) return;
+      const parent = from.parentElement;
+      if (!parent || parent !== to.parentElement) return;
+
+      // 交換 DOM 順序（swap）
+      const fromNext = from.nextSibling;
+      const toNext = to.nextSibling;
+
+      parent.insertBefore(from, toNext);
+      parent.insertBefore(to, fromNext);
+
+      __draggingHomeEntryRow = null;
+    });
+
+    document.addEventListener("dragend", function () {
+      __draggingHomeEntryRow = null;
+    });
+  }
+
+  // `.entry-delete-btn` 刪除：事件委派（避免動態 row 沒綁到）
+  if (!window.__dkHomeEntriesDeleteDelegated) {
+    window.__dkHomeEntriesDeleteDelegated = true;
+    document.addEventListener("click", function (e) {
+      const btn = e.target && e.target.closest ? e.target.closest(".entry-delete-btn") : null;
+      if (!btn) return;
+      const row = btn.closest ? btn.closest(".home-entry-row") : null;
+      if (row) row.remove();
+    });
+  }
 
   // 首頁第二區分類卡片圖片：圖片上傳 → Supabase Storage（site-assets/home/）→ 回寫 image URL
   (function initHomeEntryImageUploads() {
@@ -1153,6 +1280,7 @@
           urlInput.value = url;
           urlInput.dispatchEvent(new Event("input", { bubbles: true }));
           urlInput.dispatchEvent(new Event("change", { bubbles: true }));
+          console.log("[homeEntries] image uploaded");
         }
 
         if (preview) {
@@ -1177,6 +1305,110 @@
       }
     });
   })();
+
+  // 首頁第二區分類卡片：刪除按鈕（動態 row 也支援）
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest ? e.target.closest(".entry-delete-btn") : null;
+    if (!btn) return;
+    const row = btn.closest(".home-entry-row");
+    if (row) row.remove();
+  });
+
+  // 首頁第二區分類卡片：委派綁定新增按鈕（確保晚載入 DOM 也可運作）
+  document.addEventListener("click", function (e) {
+    const addBtn = e.target.closest ? e.target.closest("#addHomeEntryBtn") : null;
+    if (!addBtn) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const listEl = document.getElementById("feHomeEntriesList");
+    console.log("[homeEntries] delegated add click", { listEl, addBtn });
+
+    if (!listEl) {
+      console.error("[homeEntries] #feHomeEntriesList not found");
+      return;
+    }
+
+    let current = [];
+    try {
+      current =
+        typeof collectHomeEntriesFromDom === "function"
+          ? collectHomeEntriesFromDom(listEl)
+          : [];
+    } catch (err) {
+      console.error("[homeEntries] collectHomeEntriesFromDom failed:", err);
+      current = [];
+    }
+
+    current.push({
+      title: "",
+      subtitle: "",
+      image: "",
+      link: "",
+    });
+
+    try {
+      renderHomeEntriesAdmin(listEl, current);
+      console.log("[homeEntries] row added", current);
+    } catch (err) {
+      console.error("[homeEntries] renderHomeEntriesAdmin failed:", err);
+    }
+  });
+
+  // 首頁第二區分類卡片：初始化新增按鈕（DOM ready 後執行）
+  document.addEventListener("DOMContentLoaded", function () {
+    try {
+      initHomeEntriesAdmin();
+    } catch (err) {
+      console.error("[homeEntries] init failed:", err);
+    }
+  });
+
+  // 前台管理：可折疊區塊（只動 UI，不影響資料讀寫/上傳/排序）
+  // 用事件委派避免 DOM 時機問題
+  document.addEventListener("click", function (e) {
+    const expandAllBtn = e.target?.closest ? e.target.closest("#frontendExpandAllBtn") : null;
+    const collapseAllBtn = e.target?.closest ? e.target.closest("#frontendCollapseAllBtn") : null;
+    if (expandAllBtn || collapseAllBtn) {
+      e.preventDefault();
+
+      const root = document.getElementById("tab-frontend");
+      if (!root) return;
+      const items = root.querySelectorAll(".admin-collapsible");
+      const nextOpen = !!expandAllBtn;
+      items.forEach((wrap) => {
+        wrap.classList.toggle("is-open", nextOpen);
+        const btn = wrap.querySelector(".admin-collapsible-toggle");
+        if (btn) btn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+      });
+      return;
+    }
+
+    const btn = e.target?.closest ? e.target.closest(".admin-collapsible-toggle") : null;
+    if (!btn) return;
+    const wrap = btn.closest ? btn.closest(".admin-collapsible") : null;
+    if (!wrap) return;
+    e.preventDefault();
+
+    const nextOpen = !wrap.classList.contains("is-open");
+    wrap.classList.toggle("is-open", nextOpen);
+    btn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+  });
+
+  function initHomeEntriesAdmin() {
+    console.log("[homeEntries] init start");
+
+    const listEl = document.getElementById("feHomeEntriesList");
+    const addBtn = document.getElementById("addHomeEntryBtn");
+
+    console.log("[homeEntries] listEl =", listEl);
+    console.log("[homeEntries] addBtn =", addBtn);
+
+    if (!listEl || !addBtn) {
+      console.error("home entries DOM missing");
+    }
+  }
 
   // 首頁 Banner 管理：render / add / remove / move
   function renderHomeBanners(listEl, banners) {
@@ -1410,6 +1642,11 @@
     /** 庫存品項表排序：key 為欄位名，dir 為 1 升序、-1 降序 */
     let v2ItemsSortKey = null;
     let v2ItemsSortDir = 1;
+    const V2_PAGE_SIZE = 15;
+    let itemsPage = 1;
+    let ledgerPage = 1;
+    let ordersPage = 1;
+    let expensesPage = 1;
     const STATUS_LABEL = { READY: "可售", TESTING: "待測", PREP: "待整理", RESERVED: "保留", CLEARANCE: "待出清", SCRAP: "報廢拆料" };
     const CONDITION_LABEL = { NEW: "全新", USED: "二手", REFURB: "整新" };
     const LEDGER_TYPE_LABEL = { IN: "入庫", OUT: "出庫", ADJUST: "調整" };
@@ -1417,6 +1654,23 @@
     const ORDER_STATUS_LABEL = { pending: "待處理", paid: "已付款", shipped: "已出貨", completed: "已完成", refunded: "已退貨" };
     const ORDER_PAYMENT_LABEL = { cash: "現金", transfer: "轉帳", card: "刷卡" };
     const EXPENSE_TYPE_LABEL = { COGS: "銷貨成本", OPEX: "營業費用", OTHER: "其他" };
+
+    function paginateV2(list, page, pageSize) {
+      const size = pageSize || V2_PAGE_SIZE;
+      const total = list.length;
+      const totalPages = total === 0 ? 1 : Math.ceil(total / size);
+      let p = page || 1;
+      if (p < 1) p = 1;
+      if (p > totalPages) p = totalPages;
+      const start = (p - 1) * size;
+      const end = start + size;
+      return {
+        pageItems: list.slice(start, end),
+        page: p,
+        totalPages,
+        total,
+      };
+    }
 
     function fillV2CategoryOptions() {
       const cats = DK.getInventoryCategories ? DK.getInventoryCategories() : ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼"];
@@ -1504,7 +1758,9 @@
     function renderV2Items() {
       if (!itemsTbody) return;
       const list = getV2ItemsSortedList();
-      itemsTbody.innerHTML = list.map((x) => {
+      const pageInfo = paginateV2(list, itemsPage, V2_PAGE_SIZE);
+      itemsPage = pageInfo.page;
+      itemsTbody.innerHTML = pageInfo.pageItems.map((x) => {
         const alert = DK.getItemAlert(x);
         const alertText = alert ? alert.message : "-";
         const rowClass = (x.qty_on_hand ?? 0) === 0 ? " qty-zero-row" : "";
@@ -1537,6 +1793,23 @@
       const catVal = itemsCategory?.value || "";
       itemsCategoryQuick?.querySelectorAll(".seg-cat").forEach((b) => b.classList.toggle("active", (b.getAttribute("data-cat") || "") === catVal));
       updateV2ItemsSortHeaders();
+
+      const pager = document.getElementById("itemsPagination");
+      if (pager) {
+        const cur = pageInfo.page;
+        const totalPages = pageInfo.totalPages;
+        const total = pageInfo.total;
+        let html = `<span class="pagination-info">共 ${total} 筆，第 ${cur} / ${totalPages} 頁</span>`;
+        if (totalPages > 1) {
+          html += `<span class="pagination-btns"><button type="button" class="btn btn-ghost btn-sm page-btn prev" data-page="${cur - 1}" ${cur <= 1 ? "disabled" : ""}>上一頁</button>`;
+          for (let p = 1; p <= totalPages; p++) {
+            const active = p === cur ? " current" : "";
+            html += `<button type="button" class="btn btn-ghost btn-sm page-btn${active}" data-page="${p}">${p}</button>`;
+          }
+          html += `<button type="button" class="btn btn-ghost btn-sm page-btn next" data-page="${cur + 1}" ${cur >= totalPages ? "disabled" : ""}>下一頁</button></span>`;
+        }
+        pager.innerHTML = html;
+      }
     }
 
     function generateUniqueSKU() {
@@ -1881,9 +2154,9 @@
       renderV2Items();
       setTimeout(closeV2ItemEditor, 800);
     });
-    itemsSearch?.addEventListener("input", renderV2Items);
-    itemsCategory?.addEventListener("change", renderV2Items);
-    itemsStatus?.addEventListener("change", renderV2Items);
+    itemsSearch?.addEventListener("input", () => { itemsPage = 1; renderV2Items(); });
+    itemsCategory?.addEventListener("change", () => { itemsPage = 1; renderV2Items(); });
+    itemsStatus?.addEventListener("change", () => { itemsPage = 1; renderV2Items(); });
     document.getElementById("btnDeleteSelectedItems")?.addEventListener("click", () => {
       const checked = document.querySelectorAll("#itemsTbody .item-row-cb:checked");
       const ids = Array.from(checked).map((cb) => cb.getAttribute("data-id")).filter(Boolean);
@@ -1918,10 +2191,29 @@
       const list = DK.getLedger();
       const items = DK.getItems();
       const byId = Object.fromEntries(items.map((i) => [i.id, i]));
-      ledgerTbody.innerHTML = list.slice(0, 100).map((r) => {
+      const pageInfo = paginateV2(list, ledgerPage, V2_PAGE_SIZE);
+      ledgerPage = pageInfo.page;
+      ledgerTbody.innerHTML = pageInfo.pageItems.map((r) => {
         const name = byId[r.item_id] ? (byId[r.item_id].name || byId[r.item_id].sku) : r.item_id;
         return `<tr><td class="nowrap">${v2Esc((r.created_at || "").toString().slice(0, 19))}</td><td>${v2Esc(name)}</td><td>${v2Esc(LEDGER_TYPE_LABEL[r.type] || r.type)}</td><td>${r.qty}</td><td>${v2FmtNum(r.unit_cost)}</td><td>${v2Esc(REF_TYPE_LABEL[r.ref_type] || r.ref_type)}</td><td>${v2Esc(r.ref_id)}</td><td class="muted">${v2Esc(r.note)}</td></tr>`;
       }).join("");
+
+      const pager = document.getElementById("ledgerPagination");
+      if (pager) {
+        const cur = pageInfo.page;
+        const totalPages = pageInfo.totalPages;
+        const total = pageInfo.total;
+        let html = `<span class="pagination-info">共 ${total} 筆，第 ${cur} / ${totalPages} 頁</span>`;
+        if (totalPages > 1) {
+          html += `<span class="pagination-btns"><button type="button" class="btn btn-ghost btn-sm page-btn prev" data-page="${cur - 1}" ${cur <= 1 ? "disabled" : ""}>上一頁</button>`;
+          for (let p = 1; p <= totalPages; p++) {
+            const active = p === cur ? " current" : "";
+            html += `<button type="button" class="btn btn-ghost btn-sm page-btn${active}" data-page="${p}">${p}</button>`;
+          }
+          html += `<button type="button" class="btn btn-ghost btn-sm page-btn next" data-page="${cur + 1}" ${cur >= totalPages ? "disabled" : ""}>下一頁</button></span>`;
+        }
+        pager.innerHTML = html;
+      }
     }
     document.getElementById("btnNewLedger")?.addEventListener("click", () => {
       const sel = document.getElementById("ledgerItemId");
@@ -2062,18 +2354,37 @@
     function renderV2Orders() {
       if (!ordersTbody) return;
       const list = getFilteredOrders();
-      ordersTbody.innerHTML = list.map((o) => {
+      const pageInfo = paginateV2(list, ordersPage, V2_PAGE_SIZE);
+      ordersPage = pageInfo.page;
+      ordersTbody.innerHTML = pageInfo.pageItems.map((o) => {
         const margin = o.gross_margin != null ? (o.gross_margin * 100).toFixed(1) + "%" : "-";
         const statusKey = (o.status && ORDER_STATUS_LABEL[o.status]) ? o.status : "pending";
         const statusClass = "order-status-badge order-status-" + statusKey;
         return `<tr><td class="nowrap">${v2Esc(o.order_no)}</td><td>${v2Esc(o.customer_name)}</td><td>${v2FmtNum(o.total_sale)}</td><td>${v2FmtNum(o.shipping_income)}</td><td>${v2FmtNum(o.discount)}</td><td>${v2FmtNum(o.cogs_total)}</td><td>${v2FmtNum(o.gross_profit)}</td><td>${margin}</td><td><span class="${statusClass}">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</span></td><td class="nowrap">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td></tr>`;
       }).join("");
       ordersTbody.querySelectorAll(".btn-edit-order").forEach((btn) => btn.addEventListener("click", () => openV2OrderEditor(btn.getAttribute("data-id"))));
+
+      const pager = document.getElementById("ordersPagination");
+      if (pager) {
+        const cur = pageInfo.page;
+        const totalPages = pageInfo.totalPages;
+        const total = pageInfo.total;
+        let html = `<span class="pagination-info">共 ${total} 筆，第 ${cur} / ${totalPages} 頁</span>`;
+        if (totalPages > 1) {
+          html += `<span class="pagination-btns"><button type="button" class="btn btn-ghost btn-sm page-btn prev" data-page="${cur - 1}" ${cur <= 1 ? "disabled" : ""}>上一頁</button>`;
+          for (let p = 1; p <= totalPages; p++) {
+            const active = p === cur ? " current" : "";
+            html += `<button type="button" class="btn btn-ghost btn-sm page-btn${active}" data-page="${p}">${p}</button>`;
+          }
+          html += `<button type="button" class="btn btn-ghost btn-sm page-btn next" data-page="${cur + 1}" ${cur >= totalPages ? "disabled" : ""}>下一頁</button></span>`;
+        }
+        pager.innerHTML = html;
+      }
     }
-    orderSearchEl?.addEventListener("input", renderV2Orders);
-    orderSearchEl?.addEventListener("search", renderV2Orders);
-    orderDateRangeEl?.addEventListener("change", renderV2Orders);
-    orderStatusFilterEl?.addEventListener("change", () => { applyOrderStatusSelectClass(); renderV2Orders(); });
+    orderSearchEl?.addEventListener("input", () => { ordersPage = 1; renderV2Orders(); });
+    orderSearchEl?.addEventListener("search", () => { ordersPage = 1; renderV2Orders(); });
+    orderDateRangeEl?.addEventListener("change", () => { ordersPage = 1; renderV2Orders(); });
+    orderStatusFilterEl?.addEventListener("change", () => { applyOrderStatusSelectClass(); ordersPage = 1; renderV2Orders(); });
 
     function fillOrderLineItemSelect() {
       if (!orderLineItemSelect) return;
@@ -2344,7 +2655,9 @@
     function renderV2Expenses() {
       if (!expensesTbody) return;
       const list = DK.getExpenses();
-      expensesTbody.innerHTML = list.slice(0, 100).map((e) => `<tr><td>${v2Esc(e.date)}</td><td>${v2Esc(EXPENSE_TYPE_LABEL[e.type] || e.type)}</td><td>${v2Esc(e.category)}</td><td>${v2FmtNum(e.amount)}</td><td class="muted">${v2Esc(e.note)}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-del-expense" data-id="${v2Esc(e.id)}">刪除</button></td></tr>`).join("");
+      const pageInfo = paginateV2(list, expensesPage, V2_PAGE_SIZE);
+      expensesPage = pageInfo.page;
+      expensesTbody.innerHTML = pageInfo.pageItems.map((e) => `<tr><td>${v2Esc(e.date)}</td><td>${v2Esc(EXPENSE_TYPE_LABEL[e.type] || e.type)}</td><td>${v2Esc(e.category)}</td><td>${v2FmtNum(e.amount)}</td><td class="muted">${v2Esc(e.note)}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-del-expense" data-id="${v2Esc(e.id)}">刪除</button></td></tr>`).join("");
       expensesTbody.querySelectorAll(".btn-del-expense").forEach((btn) => {
         btn.addEventListener("click", () => {
           if (!confirm("確定刪除？")) return;
@@ -2356,6 +2669,23 @@
           renderV2Reports();
         });
       });
+
+      const pager = document.getElementById("expensesPagination");
+      if (pager) {
+        const cur = pageInfo.page;
+        const totalPages = pageInfo.totalPages;
+        const total = pageInfo.total;
+        let html = `<span class="pagination-info">共 ${total} 筆，第 ${cur} / ${totalPages} 頁</span>`;
+        if (totalPages > 1) {
+          html += `<span class="pagination-btns"><button type="button" class="btn btn-ghost btn-sm page-btn prev" data-page="${cur - 1}" ${cur <= 1 ? "disabled" : ""}>上一頁</button>`;
+          for (let p = 1; p <= totalPages; p++) {
+            const active = p === cur ? " current" : "";
+            html += `<button type="button" class="btn btn-ghost btn-sm page-btn${active}" data-page="${p}">${p}</button>`;
+          }
+          html += `<button type="button" class="btn btn-ghost btn-sm page-btn next" data-page="${cur + 1}" ${cur >= totalPages ? "disabled" : ""}>下一頁</button></span>`;
+        }
+        pager.innerHTML = html;
+      }
     }
     document.getElementById("btnNewExpense")?.addEventListener("click", () => {
       document.getElementById("expenseDate").value = todayStr();
@@ -2479,6 +2809,39 @@
       URL.revokeObjectURL(a.href);
     }
     document.getElementById("btnExportReport")?.addEventListener("click", exportReportCSV);
+
+    document.getElementById("itemsPagination")?.addEventListener("click", (e) => {
+      const btn = e.target?.closest?.("button[data-page]");
+      if (!btn || btn.disabled) return;
+      const page = parseInt(btn.getAttribute("data-page"), 10);
+      if (!Number.isFinite(page)) return;
+      itemsPage = page;
+      renderV2Items();
+    });
+    document.getElementById("ledgerPagination")?.addEventListener("click", (e) => {
+      const btn = e.target?.closest?.("button[data-page]");
+      if (!btn || btn.disabled) return;
+      const page = parseInt(btn.getAttribute("data-page"), 10);
+      if (!Number.isFinite(page)) return;
+      ledgerPage = page;
+      renderV2Ledger();
+    });
+    document.getElementById("ordersPagination")?.addEventListener("click", (e) => {
+      const btn = e.target?.closest?.("button[data-page]");
+      if (!btn || btn.disabled) return;
+      const page = parseInt(btn.getAttribute("data-page"), 10);
+      if (!Number.isFinite(page)) return;
+      ordersPage = page;
+      renderV2Orders();
+    });
+    document.getElementById("expensesPagination")?.addEventListener("click", (e) => {
+      const btn = e.target?.closest?.("button[data-page]");
+      if (!btn || btn.disabled) return;
+      const page = parseInt(btn.getAttribute("data-page"), 10);
+      if (!Number.isFinite(page)) return;
+      expensesPage = page;
+      renderV2Expenses();
+    });
 
     window.__adminV2Refresh = function () {
       const active = document.querySelector(".v2-tab.active");

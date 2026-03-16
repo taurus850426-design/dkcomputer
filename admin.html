@@ -141,6 +141,7 @@
                 <tbody id="itemsTbody"></tbody>
               </table>
             </div>
+            <div id="itemsPagination" class="pagination"></div>
             <div id="itemEditorModal" class="item-editor-modal" hidden>
               <div id="itemEditor" class="card item-editor-card" role="dialog" aria-modal="true" aria-labelledby="itemEditorTitle">
               <h3 id="itemEditorTitle" class="h3">新增 / 編輯品項</h3>
@@ -177,6 +178,7 @@
                   <tbody id="ledgerTbody"></tbody>
                 </table>
               </div>
+            <div id="ledgerPagination" class="pagination"></div>
               <div id="ledgerForm" class="card" style="margin-top:12px" hidden>
                 <h3 class="h3">新增流水</h3>
                 <div class="form-grid">
@@ -274,6 +276,7 @@
                   <tbody id="ordersTbody"></tbody>
                 </table>
               </div>
+            <div id="ordersPagination" class="pagination"></div>
             </div>
 
             <!-- 支出 -->
@@ -290,6 +293,7 @@
                   <tbody id="expensesTbody"></tbody>
                 </table>
               </div>
+            <div id="expensesPagination" class="pagination"></div>
               <div id="expenseForm" class="card" style="margin-top:12px" hidden>
                 <h3 class="h3">新增支出</h3>
                 <div class="form-grid">
@@ -477,260 +481,289 @@
               </div>
               <div class="section-actions">
                 <a class="btn btn-ghost" href="./index.html" target="_blank" rel="noreferrer">預覽首頁</a>
+                <button id="frontendExpandAllBtn" class="btn btn-ghost btn-sm" type="button">全部展開</button>
+                <button id="frontendCollapseAllBtn" class="btn btn-ghost btn-sm" type="button">全部收合</button>
                 <button id="frontendSaveBtn" class="btn btn-primary" type="button">儲存設定</button>
               </div>
             </div>
 
             <div class="form-grid" style="margin-top: 12px">
-              <div class="field full">
-                <label for="feSiteTitle">網站標題（瀏覽器標籤）</label>
-                <input id="feSiteTitle" type="text" placeholder="二手電腦・實測交付｜依用途配機，不亂賣、不踩雷" />
-              </div>
+              <!-- SEO 與分享預覽 -->
+              <section class="admin-collapsible full" data-collapsible="seo">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="false">SEO 與分享預覽</button>
+                <div class="admin-collapsible-body">
+                  <div class="field full">
+                    <label for="feSiteTitle">網站標題（瀏覽器標籤）</label>
+                    <input id="feSiteTitle" type="text" placeholder="二手電腦・實測交付｜依用途配機，不亂賣、不踩雷" />
+                  </div>
+                  <div class="field full">
+                    <label class="h3" style="margin: 8px 0 4px">分享預覽（LINE／Facebook）</label>
+                  </div>
+                  <div class="field full">
+                    <label for="feOgTitle">分享標題（網址預覽粗體那一行）</label>
+                    <input id="feOgTitle" type="text" placeholder="二手電腦・實測交付｜依用途配機，不亂賣、不踩雷" />
+                  </div>
+                  <div class="field full">
+                    <label for="feOgDescription">分享說明（網址預覽灰色小字）</label>
+                    <input id="feOgDescription" type="text" placeholder="依用途配機，不亂賣、不踩雷。買整機、不知道怎麼選、電腦維修，加 LINE 一次搞定。" />
+                  </div>
+                  <div class="field full">
+                    <label for="feOgImageUrl">分享圖片網址（顯示 LOGO 或封面圖）</label>
+                    <input id="feOgImageUrl" type="url" placeholder="貼上一張已上傳的 LOGO 或封面圖網址，例如：https://…/logo.png" />
+                    <p class="muted small">建議長寬至少 1200×630px（或接近 1.91:1），可使用 GitHub / Imgur / 自家主機等圖檔網址。</p>
+                  </div>
+                </div>
+              </section>
 
-              <div class="field full">
-                <label class="h3" style="margin: 8px 0 4px">分享預覽（LINE／Facebook）</label>
-              </div>
-              <div class="field full">
-                <label for="feOgTitle">分享標題（網址預覽粗體那一行）</label>
-                <input id="feOgTitle" type="text" placeholder="二手電腦・實測交付｜依用途配機，不亂賣、不踩雷" />
-              </div>
-              <div class="field full">
-                <label for="feOgDescription">分享說明（網址預覽灰色小字）</label>
-                <input id="feOgDescription" type="text" placeholder="依用途配機，不亂賣、不踩雷。買整機、不知道怎麼選、電腦維修，加 LINE 一次搞定。" />
-              </div>
-              <div class="field full">
-                <label for="feOgImageUrl">分享圖片網址（顯示 LOGO 或封面圖）</label>
-                <input id="feOgImageUrl" type="url" placeholder="貼上一張已上傳的 LOGO 或封面圖網址，例如：https://…/logo.png" />
-                <p class="muted small">建議長寬至少 1200×630px（或接近 1.91:1），可使用 GitHub / Imgur / 自家主機等圖檔網址。</p>
-              </div>
+              <!-- 品牌設定 -->
+              <section class="admin-collapsible full" data-collapsible="brand">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="false">品牌設定</button>
+                <div class="admin-collapsible-body">
+                  <div class="field full">
+                    <label class="h3" style="margin: 8px 0 4px">品牌（左上角）</label>
+                  </div>
+                  <div class="field">
+                    <label for="feBrandMark">品牌縮寫</label>
+                    <input id="feBrandMark" type="text" placeholder="DK" />
+                  </div>
+                  <div class="field">
+                    <label for="feBrandTitle">品牌名稱</label>
+                    <input id="feBrandTitle" type="text" placeholder="二手電腦・實測交付" />
+                  </div>
+                  <div class="field full">
+                    <label for="feBrandSubtitle">品牌副標</label>
+                    <input id="feBrandSubtitle" type="text" placeholder="依用途配機，不亂賣、不踩雷" />
+                  </div>
+                </div>
+              </section>
 
-              <div class="field full">
-                <label class="h3" style="margin: 8px 0 4px">品牌（左上角）</label>
-              </div>
-              <div class="field">
-                <label for="feBrandMark">品牌縮寫</label>
-                <input id="feBrandMark" type="text" placeholder="DK" />
-              </div>
-              <div class="field">
-                <label for="feBrandTitle">品牌名稱</label>
-                <input id="feBrandTitle" type="text" placeholder="二手電腦・實測交付" />
-              </div>
-              <div class="field full">
-                <label for="feBrandSubtitle">品牌副標</label>
-                <input id="feBrandSubtitle" type="text" placeholder="依用途配機，不亂賣、不踩雷" />
-              </div>
+              <!-- 首頁 Hero（預設展開） -->
+              <section class="admin-collapsible full is-open" data-collapsible="hero">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="true">首頁 Hero</button>
+                <div class="admin-collapsible-body">
+                  <div class="field full">
+                    <label class="h3" style="margin: 16px 0 4px">首頁首屏</label>
+                  </div>
+                  <div class="field full">
+                    <label for="feHeroTagline">主標語</label>
+                    <input id="feHeroTagline" type="text" placeholder="二手電腦・實測交付" />
+                  </div>
+                  <div class="field full">
+                    <label for="feHeroSub">副標語</label>
+                    <input id="feHeroSub" type="text" placeholder="依用途配機，不亂賣、不踩雷" />
+                  </div>
+                  <div class="field">
+                    <label for="feHeroBtn1">主按鈕 1</label>
+                    <input id="feHeroBtn1" type="text" placeholder="🔥 我要買整機" />
+                  </div>
+                  <div class="field">
+                    <label for="feHeroBtn2">主按鈕 2</label>
+                    <input id="feHeroBtn2" type="text" placeholder="🧠 不知道怎麼選（需求表單）" />
+                  </div>
+                </div>
+              </section>
 
-              <div class="field full">
-                <label class="h3" style="margin: 16px 0 4px">首頁首屏</label>
-              </div>
-              <div class="field full">
-                <label for="feHeroTagline">主標語</label>
-                <input id="feHeroTagline" type="text" placeholder="二手電腦・實測交付" />
-              </div>
-              <div class="field full">
-                <label for="feHeroSub">副標語</label>
-                <input id="feHeroSub" type="text" placeholder="依用途配機，不亂賣、不踩雷" />
-              </div>
-              <div class="field">
-                <label for="feHeroBtn1">主按鈕 1</label>
-                <input id="feHeroBtn1" type="text" placeholder="🔥 我要買整機" />
-              </div>
-              <div class="field">
-                <label for="feHeroBtn2">主按鈕 2</label>
-                <input id="feHeroBtn2" type="text" placeholder="🧠 不知道怎麼選（需求表單）" />
-              </div>
-              <div class="field">
-                <label for="feHeroBtn3">主按鈕 3</label>
-                <input id="feHeroBtn3" type="text" placeholder="🔧 電腦有問題要維修" />
-              </div>
-
-              <div class="field full">
-                <label class="h3" style="margin: 16px 0 4px">信任建立區塊</label>
-              </div>
-              <div class="field full">
-                <label for="feTrustTitle">標題</label>
-                <input id="feTrustTitle" type="text" placeholder="所有整機皆" />
-              </div>
-              <div class="field full">
-                <label for="feTrustItems">項目（每行一項）</label>
-                <textarea id="feTrustItems" rows="5" placeholder="實測
+              <!-- 信任建立區塊 -->
+              <section class="admin-collapsible full" data-collapsible="trust">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="false">信任建立區塊</button>
+                <div class="admin-collapsible-body">
+                  <div class="field full">
+                    <label class="h3" style="margin: 16px 0 4px">信任建立區塊</label>
+                  </div>
+                  <div class="field full">
+                    <label for="feTrustTitle">標題</label>
+                    <input id="feTrustTitle" type="text" placeholder="所有整機皆" />
+                  </div>
+                  <div class="field full">
+                    <label for="feTrustItems">項目（每行一項）</label>
+                    <textarea id="feTrustItems" rows="5" placeholder="實測
 清潔
 交付前檢查
 不賣不適合用途的配法
 有問題可回來處理"></textarea>
-              </div>
-              <div class="field full">
-                <label for="feTrustNote">備註說明</label>
-                <input id="feTrustNote" type="text" placeholder="官網會寫清楚：不適合誰、不能幹嘛、不賣的情況。奧客會自己離開。" />
-              </div>
+                  </div>
+                  <div class="field full">
+                    <label for="feTrustNote">備註說明</label>
+                    <input id="feTrustNote" type="text" placeholder="官網會寫清楚：不適合誰、不能幹嘛、不賣的情況。奧客會自己離開。" />
+                  </div>
+                </div>
+              </section>
 
-              <div class="field full">
-                <label class="h3" style="margin: 16px 0 4px">聯絡區塊</label>
-              </div>
-              <div class="field">
-                <label for="feContactTitle">聯絡標題</label>
-                <input id="feContactTitle" type="text" placeholder="聯絡我們" />
-              </div>
-              <div class="field full">
-                <label for="feContactSub">聯絡說明</label>
-                <input id="feContactSub" type="text" placeholder="只留 LINE 官方帳，入口越少你越不亂。" />
-              </div>
+              <!-- 聯絡區塊 -->
+              <section class="admin-collapsible full" data-collapsible="contact">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="false">聯絡區塊</button>
+                <div class="admin-collapsible-body">
+                  <div class="field full">
+                    <label class="h3" style="margin: 16px 0 4px">聯絡區塊</label>
+                  </div>
+                  <div class="field">
+                    <label for="feContactTitle">聯絡標題</label>
+                    <input id="feContactTitle" type="text" placeholder="聯絡我們" />
+                  </div>
+                  <div class="field full">
+                    <label for="feContactSub">聯絡說明</label>
+                    <input id="feContactSub" type="text" placeholder="只留 LINE 官方帳，入口越少你越不亂。" />
+                  </div>
+                </div>
+              </section>
 
-              <div class="field full">
-                <label class="h3" style="margin: 16px 0 4px">整機販售頁</label>
-              </div>
-              <div class="field full">
-                <label for="feMachinePageTitle">頁面標題</label>
-                <input id="feMachinePageTitle" type="text" placeholder="整機販售" />
-              </div>
-              <div class="field full">
-                <label for="feMachinePageSub">頁面說明</label>
-                <input id="feMachinePageSub" type="text" placeholder="依用途分類，不寫一堆規格。價格是「約」，詳細配備請加 LINE 詢問。" />
-              </div>
-              <div class="field full">
-                <label class="h3" style="margin: 16px 0 4px">五張分類卡片名稱與圖片</label>
-              </div>
-              <div class="form-grid">
-                <div class="field">
-                  <label for="feCatTitleOffice">① 卡片名稱（文書／上網／學生）</label>
-                  <input id="feCatTitleOffice" type="text" placeholder="文書／上網／學生" />
-                </div>
-                <div class="field">
-                  <label for="feCatTitleGameEntry">② 卡片名稱（遊戲入門）</label>
-                  <input id="feCatTitleGameEntry" type="text" placeholder="遊戲入門" />
-                </div>
-                <div class="field">
-                  <label for="feCatTitleGameMid">③ 卡片名稱（遊戲中階（主力））</label>
-                  <input id="feCatTitleGameMid" type="text" placeholder="遊戲中階（主力）" />
-                </div>
-                <div class="field">
-                  <label for="feCatTitleWork">④ 卡片名稱（工作／效能取向）</label>
-                  <input id="feCatTitleWork" type="text" placeholder="工作／效能取向" />
-                </div>
-                <div class="field">
-                  <label for="feCatTitlePeripherals">⑤ 卡片名稱（電腦周邊）</label>
-                  <input id="feCatTitlePeripherals" type="text" placeholder="電腦周邊" />
-                </div>
-              </div>
-              <div class="field full">
-                <p class="muted small">從電腦選擇照片可替換整機販售頁的五張分類圖。未上傳則使用預設圖。</p>
-              </div>
-              <div class="field full" style="display: flex; flex-wrap: wrap; gap: 16px;">
-                <div class="cat-image-slot">
-                  <div class="cat-image-label">① 文書／上網／學生</div>
-                  <div class="cat-image-preview" id="feCatPreviewOffice"></div>
-                  <input type="file" id="feCatFileOffice" accept="image/*" class="cat-image-input" data-cat="office" style="display:none" />
-                  <div style="margin-top:6px;display:flex;gap:8px;">
-                    <label class="btn btn-ghost btn-sm" for="feCatFileOffice">選擇圖片</label>
-                    <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="office">清除</button>
+              <!-- 整機販售頁設定 -->
+              <section class="admin-collapsible full" data-collapsible="machine">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="false">整機販售頁設定</button>
+                <div class="admin-collapsible-body">
+                  <div class="field full">
+                    <label class="h3" style="margin: 16px 0 4px">整機販售頁</label>
+                  </div>
+                  <div class="field full">
+                    <label for="feMachinePageTitle">頁面標題</label>
+                    <input id="feMachinePageTitle" type="text" placeholder="整機販售" />
+                  </div>
+                  <div class="field full">
+                    <label for="feMachinePageSub">頁面說明</label>
+                    <input id="feMachinePageSub" type="text" placeholder="依用途分類，不寫一堆規格。價格是「約」，詳細配備請加 LINE 詢問。" />
                   </div>
                 </div>
-                <div class="cat-image-slot">
-                  <div class="cat-image-label">② 遊戲入門</div>
-                  <div class="cat-image-preview" id="feCatPreviewGameEntry"></div>
-                  <input type="file" id="feCatFileGameEntry" accept="image/*" class="cat-image-input" data-cat="game-entry" style="display:none" />
-                  <div style="margin-top:6px;display:flex;gap:8px;">
-                    <label class="btn btn-ghost btn-sm" for="feCatFileGameEntry">選擇圖片</label>
-                    <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="game-entry">清除</button>
-                  </div>
-                </div>
-                <div class="cat-image-slot">
-                  <div class="cat-image-label">③ 遊戲中階（主力）</div>
-                  <div class="cat-image-preview" id="feCatPreviewGameMid"></div>
-                  <input type="file" id="feCatFileGameMid" accept="image/*" class="cat-image-input" data-cat="game-mid" style="display:none" />
-                  <div style="margin-top:6px;display:flex;gap:8px;">
-                    <label class="btn btn-ghost btn-sm" for="feCatFileGameMid">選擇圖片</label>
-                    <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="game-mid">清除</button>
-                  </div>
-                </div>
-                <div class="cat-image-slot">
-                  <div class="cat-image-label">④ 工作／效能取向</div>
-                  <div class="cat-image-preview" id="feCatPreviewWork"></div>
-                  <input type="file" id="feCatFileWork" accept="image/*" class="cat-image-input" data-cat="work" style="display:none" />
-                  <div style="margin-top:6px;display:flex;gap:8px;">
-                    <label class="btn btn-ghost btn-sm" for="feCatFileWork">選擇圖片</label>
-                    <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="work">清除</button>
-                  </div>
-                </div>
-                <div class="cat-image-slot">
-                  <div class="cat-image-label">⑤ 電腦周邊</div>
-                  <div class="cat-image-preview" id="feCatPreviewPeripherals"></div>
-                  <input type="file" id="feCatFilePeripherals" accept="image/*" class="cat-image-input" data-cat="peripherals" style="display:none" />
-                  <div style="margin-top:6px;display:flex;gap:8px;">
-                    <label class="btn btn-ghost btn-sm" for="feCatFilePeripherals">選擇圖片</label>
-                    <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="peripherals">清除</button>
-                  </div>
-                </div>
-              </div>
+              </section>
 
-              <div class="field full">
-                <label class="h3" style="margin:16px 0 4px">首頁第二區三張分類卡片圖片</label>
-                <p class="muted small">
-                  設定首頁第二區三張分類卡片的圖片。未設定時只顯示文字，不顯示破圖。
-                </p>
-              </div>
-
-              <div class="field full">
-                <div class="home-entry-row" data-entry-index="0" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;">
-                  <div style="min-width:120px;">
-                    <div class="muted small">入口一：網咖淘汰</div>
-                    <div class="entry-image-preview" style="margin-top:4px;"></div>
+              <!-- 五張分類卡圖片（預設展開） -->
+              <section class="admin-collapsible full is-open" data-collapsible="cat-images">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="true">五張分類卡圖片</button>
+                <div class="admin-collapsible-body">
+                  <div class="field full">
+                    <label class="h3" style="margin: 16px 0 4px">五張分類卡片名稱與圖片</label>
                   </div>
-                  <div style="flex:1;min-width:220px;">
-                    <input type="url" class="entry-image-url" placeholder="圖片網址（自動帶入上傳結果）" style="width:100%;margin-bottom:6px;" />
-                    <input type="file" class="entry-image-file" accept="image/*" />
+                  <div class="form-grid">
+                    <div class="field">
+                      <label for="feCatTitleOffice">① 卡片名稱（文書／上網／學生）</label>
+                      <input id="feCatTitleOffice" type="text" placeholder="文書／上網／學生" />
+                    </div>
+                    <div class="field">
+                      <label for="feCatTitleGameEntry">② 卡片名稱（遊戲入門）</label>
+                      <input id="feCatTitleGameEntry" type="text" placeholder="遊戲入門" />
+                    </div>
+                    <div class="field">
+                      <label for="feCatTitleGameMid">③ 卡片名稱（遊戲中階（主力））</label>
+                      <input id="feCatTitleGameMid" type="text" placeholder="遊戲中階（主力）" />
+                    </div>
+                    <div class="field">
+                      <label for="feCatTitleWork">④ 卡片名稱（工作／效能取向）</label>
+                      <input id="feCatTitleWork" type="text" placeholder="工作／效能取向" />
+                    </div>
+                    <div class="field">
+                      <label for="feCatTitlePeripherals">⑤ 卡片名稱（電腦周邊）</label>
+                      <input id="feCatTitlePeripherals" type="text" placeholder="電腦周邊" />
+                    </div>
+                  </div>
+                  <div class="field full">
+                    <p class="muted small">從電腦選擇照片可替換整機販售頁的五張分類圖。未上傳則使用預設圖。</p>
+                  </div>
+                  <div class="field full" style="display: flex; flex-wrap: wrap; gap: 16px;">
+                    <div class="cat-image-slot">
+                      <div class="cat-image-label">① 文書／上網／學生</div>
+                      <div class="cat-image-preview" id="feCatPreviewOffice"></div>
+                      <input type="file" id="feCatFileOffice" accept="image/*" class="cat-image-input" data-cat="office" style="display:none" />
+                      <div style="margin-top:6px;display:flex;gap:8px;">
+                        <label class="btn btn-ghost btn-sm" for="feCatFileOffice">選擇圖片</label>
+                        <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="office">清除</button>
+                      </div>
+                    </div>
+                    <div class="cat-image-slot">
+                      <div class="cat-image-label">② 遊戲入門</div>
+                      <div class="cat-image-preview" id="feCatPreviewGameEntry"></div>
+                      <input type="file" id="feCatFileGameEntry" accept="image/*" class="cat-image-input" data-cat="game-entry" style="display:none" />
+                      <div style="margin-top:6px;display:flex;gap:8px;">
+                        <label class="btn btn-ghost btn-sm" for="feCatFileGameEntry">選擇圖片</label>
+                        <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="game-entry">清除</button>
+                      </div>
+                    </div>
+                    <div class="cat-image-slot">
+                      <div class="cat-image-label">③ 遊戲中階（主力）</div>
+                      <div class="cat-image-preview" id="feCatPreviewGameMid"></div>
+                      <input type="file" id="feCatFileGameMid" accept="image/*" class="cat-image-input" data-cat="game-mid" style="display:none" />
+                      <div style="margin-top:6px;display:flex;gap:8px;">
+                        <label class="btn btn-ghost btn-sm" for="feCatFileGameMid">選擇圖片</label>
+                        <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="game-mid">清除</button>
+                      </div>
+                    </div>
+                    <div class="cat-image-slot">
+                      <div class="cat-image-label">④ 工作／效能取向</div>
+                      <div class="cat-image-preview" id="feCatPreviewWork"></div>
+                      <input type="file" id="feCatFileWork" accept="image/*" class="cat-image-input" data-cat="work" style="display:none" />
+                      <div style="margin-top:6px;display:flex;gap:8px;">
+                        <label class="btn btn-ghost btn-sm" for="feCatFileWork">選擇圖片</label>
+                        <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="work">清除</button>
+                      </div>
+                    </div>
+                    <div class="cat-image-slot">
+                      <div class="cat-image-label">⑤ 電腦周邊</div>
+                      <div class="cat-image-preview" id="feCatPreviewPeripherals"></div>
+                      <input type="file" id="feCatFilePeripherals" accept="image/*" class="cat-image-input" data-cat="peripherals" style="display:none" />
+                      <div style="margin-top:6px;display:flex;gap:8px;">
+                        <label class="btn btn-ghost btn-sm" for="feCatFilePeripherals">選擇圖片</label>
+                        <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="peripherals">清除</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
+              </section>
 
-                <div class="home-entry-row" data-entry-index="1" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;margin-top:10px;">
-                  <div style="min-width:120px;">
-                    <div class="muted small">入口二：不知道怎麼下單</div>
-                    <div class="entry-image-preview" style="margin-top:4px;"></div>
+              <!-- 首頁第二區分類卡片（預設展開） -->
+              <section class="admin-collapsible full is-open" data-collapsible="home-entries">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="true">首頁第二區分類卡片</button>
+                <div class="admin-collapsible-body">
+                  <div class="field full">
+                    <label class="h3" style="margin:16px 0 4px">首頁第二區分類卡片</label>
+                    <p class="muted small">
+                      可自由新增、編輯、刪除首頁第二區分類卡片。每張卡片可設定標題、說明、圖片、連結。
+                    </p>
                   </div>
-                  <div style="flex:1;min-width:220px;">
-                    <input type="url" class="entry-image-url" placeholder="圖片網址（自動帶入上傳結果）" style="width:100%;margin-bottom:6px;" />
-                    <input type="file" class="entry-image-file" accept="image/*" />
+                  <div class="field full">
+                    <div id="feHomeEntriesList"></div>
                   </div>
-                </div>
-
-                <div class="home-entry-row" data-entry-index="2" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;margin-top:10px;">
-                  <div style="min-width:120px;">
-                    <div class="muted small">入口三：電腦有問題要維修</div>
-                    <div class="entry-image-preview" style="margin-top:4px;"></div>
-                  </div>
-                  <div style="flex:1;min-width:220px;">
-                    <input type="url" class="entry-image-url" placeholder="圖片網址（自動帶入上傳結果）" style="width:100%;margin-bottom:6px;" />
-                    <input type="file" class="entry-image-file" accept="image/*" />
+                  <div class="field full">
+                    <button type="button" id="addHomeEntryBtn" class="btn btn-ghost btn-sm">＋ 新增分類卡片</button>
                   </div>
                 </div>
-              </div>
+              </section>
 
-              <div class="field full">
-                <label class="h3" style="margin: 16px 0 4px">首頁 Banner 管理</label>
-                <p class="muted small">設定首頁 Banner 圖片與連結，會依順序輪播。可留空表示使用預設 Banner。</p>
-              </div>
-              <div class="field full">
-                <div id="feHomeBannersList" class="banner-list"></div>
-                <button type="button" id="feHomeBannerAddBtn" class="btn btn-ghost btn-sm" style="margin-top:8px">＋ 新增一張 Banner</button>
-              </div>
+              <!-- 首頁 Banner 管理（預設展開） -->
+              <section class="admin-collapsible full is-open" data-collapsible="home-banners">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="true">首頁 Banner 管理</button>
+                <div class="admin-collapsible-body">
+                  <div class="field full">
+                    <label class="h3" style="margin: 16px 0 4px">首頁 Banner 管理</label>
+                    <p class="muted small">設定首頁 Banner 圖片與連結，會依順序輪播。可留空表示使用預設 Banner。</p>
+                  </div>
+                  <div class="field full">
+                    <div id="feHomeBannersList" class="banner-list"></div>
+                    <button type="button" id="feHomeBannerAddBtn" class="btn btn-ghost btn-sm" style="margin-top:8px">＋ 新增一張 Banner</button>
+                  </div>
+                </div>
+              </section>
 
-              <div class="field full">
-                <label class="h3" style="margin: 16px 0 4px">LINE 連結</label>
-              </div>
-              <div class="field full">
-                <label for="feLineUrl">LINE 官方帳連結</label>
-                <input id="feLineUrl" type="text" placeholder="https://lin.ee/VcxP0QO" />
-              </div>
-              <div class="field full">
-                <label for="feLineCtaText">LINE 按鈕文案（全站）</label>
-                <input id="feLineCtaText" type="text" placeholder="加 LINE 快速配單／看現貨" />
-                <small class="muted">導航、浮動按鈕、整機頁 CTA 等都會顯示這段文字。</small>
-              </div>
-              <div class="field full">
-                <label for="feFooterLineSentence">每頁底部一句話</label>
-                <textarea id="feFooterLineSentence" rows="3" placeholder="不確定怎麼選？直接加 LINE：@315PEPPL，我用你的用途/預算給你最划算的配置或現貨選項。"></textarea>
-                <small class="muted">顯示在首頁、整機、表單、FAQ、售後保固的頁尾與整機頁 CTA 區。</small>
-              </div>
+              <!-- LINE 連結 -->
+              <section class="admin-collapsible full" data-collapsible="line">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="false">LINE 連結</button>
+                <div class="admin-collapsible-body">
+                  <div class="field full">
+                    <label class="h3" style="margin: 16px 0 4px">LINE 連結</label>
+                  </div>
+                  <div class="field full">
+                    <label for="feLineUrl">LINE 官方帳連結</label>
+                    <input id="feLineUrl" type="text" placeholder="https://lin.ee/VcxP0QO" />
+                  </div>
+                  <div class="field full">
+                    <label for="feLineCtaText">LINE 按鈕文案（全站）</label>
+                    <input id="feLineCtaText" type="text" placeholder="加 LINE 快速配單／看現貨" />
+                    <small class="muted">導航、浮動按鈕、整機頁 CTA 等都會顯示這段文字。</small>
+                  </div>
+                  <div class="field full">
+                    <label for="feFooterLineSentence">每頁底部一句話</label>
+                    <textarea id="feFooterLineSentence" rows="3" placeholder="不確定怎麼選？直接加 LINE：@315PEPPL，我用你的用途/預算給你最划算的配置或現貨選項。"></textarea>
+                    <small class="muted">顯示在首頁、整機、表單、FAQ、售後保固的頁尾與整機頁 CTA 區。</small>
+                  </div>
+                </div>
+              </section>
 
               <div class="full actions">
                 <button id="frontendSaveBtn2" class="btn btn-primary" type="button">儲存設定</button>
