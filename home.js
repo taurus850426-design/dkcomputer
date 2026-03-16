@@ -29,12 +29,21 @@
       slide.className = "hero-slide";
 
       if (banner && banner.image) {
+        const clamp01 = (n) => {
+          const v = Number(n);
+          if (!Number.isFinite(v)) return 50;
+          if (v < 0) return 0;
+          if (v > 100) return 100;
+          return v;
+        };
+        const fx = clamp01(banner.focusX);
+        const fy = clamp01(banner.focusY);
         const linkStart = banner.link ? `<a href="${banner.link}" class="hero-banner-link">` : "";
         const linkEnd = banner.link ? "</a>" : "";
         slide.innerHTML = `
           ${linkStart}
             <div class="hero-banner-img-wrap">
-              <img src="${banner.image}" alt="" loading="lazy" />
+              <img src="${banner.image}" alt="" loading="lazy" style="object-position:${fx}% ${fy}%;" />
             </div>
           ${linkEnd}
         `;
@@ -139,7 +148,7 @@
         return `
           <a href="${href}" class="home-category-item">
             <div class="home-category-img">
-              ${img ? `<img src="${img}" alt="${title}" loading="lazy" />` : ""}
+              ${img ? `<img src="${img}" alt="${title}" loading="lazy" onerror="this.style.display='none'" />` : ""}
             </div>
             <div class="home-category-text">
               <h3>${title}</h3>

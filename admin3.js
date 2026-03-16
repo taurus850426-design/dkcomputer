@@ -863,6 +863,45 @@
       // 若後台版本不支援或 DOM 缺失，略過 Banner 區塊，避免影響其他設定
     }
 
+    // 首頁第二區分類卡片圖片：載入 frontend.homeEntries[idx].image
+    try {
+      const entries = Array.isArray(fe.homeEntries) ? fe.homeEntries : [];
+      const rows = Array.from(document.querySelectorAll(".home-entry-row"));
+      rows.forEach((row) => {
+        const idx = Number(row.getAttribute("data-entry-index") || "0");
+        const entry = entries[idx] || {};
+        const urlInput = row.querySelector(".entry-image-url");
+        const preview = row.querySelector(".entry-image-preview");
+
+        if (urlInput) {
+          urlInput.value = entry.image || "";
+        }
+        if (preview) {
+          preview.innerHTML = "";
+          if (entry.image) {
+            const img = document.createElement("img");
+            img.src = entry.image;
+            img.alt = "";
+            img.style.cssText =
+              "max-width:140px;max-height:80px;object-fit:contain;border-radius:8px;background:#f9fafb;";
+            img.onerror = () => {
+              preview.innerHTML = "";
+              const msg = document.createElement("div");
+              msg.textContent = "預覽失敗";
+              msg.className = "muted small";
+              preview.appendChild(msg);
+            };
+            preview.appendChild(img);
+          } else {
+            const msg = document.createElement("div");
+            msg.textContent = "尚未設定圖片";
+            msg.className = "muted small";
+            preview.appendChild(msg);
+          }
+        }
+      });
+    } catch (_) {}
+
     const msg = document.getElementById("frontendMsg");
     if (msg) msg.hidden = true;
   }
@@ -926,15 +965,47 @@
           for (const row of rows) {
             const imgInput = row.querySelector(".banner-image");
             const linkInput = row.querySelector(".banner-link");
+            const fxInput = row.querySelector(".banner-focus-x");
+            const fyInput = row.querySelector(".banner-focus-y");
             if (!imgInput) continue;
             const image = (imgInput.value || "").trim();
             const linkRaw = (linkInput && linkInput.value) ? linkInput.value.trim() : "";
             if (!image) continue; // image 必填，空的不存
             const banner = { image };
             if (linkRaw) banner.link = linkRaw;
+            const clamp = (n) => {
+              const v = Number(n);
+              if (!Number.isFinite(v)) return 50;
+              if (v < 0) return 0;
+              if (v > 100) return 100;
+              return v;
+            };
+            banner.focusX = clamp(fxInput?.value);
+            banner.focusY = clamp(fyInput?.value);
             out.push(banner);
           }
           return out;
+        })(),
+        homeEntries: (function collectHomeEntries() {
+          const prev = Array.isArray(cfg.frontend?.homeEntries) ? cfg.frontend.homeEntries : [];
+          const rows = Array.from(document.querySelectorAll(".home-entry-row"));
+          if (!rows.length) return prev;
+          const next = prev.slice();
+          rows.forEach((row) => {
+            const idx = Number(row.getAttribute("data-entry-index") || "0");
+            const urlInput = row.querySelector(".entry-image-url");
+            if (!urlInput) return;
+            const image = (urlInput.value || "").trim();
+            const base = prev[idx] || {};
+            if (!next[idx]) next[idx] = { ...base };
+            if (image) {
+              next[idx] = { ...base, image };
+            } else {
+              next[idx] = { ...base };
+              delete next[idx].image;
+            }
+          });
+          return next;
         })(),
       },
       line: {
@@ -1035,6 +1106,78 @@
     });
   });
 
+  // 首頁第二區分類卡片圖片：圖片上傳 → Supabase Storage（site-assets/home/）→ 回寫 image URL
+  (function initHomeEntryImageUploads() {
+    if (window.__dkHomeEntryImageUploadBound) return;
+    window.__dkHomeEntryImageUploadBound = true;
+    if (!window.DK?.uploadSiteAssetToSupabaseStorage) return;
+
+    document.addEventListener("change", async function (e) {
+      const target = e.target;
+      if (!target || !(target instanceof HTMLInputElement)) return;
+      if (!target.classList.contains("entry-image-file")) return;
+      if (target.type !== "file") return;
+
+      const fileInput = target;
+      const file = fileInput.files && fileInput.files[0];
+      fileInput.value = "";
+      if (!file || !file.type || !file.type.startsWith("image/")) return;
+
+      let row = fileInput.closest(".home-entry-row");
+      if (!row) {
+        row = fileInput.closest(".home-entry") || fileInput.closest("tr") || fileInput.parentElement;
+      }
+      if (!row) return;
+
+      const urlInput = row.querySelector(".entry-image-url");
+      const preview = row.querySelector(".entry-image-preview");
+
+      const now = new Date();
+      const ts = now.toISOString().replace(/[:.]/g, "-");
+      const rand = Math.random().toString(16).slice(2);
+      const path = `home/${ts}-${rand}.webp`;
+
+      try {
+        const url = await window.DK.uploadSiteAssetToSupabaseStorage(file, path, {
+          compress: true,
+          maxWidth: 1200,
+          mimeType: "image/webp",
+          quality: 0.82,
+        });
+        if (!url) {
+          alert("分類圖片上傳失敗，請稍後再試。");
+          return;
+        }
+
+        if (urlInput) {
+          urlInput.value = url;
+          urlInput.dispatchEvent(new Event("input", { bubbles: true }));
+          urlInput.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+        if (preview) {
+          preview.innerHTML = "";
+          const img = document.createElement("img");
+          img.src = url;
+          img.alt = "";
+          img.style.cssText =
+            "max-width:140px;max-height:80px;object-fit:contain;border-radius:8px;background:#f9fafb;";
+          img.onerror = () => {
+            preview.innerHTML = "";
+            const msg = document.createElement("div");
+            msg.textContent = "預覽失敗";
+            msg.className = "muted small";
+            preview.appendChild(msg);
+          };
+          preview.appendChild(img);
+        }
+      } catch (err) {
+        console.warn("上傳分類圖片發生錯誤", err);
+        alert("分類圖片上傳失敗，請稍後再試。");
+      }
+    });
+  })();
+
   // 首頁 Banner 管理：render / add / remove / move
   function renderHomeBanners(listEl, banners) {
     listEl.innerHTML = "";
@@ -1051,6 +1194,8 @@
         <div class="banner-fields">
           <input type="url" class="banner-image" placeholder="圖片網址（必填）" />
           <input type="url" class="banner-link" placeholder="點擊連結（選填）" />
+          <input type="number" class="banner-focus-x" placeholder="focusX (0-100)" min="0" max="100" step="1" />
+          <input type="number" class="banner-focus-y" placeholder="focusY (0-100)" min="0" max="100" step="1" />
           <input type="file" class="banner-file" accept="image/*" />
         </div>
         <div class="banner-actions">
@@ -1062,11 +1207,15 @@
 
       const imgInput = row.querySelector(".banner-image");
       const linkInput = row.querySelector(".banner-link");
+      const fxInput = row.querySelector(".banner-focus-x");
+      const fyInput = row.querySelector(".banner-focus-y");
       const fileInput = row.querySelector(".banner-file");
       const previewWrap = row.querySelector(".banner-preview");
 
       if (imgInput) imgInput.value = (b && b.image) ? b.image : "";
       if (linkInput) linkInput.value = (b && b.link) ? b.link : "";
+      if (fxInput) fxInput.value = (b && Number.isFinite(Number(b.focusX))) ? String(Number(b.focusX)) : "50";
+      if (fyInput) fyInput.value = (b && Number.isFinite(Number(b.focusY))) ? String(Number(b.focusY)) : "50";
 
       function updatePreview() {
         if (!previewWrap) return;
