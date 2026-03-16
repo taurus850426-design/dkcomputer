@@ -50,46 +50,47 @@
     </header>
 
     <main>
-      <!-- 首屏：5 秒定生死 -->
+      <!-- 首屏：Banner 圖片跑馬燈（第一區） -->
       <section id="hero" class="section hero hero-first">
         <div class="container">
-          <div class="hero-content">
-            <h1 id="heroTagline" class="hero-tagline">二手電腦・實測交付</h1>
-            <p id="heroSub" class="hero-sub">依用途配機，不亂賣、不踩雷</p>
-
-            <div id="main-cta" class="hero-buttons">
-              <a id="heroBtn1" href="./machine.html" class="btn btn-primary btn-hero">🔥 我要買整機</a>
-              <a id="heroBtn2" href="./form.html" class="btn btn-primary btn-hero">🧠 不知道怎麼選（需求表單）</a>
-              <a id="heroBtn3" href="#" class="btn btn-primary btn-hero">🔧 電腦有問題要維修</a>
-            </div>
+          <div class="hero-carousel" aria-label="重點主打" role="region">
+            <div class="hero-slides"></div>
+            <button class="hero-arrow hero-arrow-prev" type="button" aria-label="上一則"></button>
+            <button class="hero-arrow hero-arrow-next" type="button" aria-label="下一則"></button>
+            <div class="hero-dots" role="tablist" aria-label="主打輪播指示"></div>
           </div>
         </div>
       </section>
 
-      <!-- 信任建立（不用長） -->
-      <section id="trust" class="section section-soft">
+      <!-- 首頁三大入口（第二區） -->
+      <section id="home-entries" class="section">
         <div class="container">
-          <h2 id="trustTitle" class="h2">所有整機皆</h2>
-          <ul id="trustList" class="trust-list">
-            <li>實測</li>
-            <li>清潔</li>
-            <li>交付前檢查</li>
-            <li>不賣不適合用途的配法</li>
-            <li>有問題可回來處理</li>
-          </ul>
-          <p id="trustNote" class="muted">官網會寫清楚：不適合誰、不能幹嘛、不賣的情況。奧客會自己離開。</p>
-        </div>
-      </section>
-
-      <!-- 聯絡方式：只留 LINE -->
-      <section id="contact" class="section">
-        <div class="container">
-          <div class="contact-block">
-            <div>
-              <div id="contactTitle" class="contact-title">聯絡我們</div>
-              <div id="contactSub" class="muted">只留 LINE 官方帳，入口越少你越不亂。</div>
-            </div>
-            <a id="lineMainBtn" class="btn btn-primary btn-lg">加 LINE 官方帳</a>
+          <header class="home-entry-head">
+            <h1 id="heroTagline" class="home-entry-tagline">二手電腦・實測交付</h1>
+            <p id="heroSub" class="home-entry-sub muted">依用途配機，不亂賣、不踩雷</p>
+          </header>
+          <div class="home-entry-grid">
+            <article class="home-entry-card">
+              <h2 class="h3">網咖淘汰</h2>
+              <p class="muted">精選高 CP 值現貨主機，適合想直接入手、快速開玩的客人。</p>
+              <div class="home-entry-actions">
+                <a id="heroBtn1" href="./machine.html" class="btn btn-primary btn-hero">🔥 我要買整機</a>
+              </div>
+            </article>
+            <article class="home-entry-card">
+              <h2 class="h3">不知道怎麼下單</h2>
+              <p class="muted">不確定規格怎麼選沒關係，先填需求，我幫你配到適合的電腦。</p>
+              <div class="home-entry-actions">
+                <a id="heroBtn2" href="./form.html" class="btn btn-primary btn-hero">🧠 不知道怎麼選（需求表單）</a>
+              </div>
+            </article>
+            <article class="home-entry-card">
+              <h2 class="h3">電腦有問題要維修</h2>
+              <p class="muted">電腦故障、異常、升級需求，都可以先聯絡我協助判斷。</p>
+              <div class="home-entry-actions">
+                <a id="heroBtn3" href="#" class="btn btn-primary btn-hero">🔧 電腦有問題要維修</a>
+              </div>
+            </article>
           </div>
         </div>
       </section>
@@ -122,6 +123,6 @@
     </div>
 
     <script src="./shared.js?v=20260201"></script>
-    <script src="./app.js?v=20260201"></script>
+    <script src="./home.js?v=20260217"></script>
   </body>
 </html>

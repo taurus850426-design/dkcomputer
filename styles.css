@@ -143,6 +143,155 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .hero-buttons{ display: flex; flex-direction: column; gap: 14px; align-items: center; }
 .btn-hero{ min-width: 280px; padding: 14px 24px; font-size: 16px; }
 
+/* Hero 輪播基礎結構（首頁第一區） */
+.hero-carousel{
+  position: relative;
+  overflow: hidden;
+}
+.hero-slides{
+  display: flex;
+  flex-wrap: nowrap;
+  transition: transform 0.6s ease;
+}
+.hero-slide{
+  flex: 0 0 100%;
+  opacity: 0;
+  transform: translateX(4%);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.hero-slide-active{
+  opacity: 1;
+  transform: translateX(0);
+}
+.hero-arrow{
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.45);
+  background: radial-gradient(circle at 30% 0, rgba(255,255,255,0.45), transparent 60%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  box-shadow: 0 0 18px rgba(0,0,0,0.85);
+  backdrop-filter: blur(12px);
+}
+.hero-arrow::before{
+  content: "";
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+.hero-arrow-prev{ left: 8px; }
+.hero-arrow-prev::before{
+  border-width: 8px 10px 8px 0;
+  border-color: transparent #fff transparent transparent;
+}
+.hero-arrow-next{ right: 8px; }
+.hero-arrow-next::before{
+  border-width: 8px 0 8px 10px;
+  border-color: transparent transparent transparent #fff;
+}
+.hero-arrow:hover{
+  border-color: var(--primary, #7c5cff);
+}
+.hero-dots{
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 24px;
+}
+.hero-dot{
+  width: 28px;
+  height: 6px;
+  border-radius: 999px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: rgba(255,255,255,0.24);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.hero-dot-active{
+  background: linear-gradient(90deg, #ff6b9b, #ff1744);
+  transform: scaleX(1.15);
+}
+
+/* 首頁入口卡片區（第二區） */
+.home-entry-head{
+  text-align: center;
+  margin-bottom: 18px;
+}
+.home-entry-tagline{
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.home-entry-sub{
+  font-size: 13px;
+  opacity: 0.75;
+}
+.home-entry-grid{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.home-entry-card{
+  position: relative;
+  padding: 18px 18px 20px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(16,18,32,0.96), rgba(7,9,20,0.98));
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 18px 40px rgba(0,0,0,0.9);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.home-entry-card:hover{
+  transform: translateY(-4px);
+  border-color: rgba(255,23,68,0.9);
+  box-shadow:
+    0 0 18px rgba(255,23,68,0.85),
+    0 0 36px rgba(103,58,183,0.9);
+}
+.home-entry-card .h3{
+  margin: 0;
+}
+.home-entry-card .muted{
+  font-size: 13px;
+}
+.home-entry-actions{
+  margin-top: auto;
+}
+.home-entry-card .btn-hero{
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 900px){
+  .home-entry-grid{
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Hero fallback Banner：預設主視覺，可自行替換圖片路徑 */
+.hero-banner-fallback{
+  width: 100%;
+  aspect-ratio: 21 / 9;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.15);
+  box-shadow: 0 26px 60px rgba(0,0,0,0.9);
+  background-image: url("./assets/default-hero-banner.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
 /* 信任建立 */
 .trust-list{ list-style: none; margin: 12px 0 10px; padding: 0; font-size: 17px; line-height: 1.8; }
 .trust-list li::before{ content: "✓ "; color: var(--ok, #2ee59d); font-weight: 700; }
@@ -1007,6 +1156,25 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
   }
 }
 
+/* 手機版深色主題：展開選單的文字顏色加亮，避免背景發光時看不清楚 */
+@media (max-width: 560px){
+  body.theme-apple .nav{
+    background: rgba(5,5,15,0.96);
+    border-color: rgba(255,255,255,0.18);
+  }
+  body.theme-apple .nav a{
+    color: #e5e7ff;
+  }
+  body.theme-apple .nav a:hover{
+    background: radial-gradient(circle at 0 0, rgba(255,23,68,0.35), transparent 70%);
+    color: #ffffff;
+  }
+  body.theme-apple #navLineBtn{
+    color: #ffffff;
+    font-weight: 800;
+  }
+}
+
 .admin-shell{
   min-height: 100vh;
   padding: 28px 0 40px;
@@ -1423,138 +1591,342 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
 }
 
 /* =========================
-   Apple 風格主題（近似）
+   ROG 風格主題（深色電競）
    套用：<body class="theme-apple">
    ========================= */
 
 body.theme-apple{
-  --bg: #ffffff;
-  --text: rgba(29,29,31,0.96);
-  --muted: rgba(29,29,31,0.60);
-  --border: rgba(0,0,0,0.10);
-  --panel: rgba(255,255,255,0.88);
-  --panel2: rgba(255,255,255,0.98);
-  --shadow: 0 12px 30px rgba(0,0,0,0.08);
+  --bg: #050509;
+  --text: #e4e7ff;
+  --muted: #8890b5;
+  --border: rgba(255,255,255,0.08);
+  --panel: rgba(16,18,30,0.96);
+  --panel2: rgba(20,22,36,0.98);
+  --shadow: 0 18px 45px rgba(0,0,0,0.7);
   --radius: 18px;
   --radius-sm: 14px;
-  --container: 980px;
+  --container: 1080px;
 
-  --primary: #0071e3;      /* Apple 風格藍 */
-  --primary2: #0071e3;
-  --danger: #d70015;
-  --warn: #bf4800;
-  --ok: #1d1d1f;
+  --primary: #ff1744;      /* 霓虹紅 */
+  --primary2: #ff6b9b;
+  --danger: #ff4b5c;
+  --warn: #ffb74d;
+  --ok: #26ffda;
 
   margin:0;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Noto Sans TC", system-ui, "Segoe UI", Arial, sans-serif;
-  background: var(--bg);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(1200px 520px at 10% -10%, rgba(255,23,68,0.28), transparent 60%),
+    radial-gradient(900px 520px at 90% 0%, rgba(103,58,183,0.3), transparent 60%),
+    radial-gradient(1600px 900px at 50% 120%, rgba(0,230,118,0.18), transparent 70%),
+    #050509;
   color: var(--text);
 }
 
 body.theme-apple a{ color: inherit; }
 body.theme-apple a.link{
-  color: var(--primary);
+  color: var(--primary2);
   text-decoration: none;
 }
 body.theme-apple a.link:hover{ text-decoration: underline; text-underline-offset: 4px; }
 
 body.theme-apple .site-header{
-  backdrop-filter: saturate(180%) blur(20px);
-  background: #fff;
-  border-bottom: 1px solid rgba(0,0,0,0.08);
+  backdrop-filter: saturate(180%) blur(22px);
+  background: linear-gradient(90deg, rgba(5,5,12,0.98), rgba(20,8,24,0.96));
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
-body.theme-apple .header-inner{ padding: 10px 0; }
+body.theme-apple .header-inner{ padding: 12px 0; }
 
 body.theme-apple .brand{ gap:10px; }
 body.theme-apple .brand-mark{
-  width: 40px; height: 40px;
+  width: 42px; height: 42px;
   border-radius: 12px;
-  background: rgba(0,0,0,0.06);
-  color: rgba(29,29,31,0.92);
-  box-shadow: none;
-  border: 1px solid rgba(0,0,0,0.08);
+  background: radial-gradient(circle at 30% 0%, #ff6b9b 0, #ff1744 40%, #4a148c 100%);
+  color: #ffffff;
+  box-shadow:
+    0 0 16px rgba(255,23,68,0.7),
+    0 0 32px rgba(103,58,183,0.7);
+  border: 1px solid rgba(255,255,255,0.18);
   font-weight: 800;
+  letter-spacing: 0.6px;
 }
 body.theme-apple .brand-title{ font-weight: 800; letter-spacing: -0.2px; }
 body.theme-apple .brand-subtitle{ color: var(--muted); }
 
 body.theme-apple .nav a{
   font-size: 13px;
-  color: rgba(29,29,31,0.80);
-  padding: 8px 10px;
+  color: #c5c9ff;
+  padding: 8px 12px;
+  border-radius: 999px;
 }
-body.theme-apple .nav a:hover{ background: rgba(0,0,0,0.04); }
+body.theme-apple .nav a:hover{
+  background: radial-gradient(circle at 0 0, rgba(255,23,68,0.35), transparent 70%);
+  color: #ffffff;
+}
 body.theme-apple .nav-cta{
-  background: rgba(0,113,227,0.10);
-  border: 1px solid rgba(0,113,227,0.22);
+  background: linear-gradient(120deg, rgba(255,23,68,0.22), rgba(103,58,183,0.5));
+  border: 1px solid rgba(255,255,255,0.16);
+  box-shadow: 0 0 18px rgba(255,23,68,0.55);
 }
 body.theme-apple .nav-admin{
-  background: rgba(0,0,0,0.04);
-  border: 1px solid rgba(0,0,0,0.10);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
 }
 
 body.theme-apple .section{ padding: 56px 0; }
 body.theme-apple .hero{ padding-top: 40px; }
-body.theme-apple .hero-first{ min-height: 65vh; }
-body.theme-apple .hero-tagline{ font-size: 42px; letter-spacing: -0.8px; }
-body.theme-apple .trust-list li::before{ color: var(--primary); }
-body.theme-apple .contact-block{ background: #fff; border-color: rgba(0,0,0,0.10); }
-body.theme-apple .machine-card{ background: #fff; border-color: rgba(0,0,0,0.10); }
-body.theme-apple .cat-card{ border-color: rgba(0,0,0,0.12); }
-body.theme-apple .cat-card:hover, body.theme-apple .cat-card.active{ border-color: var(--primary); }
-body.theme-apple .form-card{ background: #fff; border-color: rgba(0,0,0,0.10); }
+body.theme-apple .hero-first{
+  min-height: 65vh;
+  position: relative;
+  overflow: hidden;
+}
+body.theme-apple .hero-tagline{
+  font-size: 40px;
+  letter-spacing: -0.5px;
+  text-shadow: 0 0 22px rgba(255,23,68,0.45);
+}
+body.theme-apple .hero-sub{ color: var(--muted); }
+
+/* ROG 風格首頁跑馬燈背景（不改文字內容，只加動態底圖） */
+body.theme-apple #hero.hero-first::before{
+  content:"";
+  position:absolute;
+  inset:-10%;
+  background: radial-gradient(1200px 520px at 10% -10%, rgba(255,23,68,0.28), transparent 60%),
+             radial-gradient(900px 520px at 90% 0%, rgba(103,58,183,0.3), transparent 60%),
+             #050509;
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  opacity:0.35;
+  filter:saturate(1.4) contrast(1.05);
+  transform:scale(1.08);
+  animation: rogMarquee 32s linear infinite alternate;
+  z-index:-2;
+}
+body.theme-apple #hero.hero-first::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:radial-gradient(circle at 0 0, rgba(255,23,68,0.55), transparent 55%),
+             radial-gradient(circle at 100% 0, rgba(103,58,183,0.55), transparent 55%),
+             linear-gradient(180deg, rgba(5,5,10,0.3) 0%, rgba(5,5,12,0.98) 85%);
+  mix-blend-mode:screen;
+  opacity:0.9;
+  z-index:-1;
+}
+@keyframes rogMarquee{
+  0%{ transform:translateX(-4%) scale(1.08); }
+  50%{ transform:translateX(4%) scale(1.08); }
+  100%{ transform:translateX(-4%) scale(1.08); }
+}
+
+/* 整機販售頁：上方圖片跑馬燈＋下方分類卡片 */
+body.theme-apple .page-head{
+  position: relative;
+  margin-bottom: 32px;
+  padding: 32px 24px 80px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: radial-gradient(circle at 0 0, rgba(255,23,68,0.35), transparent 60%),
+              radial-gradient(circle at 100% 0, rgba(103,58,183,0.45), transparent 60%),
+              linear-gradient(135deg, #070712, #05050b);
+  box-shadow: 0 22px 55px rgba(0,0,0,0.95);
+}
+body.theme-apple .page-head::before{
+  content:"";
+  position:absolute;
+  inset:-10%;
+  background-image:url("./assets/c__Users_Hi_AppData_Roaming_Cursor_User_workspaceStorage_3c490205a8a85b18531339c2776e769a_images_image-3f4eb37e-929d-4b9b-b93b-33ef76408172.png");
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  opacity:0.35;
+  filter:saturate(1.35) contrast(1.05);
+  animation: rogStrip 28s linear infinite alternate;
+  z-index:-2;
+}
+body.theme-apple .page-head::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(180deg, rgba(5,5,10,0.1) 0%, rgba(5,5,12,0.98) 70%);
+  z-index:-1;
+}
+body.theme-apple .page-head .h1,
+body.theme-apple .page-head .lead{
+  position: relative;
+  z-index: 1;
+  text-align: center;
+}
+body.theme-apple .page-head .h1{
+  font-size: 32px;
+  text-shadow: 0 0 20px rgba(0,0,0,0.95);
+}
+body.theme-apple .page-head .lead{
+  color: #ccd2ff;
+}
+
+@keyframes rogStrip{
+  0%{ background-position: 0% 50%; }
+  50%{ background-position: 100% 50%; }
+  100%{ background-position: 0% 50%; }
+}
+
+body.theme-apple .trust-list li::before{ color: var(--primary2); }
+body.theme-apple .contact-block{
+  background: linear-gradient(135deg, rgba(16,18,32,0.96), rgba(10,12,24,0.96));
+  border-color: rgba(255,255,255,0.08);
+  box-shadow: 0 18px 45px rgba(0,0,0,0.8);
+}
+body.theme-apple .machine-card{
+  background: linear-gradient(145deg, rgba(16,18,32,0.98), rgba(7,9,20,0.98));
+  border-color: rgba(255,255,255,0.06);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.85);
+}
+body.theme-apple .machine-card:hover{
+  border-color: rgba(255,23,68,0.7);
+  box-shadow:
+    0 0 25px rgba(255,23,68,0.8),
+    0 0 55px rgba(103,58,183,0.85);
+  transform: translateY(-4px);
+}
+
+body.theme-apple .cat-card{
+  border-color: rgba(255,255,255,0.08);
+  background: radial-gradient(circle at 0 0, rgba(255,23,68,0.18), rgba(7,9,18,0.98));
+  box-shadow: 0 14px 40px rgba(0,0,0,0.9);
+}
+body.theme-apple .cat-card:hover,
+body.theme-apple .cat-card.active{
+  border-color: rgba(255,23,68,0.9);
+  box-shadow:
+    0 0 22px rgba(255,23,68,0.9),
+    0 0 40px rgba(103,58,183,0.9);
+  transform: translateY(-6px) scale(1.03);
+}
+body.theme-apple .cat-card-all{
+  background: radial-gradient(circle at 0 0, rgba(255,23,68,0.18), rgba(7,9,18,0.98));
+}
+body.theme-apple .cat-card-all .cat-card-num,
+body.theme-apple .cat-card-all .cat-card-title{
+  color: #ffffff;
+}
+
+body.theme-apple .form-card{
+  background: linear-gradient(145deg, rgba(16,18,32,0.96), rgba(7,9,20,0.98));
+  border-color: rgba(255,255,255,0.08);
+}
 body.theme-apple .section-soft{
-  background: rgba(0,0,0,0.02);
-  border-top: 1px solid rgba(0,0,0,0.06);
-  border-bottom: 1px solid rgba(0,0,0,0.06);
+  background: radial-gradient(1200px 420px at 0 100%, rgba(255,23,68,0.18), transparent 70%);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
 body.theme-apple .h1{
-  font-size: 44px;
+  font-size: 40px;
   line-height: 1.1;
-  letter-spacing: -0.6px;
+  letter-spacing: -0.4px;
   margin: 0 0 12px;
 }
-body.theme-apple .h2{ font-size: 24px; letter-spacing: -0.2px; }
-body.theme-apple .h3{ font-size: 16px; letter-spacing: -0.1px; }
+body.theme-apple .h2{ font-size: 24px; letter-spacing: -0.1px; }
+body.theme-apple .h3{ font-size: 16px; letter-spacing: 0; }
 body.theme-apple .lead{
-  color: rgba(29,29,31,0.76);
+  color: var(--muted);
   max-width: 64ch;
+}
+body.theme-apple .muted{
+  color: var(--muted);
+}
+
+/* 把原本偏黑的文字顏色，在深色主題下統一拉亮 */
+body.theme-apple .lead,
+body.theme-apple .info-k,
+body.theme-apple .spec,
+body.theme-apple .spec .k,
+body.theme-apple .price,
+body.theme-apple .price small,
+body.theme-apple .ol,
+body.theme-apple .footer-links a,
+body.theme-apple .search-label,
+body.theme-apple .field label,
+body.theme-apple .field small,
+body.theme-apple .table th,
+body.theme-apple .seg,
+body.theme-apple .item-qty{
+  color: #b8bffd;
+}
+body.theme-apple .footer-links a:hover{
+  color: #ffffff;
 }
 
 body.theme-apple .pill{
-  background: rgba(0,0,0,0.02);
-  border: 1px solid rgba(0,0,0,0.08);
+  background: linear-gradient(135deg, rgba(18,20,40,0.95), rgba(8,10,22,0.98));
+  border: 1px solid rgba(255,255,255,0.04);
   padding: 16px;
+  box-shadow: 0 14px 35px rgba(0,0,0,0.85);
 }
 body.theme-apple .pill-title{ letter-spacing: -0.2px; }
 
 body.theme-apple .card{
-  background: #fff;
-  border: 1px solid rgba(0,0,0,0.10);
-  box-shadow: 0 10px 26px rgba(0,0,0,0.08);
+  background: linear-gradient(145deg, rgba(16,18,32,0.98), rgba(7,9,20,0.98));
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 18px 45px rgba(0,0,0,0.9);
 }
 body.theme-apple .card-soft{
-  background: rgba(255,255,255,0.92);
+  background: linear-gradient(145deg, rgba(16,18,32,0.96), rgba(10,12,24,0.98));
 }
 
 body.theme-apple .btn{
   border-radius: 999px;
   font-weight: 700;
-  transition: background-color .18s ease, border-color .18s ease, transform .06s ease;
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+  transition:
+    background-color .18s ease,
+    border-color .18s ease,
+    box-shadow .18s ease,
+    transform .08s ease;
 }
-body.theme-apple .btn:active{ transform: translateY(1px); }
+body.theme-apple .btn::before{
+  content:"";
+  position:absolute;
+  inset:-40%;
+  background: radial-gradient(circle at 0 0, rgba(255,255,255,0.35), transparent 60%);
+  opacity:0;
+  transform: translateX(-40%);
+  transition: opacity .25s ease, transform .35s ease;
+  z-index:-1;
+}
+body.theme-apple .btn:hover::before{
+  opacity: 1;
+  transform: translateX(40%);
+}
+body.theme-apple .btn:active{ transform: translateY(1px) scale(0.99); }
+
 body.theme-apple .btn-primary{
-  background: var(--primary);
-  border-color: rgba(0,0,0,0.08);
+  background: radial-gradient(circle at 0 0, #ff6b9b 0, #ff1744 40%, #4a148c 100%);
+  border-color: rgba(255,255,255,0.18);
   color: #fff;
+  box-shadow:
+    0 0 18px rgba(255,23,68,0.8),
+    0 0 34px rgba(103,58,183,0.9);
 }
-body.theme-apple .btn-primary:hover{ filter: brightness(1.03); }
+body.theme-apple .btn-primary:hover{
+  filter: brightness(1.05);
+  box-shadow:
+    0 0 24px rgba(255,23,68,1),
+    0 0 50px rgba(103,58,183,1);
+}
 body.theme-apple .btn-ghost{
-  background: rgba(0,0,0,0.03);
-  border-color: rgba(0,0,0,0.12);
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.12);
+  color: #e0e4ff;
 }
-body.theme-apple .btn-ghost:hover{ background: rgba(0,0,0,0.05); }
+body.theme-apple .btn-ghost:hover{
+  background: rgba(255,255,255,0.08);
+}
 
 body.theme-apple input[type="search"],
 body.theme-apple input[type="text"],
@@ -1563,53 +1935,285 @@ body.theme-apple input[type="number"],
 body.theme-apple textarea,
 body.theme-apple select{
   border-radius: 14px;
-  border-color: rgba(0,0,0,0.14);
+  border-color: rgba(255,255,255,0.16);
+  background: rgba(4,6,16,0.96);
+  color: var(--text);
+}
+body.theme-apple input[type="search"]::placeholder,
+body.theme-apple input[type="text"]::placeholder,
+body.theme-apple input[type="password"]::placeholder,
+body.theme-apple input[type="number"]::placeholder,
+body.theme-apple textarea::placeholder{
+  color: rgba(172,179,219,0.68);
 }
 body.theme-apple input:focus,
 body.theme-apple textarea:focus,
 body.theme-apple select:focus{
-  border-color: rgba(0,113,227,0.55);
-  box-shadow: 0 0 0 4px rgba(0,113,227,0.18);
+  border-color: rgba(255,23,68,0.85);
+  box-shadow:
+    0 0 0 1px rgba(255,23,68,0.75),
+    0 0 20px rgba(255,23,68,0.7);
 }
 
 body.theme-apple .segmented{
-  background: rgba(0,0,0,0.03);
-  border-color: rgba(0,0,0,0.10);
+  background: rgba(6,8,18,0.96);
+  border-color: rgba(255,255,255,0.12);
+}
+body.theme-apple .seg{
+  color: #a6addb;
 }
 body.theme-apple .seg.active{
-  background: rgba(0,0,0,0.10);
-  border-color: rgba(0,0,0,0.16);
+  background: linear-gradient(135deg, rgba(255,23,68,0.3), rgba(103,58,183,0.7));
+  border-color: rgba(255,255,255,0.18);
+  color: #fff;
 }
 
 body.theme-apple .badge{
-  border-color: rgba(0,0,0,0.10);
-  background: rgba(0,0,0,0.04);
-  color: rgba(29,29,31,0.78);
+  border-color: rgba(255,255,255,0.12);
+  background: rgba(7,9,20,0.95);
+  color: #c5c9ff;
 }
 body.theme-apple .badge.ok{
-  background: rgba(0,0,0,0.08);
-  border-color: rgba(0,0,0,0.14);
-  color: rgba(29,29,31,0.90);
+  background: rgba(38,255,218,0.12);
+  border-color: rgba(38,255,218,0.5);
+  color: #7fffe8;
 }
 body.theme-apple .badge.warn{
-  background: rgba(191,72,0,0.10);
-  border-color: rgba(191,72,0,0.22);
+  background: rgba(255,183,77,0.14);
+  border-color: rgba(255,183,77,0.6);
 }
 body.theme-apple .badge.danger{
-  background: rgba(215,0,21,0.10);
-  border-color: rgba(215,0,21,0.22);
+  background: rgba(255,75,92,0.16);
+  border-color: rgba(255,75,92,0.7);
 }
 
 body.theme-apple .item-photo,
 body.theme-apple .mini-photo,
 body.theme-apple .shop-photo{
-  border-color: rgba(0,0,0,0.10);
+  border-color: rgba(255,255,255,0.08);
+  background: radial-gradient(circle at 0 0, rgba(255,23,68,0.18), rgba(8,10,22,0.98));
 }
 
 body.theme-apple .sticky-bar{
-  background: rgba(255,255,255,0.72);
-  border-top: 1px solid rgba(0,0,0,0.10);
+  background: linear-gradient(90deg, rgba(5,5,12,0.96), rgba(20,8,24,0.96));
+  border-top: 1px solid rgba(255,255,255,0.12);
   backdrop-filter: saturate(180%) blur(18px);
+}
+
+/* =========================
+   Admin scope（後台可讀性優先）
+   套用：<body class="theme-apple admin-page">
+   目的：把前台電競風格與後台介面隔離
+   ========================= */
+body.theme-apple.admin-page{
+  --bg: #f7f8fc;
+  --text: rgba(17,24,39,0.96);
+  --muted: rgba(17,24,39,0.62);
+  --border: rgba(17,24,39,0.14);
+  --panel: rgba(255,255,255,0.96);
+  --panel2: rgba(255,255,255,1);
+  --shadow: 0 10px 28px rgba(17,24,39,0.10);
+
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* 主要排版與文字（避免過淡） */
+body.admin-page .admin-shell{ background: transparent; }
+body.admin-page .admin-head h1{ color: rgba(17,24,39,0.96); }
+body.admin-page .h1, body.admin-page .h2, body.admin-page .h3{ color: rgba(17,24,39,0.96); }
+body.admin-page .lead{ color: rgba(17,24,39,0.72); }
+body.admin-page .muted{ color: rgba(17,24,39,0.62); }
+body.admin-page a.link{ color: rgba(17,24,39,0.86); }
+
+/* 卡片：回到清楚白底，不要透明與發光 */
+body.admin-page .card,
+body.admin-page .form-card{
+  background: #fff;
+  border-color: rgba(17,24,39,0.12);
+  box-shadow: 0 10px 24px rgba(17,24,39,0.08);
+}
+
+/* 表格：標題列更清楚、內容對比加強 */
+body.admin-page .table{
+  background: #fff;
+  border-color: rgba(17,24,39,0.12);
+}
+body.admin-page .table th{
+  color: rgba(55,65,81,0.92);
+  background: rgba(17,24,39,0.04);
+  font-weight: 700;
+}
+body.admin-page .table td{
+  color: rgba(17,24,39,0.94);
+}
+body.admin-page .table tr:hover{ background: rgba(17,24,39,0.03); }
+
+/* 輸入框 / placeholder / select / option：確保下拉選單可讀 */
+body.admin-page input[type="search"],
+body.admin-page input[type="text"],
+body.admin-page input[type="password"],
+body.admin-page input[type="number"],
+body.admin-page input[type="url"],
+body.admin-page textarea,
+body.admin-page select{
+  background: #fff;
+  color: rgba(17,24,39,0.94);
+  border-color: rgba(17,24,39,0.18);
+}
+body.admin-page input::placeholder,
+body.admin-page textarea::placeholder{
+  color: rgba(107,114,128,0.92);
+}
+body.admin-page select option{
+  color: rgba(17,24,39,0.94);
+  background: #fff;
+}
+body.admin-page input:focus,
+body.admin-page textarea:focus,
+body.admin-page select:focus{
+  border-color: rgba(0,113,227,0.55);
+  box-shadow: 0 0 0 3px rgba(0,113,227,0.14);
+}
+
+/* Tabs / segmented：提高可讀性，避免深色電競覆蓋 */
+body.admin-page .tab{
+  background: #fff;
+  color: rgba(17,24,39,0.88);
+  border-color: rgba(17,24,39,0.14);
+  box-shadow: 0 8px 18px rgba(17,24,39,0.06);
+}
+body.admin-page .tab.active{
+  background: rgba(17,24,39,0.10);
+  border-color: rgba(17,24,39,0.20);
+  color: rgba(17,24,39,0.92);
+}
+body.admin-page .segmented{
+  background: rgba(17,24,39,0.03);
+  border-color: rgba(17,24,39,0.12);
+}
+body.admin-page .seg{ color: rgba(17,24,39,0.72); }
+body.admin-page .seg.active{
+  background: rgba(17,24,39,0.10);
+  border-color: rgba(17,24,39,0.18);
+  color: rgba(17,24,39,0.92);
+}
+
+/* Badge：回到清楚的狀態色，不用前台深色 badge */
+body.admin-page .badge{
+  background: rgba(17,24,39,0.04);
+  border-color: rgba(17,24,39,0.14);
+  color: rgba(17,24,39,0.78);
+}
+body.admin-page .badge.ok{ background: rgba(34,197,94,0.14); border-color: rgba(34,197,94,0.32); color: rgba(22,101,52,0.96); }
+body.admin-page .badge.warn{ background: rgba(234,179,8,0.14); border-color: rgba(234,179,8,0.34); color: rgba(133,77,14,0.96); }
+body.admin-page .badge.danger{ background: rgba(239,68,68,0.14); border-color: rgba(239,68,68,0.34); color: rgba(153,27,27,0.96); }
+body.admin-page .badge.tag{ background: rgba(59,130,246,0.10); border-color: rgba(59,130,246,0.24); color: rgba(30,64,175,0.96); }
+
+/* 按鈕：後台維持簡潔，避免發光效果過強 */
+body.admin-page .btn-primary{
+  background: #111827;
+  color: #fff;
+  border-color: rgba(17,24,39,0.12);
+  box-shadow: none;
+}
+body.admin-page .btn-primary:hover{ filter: brightness(1.05); }
+body.admin-page .btn-ghost{
+  background: rgba(17,24,39,0.04);
+  border-color: rgba(17,24,39,0.14);
+  color: rgba(17,24,39,0.92);
+}
+body.admin-page .btn-ghost:hover{ background: rgba(17,24,39,0.07); }
+body.admin-page .btn::before{ display:none; } /* 關掉掃光 */
+
+/* ===== 後台：首頁 Banner 管理區（僅 admin-page scope） ===== */
+body.admin-page .banner-list{
+  display: grid;
+  gap: 10px;
+}
+
+body.admin-page .banner-row{
+  display: grid;
+  grid-template-columns: 180px 1fr auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid rgba(17,24,39,0.12);
+  border-radius: 12px;
+  background: #fff;
+}
+
+body.admin-page .banner-preview-wrap{
+  width: 180px;
+}
+
+body.admin-page .banner-preview{
+  width: 180px;
+  height: 88px;
+  border-radius: 10px;
+  border: 1px dashed rgba(17,24,39,0.20);
+  background: rgba(17,24,39,0.02);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 6px;
+  color: rgba(17,24,39,0.62);
+}
+
+body.admin-page .banner-preview img{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+
+body.admin-page .banner-fields{
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+body.admin-page .banner-fields .banner-image,
+body.admin-page .banner-fields .banner-link{
+  width: 100%;
+}
+
+body.admin-page .banner-actions{
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  align-content: start;
+  min-width: 88px;
+}
+
+body.admin-page .banner-actions .btn{
+  width: 88px;
+}
+
+body.admin-page #feHomeBannerAddBtn{
+  align-self: start;
+}
+
+@media (max-width: 900px){
+  body.admin-page .banner-row{
+    grid-template-columns: 1fr;
+  }
+  body.admin-page .banner-preview-wrap,
+  body.admin-page .banner-preview{
+    width: 100%;
+    max-width: 420px;
+  }
+  body.admin-page .banner-actions{
+    grid-auto-flow: column;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    justify-items: stretch;
+    min-width: 0;
+  }
+  body.admin-page .banner-actions .btn{
+    width: 100%;
+  }
 }
 
 @media (prefers-reduced-motion: reduce){
@@ -1617,7 +2221,7 @@ body.theme-apple .sticky-bar{
 }
 
 @media (max-width: 980px){
-  body.theme-apple .h1{ font-size: 36px; }
+  body.theme-apple .h1{ font-size: 34px; }
   body.theme-apple .section{ padding: 44px 0; }
 }
 

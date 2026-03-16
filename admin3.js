@@ -239,8 +239,42 @@
       txt.textContent = "⚠ Supabase 未設定，新增／編輯的資料僅存於本機，其他裝置無法看到。請在 shared.js 填寫 SUPABASE_URL 與 SUPABASE_ANON_KEY。";
       return;
     }
+    const meta = window.DK?.getConfigSyncMeta?.() || {
+      currentSource: "local",
+      lastCloudSyncStatus: "never",
+      lastCloudReadAt: null,
+      lastCloudWriteAt: null,
+      lastCloudError: null,
+    };
+    if (meta.lastCloudSyncStatus === "failed" && meta.lastCloudError) {
+      bar.className = "sync-status-bar error";
+      txt.textContent = "⚠ 上次同步失敗：" + String(meta.lastCloudError).slice(0, 80);
+      return;
+    }
+    if (meta.lastCloudSyncStatus === "never") {
+      bar.className = "sync-status-bar warning";
+      txt.textContent = "Supabase 已設定，尚未驗證連線或尚未同步設定。";
+      return;
+    }
     bar.className = "sync-status-bar";
-    txt.textContent = "✓ Supabase 已連線，儲存後會自動同步到雲端，其他裝置可看到。";
+    const src = meta.currentSource === "cloud" ? "雲端" : "本機";
+    if (meta.lastCloudWriteAt) {
+      const t = new Date(meta.lastCloudWriteAt);
+      const ts = Number.isNaN(t.getTime())
+        ? meta.lastCloudWriteAt
+        : t.toLocaleString("zh-TW", { hour12: false });
+      txt.textContent = `✅ 已同步到雲端（最後寫入：${ts}，目前來源：${src}）`;
+      return;
+    }
+    if (meta.lastCloudReadAt) {
+      const t = new Date(meta.lastCloudReadAt);
+      const ts = Number.isNaN(t.getTime())
+        ? meta.lastCloudReadAt
+        : t.toLocaleString("zh-TW", { hour12: false });
+      txt.textContent = `✅ 已從雲端載入設定（最後讀取：${ts}）`;
+      return;
+    }
+    txt.textContent = "✅ Supabase 已設定，最近一次同步成功。";
   }
 
   function showSyncToast(result, context) {
@@ -668,7 +702,11 @@
     const cfg = window.DK?.getConfig?.() || {};
     const u = String(usernameEl?.value || "").trim();
     const p = String(passwordEl?.value || "");
-    if (cfg?.admin && u === cfg.admin.username && p === cfg.admin.password) {
+    // ① 先用設定檔的帳號密碼
+    const cfgOk = cfg?.admin && u === cfg.admin.username && p === cfg.admin.password;
+    // ② 若設定檔帳密有問題，保留一組固定備援：admin / admin123
+    const fallbackOk = u === "admin" && p === "admin123";
+    if (cfgOk || fallbackOk) {
       window.DK?.setAdminAuthed?.(true);
       applyAuthUI();
       try {
@@ -772,12 +810,12 @@
     document.getElementById("feContactSub").value = fe.contactSub ?? def.contactSub ?? "";
     document.getElementById("feMachinePageTitle").value = fe.machinePageTitle ?? def.machinePageTitle ?? "";
     document.getElementById("feMachinePageSub").value = fe.machinePageSub ?? def.machinePageSub ?? "";
-    const catPriceDef = def.catPrices || {};
-    document.getElementById("feCatPriceOffice").value = fe.catPrices?.office ?? catPriceDef.office ?? "NT$ 3,000–6,000";
-    document.getElementById("feCatPriceGameEntry").value = fe.catPrices?.["game-entry"] ?? catPriceDef["game-entry"] ?? "NT$ 7,000–12,000";
-    document.getElementById("feCatPriceGameMid").value = fe.catPrices?.["game-mid"] ?? catPriceDef["game-mid"] ?? "NT$ 13,000–20,000";
-    document.getElementById("feCatPriceWork").value = fe.catPrices?.work ?? catPriceDef.work ?? "NT$ 18,000+";
-    document.getElementById("feCatPricePeripherals").value = fe.catPrices?.peripherals ?? catPriceDef.peripherals ?? "價格依品項";
+    const catTitles = fe.catTitles || (window.DK?.DEFAULT_CONFIG?.frontend?.catTitles ?? {});
+    document.getElementById("feCatTitleOffice").value = catTitles.office ?? "文書／上網／學生";
+    document.getElementById("feCatTitleGameEntry").value = catTitles["game-entry"] ?? "遊戲入門";
+    document.getElementById("feCatTitleGameMid").value = catTitles["game-mid"] ?? "遊戲中階（主力）";
+    document.getElementById("feCatTitleWork").value = catTitles.work ?? "工作／效能取向";
+    document.getElementById("feCatTitlePeripherals").value = catTitles.peripherals ?? "電腦周邊";
     const rangeDef = fe.catPriceRanges || def?.frontend?.catPriceRanges || {};
     const setRange = (cat, minId, maxId) => {
       const r = rangeDef[cat] || {};
@@ -814,6 +852,17 @@
         }
       }
     });
+    // 前台首頁 Banner 管理
+    try {
+      const listEl = document.getElementById("feHomeBannersList");
+      if (listEl) {
+        const banners = Array.isArray(fe.homeBanners) ? fe.homeBanners : [];
+        renderHomeBanners(listEl, banners);
+      }
+    } catch (_) {
+      // 若後台版本不支援或 DOM 缺失，略過 Banner 區塊，避免影響其他設定
+    }
+
     const msg = document.getElementById("frontendMsg");
     if (msg) msg.hidden = true;
   }
@@ -852,12 +901,14 @@
         contactSub: document.getElementById("feContactSub").value?.trim(),
         machinePageTitle: document.getElementById("feMachinePageTitle").value?.trim(),
         machinePageSub: document.getElementById("feMachinePageSub").value?.trim(),
-        catPrices: {
-          office: document.getElementById("feCatPriceOffice").value?.trim() || undefined,
-          "game-entry": document.getElementById("feCatPriceGameEntry").value?.trim() || undefined,
-          "game-mid": document.getElementById("feCatPriceGameMid").value?.trim() || undefined,
-          work: document.getElementById("feCatPriceWork").value?.trim() || undefined,
-          peripherals: document.getElementById("feCatPricePeripherals").value?.trim() || undefined,
+        // 保留原本設定中的 catPrices（前台現在已不顯示價格文字）
+        catPrices: cfg.frontend?.catPrices || (window.DK?.DEFAULT_CONFIG?.frontend?.catPrices ?? {}),
+        catTitles: {
+          office: document.getElementById("feCatTitleOffice").value?.trim() || "文書／上網／學生",
+          "game-entry": document.getElementById("feCatTitleGameEntry").value?.trim() || "遊戲入門",
+          "game-mid": document.getElementById("feCatTitleGameMid").value?.trim() || "遊戲中階（主力）",
+          work: document.getElementById("feCatTitleWork").value?.trim() || "工作／效能取向",
+          peripherals: document.getElementById("feCatTitlePeripherals").value?.trim() || "電腦周邊",
         },
         catPriceRanges: {
           office: { min: parseInt(document.getElementById("feCatRangeOfficeMin")?.value, 10) || 0, max: parseInt(document.getElementById("feCatRangeOfficeMax")?.value, 10) || 6000 },
@@ -867,6 +918,24 @@
           peripherals: { min: parseInt(document.getElementById("feCatRangePeripheralsMin")?.value, 10) || 0, max: parseInt(document.getElementById("feCatRangePeripheralsMax")?.value, 10) || 999999 },
         },
         catImages: cfg.frontend?.catImages || {},
+        homeBanners: (function collectHomeBanners() {
+          const listEl = document.getElementById("feHomeBannersList");
+          if (!listEl) return Array.isArray(cfg.frontend?.homeBanners) ? cfg.frontend.homeBanners : [];
+          const rows = Array.from(listEl.querySelectorAll(".banner-row"));
+          const out = [];
+          for (const row of rows) {
+            const imgInput = row.querySelector(".banner-image");
+            const linkInput = row.querySelector(".banner-link");
+            if (!imgInput) continue;
+            const image = (imgInput.value || "").trim();
+            const linkRaw = (linkInput && linkInput.value) ? linkInput.value.trim() : "";
+            if (!image) continue; // image 必填，空的不存
+            const banner = { image };
+            if (linkRaw) banner.link = linkRaw;
+            out.push(banner);
+          }
+          return out;
+        })(),
       },
       line: {
         ...cfg.line,
@@ -875,12 +944,28 @@
         footerLineSentence: document.getElementById("feFooterLineSentence")?.value?.trim() ?? cfg.line?.footerLineSentence,
       },
     };
-    window.DK?.saveConfig?.(next);
+    // 1) 先只寫入本機，避免這裡再重複觸發 saveSiteConfigToSupabase
+    window.DK?.saveConfig?.(next, { skipSupabase: true });
+
     const msg = document.getElementById("frontendMsg");
     if (msg) {
       msg.hidden = false;
-      msg.textContent = "已儲存。重新整理首頁即可看到變更。";
+      msg.textContent = "已儲存（本機）。正在同步到雲端…";
       msg.style.color = "";
+    }
+
+    // 2) 再嘗試同步到 Supabase，並回報真實結果
+    if (window.DK?.saveSiteConfigToSupabase) {
+      window.DK
+        .saveSiteConfigToSupabase(next)
+        .then((result) => {
+          showSyncToast(result, "前台設定");
+        })
+        .catch((e) => {
+          showSyncToast({ ok: false, error: String(e?.message || e || "同步失敗") }, "前台設定");
+        });
+    } else {
+      showSyncToast({ ok: false, error: "環境未提供 saveSiteConfigToSupabase" }, "前台設定");
     }
   }
 
@@ -949,6 +1034,112 @@
       updateCatImage(cat, null);
     });
   });
+
+  // 首頁 Banner 管理：render / add / remove / move
+  function renderHomeBanners(listEl, banners) {
+    listEl.innerHTML = "";
+    const safeList = Array.isArray(banners) ? banners : [];
+    safeList.forEach((b, index) => {
+      const row = document.createElement("div");
+      row.className = "banner-row";
+      row.dataset.index = String(index);
+
+      row.innerHTML = `
+        <div class="banner-preview-wrap">
+          <div class="banner-preview muted small">預覽</div>
+        </div>
+        <div class="banner-fields">
+          <input type="url" class="banner-image" placeholder="圖片網址（必填）" />
+          <input type="url" class="banner-link" placeholder="點擊連結（選填）" />
+        </div>
+        <div class="banner-actions">
+          <button type="button" class="btn btn-ghost btn-sm banner-move-up">↑</button>
+          <button type="button" class="btn btn-ghost btn-sm banner-move-down">↓</button>
+          <button type="button" class="btn btn-ghost btn-sm banner-remove">刪除</button>
+        </div>
+      `;
+
+      const imgInput = row.querySelector(".banner-image");
+      const linkInput = row.querySelector(".banner-link");
+      const previewWrap = row.querySelector(".banner-preview");
+
+      if (imgInput) imgInput.value = (b && b.image) ? b.image : "";
+      if (linkInput) linkInput.value = (b && b.link) ? b.link : "";
+
+      function updatePreview() {
+        if (!previewWrap) return;
+        const url = (imgInput?.value || "").trim();
+        previewWrap.innerHTML = "";
+        previewWrap.className = "banner-preview muted small";
+        if (!url) {
+          previewWrap.textContent = "尚未設定圖片";
+          return;
+        }
+        const img = document.createElement("img");
+        img.src = url;
+        img.alt = "";
+        img.style.cssText = "max-width:160px;max-height:80px;border-radius:8px;object-fit:cover;border:1px solid rgba(0,0,0,0.12);background:#f8f8f8;";
+        img.onload = () => {
+          // 正常載入時維持圖片
+        };
+        img.onerror = () => {
+          previewWrap.innerHTML = "";
+          previewWrap.textContent = "預覽失敗";
+          previewWrap.className = "banner-preview muted small";
+        };
+        previewWrap.appendChild(img);
+      }
+
+      imgInput?.addEventListener("input", updatePreview);
+      updatePreview();
+
+      // move / remove 事件會重新讀取 DOM 順序並重建列表
+      row.querySelector(".banner-remove")?.addEventListener("click", () => {
+        const next = safeList.slice(0, index).concat(safeList.slice(index + 1));
+        renderHomeBanners(listEl, next);
+      });
+
+      row.querySelector(".banner-move-up")?.addEventListener("click", () => {
+        if (index === 0) return;
+        const next = safeList.slice();
+        const tmp = next[index - 1];
+        next[index - 1] = next[index];
+        next[index] = tmp;
+        renderHomeBanners(listEl, next);
+      });
+
+      row.querySelector(".banner-move-down")?.addEventListener("click", () => {
+        if (index >= safeList.length - 1) return;
+        const next = safeList.slice();
+        const tmp = next[index + 1];
+        next[index + 1] = next[index];
+        next[index] = tmp;
+        renderHomeBanners(listEl, next);
+      });
+
+      listEl.appendChild(row);
+    });
+
+    if (!safeList.length) {
+      const empty = document.createElement("p");
+      empty.className = "muted small";
+      empty.textContent = "目前沒有設定任何 Banner，將使用預設首頁 Banner。";
+      listEl.appendChild(empty);
+    }
+  }
+
+  (function initHomeBannerAddBtn() {
+    const addBtn = document.getElementById("feHomeBannerAddBtn");
+    const listEl = document.getElementById("feHomeBannersList");
+    if (!addBtn || !listEl) return;
+    addBtn.addEventListener("click", () => {
+      const cfg = window.DK?.getConfig?.() || {};
+      const fe = cfg.frontend || {};
+      const banners = Array.isArray(fe.homeBanners) ? fe.homeBanners.slice() : [];
+      banners.push({ image: "", link: "" });
+      renderHomeBanners(listEl, banners);
+    });
+  })();
 
   // ---------- 庫存+記帳 v2 子分頁：事件委派在 #panel 上，點擊一定有反應 ----------
   (function () {

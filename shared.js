@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
   stockKinds: "dk_stock_kinds_v1",
   stockSchema: "dk_stock_schema_v1",
   stock: "dk_stock_v1",
+  configSyncMeta: "dk_site_config_sync_meta_v1",
 };
 
 // ===== Supabase（遠端前台商品）設定 =====
@@ -62,7 +63,15 @@ const DEFAULT_CONFIG = {
     ogTitle: "二手電腦・實測交付｜依用途配機，不亂賣、不踩雷",
     ogDescription: "依用途配機，不亂賣、不踩雷。買整機、不知道怎麼選、電腦維修，加 LINE 一次搞定。",
     ogImageUrl: "",
+    /** 整機頁五張分類卡片：背景圖與標題 */
     catImages: {},
+    catTitles: {
+      office: "文書／上網／學生",
+      "game-entry": "遊戲入門",
+      "game-mid": "遊戲中階（主力）",
+      work: "工作／效能取向",
+      peripherals: "電腦周邊",
+    },
     catPrices: {
       office: "NT$ 3,000–6,000",
       "game-entry": "NT$ 7,000–12,000",
@@ -78,6 +87,8 @@ const DEFAULT_CONFIG = {
       work: { min: 18000, max: 999999 },
       peripherals: { min: 0, max: 999999 },
     },
+    /** 首頁 Banner 設定（後台管理）；可為空陣列 */
+    homeBanners: [],
   },
   shop: {
     name: "哈啦電競電腦維修",
@@ -310,9 +321,41 @@ function getConfig() {
 
 function saveConfig(nextConfig) {
   localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(nextConfig));
-  // 同步寫入 Supabase，讓所有人看到同一份前台設定
-  if (window.DK?.saveSiteConfigToSupabase) {
+  const opts = arguments[1] || {};
+  const skipSupabase = opts && opts.skipSupabase;
+  // 預設仍會 fire-and-forget 寫入 Supabase；後台若需要精準同步結果，可傳 skipSupabase: true 並自行呼叫 saveSiteConfigToSupabase
+  if (!skipSupabase && window.DK?.saveSiteConfigToSupabase) {
     window.DK.saveSiteConfigToSupabase(nextConfig).catch(() => {});
+  }
+}
+
+function getConfigSyncMeta() {
+  const raw = safeJsonParse(localStorage.getItem(STORAGE_KEYS.configSyncMeta), null);
+  if (!raw || typeof raw !== "object") {
+    return {
+      currentSource: "local",
+      lastCloudReadAt: null,
+      lastCloudWriteAt: null,
+      lastCloudSyncStatus: "never", // "never" | "success-read" | "success-write" | "failed"
+      lastCloudError: null,
+    };
+  }
+  return {
+    currentSource: raw.currentSource || "local",
+    lastCloudReadAt: raw.lastCloudReadAt || null,
+    lastCloudWriteAt: raw.lastCloudWriteAt || null,
+    lastCloudSyncStatus: raw.lastCloudSyncStatus || "never",
+    lastCloudError: raw.lastCloudError || null,
+  };
+}
+
+function saveConfigSyncMeta(patch) {
+  const base = getConfigSyncMeta();
+  const next = { ...base, ...(patch || {}) };
+  try {
+    localStorage.setItem(STORAGE_KEYS.configSyncMeta, JSON.stringify(next));
+  } catch (_) {
+    // meta 寫入失敗不應影響主要功能
   }
 }
 
@@ -497,15 +540,36 @@ async function fetchSiteConfigFromSupabase() {
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
     },
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const errText = await res.text();
+    saveConfigSyncMeta({
+      lastCloudSyncStatus: "failed",
+      lastCloudError: errText.slice(0, 200) || ("HTTP " + res.status),
+    });
+    return null;
+  }
   const rows = await res.json();
   const raw = rows?.[0]?.data;
   if (!raw || typeof raw !== "object") return null;
-  return deepMerge(DEFAULT_CONFIG, raw);
+  const merged = deepMerge(DEFAULT_CONFIG, raw);
+  saveConfigSyncMeta({
+    currentSource: "cloud",
+    lastCloudSyncStatus: "success-read",
+    lastCloudReadAt: new Date().toISOString(),
+    lastCloudError: null,
+  });
+  return merged;
 }
 
 async function saveSiteConfigToSupabase(config) {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !config || typeof config !== "object") return;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !config || typeof config !== "object") {
+    const msg = !SUPABASE_URL || !SUPABASE_ANON_KEY ? "Supabase 未設定" : "設定物件不合法";
+    saveConfigSyncMeta({
+      lastCloudSyncStatus: "failed",
+      lastCloudError: msg,
+    });
+    return { ok: false, error: msg };
+  }
   const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_SITE_CONFIG_TABLE}?on_conflict=id`;
   const res = await fetch(url, {
     method: "POST",
@@ -518,8 +582,21 @@ async function saveSiteConfigToSupabase(config) {
     body: JSON.stringify([{ id: SITE_CONFIG_ROW_ID, data: config }]),
   });
   if (!res.ok) {
-    console.warn("同步官網設定到 Supabase 失敗", await res.text());
+    const txt = await res.text();
+    console.warn("同步官網設定到 Supabase 失敗", txt);
+    const errMsg = (txt || ("HTTP " + res.status)).slice(0, 200);
+    saveConfigSyncMeta({
+      lastCloudSyncStatus: "failed",
+      lastCloudError: errMsg,
+    });
+    return { ok: false, error: errMsg };
   }
+  saveConfigSyncMeta({
+    lastCloudSyncStatus: "success-write",
+    lastCloudWriteAt: new Date().toISOString(),
+    lastCloudError: null,
+  });
+  return { ok: true };
 }
 
 // ===== Supabase：庫存資料（stock + stockKinds + stockSchema）讀寫 =====
@@ -1138,10 +1215,20 @@ function applyConfigToHomePage() {
   const machinePageSub = document.getElementById("machinePageSub");
   if (machinePageSub) machinePageSub.textContent = fe.machinePageSub ?? "";
   const catPrices = fe.catPrices || (typeof DK !== "undefined" && DK.DEFAULT_CONFIG?.frontend?.catPrices) || {};
+  const catTitles = fe.catTitles || (typeof DK !== "undefined" && DK.DEFAULT_CONFIG?.frontend?.catTitles) || {};
+  const catTitleDefaults = {
+    office: "文書／上網／學生",
+    "game-entry": "遊戲入門",
+    "game-mid": "遊戲中階（主力）",
+    work: "工作／效能取向",
+    peripherals: "電腦周邊",
+  };
   const catPriceDefaults = { office: "NT$ 3,000–6,000", "game-entry": "NT$ 7,000–12,000", "game-mid": "NT$ 13,000–20,000", work: "NT$ 18,000+", peripherals: "價格依品項" };
   document.querySelectorAll(".cat-card[data-cat]").forEach((card) => {
     const cat = card.dataset.cat;
     if (cat === "all") return;
+    const titleEl = card.querySelector(".cat-card-title");
+    if (titleEl) titleEl.textContent = (catTitles[cat] || catTitleDefaults[cat] || "").trim() || catTitleDefaults[cat];
     const priceEl = card.querySelector(".cat-card-price");
     if (priceEl) priceEl.textContent = (catPrices[cat] || catPriceDefaults[cat] || "").trim() || catPriceDefaults[cat];
   });
@@ -1262,6 +1349,8 @@ window.DK = {
   DEFAULT_INVENTORY,
   getConfig,
   saveConfig,
+  getConfigSyncMeta,
+  saveConfigSyncMeta,
   getInventoryCategories,
   getInventory,
   getInventoryForDisplay,
@@ -1320,7 +1409,7 @@ if (window.DK.fetchSiteConfigFromSupabase && window.DK.saveConfig) {
   window.DK
     .fetchSiteConfigFromSupabase()
     .then(function (c) {
-      if (c != null) window.DK.saveConfig(c);
+      if (c != null) window.DK.saveConfig(c, { skipSupabase: true });
     })
     .catch(function () {});
 }

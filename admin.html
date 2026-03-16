@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="./styles.css?v=20260217" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
-  <body class="theme-apple">
+  <body class="theme-apple admin-page">
     <main class="admin-shell">
       <div class="container">
         <div class="admin-head">
@@ -588,38 +588,31 @@
                 <input id="feMachinePageSub" type="text" placeholder="依用途分類，不寫一堆規格。價格是「約」，詳細配備請加 LINE 詢問。" />
               </div>
               <div class="field full">
-                <label class="h3" style="margin: 16px 0 4px">五張分類卡片價格（顯示在卡片上的價格區間文字）</label>
+                <label class="h3" style="margin: 16px 0 4px">五張分類卡片名稱與圖片</label>
               </div>
               <div class="form-grid">
                 <div class="field">
-                  <label for="feCatPriceOffice">① 文書／上網／學生</label>
-                  <textarea id="feCatPriceOffice" rows="3" placeholder="NT$ 3,000–6,000&#10;可換行、分段填寫"></textarea>
-                  <div class="muted small" style="margin-top:4px">篩選區間：最低 <input id="feCatRangeOfficeMin" type="number" min="0" placeholder="0" style="width:70px" /> 最高 <input id="feCatRangeOfficeMax" type="number" min="0" placeholder="6000" style="width:70px" /> 元</div>
+                  <label for="feCatTitleOffice">① 卡片名稱（文書／上網／學生）</label>
+                  <input id="feCatTitleOffice" type="text" placeholder="文書／上網／學生" />
                 </div>
                 <div class="field">
-                  <label for="feCatPriceGameEntry">② 遊戲入門</label>
-                  <textarea id="feCatPriceGameEntry" rows="3" placeholder="NT$ 7,000–12,000&#10;可換行、分段填寫"></textarea>
-                  <div class="muted small" style="margin-top:4px">篩選區間：最低 <input id="feCatRangeGameEntryMin" type="number" min="0" placeholder="7000" style="width:70px" /> 最高 <input id="feCatRangeGameEntryMax" type="number" min="0" placeholder="12000" style="width:70px" /> 元</div>
+                  <label for="feCatTitleGameEntry">② 卡片名稱（遊戲入門）</label>
+                  <input id="feCatTitleGameEntry" type="text" placeholder="遊戲入門" />
                 </div>
                 <div class="field">
-                  <label for="feCatPriceGameMid">③ 遊戲中階（主力）</label>
-                  <textarea id="feCatPriceGameMid" rows="3" placeholder="NT$ 13,000–20,000&#10;可換行、分段填寫"></textarea>
-                  <div class="muted small" style="margin-top:4px">篩選區間：最低 <input id="feCatRangeGameMidMin" type="number" min="0" placeholder="13000" style="width:70px" /> 最高 <input id="feCatRangeGameMidMax" type="number" min="0" placeholder="20000" style="width:70px" /> 元</div>
+                  <label for="feCatTitleGameMid">③ 卡片名稱（遊戲中階（主力））</label>
+                  <input id="feCatTitleGameMid" type="text" placeholder="遊戲中階（主力）" />
                 </div>
                 <div class="field">
-                  <label for="feCatPriceWork">④ 工作／效能取向</label>
-                  <textarea id="feCatPriceWork" rows="3" placeholder="NT$ 18,000+&#10;可換行、分段填寫"></textarea>
-                  <div class="muted small" style="margin-top:4px">篩選區間：最低 <input id="feCatRangeWorkMin" type="number" min="0" placeholder="18000" style="width:70px" /> 最高 <input id="feCatRangeWorkMax" type="number" min="0" placeholder="999999" style="width:70px" /> 元</div>
+                  <label for="feCatTitleWork">④ 卡片名稱（工作／效能取向）</label>
+                  <input id="feCatTitleWork" type="text" placeholder="工作／效能取向" />
                 </div>
                 <div class="field">
-                  <label for="feCatPricePeripherals">⑤ 電腦周邊</label>
-                  <textarea id="feCatPricePeripherals" rows="3" placeholder="價格依品項&#10;可換行、分段填寫"></textarea>
-                  <div class="muted small" style="margin-top:4px">篩選區間：最低 <input id="feCatRangePeripheralsMin" type="number" min="0" placeholder="0" style="width:70px" /> 最高 <input id="feCatRangePeripheralsMax" type="number" min="0" placeholder="999999" style="width:70px" /> 元</div>
+                  <label for="feCatTitlePeripherals">⑤ 卡片名稱（電腦周邊）</label>
+                  <input id="feCatTitlePeripherals" type="text" placeholder="電腦周邊" />
                 </div>
               </div>
-
               <div class="field full">
-                <label class="h3" style="margin: 16px 0 4px">五張分類卡片圖片</label>
                 <p class="muted small">從電腦選擇照片可替換整機販售頁的五張分類圖。未上傳則使用預設圖。</p>
               </div>
               <div class="field full" style="display: flex; flex-wrap: wrap; gap: 16px;">
@@ -668,6 +661,15 @@
                     <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="peripherals">清除</button>
                   </div>
                 </div>
+              </div>
+
+              <div class="field full">
+                <label class="h3" style="margin: 16px 0 4px">首頁 Banner 管理</label>
+                <p class="muted small">設定首頁 Banner 圖片與連結，會依順序輪播。可留空表示使用預設 Banner。</p>
+              </div>
+              <div class="field full">
+                <div id="feHomeBannersList" class="banner-list"></div>
+                <button type="button" id="feHomeBannerAddBtn" class="btn btn-ghost btn-sm" style="margin-top:8px">＋ 新增一張 Banner</button>
               </div>
 
               <div class="field full">
