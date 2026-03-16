@@ -1051,6 +1051,7 @@
         <div class="banner-fields">
           <input type="url" class="banner-image" placeholder="圖片網址（必填）" />
           <input type="url" class="banner-link" placeholder="點擊連結（選填）" />
+          <input type="file" class="banner-file" accept="image/*" />
         </div>
         <div class="banner-actions">
           <button type="button" class="btn btn-ghost btn-sm banner-move-up">↑</button>
@@ -1061,6 +1062,7 @@
 
       const imgInput = row.querySelector(".banner-image");
       const linkInput = row.querySelector(".banner-link");
+      const fileInput = row.querySelector(".banner-file");
       const previewWrap = row.querySelector(".banner-preview");
 
       if (imgInput) imgInput.value = (b && b.image) ? b.image : "";
@@ -1092,6 +1094,45 @@
 
       imgInput?.addEventListener("input", updatePreview);
       updatePreview();
+
+      // 檔案上傳 → 存到 Supabase Storage（site-assets/banner/…）→ 回寫 image 欄位
+      fileInput?.addEventListener("change", async (e) => {
+        const input = e.target;
+        const file = input?.files?.[0];
+        input.value = "";
+        if (!file || !file.type.startsWith("image/")) return;
+        if (!window.DK?.uploadSiteAssetToSupabaseStorage) {
+          alert("環境尚未提供 Banner 圖片上傳功能（uploadSiteAssetToSupabaseStorage）。");
+          return;
+        }
+        // 依檔名或 MIME type 推斷副檔名，避免一律變成 .jpg
+        let ext = "";
+        const name = typeof file.name === "string" ? file.name : "";
+        const m = name.match(/\.([a-zA-Z0-9]+)$/);
+        if (m && m[1]) {
+          ext = "." + m[1].toLowerCase();
+        } else if (file.type && typeof file.type === "string") {
+          if (file.type === "image/png") ext = ".png";
+          else if (file.type === "image/webp") ext = ".webp";
+          else if (file.type === "image/jpeg") ext = ".jpg";
+          else ext = ".jpg";
+        } else {
+          ext = ".jpg";
+        }
+        const now = new Date();
+        const ts = now.toISOString().replace(/[:.]/g, "-");
+        const rand = Math.random().toString(16).slice(2);
+        const path = `banner/${ts}-${rand}${ext}`;
+        const url = await window.DK.uploadSiteAssetToSupabaseStorage(file, path);
+        if (!url) {
+          alert("Banner 圖片上傳失敗，請稍後再試。");
+          return;
+        }
+        if (imgInput) {
+          imgInput.value = url;
+          imgInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      });
 
       // move / remove 事件會重新讀取 DOM 順序並重建列表
       row.querySelector(".banner-remove")?.addEventListener("click", () => {

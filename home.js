@@ -1,6 +1,7 @@
 /* home.js - 首頁 Hero 輪播與產品展示（不更動既有設定與資料結構） */
 
- (function () {
+// 首頁專用腳本：Hero 輪播 + 分類入口
+(function () {
   /* ===== Hero Banner 輪播（第一區）：從設定讀取 homeBanners ===== */
   const hero = document.getElementById("hero");
   const slidesWrap = hero?.querySelector(".hero-slides");
@@ -113,5 +114,42 @@
       startHeroAuto();
     }
   }
-})();
 
+  /* ===== 首頁第二區：ROG 風格分類入口（config 驅動）===== */
+  function renderHomeEntries() {
+    const container = document.getElementById("homeCategories");
+    if (!container) return;
+
+    const cfg = window.DK?.getConfig?.() || {};
+    const fe = cfg.frontend || {};
+    const entries = Array.isArray(fe.homeEntries) ? fe.homeEntries : [];
+    const list = entries.filter((e) => e && (e.title || e.image || e.link));
+
+    if (!list.length) {
+      container.innerHTML = "";
+      return;
+    }
+
+    container.innerHTML = list
+      .map((e) => {
+        const href = e.link || "#";
+        const title = e.title || "";
+        const subtitle = e.subtitle || "";
+        const img = e.image || "";
+        return `
+          <a href="${href}" class="home-category-item">
+            <div class="home-category-img">
+              ${img ? `<img src="${img}" alt="${title}" loading="lazy" />` : ""}
+            </div>
+            <div class="home-category-text">
+              <h3>${title}</h3>
+              <p>${subtitle}</p>
+            </div>
+          </a>
+        `;
+      })
+      .join("");
+  }
+
+  renderHomeEntries();
+})();

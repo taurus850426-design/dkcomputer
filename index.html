@@ -62,35 +62,20 @@
         </div>
       </section>
 
-      <!-- 首頁三大入口（第二區） -->
+      <!-- 首頁三大分類入口（第二區） -->
       <section id="home-entries" class="section">
         <div class="container">
           <header class="home-entry-head">
             <h1 id="heroTagline" class="home-entry-tagline">二手電腦・實測交付</h1>
             <p id="heroSub" class="home-entry-sub muted">依用途配機，不亂賣、不踩雷</p>
           </header>
-          <div class="home-entry-grid">
-            <article class="home-entry-card">
-              <h2 class="h3">網咖淘汰</h2>
-              <p class="muted">精選高 CP 值現貨主機，適合想直接入手、快速開玩的客人。</p>
-              <div class="home-entry-actions">
-                <a id="heroBtn1" href="./machine.html" class="btn btn-primary btn-hero">🔥 我要買整機</a>
-              </div>
-            </article>
-            <article class="home-entry-card">
-              <h2 class="h3">不知道怎麼下單</h2>
-              <p class="muted">不確定規格怎麼選沒關係，先填需求，我幫你配到適合的電腦。</p>
-              <div class="home-entry-actions">
-                <a id="heroBtn2" href="./form.html" class="btn btn-primary btn-hero">🧠 不知道怎麼選（需求表單）</a>
-              </div>
-            </article>
-            <article class="home-entry-card">
-              <h2 class="h3">電腦有問題要維修</h2>
-              <p class="muted">電腦故障、異常、升級需求，都可以先聯絡我協助判斷。</p>
-              <div class="home-entry-actions">
-                <a id="heroBtn3" href="#" class="btn btn-primary btn-hero">🔧 電腦有問題要維修</a>
-              </div>
-            </article>
+          <!-- 由 home.js 根據 frontend.homeEntries 動態渲染分類卡 -->
+          <div id="homeCategories" class="home-categories"></div>
+          <!-- 設定覆寫用的隱藏按鈕（保留 DK.applyConfigToHomePage 綁定） -->
+          <div class="home-entry-hidden" aria-hidden="true">
+            <a id="heroBtn1" href="./machine.html"></a>
+            <a id="heroBtn2" href="./form.html"></a>
+            <a id="heroBtn3" href="#"></a>
           </div>
         </div>
       </section>

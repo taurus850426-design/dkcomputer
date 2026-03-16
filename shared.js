@@ -37,6 +37,8 @@ const SUPABASE_V2_DATA_TABLE = "v2_data";
 const V2_DATA_ROW_ID = "default";
 /** 若設定為 bucket 名稱（例如 "product-photos"），上傳商品照片時會改存 Supabase Storage，只在本機存網址，可避免 5MB 上限。請先在 Supabase 後台建立該 bucket 並設為 Public。 */
 const SUPABASE_STORAGE_BUCKET = "product-photos";
+// 專供站內資產（例如首頁 Banner）使用的 Storage bucket，請在 Supabase 建立並設為 Public
+const SUPABASE_SITE_ASSET_BUCKET = "site-assets";
 const V2_STORAGE_KEYS = { items: "dk_v2_items", ledger: "dk_v2_ledger", orders: "dk_v2_orders", expenses: "dk_v2_expenses" };
 
 const DEFAULT_CONFIG = {
@@ -89,6 +91,27 @@ const DEFAULT_CONFIG = {
     },
     /** 首頁 Banner 設定（後台管理）；可為空陣列 */
     homeBanners: [],
+    /** 首頁三大分類入口（第二區）；可於後台或日後配置擴充 */
+    homeEntries: [
+      {
+        title: "網咖淘汰",
+        subtitle: "精選高 CP 值現貨主機，適合想直接入手、快速開玩的客人。",
+        image: "./assets/entry-cafe.png",
+        link: "./machine.html",
+      },
+      {
+        title: "不知道怎麼下單",
+        subtitle: "不確定規格怎麼選沒關係，先填需求，我幫你配到適合的電腦。",
+        image: "./assets/entry-select.png",
+        link: "./form.html",
+      },
+      {
+        title: "電腦有問題要維修",
+        subtitle: "電腦故障、異常、升級需求，都可以先聯絡我協助判斷。",
+        image: "./assets/entry-repair.png",
+        link: "./repair.html",
+      },
+    ],
   },
   shop: {
     name: "哈啦電競電腦維修",
@@ -524,6 +547,35 @@ async function uploadImageToSupabaseStorage(blob, pathOrFilename) {
     return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_STORAGE_BUCKET}/${path}`;
   } catch (e) {
     console.warn("[Supabase Storage] 上傳錯誤", e?.message || e);
+    return null;
+  }
+}
+
+// ===== Supabase Storage：站內資產上傳（例如首頁 Banner） =====
+/** 上傳站內資產（如 Banner 圖片）到 Supabase Storage，回傳公開網址；失敗時回傳 null。 */
+async function uploadSiteAssetToSupabaseStorage(blob, pathOrFilename) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SITE_ASSET_BUCKET) return null;
+  const path = String(pathOrFilename || "asset.jpg").replace(/^\/+/, "");
+  const url = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_SITE_ASSET_BUCKET}/${path}`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": blob.type || "image/jpeg",
+        "x-upsert": "true",
+      },
+      body: blob,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.warn("[SiteAssets] 上傳失敗", res.status, err.slice(0, 100));
+      return null;
+    }
+    return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_SITE_ASSET_BUCKET}/${path}`;
+  } catch (e) {
+    console.warn("[SiteAssets] 上傳錯誤", e?.message || e);
     return null;
   }
 }
@@ -1359,6 +1411,7 @@ window.DK = {
   upsertInventoryItemToSupabase,
   deleteInventoryItemFromSupabase,
   uploadImageToSupabaseStorage,
+  uploadSiteAssetToSupabaseStorage,
   fetchSiteConfigFromSupabase,
   saveSiteConfigToSupabase,
   fetchStockDataFromSupabase,
