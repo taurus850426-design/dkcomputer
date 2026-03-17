@@ -307,6 +307,7 @@
   const VALID_TABS = ["inv", "publish", "frontend"];
   function switchTab(name) {
     try { sessionStorage.setItem(ADMIN_TAB_KEY, name); } catch (_) {}
+    try { localStorage.setItem("dk_admin_active_tab", name); } catch (_) {}
     if (VALID_TABS.includes(name)) try { location.hash = name; } catch (_) {}
     for (const t of tabs) {
       if (t.getAttribute("data-tab") === name) t.classList.add("active");
@@ -688,8 +689,14 @@
       switchTab(toTab);
     });
   }
-  /* F5 重新整理後還原上次分頁：優先讀網址 #publish / #inv / #frontend，再 fallback sessionStorage */
+  /* F5 重新整理後還原上次分頁：優先 localStorage dk_admin_active_tab，再 hash / sessionStorage */
   function restoreAdminTab() {
+    const fromStorage = (function () { try { return localStorage.getItem("dk_admin_active_tab"); } catch (_) { return null; } })();
+    const hasPanel = (name) => (name === "inv" && tabInv) || (name === "publish" && tabPublish) || (name === "frontend" && tabFrontend);
+    if (fromStorage && VALID_TABS.includes(fromStorage) && hasPanel(fromStorage)) {
+      switchTab(fromStorage);
+      return;
+    }
     const fromHash = (location.hash || "").replace(/^#/, "").trim().toLowerCase();
     const saved = (VALID_TABS.includes(fromHash) ? fromHash : null) || (function () { try { return sessionStorage.getItem(ADMIN_TAB_KEY); } catch (_) { return null; } })();
     if (saved && VALID_TABS.includes(saved)) switchTab(saved);
@@ -710,7 +717,7 @@
       window.DK?.setAdminAuthed?.(true);
       applyAuthUI();
       try {
-        const saved = sessionStorage.getItem(ADMIN_TAB_KEY);
+        const saved = localStorage.getItem("dk_admin_active_tab") || sessionStorage.getItem(ADMIN_TAB_KEY);
         if (saved === "publish" || saved === "inv" || saved === "frontend") switchTab(saved);
         else switchTab("inv");
       } catch (_) { switchTab("inv"); }
@@ -787,6 +794,60 @@
     publishPhotosInput.value = "";
   });
   // ---------- frontend (前台管理) ----------
+  function updateHeroLivePreview() {
+    const taglineEl = document.getElementById("heroLivePreviewTagline");
+    const subEl = document.getElementById("heroLivePreviewSub");
+    const btn1El = document.getElementById("heroLivePreviewBtn1");
+    const btn2El = document.getElementById("heroLivePreviewBtn2");
+    const tagline = document.getElementById("feHeroTagline")?.value ?? "";
+    const sub = document.getElementById("feHeroSub")?.value ?? "";
+    const btn1 = document.getElementById("feHeroBtn1")?.value ?? "";
+    const btn2 = document.getElementById("feHeroBtn2")?.value ?? "";
+    if (taglineEl) taglineEl.textContent = tagline || "主標語";
+    if (subEl) subEl.textContent = sub || "副標語";
+    if (btn1El) btn1El.textContent = btn1 || "主按鈕 1";
+    if (btn2El) btn2El.textContent = btn2 || "主按鈕 2";
+  }
+
+  function updateBrandLivePreview() {
+    const markEl = document.getElementById("brandLivePreviewMark");
+    const titleEl = document.getElementById("brandLivePreviewTitle");
+    const subtitleEl = document.getElementById("brandLivePreviewSubtitle");
+    const mark = document.getElementById("feBrandMark")?.value ?? "";
+    const title = document.getElementById("feBrandTitle")?.value ?? "";
+    const subtitle = document.getElementById("feBrandSubtitle")?.value ?? "";
+    if (markEl) markEl.textContent = mark || "品牌縮寫";
+    if (titleEl) titleEl.textContent = title || "品牌名稱";
+    if (subtitleEl) subtitleEl.textContent = subtitle || "品牌副標";
+  }
+
+  function updateTrustLivePreview() {
+    const titleEl = document.getElementById("trustLivePreviewTitle");
+    const itemsEl = document.getElementById("trustLivePreviewItems");
+    const noteEl = document.getElementById("trustLivePreviewNote");
+    const title = document.getElementById("feTrustTitle")?.value ?? "";
+    const itemsText = document.getElementById("feTrustItems")?.value ?? "";
+    const note = document.getElementById("feTrustNote")?.value ?? "";
+    const items = itemsText.split(/\n/).map((s) => s.trim()).filter(Boolean);
+    if (titleEl) titleEl.textContent = title || "標題";
+    if (itemsEl) {
+      itemsEl.innerHTML = "";
+      items.forEach((line) => {
+        const li = document.createElement("li");
+        li.textContent = line;
+        li.style.marginBottom = "4px";
+        itemsEl.appendChild(li);
+      });
+      if (items.length === 0) {
+        const li = document.createElement("li");
+        li.textContent = "（尚無項目）";
+        li.style.color = "#9ca3af";
+        itemsEl.appendChild(li);
+      }
+    }
+    if (noteEl) noteEl.textContent = note || "備註說明";
+  }
+
   function loadFrontendForm() {
     const cfg = window.DK?.getConfig?.() || {};
     const fe = cfg.frontend || {};
@@ -805,6 +866,16 @@
     document.getElementById("feTrustTitle").value = fe.trustTitle ?? def.trustTitle ?? "";
     document.getElementById("feTrustItems").value = Array.isArray(fe.trustItems) ? fe.trustItems.join("\n") : (def.trustItems || []).join("\n");
     document.getElementById("feTrustNote").value = fe.trustNote ?? def.trustNote ?? "";
+    const homeTrust = fe.homeTrust && typeof fe.homeTrust === "object" ? fe.homeTrust : {};
+    const htItems = Array.isArray(homeTrust.items) ? homeTrust.items : [];
+    document.getElementById("feHomeTrustTitle").value = homeTrust.title ?? "";
+    [1, 2, 3].forEach((i) => {
+      const item = htItems[i - 1] || {};
+      const titleEl = document.getElementById("feHomeTrust" + i + "Title");
+      const textEl = document.getElementById("feHomeTrust" + i + "Text");
+      if (titleEl) titleEl.value = item.title ?? "";
+      if (textEl) textEl.value = item.text ?? "";
+    });
     document.getElementById("feContactTitle").value = fe.contactTitle ?? def.contactTitle ?? "";
     document.getElementById("feContactSub").value = fe.contactSub ?? def.contactSub ?? "";
     document.getElementById("feMachinePageTitle").value = fe.machinePageTitle ?? def.machinePageTitle ?? "";
@@ -862,47 +933,22 @@
       // 若後台版本不支援或 DOM 缺失，略過 Banner 區塊，避免影響其他設定
     }
 
-    // 首頁第二區分類卡片圖片：載入 frontend.homeEntries[idx].image
+    // 首頁第二區分類卡片：從 frontend.homeEntries 載入並 render 出所有 row（重整後才能看到已儲存的卡片）
     try {
       const entries = Array.isArray(fe.homeEntries) ? fe.homeEntries : [];
-      const rows = Array.from(document.querySelectorAll(".home-entry-row"));
-      rows.forEach((row) => {
-        const idx = Number(row.getAttribute("data-entry-index") || "0");
-        const entry = entries[idx] || {};
-        const urlInput = row.querySelector(".entry-image-url");
-        const preview = row.querySelector(".entry-image-preview");
-
-        if (urlInput) {
-          urlInput.value = entry.image || "";
-        }
-        if (preview) {
-          preview.innerHTML = "";
-          if (entry.image) {
-            const img = document.createElement("img");
-            img.src = entry.image;
-            img.alt = "";
-            img.style.cssText =
-              "max-width:140px;max-height:80px;object-fit:contain;border-radius:8px;background:#f9fafb;";
-            img.onerror = () => {
-              preview.innerHTML = "";
-              const msg = document.createElement("div");
-              msg.textContent = "預覽失敗";
-              msg.className = "muted small";
-              preview.appendChild(msg);
-            };
-            preview.appendChild(img);
-          } else {
-            const msg = document.createElement("div");
-            msg.textContent = "尚未設定圖片";
-            msg.className = "muted small";
-            preview.appendChild(msg);
-          }
-        }
-      });
+      const safeEntries = entries.filter(
+        (e) => e && typeof e === "object" && (e.id != null || e.title != null)
+      );
+      const listEl = document.getElementById("feHomeEntriesList");
+      if (listEl && typeof renderHomeEntriesAdmin === "function") {
+        renderHomeEntriesAdmin(listEl, safeEntries);
+      }
     } catch (_) {}
 
     const msg = document.getElementById("frontendMsg");
     if (msg) msg.hidden = true;
+    updateHeroLivePreview();
+    updateBrandLivePreview();
   }
 
   function saveFrontend() {
@@ -934,6 +980,15 @@
         trustTitle: document.getElementById("feTrustTitle").value?.trim(),
         trustItems: trustItems.length > 0 ? trustItems : (cfg.frontend?.trustItems || []),
         trustNote: document.getElementById("feTrustNote").value?.trim(),
+        homeTrust: (function () {
+          const title = (document.getElementById("feHomeTrustTitle")?.value ?? "").trim();
+          const items = [1, 2, 3].map((i) => ({
+            id: String(i),
+            title: (document.getElementById("feHomeTrust" + i + "Title")?.value ?? "").trim(),
+            text: (document.getElementById("feHomeTrust" + i + "Text")?.value ?? "").trim(),
+          }));
+          return { title: title || "為什麼選 DK 電腦", items };
+        })(),
         contactTitle: document.getElementById("feContactTitle").value?.trim(),
         contactSub: document.getElementById("feContactSub").value?.trim(),
         machinePageTitle: document.getElementById("feMachinePageTitle").value?.trim(),
@@ -1043,6 +1098,15 @@
   document.getElementById("frontendResetBtn")?.addEventListener("click", () => {
     if (confirm("確定重置前台設定為預設值？")) resetFrontend();
   });
+  ["feHeroTagline", "feHeroSub", "feHeroBtn1", "feHeroBtn2"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("input", updateHeroLivePreview);
+  });
+  ["feBrandMark", "feBrandTitle", "feBrandSubtitle"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("input", updateBrandLivePreview);
+  });
+  ["feTrustTitle", "feTrustItems", "feTrustNote"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("input", updateTrustLivePreview);
+  });
 
   function updateCatImage(cat, dataUrl) {
     const cfg = window.DK?.getConfig?.() || {};
@@ -1129,27 +1193,32 @@
     const safe = Array.isArray(entries) ? entries : [];
     listEl.innerHTML = "";
 
-    safe.forEach((entry) => {
+    safe.forEach((entry, index) => {
       const id = entry?.id || ("home_" + Date.now() + "_" + Math.floor(Math.random() * 1000));
       if (entry && !entry.id) entry.id = id;
       const row = document.createElement("div");
-      row.className = "home-entry-row";
+      row.className = "home-entry-row home-entry-card";
       row.dataset.entryId = id;
       row.setAttribute("draggable", "true");
 
+      const n = index + 1;
       row.innerHTML = `
+        <div class="home-entry-card-head"><span class="home-entry-drag-hint" title="拖曳排序">⋮⋮</span> 第 ${n} 張</div>
         <input class="entry-title" type="text" placeholder="標題" />
         <input class="entry-subtitle" type="text" placeholder="說明" />
         <input class="entry-link" type="url" placeholder="連結（例如 ./machine.html）" />
-        <input class="entry-image-url" type="url" placeholder="圖片網址" />
         <select class="entry-theme">
           <option value="">預設</option>
           <option value="dark">深色</option>
           <option value="light">淺色</option>
           <option value="blue">藍色</option>
         </select>
-        <input class="entry-image-file" type="file" accept="image/*" />
-        <button type="button" class="entry-delete-btn">刪除</button>
+        <div class="entry-image-preview-wrap">
+          <div class="entry-image-preview">尚未設定圖片</div>
+        </div>
+        <input class="entry-image-url" type="url" placeholder="圖片網址" />
+        <label class="btn btn-ghost btn-sm" style="margin:0">上傳圖片 <input type="file" class="entry-image-file" accept="image/*" style="display:none" /></label>
+        <button type="button" class="entry-delete-btn btn btn-ghost btn-sm">刪除</button>
       `;
 
       const t = row.querySelector(".entry-title");
@@ -1157,12 +1226,30 @@
       const l = row.querySelector(".entry-link");
       const img = row.querySelector(".entry-image-url");
       const theme = row.querySelector(".entry-theme");
+      const preview = row.querySelector(".entry-image-preview");
 
       if (t) t.value = entry?.title || "";
       if (s) s.value = entry?.subtitle || "";
       if (l) l.value = entry?.link || "";
       if (img) img.value = entry?.image || "";
       if (theme) theme.value = entry?.theme || "";
+
+      if (preview && entry?.image) {
+        preview.innerHTML = "";
+        const imgEl = document.createElement("img");
+        imgEl.src = entry.image;
+        imgEl.alt = "";
+        imgEl.onerror = function () {
+          preview.innerHTML = "";
+          const msg = document.createElement("span");
+          msg.textContent = "預覽失敗";
+          msg.className = "muted small";
+          preview.appendChild(msg);
+        };
+        preview.appendChild(imgEl);
+      } else if (preview && !preview.querySelector("img")) {
+        preview.textContent = "尚未設定圖片";
+      }
 
       listEl.appendChild(row);
     });
@@ -1426,8 +1513,10 @@
         <div class="banner-fields">
           <input type="url" class="banner-image" placeholder="圖片網址（必填）" />
           <input type="url" class="banner-link" placeholder="點擊連結（選填）" />
-          <input type="number" class="banner-focus-x" placeholder="focusX (0-100)" min="0" max="100" step="1" />
-          <input type="number" class="banner-focus-y" placeholder="focusY (0-100)" min="0" max="100" step="1" />
+          <label class="banner-focus-label">圖片焦點 X（左右，0=左，50=中，100=右）</label>
+          <input type="number" class="banner-focus-x" placeholder="0–100" min="0" max="100" step="1" />
+          <label class="banner-focus-label">圖片焦點 Y（上下，0=上，50=中，100=下）</label>
+          <input type="number" class="banner-focus-y" placeholder="0–100" min="0" max="100" step="1" />
           <input type="file" class="banner-file" accept="image/*" />
         </div>
         <div class="banner-actions">
@@ -2879,7 +2968,9 @@
   // ---------- init ----------
   applyAuthUI();
   if (window.DK?.isAdminAuthed?.()) {
-    switchTab("inv");
+    const saved = (function () { try { return localStorage.getItem("dk_admin_active_tab"); } catch (_) { return null; } })();
+    if (saved === "publish" || saved === "inv" || saved === "frontend") switchTab(saved);
+    else switchTab("inv");
   }
 })();
 

@@ -487,6 +487,32 @@
               </div>
             </div>
 
+            <style>
+            /* 前台管理：可折疊區塊卡片化，僅限 #tab-frontend */
+            #tab-frontend .admin-collapsible {
+              background: rgba(0,0,0,0.06);
+              border-radius: 12px;
+              margin-bottom: 18px;
+              border: 1px solid rgba(0,0,0,0.08);
+              box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+              overflow: hidden;
+            }
+            #tab-frontend .admin-collapsible .admin-collapsible-toggle {
+              background: rgba(0,0,0,0.10);
+              padding: 14px 16px;
+              border-radius: 12px 12px 0 0;
+              border-bottom: 1px solid rgba(255,255,255,0.05);
+            }
+            #tab-frontend .admin-collapsible:not(.is-open) .admin-collapsible-toggle {
+              border-radius: 12px;
+              border-bottom: none;
+            }
+            #tab-frontend .admin-collapsible .admin-collapsible-body {
+              padding: 16px;
+              background: rgba(0,0,0,0.04);
+            }
+            </style>
+
             <div class="form-grid" style="margin-top: 12px">
               <!-- SEO 與分享預覽 -->
               <section class="admin-collapsible full" data-collapsible="seo">
@@ -534,6 +560,88 @@
                     <label for="feBrandSubtitle">品牌副標</label>
                     <input id="feBrandSubtitle" type="text" placeholder="依用途配機，不亂賣、不踩雷" />
                   </div>
+                  <div class="field full" style="margin-top:16px">
+                    <label class="h3" style="margin:16px 0 4px">品牌即時預覽</label>
+                    <div id="brandLivePreview" class="brand-live-preview-card" style="border:1px solid rgba(17,24,39,0.12);border-radius:12px;padding:20px;background:#f8fafc;">
+                      <div id="brandLivePreviewMark" class="brand-preview-mark" style="font-size:1.1rem;font-weight:700;letter-spacing:0.05em;color:#111827;margin-bottom:4px;"></div>
+                      <div id="brandLivePreviewTitle" class="brand-preview-title" style="font-size:1rem;font-weight:600;color:#374151;margin-bottom:2px;"></div>
+                      <div id="brandLivePreviewSubtitle" class="brand-preview-subtitle" style="font-size:0.85rem;color:#6b7280;"></div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 首頁（區塊一）Banner 輪播（預設展開） -->
+              <section class="admin-collapsible full is-open" data-collapsible="home-banners">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="true">首頁（區塊一）Banner 輪播</button>
+                <div class="admin-collapsible-body">
+                  <div class="field full">
+                    <label class="h3" style="margin: 16px 0 4px">首頁（區塊一）Banner 輪播</label>
+                    <p class="muted small">設定首頁 Banner 圖片與連結，會依順序輪播。可留空表示使用預設 Banner。</p>
+                  </div>
+                  <div class="field full">
+                    <div id="feHomeBannersList" class="banner-list"></div>
+                    <button type="button" id="feHomeBannerAddBtn" class="btn btn-ghost btn-sm" style="margin-top:8px">＋ 新增一張 Banner</button>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 首頁（區塊二）分類入口（預設展開） -->
+              <section class="admin-collapsible full is-open" data-collapsible="home-entries">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="true">首頁（區塊二）分類入口</button>
+                <div class="admin-collapsible-body">
+                  <style>
+                    section[data-collapsible="home-entries"] .home-entries-admin-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+                    @media (max-width: 900px) { section[data-collapsible="home-entries"] .home-entries-admin-list { grid-template-columns: repeat(2, 1fr); } }
+                    @media (max-width: 560px) { section[data-collapsible="home-entries"] .home-entries-admin-list { grid-template-columns: 1fr; } }
+                    section[data-collapsible="home-entries"] .home-entry-card { border: 1px solid rgba(17,24,39,0.14); border-radius: 12px; padding: 14px; background: #fff; display: flex; flex-direction: column; gap: 10px; }
+                    section[data-collapsible="home-entries"] .home-entry-card-head { font-weight: 700; font-size: 13px; color: rgba(17,24,39,0.85); display: flex; align-items: center; gap: 8px; }
+                    section[data-collapsible="home-entries"] .home-entry-drag-hint { color: rgba(17,24,39,0.45); cursor: grab; }
+                    section[data-collapsible="home-entries"] .entry-image-preview-wrap { width: 100%; aspect-ratio: 16/9; background: #f3f4f6; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+                    section[data-collapsible="home-entries"] .entry-image-preview { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 12px; color: rgba(17,24,39,0.5); }
+                    section[data-collapsible="home-entries"] .entry-image-preview img { width: 100%; height: 100%; object-fit: contain; display: block; }
+                  </style>
+                  <div class="field full">
+                    <label class="h3" style="margin:16px 0 4px">首頁（區塊二）分類入口</label>
+                    <p class="muted small">
+                      可自由新增、編輯、刪除首頁第二區分類卡片。每張卡片可設定標題、說明、圖片、連結。
+                    </p>
+                  </div>
+                  <div class="field full">
+                    <div id="feHomeEntriesList" class="home-entries-admin-list"></div>
+                  </div>
+                  <div class="field full">
+                    <button type="button" id="addHomeEntryBtn" class="btn btn-ghost btn-sm">＋ 新增分類卡片</button>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 首頁（區塊三）為什麼選 DK 電腦 -->
+              <section class="admin-collapsible full" data-collapsible="home-trust">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="false">首頁（區塊三）為什麼選 DK 電腦</button>
+                <div class="admin-collapsible-body">
+                  <div class="field full">
+                    <label class="h3" style="margin: 16px 0 4px">首頁（區塊三）為什麼選 DK 電腦</label>
+                  </div>
+                  <div class="field full">
+                    <label for="feHomeTrustTitle">區塊標題</label>
+                    <input id="feHomeTrustTitle" type="text" placeholder="為什麼選 DK 電腦" />
+                  </div>
+                  <div class="field full">
+                    <label class="h3" style="margin: 12px 0 4px">卡片 1</label>
+                    <input id="feHomeTrust1Title" type="text" placeholder="卡片標題" />
+                    <input id="feHomeTrust1Text" type="text" placeholder="卡片說明" style="margin-top:6px" />
+                  </div>
+                  <div class="field full">
+                    <label class="h3" style="margin: 12px 0 4px">卡片 2</label>
+                    <input id="feHomeTrust2Title" type="text" placeholder="卡片標題" />
+                    <input id="feHomeTrust2Text" type="text" placeholder="卡片說明" style="margin-top:6px" />
+                  </div>
+                  <div class="field full">
+                    <label class="h3" style="margin: 12px 0 4px">卡片 3</label>
+                    <input id="feHomeTrust3Title" type="text" placeholder="卡片標題" />
+                    <input id="feHomeTrust3Text" type="text" placeholder="卡片說明" style="margin-top:6px" />
+                  </div>
                 </div>
               </section>
 
@@ -560,6 +668,17 @@
                     <label for="feHeroBtn2">主按鈕 2</label>
                     <input id="feHeroBtn2" type="text" placeholder="🧠 不知道怎麼選（需求表單）" />
                   </div>
+                  <div class="field full" style="margin-top:16px">
+                    <label class="h3" style="margin:16px 0 4px">Hero 即時預覽</label>
+                    <div id="heroLivePreview" class="hero-live-preview-card" style="border:1px solid rgba(17,24,39,0.12);border-radius:12px;padding:20px;background:#f8fafc;">
+                      <div id="heroLivePreviewTagline" class="hero-preview-tagline" style="font-size:1.5rem;font-weight:700;margin-bottom:8px;color:#111827;"></div>
+                      <div id="heroLivePreviewSub" class="hero-preview-sub" style="font-size:0.95rem;color:#4b5563;margin-bottom:14px;"></div>
+                      <div class="hero-preview-btns" style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <span id="heroLivePreviewBtn1" class="hero-preview-btn" style="display:inline-block;padding:8px 14px;border-radius:8px;background:#111827;color:#fff;font-size:14px;"></span>
+                        <span id="heroLivePreviewBtn2" class="hero-preview-btn" style="display:inline-block;padding:8px 14px;border-radius:8px;background:#111827;color:#fff;font-size:14px;"></span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </section>
 
@@ -585,6 +704,14 @@
                   <div class="field full">
                     <label for="feTrustNote">備註說明</label>
                     <input id="feTrustNote" type="text" placeholder="官網會寫清楚：不適合誰、不能幹嘛、不賣的情況。奧客會自己離開。" />
+                  </div>
+                  <div class="field full" style="margin-top:16px">
+                    <label class="h3" style="margin:16px 0 4px">信任建立即時預覽</label>
+                    <div id="trustLivePreview" class="trust-live-preview-card" style="border:1px solid rgba(17,24,39,0.12);border-radius:12px;padding:20px;background:#f8fafc;">
+                      <div id="trustLivePreviewTitle" class="trust-preview-title" style="font-size:1.15rem;font-weight:700;color:#111827;margin-bottom:10px;"></div>
+                      <ul id="trustLivePreviewItems" class="trust-preview-items" style="margin:0 0 12px 0;padding-left:1.2em;font-size:0.95rem;color:#374151;line-height:1.5;"></ul>
+                      <div id="trustLivePreviewNote" class="trust-preview-note" style="font-size:0.8rem;color:#6b7280;"></div>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -703,40 +830,6 @@
                         <button type="button" class="btn btn-ghost btn-sm cat-image-clear" data-cat="peripherals">清除</button>
                       </div>
                     </div>
-                  </div>
-                </div>
-              </section>
-
-              <!-- 首頁第二區分類卡片（預設展開） -->
-              <section class="admin-collapsible full is-open" data-collapsible="home-entries">
-                <button type="button" class="admin-collapsible-toggle" aria-expanded="true">首頁第二區分類卡片</button>
-                <div class="admin-collapsible-body">
-                  <div class="field full">
-                    <label class="h3" style="margin:16px 0 4px">首頁第二區分類卡片</label>
-                    <p class="muted small">
-                      可自由新增、編輯、刪除首頁第二區分類卡片。每張卡片可設定標題、說明、圖片、連結。
-                    </p>
-                  </div>
-                  <div class="field full">
-                    <div id="feHomeEntriesList"></div>
-                  </div>
-                  <div class="field full">
-                    <button type="button" id="addHomeEntryBtn" class="btn btn-ghost btn-sm">＋ 新增分類卡片</button>
-                  </div>
-                </div>
-              </section>
-
-              <!-- 首頁 Banner 管理（預設展開） -->
-              <section class="admin-collapsible full is-open" data-collapsible="home-banners">
-                <button type="button" class="admin-collapsible-toggle" aria-expanded="true">首頁 Banner 管理</button>
-                <div class="admin-collapsible-body">
-                  <div class="field full">
-                    <label class="h3" style="margin: 16px 0 4px">首頁 Banner 管理</label>
-                    <p class="muted small">設定首頁 Banner 圖片與連結，會依順序輪播。可留空表示使用預設 Banner。</p>
-                  </div>
-                  <div class="field full">
-                    <div id="feHomeBannersList" class="banner-list"></div>
-                    <button type="button" id="feHomeBannerAddBtn" class="btn btn-ghost btn-sm" style="margin-top:8px">＋ 新增一張 Banner</button>
                   </div>
                 </div>
               </section>

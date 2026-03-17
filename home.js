@@ -4,6 +4,7 @@
 (function () {
   /* ===== Hero Banner 輪播（第一區）：從設定讀取 homeBanners ===== */
   const hero = document.getElementById("hero");
+  const heroCarousel = hero?.querySelector(".hero-carousel");
   const slidesWrap = hero?.querySelector(".hero-slides");
   const prevBtn = hero?.querySelector(".hero-arrow-prev");
   const nextBtn = hero?.querySelector(".hero-arrow-next");
@@ -61,14 +62,16 @@
   }
 
   function updateHeroCarousel(target) {
-    if (!slides.length) return;
+    if (!slides.length || !slidesWrap) return;
     heroIndex = ((target % slides.length) + slides.length) % slides.length;
-    slides.forEach((el, i) => {
+    slides.forEach(function (el, i) {
       el.classList.toggle("hero-slide-active", i === heroIndex);
     });
+    var carouselW = heroCarousel ? heroCarousel.offsetWidth : 0;
+    slidesWrap.style.transform = "translateX(-" + (heroIndex * carouselW) + "px)";
     if (dotsWrap) {
-      const dots = Array.from(dotsWrap.querySelectorAll(".hero-dot"));
-      dots.forEach((d, i) => d.classList.toggle("hero-dot-active", i === heroIndex));
+      var dots = Array.from(dotsWrap.querySelectorAll(".hero-dot"));
+      dots.forEach(function (d, i) { d.classList.toggle("hero-dot-active", i === heroIndex); });
     }
   }
 
@@ -119,8 +122,34 @@
       hero.addEventListener("mouseenter", stopHeroAuto);
       hero.addEventListener("mouseleave", startHeroAuto);
 
+      /* 手機版：手指左右滑動切換 Banner（綁在 .hero-carousel） */
+      if (heroCarousel && slides.length > 1) {
+        var touchStartX = 0;
+        var SWIPE_THRESHOLD = 50;
+        heroCarousel.addEventListener("touchstart", function (e) {
+          touchStartX = e.changedTouches ? e.changedTouches[0].clientX : e.touches[0].clientX;
+        }, { passive: true });
+        heroCarousel.addEventListener("touchend", function (e) {
+          if (!e.changedTouches || !e.changedTouches[0]) return;
+          var x = e.changedTouches[0].clientX;
+          var delta = x - touchStartX;
+          if (delta > SWIPE_THRESHOLD) {
+            stopHeroAuto();
+            updateHeroCarousel(heroIndex - 1);
+            startHeroAuto();
+          } else if (delta < -SWIPE_THRESHOLD) {
+            stopHeroAuto();
+            updateHeroCarousel(heroIndex + 1);
+            startHeroAuto();
+          }
+        }, { passive: true });
+      }
+
       updateHeroCarousel(0);
       startHeroAuto();
+      window.addEventListener("resize", function () {
+        if (slides.length && slidesWrap) updateHeroCarousel(heroIndex);
+      });
     }
   }
 
@@ -161,6 +190,48 @@
   }
 
   renderHomeEntries();
+
+  /* ===== 為什麼選 DK 電腦（第三區）：frontend.homeTrust ===== */
+  const DEFAULT_HOME_TRUST = {
+    title: "為什麼選 DK 電腦",
+    items: [
+      { id: "1", title: "每台實測穩定", text: "交機前先測試，不亂出貨" },
+      { id: "2", title: "依用途幫你配機", text: "文書、遊戲、剪輯，照預算配" },
+      { id: "3", title: "店家保固好處理", text: "有問題直接找人，不用自己亂跑" },
+    ],
+  };
+  const HOME_TRUST_ICONS = ["✓", "🎯", "🛡️"];
+  function renderHomeTrust() {
+    const titleEl = document.getElementById("homeTrustTitle");
+    const gridEl = document.getElementById("homeTrustGrid");
+    if (!titleEl || !gridEl) return;
+    const cfg = window.DK?.getConfig?.() || {};
+    const fe = cfg.frontend || {};
+    const data = fe.homeTrust && typeof fe.homeTrust === "object" ? fe.homeTrust : DEFAULT_HOME_TRUST;
+    const title = (data.title || "").trim() || DEFAULT_HOME_TRUST.title;
+    const items = Array.isArray(data.items) ? data.items : DEFAULT_HOME_TRUST.items;
+    const list = items.slice(0, 3).filter((e) => e && (e.title || e.text));
+    if (!list.length) list.push(...DEFAULT_HOME_TRUST.items);
+    titleEl.textContent = title;
+    gridEl.innerHTML = list
+      .map((item, i) => {
+        const t = (item.title || "").trim() || "";
+        const d = (item.text || "").trim() || "";
+        const icon = HOME_TRUST_ICONS[i] || "•";
+        return `<div class="home-trust-card">
+          <div class="home-trust-icon" aria-hidden="true">${icon}</div>
+          <h3 class="home-trust-card-title">${escapeHtml(t)}</h3>
+          <p class="home-trust-card-text">${escapeHtml(d)}</p>
+        </div>`;
+      })
+      .join("");
+  }
+  function escapeHtml(s) {
+    const div = document.createElement("div");
+    div.textContent = s;
+    return div.innerHTML;
+  }
+  renderHomeTrust();
 
   /* ===== 首頁主推主機（Hero 下方）：從 inventory 篩選 ===== */
   function renderFeaturedMachines(retriesLeft) {

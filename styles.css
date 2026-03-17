@@ -141,6 +141,7 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
   margin:0;
 }
 .hero-first .container{
+  width: 100%;
   max-width:100%;
   padding-left:0;
   padding-right:0;
@@ -151,30 +152,33 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .hero-buttons{ display: flex; flex-direction: column; gap: 14px; align-items: center; }
 .btn-hero{ min-width: 280px; padding: 14px 24px; font-size: 16px; }
 
-/* Hero 輪播基礎結構（首頁第一區） */
+/* Hero 輪播基礎結構（首頁第一區）：slide/track/img 寬度一致，每張 slide = 100% 可視寬 */
 .hero-carousel{
   position: relative;
   overflow: hidden;
-  width:100%;
+  width: 100%;
 }
 .hero-slides{
   display: flex;
   flex-wrap: nowrap;
   transition: transform 0.6s ease;
+  will-change: transform;
 }
 .hero-banner-img-wrap{
   position: relative;
-  width:100%;
-  height:calc(100vh - 72px);
-  aspect-ratio:auto;
+  width: 100%;
+  min-height: 420px;
+  aspect-ratio: auto;
   overflow: hidden;
 }
 .hero-banner-img-wrap img{
+  display: block;
   width: 100%;
   height: 100%;
-  display: block;
   object-fit: cover;
   object-position: center;
+  position: absolute;
+  inset: 0;
 }
 .hero-banner-img-wrap::after{
   content:"";
@@ -191,6 +195,8 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
 .hero-slide{
   flex: 0 0 100%;
   width: 100%;
+  min-width: 100%;
+  position: relative;
   opacity: 0;
   transform: translateX(4%);
   transition: opacity 0.4s ease, transform 0.4s ease;
@@ -200,6 +206,7 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
   transform: translateX(0);
 }
 .hero-arrow{
+  display: none !important;
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
@@ -208,7 +215,6 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
   border-radius: 999px;
   border: 1px solid rgba(255,255,255,0.45);
   background: radial-gradient(circle at 30% 0, rgba(255,255,255,0.45), transparent 60%);
-  display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
@@ -286,14 +292,27 @@ body.theme-apple #home-entries .home-entry-sub{
   opacity: 0.75;
 }
 
-/* ROG 風格分類入口卡片（白底＋圖片在上） */
+/* ROG 風格分類入口卡片（白底＋圖片在上）：單排橫向滑動 */
 .home-categories{
-  display:grid;
-  grid-template-columns: repeat(3, minmax(0,1fr));
-  gap:18px;
-  margin-top:12px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 18px;
+  margin-top: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  padding-bottom: 8px;
+  padding-right: 4px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.home-categories::-webkit-scrollbar{
+  display: none;
 }
 .home-category-item{
+  flex: 0 0 260px;
+  min-width: 260px;
+  scroll-snap-align: start;
   display:flex;
   flex-direction:column;
   align-items:center;
@@ -316,15 +335,18 @@ body.theme-apple #home-entries .home-entry-sub{
   max-width:220px;
   height:140px;
   margin-bottom:10px;
-  background:#f9fafb;
+  background: transparent;
   border-radius:12px;
   display:flex;
   align-items:center;
   justify-content:center;
+  overflow: hidden;
 }
 .home-category-img img{
   max-width:100%;
   max-height:100%;
+  width: 100%;
+  height: 100%;
   display:block;
   border-radius:10px;
   object-fit:cover;
@@ -353,9 +375,73 @@ body.theme-apple #home-entries .home-entry-sub{
   border:0;
 }
 
+/* 為什麼選 DK 電腦（第三區）：深色底 */
+.home-trust{
+  background: #0c0c0e;
+  padding: 48px 0 56px;
+}
+.home-trust-title{
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: #f0f0f4;
+  margin: 0 0 28px;
+}
+.home-trust-grid{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.home-trust-card{
+  background: rgba(22,22,28,0.95);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 20px 18px;
+  text-align: center;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.home-trust-card:hover{
+  border-color: rgba(255,255,255,0.14);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+}
+.home-trust-icon{
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+}
+.home-trust-card-title{
+  font-size: 16px;
+  font-weight: 700;
+  color: #e8e8ee;
+  margin: 0 0 6px;
+}
+.home-trust-card-text{
+  font-size: 14px;
+  color: #a8a8b8;
+  line-height: 1.5;
+  margin: 0;
+}
 @media (max-width: 900px){
-  .home-categories{
-    grid-template-columns:1fr;
+  .home-category-item{
+    flex: 0 0 240px;
+    min-width: 240px;
+  }
+  .home-trust-grid{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px){
+  .home-trust-grid{
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1757,11 +1843,7 @@ body.theme-apple{
 
   margin:0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Segoe UI", sans-serif;
-  background:
-    radial-gradient(1200px 520px at 10% -10%, rgba(255,23,68,0.28), transparent 60%),
-    radial-gradient(900px 520px at 90% 0%, rgba(103,58,183,0.3), transparent 60%),
-    radial-gradient(1600px 900px at 50% 120%, rgba(0,230,118,0.18), transparent 70%),
-    #050509;
+  background: #000;
   color: var(--text);
 }
 
@@ -1818,9 +1900,27 @@ body.theme-apple .nav-admin{
 body.theme-apple .section{ padding: 56px 0; }
 body.theme-apple .hero{ padding-top: 40px; }
 body.theme-apple .hero-first{
-  min-height: 65vh;
+  min-height: 0;
   position: relative;
   overflow: hidden;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+body.theme-apple #hero.hero-first{
+  padding-top: 0;
+  padding-bottom: 0;
+}
+body.theme-apple #home-entries{
+  margin-top: 0;
+}
+
+/* 首頁：Hero(第一區) 與第二區銜接，避免中間露出深色背景 */
+body.theme-apple #featuredMachines.section{
+  padding: 0;
+  margin: 0;
+}
+body.theme-apple #featuredMachines:has(.container:empty){
+  display: none;
 }
 body.theme-apple .hero-tagline{
   font-size: 40px;
