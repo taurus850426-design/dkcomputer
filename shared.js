@@ -106,10 +106,10 @@ const DEFAULT_CONFIG = {
         link: "./form.html",
       },
       {
-        title: "電腦有問題要維修",
+        title: "電腦壞了 / 維修",
         subtitle: "電腦故障、異常、升級需求，都可以先聯絡我協助判斷。",
         image: "./assets/entry-repair.png",
-        link: "./repair.html",
+        link: "./form.html",
       },
     ],
   },
