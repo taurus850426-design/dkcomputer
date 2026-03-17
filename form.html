@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light" />
-    <title>不知道怎麼選｜需求表單｜二手電腦</title>
+    <title>不知道怎麼選｜需求表單｜DK電腦</title>
     <meta name="description" content="填寫用途、預算、是否接受二手，我們會依需求推薦最適合的配置。" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -41,13 +41,13 @@
       <section class="section">
         <div class="container container-form">
           <div class="page-head">
-            <h1 class="h1">不知道怎麼選？</h1>
-            <p class="lead muted">填完表單會自動複製你的需求並開啟 LINE，請在對話框貼上後傳送給我們。</p>
+            <h1 id="formPageTitle" class="h1">不知道怎麼選？</h1>
+            <p id="formPageLead" class="lead muted">填完表單會自動複製你的需求並開啟 LINE，請在對話框貼上後傳送給我們。</p>
           </div>
 
           <form id="demandForm" class="form-card">
             <div class="field">
-              <label for="usage">用途 <span class="required">*</span></label>
+              <label id="usageLabel" for="usage">用途 <span class="required">*</span></label>
               <select id="usage" required>
                 <option value="">請選擇</option>
                 <option value="文書">文書</option>
@@ -58,7 +58,7 @@
             </div>
 
             <div class="field">
-              <label for="budget">預算區間 <span class="required">*</span></label>
+              <label id="budgetLabel" for="budget">預算區間 <span class="required">*</span></label>
               <select id="budget" required>
                 <option value="">請選擇</option>
                 <option value="3000-6000">$3,000–6,000（文書）</option>
@@ -69,7 +69,7 @@
             </div>
 
             <div class="field">
-              <label>是否接受二手</label>
+              <label id="usedLabel">是否接受二手</label>
               <div class="radio-row">
                 <label class="radio-wrap">
                   <input type="radio" name="used" value="是" checked />
@@ -83,7 +83,7 @@
             </div>
 
             <div class="field">
-              <label>有沒有舊電腦</label>
+              <label id="oldPCLabel">有沒有舊電腦</label>
               <div class="radio-row">
                 <label class="radio-wrap">
                   <input type="radio" name="oldPC" value="有" id="oldPCYes" />
@@ -134,7 +134,7 @@
             </div>
 
             <div class="form-actions">
-              <button type="submit" class="btn btn-primary btn-lg">複製需求並開啟 LINE（請在對話框貼上後傳送）</button>
+              <button id="formSubmitBtn" type="submit" class="btn btn-primary btn-lg">複製需求並開啟 LINE（請在對話框貼上後傳送）</button>
             </div>
           </form>
         </div>
