@@ -1731,6 +1731,14 @@
     /** 庫存品項表排序：key 為欄位名，dir 為 1 升序、-1 降序 */
     let v2ItemsSortKey = null;
     let v2ItemsSortDir = 1;
+    let itemsStatusTouchedByUser = false;
+    const HIDE_ZERO_STOCK_KEY = "dk_items_hide_zero_stock";
+    let hideZeroStock = true;
+    try {
+      const savedHideZero = localStorage.getItem(HIDE_ZERO_STOCK_KEY);
+      if (savedHideZero === "1") hideZeroStock = true;
+      if (savedHideZero === "0") hideZeroStock = false;
+    } catch (_) {}
     const V2_PAGE_SIZE = 15;
     let itemsPage = 1;
     let ledgerPage = 1;
@@ -1846,7 +1854,27 @@
 
     function renderV2Items() {
       if (!itemsTbody) return;
-      const list = getV2ItemsSortedList();
+      let list = getV2ItemsSortedList();
+      // ===== 預設只顯示「可售 + 有庫存」=====
+      // 這裡實際狀態值使用 READY（顯示文字才是「可售」）
+      const statusFilterEl = itemsStatus || document.getElementById("v2StatusFilter");
+      const isDefaultAll = !statusFilterEl || statusFilterEl.value === "全部" || statusFilterEl.value === "";
+      // 只有在「尚未手動選擇狀態篩選」時才套用預設
+      if (!itemsStatusTouchedByUser && isDefaultAll) {
+        list = list.filter((it) => {
+          const qty = Number(it.qty_on_hand || 0);
+          return it.status === "READY" && qty > 0;
+        });
+      }
+      // ===== 隱藏 0 庫存 =====
+      if (hideZeroStock) {
+        list = list.filter((it) => {
+          const qty = Number(it.qty_on_hand || 0);
+          return qty > 0;
+        });
+      }
+      // ===== END =====
+      // ===== END =====
       const pageInfo = paginateV2(list, itemsPage, V2_PAGE_SIZE);
       itemsPage = pageInfo.page;
       itemsTbody.innerHTML = pageInfo.pageItems.map((x) => {
@@ -1978,6 +2006,27 @@
 
     document.getElementById("btnNewItem")?.addEventListener("click", () => openV2ItemEditor(null));
     document.getElementById("btnExportItemsExcel")?.addEventListener("click", exportV2ItemsToExcel);
+    (function initZeroStockToggle() {
+      const actions = document.getElementById("btnNewItem")?.closest(".section-actions");
+      if (!actions || document.getElementById("toggleZeroStock")) return;
+      const label = document.createElement("label");
+      label.style.marginLeft = "12px";
+      label.style.fontSize = "14px";
+      label.innerHTML = '<input type="checkbox" id="toggleZeroStock" checked> 隱藏 0 庫存';
+      actions.appendChild(label);
+      const toggleZeroStock = document.getElementById("toggleZeroStock");
+      if (toggleZeroStock) {
+        toggleZeroStock.checked = hideZeroStock;
+        toggleZeroStock.addEventListener("change", function () {
+          hideZeroStock = this.checked;
+          try {
+            localStorage.setItem(HIDE_ZERO_STOCK_KEY, hideZeroStock ? "1" : "0");
+          } catch (_) {}
+          itemsPage = 1;
+          renderV2Items();
+        });
+      }
+    })();
     document.getElementById("itemCancel")?.addEventListener("click", closeV2ItemEditor);
     /* 不再點空白關閉：僅能按「取消」或「關閉」按鈕關閉，避免誤觸流失資料 */
     document.getElementById("itemDelete")?.addEventListener("click", () => {
@@ -2245,7 +2294,7 @@
     });
     itemsSearch?.addEventListener("input", () => { itemsPage = 1; renderV2Items(); });
     itemsCategory?.addEventListener("change", () => { itemsPage = 1; renderV2Items(); });
-    itemsStatus?.addEventListener("change", () => { itemsPage = 1; renderV2Items(); });
+    itemsStatus?.addEventListener("change", () => { itemsStatusTouchedByUser = true; itemsPage = 1; renderV2Items(); });
     document.getElementById("btnDeleteSelectedItems")?.addEventListener("click", () => {
       const checked = document.querySelectorAll("#itemsTbody .item-row-cb:checked");
       const ids = Array.from(checked).map((cb) => cb.getAttribute("data-id")).filter(Boolean);
@@ -2283,8 +2332,11 @@
       const pageInfo = paginateV2(list, ledgerPage, V2_PAGE_SIZE);
       ledgerPage = pageInfo.page;
       ledgerTbody.innerHTML = pageInfo.pageItems.map((r) => {
-        const name = byId[r.item_id] ? (byId[r.item_id].name || byId[r.item_id].sku) : r.item_id;
-        return `<tr><td class="nowrap">${v2Esc((r.created_at || "").toString().slice(0, 19))}</td><td>${v2Esc(name)}</td><td>${v2Esc(LEDGER_TYPE_LABEL[r.type] || r.type)}</td><td>${r.qty}</td><td>${v2FmtNum(r.unit_cost)}</td><td>${v2Esc(REF_TYPE_LABEL[r.ref_type] || r.ref_type)}</td><td>${v2Esc(r.ref_id)}</td><td class="muted">${v2Esc(r.note)}</td></tr>`;
+        const item = byId[r.item_id];
+        const baseName = item ? (item.name || item.sku || "") : String(r.item_id || "");
+        const spec = item ? String(item.spec || "").trim() : "";
+        const displayName = spec ? `${baseName} ${spec}` : baseName;
+        return `<tr><td class="nowrap">${v2Esc((r.created_at || "").toString().slice(0, 19))}</td><td>${v2Esc(displayName)}</td><td>${v2Esc(LEDGER_TYPE_LABEL[r.type] || r.type)}</td><td>${r.qty}</td><td>${v2FmtNum(r.unit_cost)}</td><td>${v2Esc(REF_TYPE_LABEL[r.ref_type] || r.ref_type)}</td><td>${v2Esc(r.ref_id)}</td><td class="muted">${v2Esc(r.note)}</td></tr>`;
       }).join("");
 
       const pager = document.getElementById("ledgerPagination");
