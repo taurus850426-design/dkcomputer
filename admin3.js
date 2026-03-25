@@ -2899,7 +2899,13 @@
       const summary = DK.reportSummaryByDateRange(params.fromStr, params.toStr);
       const elResult = document.getElementById("reportQueryResult");
       if (elResult) elResult.innerHTML = `<div><strong>${params.label} ${summary.fromStr} ~ ${summary.toStr}</strong></div><div>訂單毛利合計：NT$ ${v2FmtNum(summary.ordersProfit)}（${summary.ordersCount} 筆）</div><div>支出合計：NT$ ${v2FmtNum(summary.expensesTotal)}（${summary.expensesCount} 筆）</div><div>庫存總成本：NT$ ${v2FmtNum(summary.inventoryValue)}</div>`;
-      const top20 = DK.reportTop20IdleDays();
+      // 庫齡排行前 20（滯留天數最多）：只顯示目前仍有庫存（qty_on_hand > 0）
+      // ⚠ 只改此排行榜的顯示用資料，不動 DK 的其他報表/排序邏輯
+      const top20 = (DK.getEnrichedItems ? DK.getEnrichedItems() : [])
+        .filter((x) => x.idle_days != null)
+        .filter((x) => Number(x.qty_on_hand || 0) > 0)
+        .sort((a, b) => (b.idle_days ?? 0) - (a.idle_days ?? 0))
+        .slice(0, 20);
       const elTop20 = document.getElementById("reportTop20");
       if (elTop20) elTop20.innerHTML = top20.length ? `<table class="table"><thead><tr><th>名稱</th><th>品類</th><th>滯留天</th><th>庫存價值</th></tr></thead><tbody>${top20.map((x) => `<tr><td>${v2Esc(x.name)}</td><td>${v2Esc(x.category)}</td><td>${x.idle_days}</td><td>${v2FmtNum(x.inventory_value)}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無資料</p>";
       const testingPrep = DK.reportTestingPrep();
