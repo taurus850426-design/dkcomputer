@@ -560,6 +560,15 @@
                     <label for="feBrandSubtitle">品牌副標</label>
                     <input id="feBrandSubtitle" type="text" placeholder="依用途配機，不亂賣、不踩雷" />
                   </div>
+                  <div class="field full">
+                    <label for="feBrandLogoFile">官網 Logo（首頁 header，存 site-assets/brand/）</label>
+                    <input type="hidden" id="feBrandLogoUrl" value="" />
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:6px;">
+                      <input id="feBrandLogoFile" type="file" accept="image/*" />
+                      <button type="button" id="feBrandLogoClear" class="btn btn-ghost btn-sm">清除 Logo</button>
+                    </div>
+                    <div id="feBrandLogoPreview" class="muted small" style="margin-top:8px;">未設定</div>
+                  </div>
                   <div class="field full" style="margin-top:16px">
                     <label class="h3" style="margin:16px 0 4px">品牌即時預覽</label>
                     <div id="brandLivePreview" class="brand-live-preview-card" style="border:1px solid rgba(17,24,39,0.12);border-radius:12px;padding:20px;background:#f8fafc;">

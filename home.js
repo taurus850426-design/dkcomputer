@@ -191,6 +191,11 @@
 
   renderHomeEntries();
 
+  /* 首頁 header Logo（frontend.brandLogo）與品牌文字：與 shared 初次套用互補 */
+  if (typeof window.DK !== "undefined" && typeof DK.applyConfigToHomePage === "function") {
+    DK.applyConfigToHomePage();
+  }
+
   /* ===== 為什麼選 DK 電腦（第三區）：frontend.homeTrust ===== */
   const DEFAULT_HOME_TRUST = {
     title: "為什麼選 DK 電腦",

@@ -89,6 +89,8 @@ const DEFAULT_CONFIG = {
       work: { min: 18000, max: 999999 },
       peripherals: { min: 0, max: 999999 },
     },
+    /** 首頁 header Logo 圖片網址（Supabase site-assets 等）；空字串表示不顯示圖片 */
+    brandLogo: "",
     /** 首頁 Banner 設定（後台管理）；可為空陣列 */
     homeBanners: [],
     /** 首頁三大分類入口（第二區）；可於後台或日後配置擴充 */
@@ -1232,14 +1234,30 @@ function applyConfigToHomePage() {
     // 安全失敗：若 meta 標籤不存在就略過，不中斷其他設定
   }
 
+  const fe = cfg.frontend || {};
+  const brandLogoUrl = (fe.brandLogo || "").trim();
+  const brandLogoImg = document.getElementById("brandLogoImg");
+  if (brandLogoImg) {
+    if (brandLogoUrl) {
+      brandLogoImg.src = brandLogoUrl;
+      brandLogoImg.alt = cfg.brand.title || "";
+      brandLogoImg.hidden = false;
+    } else {
+      brandLogoImg.removeAttribute("src");
+      brandLogoImg.alt = "";
+      brandLogoImg.hidden = true;
+    }
+  }
   const brandMark = document.getElementById("brandMark");
-  if (brandMark) brandMark.textContent = cfg.brand.mark;
+  if (brandMark) {
+    brandMark.textContent = cfg.brand.mark;
+    brandMark.hidden = !!brandLogoUrl;
+  }
   const brandTitle = document.getElementById("brandTitle");
   if (brandTitle) brandTitle.textContent = cfg.brand.title;
   const brandSubtitle = document.getElementById("brandSubtitle");
   if (brandSubtitle) brandSubtitle.textContent = cfg.brand.subtitle;
 
-  const fe = cfg.frontend || {};
   const heroTagline = document.getElementById("heroTagline");
   if (heroTagline) heroTagline.textContent = fe.heroTagline ?? cfg.brand.title;
   const heroSub = document.getElementById("heroSub");
@@ -1463,6 +1481,7 @@ if (window.DK.fetchSiteConfigFromSupabase && window.DK.saveConfig) {
     .fetchSiteConfigFromSupabase()
     .then(function (c) {
       if (c != null) window.DK.saveConfig(c, { skipSupabase: true });
+      if (typeof window.DK.applyConfigToHomePage === "function") window.DK.applyConfigToHomePage();
     })
     .catch(function () {});
 }

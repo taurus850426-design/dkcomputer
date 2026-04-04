@@ -74,6 +74,23 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
   position: relative;
 }
 .brand{ display:flex; align-items:center; gap:12px; }
+.brand-logo-img{
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.55);
+}
+.brand-logo-img[hidden]{
+  display: none !important;
+}
+@media (max-width: 560px){
+  .brand-logo-img{
+    width: 32px;
+    height: 32px;
+  }
+}
 .brand-mark{
   width:40px; height:40px;
   border-radius:14px;
@@ -84,6 +101,9 @@ a.link:visited{ color: rgba(18,24,38,0.80); }
   letter-spacing:0.5px;
   color: #fff;
   overflow: hidden;
+}
+.brand-mark[hidden]{
+  display: none !important;
 }
 .brand-mark .brand-logo{
   width: 100%;

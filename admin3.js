@@ -821,6 +821,27 @@
     if (subtitleEl) subtitleEl.textContent = subtitle || "品牌副標";
   }
 
+  function updateBrandLogoAdminPreview() {
+    const prev = document.getElementById("feBrandLogoPreview");
+    const url = (document.getElementById("feBrandLogoUrl")?.value ?? "").trim();
+    if (!prev) return;
+    prev.innerHTML = "";
+    if (url) {
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = "";
+      img.style.cssText = "max-height:72px;max-width:200px;object-fit:contain;border-radius:8px;border:1px solid rgba(17,24,39,0.12);";
+      img.onerror = function () {
+        prev.textContent = "預覽失敗（網址無效或無法載入）";
+        prev.className = "muted small";
+      };
+      prev.appendChild(img);
+    } else {
+      prev.textContent = "未設定";
+      prev.className = "muted small";
+    }
+  }
+
   function updateTrustLivePreview() {
     const titleEl = document.getElementById("trustLivePreviewTitle");
     const itemsEl = document.getElementById("trustLivePreviewItems");
@@ -859,6 +880,9 @@
     document.getElementById("feBrandMark").value = cfg.brand?.mark ?? "";
     document.getElementById("feBrandTitle").value = cfg.brand?.title ?? "";
     document.getElementById("feBrandSubtitle").value = cfg.brand?.subtitle ?? "";
+    const feBrandLogoUrlEl = document.getElementById("feBrandLogoUrl");
+    if (feBrandLogoUrlEl) feBrandLogoUrlEl.value = (fe.brandLogo ?? "").trim();
+    updateBrandLogoAdminPreview();
     document.getElementById("feHeroTagline").value = fe.heroTagline ?? def.heroTagline ?? "";
     document.getElementById("feHeroSub").value = fe.heroSub ?? def.heroSub ?? "";
     document.getElementById("feHeroBtn1").value = fe.heroBtn1 ?? def.heroBtn1 ?? "";
@@ -970,6 +994,7 @@
       },
       frontend: {
         ...cfg.frontend,
+        brandLogo: (document.getElementById("feBrandLogoUrl")?.value ?? "").trim(),
         ogTitle: document.getElementById("feOgTitle").value?.trim(),
         ogDescription: document.getElementById("feOgDescription").value?.trim(),
         ogImageUrl: document.getElementById("feOgImageUrl").value?.trim(),
@@ -1103,6 +1128,38 @@
   });
   ["feBrandMark", "feBrandTitle", "feBrandSubtitle"].forEach((id) => {
     document.getElementById(id)?.addEventListener("input", updateBrandLivePreview);
+  });
+  document.getElementById("feBrandLogoFile")?.addEventListener("change", async function (e) {
+    const inp = e.target;
+    const file = inp.files && inp.files[0];
+    if (inp) inp.value = "";
+    if (!file || !file.type || !file.type.startsWith("image/")) return;
+    if (!window.DK?.uploadSiteAssetToSupabaseStorage) {
+      alert("Supabase 站內資產（site-assets）未設定或無法上傳，請檢查 shared.js。");
+      return;
+    }
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const rand = Math.random().toString(16).slice(2);
+    const ext = file.type.includes("png") ? "png" : file.type.includes("webp") ? "webp" : file.type.includes("gif") ? "gif" : "jpg";
+    const path = "brand/" + ts + "-" + rand + "." + ext;
+    try {
+      const url = await window.DK.uploadSiteAssetToSupabaseStorage(file, path);
+      if (!url) {
+        alert("Logo 上傳失敗，請稍後再試。");
+        return;
+      }
+      const urlEl = document.getElementById("feBrandLogoUrl");
+      if (urlEl) urlEl.value = url;
+      updateBrandLogoAdminPreview();
+    } catch (err) {
+      console.warn("Logo 上傳錯誤", err);
+      alert("Logo 上傳失敗，請稍後再試。");
+    }
+  });
+  document.getElementById("feBrandLogoClear")?.addEventListener("click", function () {
+    const urlEl = document.getElementById("feBrandLogoUrl");
+    if (urlEl) urlEl.value = "";
+    updateBrandLogoAdminPreview();
   });
   ["feTrustTitle", "feTrustItems", "feTrustNote"].forEach((id) => {
     document.getElementById(id)?.addEventListener("input", updateTrustLivePreview);
