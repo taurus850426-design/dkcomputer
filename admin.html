@@ -53,6 +53,7 @@
             <button class="tab active" data-tab="inv" type="button">庫存＋記帳</button>
             <button class="tab" data-tab="publish" type="button">上架管理</button>
             <button class="tab" data-tab="frontend" type="button">前台管理</button>
+            <button class="tab" data-tab="vendors" type="button">廠商管理</button>
           </div>
 
           <!-- ① 庫存＋記帳（品項／流水帳／訂單／支出／報表） -->
@@ -148,6 +149,7 @@
               <div class="form-grid">
                 <div class="field"><label for="itemCategory">品類</label><select id="itemCategory"></select></div>
                 <div class="field full"><label for="itemName">名稱／規格</label><input id="itemName" type="text" placeholder="型號、產品名稱或規格（例：RTX 3060 Ti 8G、480GB SSD）" /></div>
+                <div class="field"><label for="itemVendor">廠商</label><select id="itemVendor"></select></div>
                 <div class="field"><label for="itemCondition">成色</label><select id="itemCondition"><option value="NEW">全新</option><option value="USED">二手</option><option value="REFURB">整新</option></select></div>
                 <div class="field"><label for="itemStatus">狀態</label><select id="itemStatus"><option value="READY">可售</option><option value="TESTING">待測</option><option value="PREP">待整理</option><option value="RESERVED">保留</option><option value="CLEARANCE">待出清</option><option value="SCRAP">報廢拆料</option></select></div>
                 <div class="field"><label for="itemQty">現貨數量</label><input id="itemQty" type="number" min="0" value="0" /></div>
@@ -872,6 +874,34 @@
                 <button id="frontendResetBtn" class="btn btn-ghost" type="button">重置為預設</button>
               </div>
               <div id="frontendMsg" class="full muted" style="margin-top: 10px" hidden></div>
+            </div>
+          </section>
+
+          <!-- ⑥ 廠商管理 -->
+          <section id="tab-vendors" class="card" hidden>
+            <div id="vendor-section">
+              <div id="vendorManageCard" class="card" style="margin-bottom:12px">
+                <h2 class="h2">廠商管理</h2>
+                <div class="form-grid" style="grid-template-columns: 1fr auto; margin-top: 12px">
+                  <div class="field">
+                    <label for="newVendorName">新增廠商</label>
+                    <input id="newVendorName" type="text" placeholder="輸入廠商名稱" autocomplete="off" />
+                  </div>
+                  <div class="field" style="display:flex; align-items:flex-end">
+                    <button id="addVendorBtn" class="btn btn-ghost" type="button">新增</button>
+                  </div>
+                </div>
+                <table class="table" style="margin-top: 10px">
+                  <thead>
+                    <tr>
+                      <th>廠商</th>
+                      <th style="text-align:right; width:100px">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="vendorOptionsTbody"></tbody>
+                </table>
+                <div id="vendorManageMsg" class="muted small" style="margin-top: 8px" hidden></div>
+              </div>
             </div>
           </section>
 
