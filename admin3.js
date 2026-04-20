@@ -142,7 +142,6 @@
   const tabInv = document.getElementById("tab-inv");
   const tabPublish = document.getElementById("tab-publish");
   const tabFrontend = document.getElementById("tab-frontend");
-  const tabVendors = document.getElementById("tab-vendors");
 
   // publish
   const publishSubmitBtn = document.getElementById("publishSubmitBtn");
@@ -305,7 +304,7 @@
   }
 
   const ADMIN_TAB_KEY = "dk_admin_tab";
-  const VALID_TABS = ["inv", "publish", "frontend", "vendors"];
+  const VALID_TABS = ["inv", "publish", "frontend"];
   function switchTab(name) {
     try { sessionStorage.setItem(ADMIN_TAB_KEY, name); } catch (_) {}
     try { localStorage.setItem("dk_admin_active_tab", name); } catch (_) {}
@@ -317,7 +316,6 @@
     if (tabInv) tabInv.hidden = name !== "inv";
     if (tabPublish) tabPublish.hidden = name !== "publish";
     if (tabFrontend) tabFrontend.hidden = name !== "frontend";
-    if (tabVendors) tabVendors.hidden = name !== "vendors";
     if (name === "inv") {
       const doRefresh = () => {
         if (typeof window.__adminV2Refresh === "function") window.__adminV2Refresh();
@@ -333,10 +331,6 @@
       renderPublish();
     }
     if (name === "frontend") loadFrontendForm();
-    if (name === "vendors") {
-      showVendorManageMsg("");
-      renderVendorOptions();
-    }
   }
 
   // ---------- 上架管理（publish）：renderPublish / submitPublish / 編輯／圖片壓縮 ----------
@@ -698,7 +692,7 @@
   /* F5 重新整理後還原上次分頁：優先 localStorage dk_admin_active_tab，再 hash / sessionStorage */
   function restoreAdminTab() {
     const fromStorage = (function () { try { return localStorage.getItem("dk_admin_active_tab"); } catch (_) { return null; } })();
-    const hasPanel = (name) => (name === "inv" && tabInv) || (name === "publish" && tabPublish) || (name === "frontend" && tabFrontend) || (name === "vendors" && tabVendors);
+    const hasPanel = (name) => (name === "inv" && tabInv) || (name === "publish" && tabPublish) || (name === "frontend" && tabFrontend);
     if (fromStorage && VALID_TABS.includes(fromStorage) && hasPanel(fromStorage)) {
       switchTab(fromStorage);
       return;
@@ -724,7 +718,7 @@
       applyAuthUI();
       try {
         const saved = localStorage.getItem("dk_admin_active_tab") || sessionStorage.getItem(ADMIN_TAB_KEY);
-        if (saved === "publish" || saved === "inv" || saved === "frontend" || saved === "vendors") switchTab(saved);
+        if (saved === "publish" || saved === "inv" || saved === "frontend") switchTab(saved);
         else switchTab("inv");
       } catch (_) { switchTab("inv"); }
       return;
@@ -981,123 +975,6 @@
     updateBrandLivePreview();
   }
 
-  // ===== 廠商清單（vendorOptions）：存於 config.frontend.vendorOptions =====
-  function normalizeVendorName(name) {
-    return String(name || "").trim();
-  }
-
-  function getVendorOptionsFromConfig() {
-    const cfg = window.DK?.getConfig?.() || {};
-    const raw = cfg?.frontend?.vendorOptions;
-    const list = Array.isArray(raw) ? raw : [];
-    const out = [];
-    const seen = new Set();
-    for (const v of list) {
-      const name = normalizeVendorName(v);
-      if (!name) continue;
-      const key = name.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(name);
-    }
-    return out;
-  }
-
-  function saveVendorOptionsToConfig(nextList) {
-    const cfg = window.DK?.getConfig?.() || {};
-    const fe = cfg.frontend || {};
-    const next = { ...cfg, frontend: { ...fe, vendorOptions: Array.isArray(nextList) ? nextList : [] } };
-    // 1) 先寫入本機
-    window.DK?.saveConfig?.(next, { skipSupabase: true });
-    // 2) 再嘗試同步到雲端（若有）
-    if (window.DK?.saveSiteConfigToSupabase) {
-      window.DK
-        .saveSiteConfigToSupabase(next)
-        .then((r) => showSyncToast(r, "廠商清單"))
-        .catch((e) => showSyncToast({ ok: false, error: String(e?.message || e || "同步失敗") }, "廠商清單"));
-    }
-  }
-
-  function renderVendorSelect(currentValue) {
-    const sel = document.getElementById("itemVendor");
-    if (!sel) return;
-    const list = getVendorOptionsFromConfig();
-    const cur = normalizeVendorName(currentValue);
-    const hasCur = cur && list.some((x) => x.toLowerCase() === cur.toLowerCase());
-    const options = [];
-    options.push('<option value="">請選擇廠商</option>');
-    for (const v of list) {
-      options.push(`<option value="${v2Esc(v)}">${v2Esc(v)}</option>`);
-    }
-    // 舊資料相容：若目前品項 vendor 不在清單內，動態補進 select，避免被洗掉
-    if (cur && !hasCur) {
-      options.push(`<option value="${v2Esc(cur)}">${v2Esc(cur)}（舊）</option>`);
-    }
-    sel.innerHTML = options.join("");
-    sel.value = cur || "";
-  }
-
-  function renderVendorOptions() {
-    const tbody = document.getElementById("vendorOptionsTbody");
-    if (!tbody) return;
-    const list = getVendorOptionsFromConfig();
-    if (list.length === 0) {
-      tbody.innerHTML = `<tr><td class="muted" colspan="2">尚無廠商</td></tr>`;
-      return;
-    }
-    tbody.innerHTML = list
-      .map(
-        (v) =>
-          `<tr><td>${v2Esc(v)}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-remove-vendor" data-name="${v2Esc(
-            v,
-          )}">移除</button></td></tr>`,
-      )
-      .join("");
-    tbody.querySelectorAll(".btn-remove-vendor").forEach((btn) => {
-      btn.addEventListener("click", () => removeVendorOption(btn.getAttribute("data-name")));
-    });
-  }
-
-  function showVendorManageMsg(text) {
-    const el = document.getElementById("vendorManageMsg");
-    if (!el) return;
-    if (!text) {
-      el.hidden = true;
-      el.textContent = "";
-      return;
-    }
-    el.hidden = false;
-    el.textContent = text;
-  }
-
-  function addVendorOption() {
-    const inp = document.getElementById("newVendorName");
-    const raw = normalizeVendorName(inp?.value);
-    if (!raw) return showVendorManageMsg("廠商名稱不能為空");
-    const list = getVendorOptionsFromConfig();
-    const exists = list.some((x) => x.toLowerCase() === raw.toLowerCase());
-    if (exists) return showVendorManageMsg("已存在相同廠商（忽略空白與大小寫）");
-    const next = [...list, raw];
-    saveVendorOptionsToConfig(next);
-    if (inp) inp.value = "";
-    showVendorManageMsg("");
-    renderVendorOptions();
-    // 若目前正在編輯品項，同步更新 select（保留目前選擇）
-    renderVendorSelect(document.getElementById("itemVendor")?.value || "");
-  }
-
-  function removeVendorOption(name) {
-    const target = normalizeVendorName(name);
-    if (!target) return;
-    const list = getVendorOptionsFromConfig();
-    const next = list.filter((x) => x.toLowerCase() !== target.toLowerCase());
-    saveVendorOptionsToConfig(next);
-    showVendorManageMsg("");
-    renderVendorOptions();
-    // 更新 select，但如果目前選到被移除的廠商，要保留舊值（動態補 option）
-    renderVendorSelect(document.getElementById("itemVendor")?.value || "");
-  }
-
   function saveFrontend() {
     const trustItemsText = document.getElementById("feTrustItems").value;
     const trustItems = trustItemsText
@@ -1287,19 +1164,6 @@
   ["feTrustTitle", "feTrustItems", "feTrustNote"].forEach((id) => {
     document.getElementById(id)?.addEventListener("input", updateTrustLivePreview);
   });
-
-  // 初始化廠商管理區塊
-  (function initVendorManage() {
-    renderVendorOptions();
-    renderVendorSelect("");
-    document.getElementById("addVendorBtn")?.addEventListener("click", addVendorOption);
-    document.getElementById("newVendorName")?.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        addVendorOption();
-      }
-    });
-  })();
 
   function updateCatImage(cat, dataUrl) {
     const cfg = window.DK?.getConfig?.() || {};
@@ -2137,7 +2001,6 @@
       set("itemCategory", item ? item.category : (DK.getInventoryCategories && DK.getInventoryCategories()[0]) || "處理器");
       const nameSpec = item ? ((item.name === item.spec || !String(item.spec || "").trim()) ? (item.name || item.spec || "") : [item.name, item.spec].filter(Boolean).join(" ").trim()) : "";
       set("itemName", nameSpec);
-      renderVendorSelect(item ? (item.vendor ?? "") : "");
       set("itemCondition", item ? item.condition : "USED");
       set("itemStatus", item ? item.status : "READY");
       set("itemQty", item ? item.qty_on_hand : 0);
@@ -2456,7 +2319,6 @@
         category: document.getElementById("itemCategory")?.value,
         name: nameSpec,
         spec: nameSpec,
-        vendor: String(document.getElementById("itemVendor")?.value || "").trim(),
         condition: document.getElementById("itemCondition")?.value || "USED",
         status: document.getElementById("itemStatus")?.value || "READY",
         qty_on_hand: Math.max(0, parseInt(document.getElementById("itemQty")?.value, 10) || 0),
@@ -3222,7 +3084,7 @@
   applyAuthUI();
   if (window.DK?.isAdminAuthed?.()) {
     const saved = (function () { try { return localStorage.getItem("dk_admin_active_tab"); } catch (_) { return null; } })();
-    if (saved === "publish" || saved === "inv" || saved === "frontend" || saved === "vendors") switchTab(saved);
+    if (saved === "publish" || saved === "inv" || saved === "frontend") switchTab(saved);
     else switchTab("inv");
   }
 })();
