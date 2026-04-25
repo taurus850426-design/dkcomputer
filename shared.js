@@ -341,6 +341,35 @@ function deepMerge(base, patch) {
 function getConfig() {
   const saved = safeJsonParse(localStorage.getItem(STORAGE_KEYS.config), null);
   if (!saved) return { ...DEFAULT_CONFIG };
+
+  // 緊急修復：若曾經把整份 config 覆蓋成只剩 frontend.vendorOptions，這裡要自動補回缺失的 admin（只補缺失欄位，不覆蓋既有資料）
+  try {
+    const s = saved && typeof saved === "object" ? saved : null;
+    const hasAdmin = !!(s && s.admin && typeof s.admin === "object");
+    if (!hasAdmin) {
+      const patched = { ...s, admin: { ...(DEFAULT_CONFIG.admin || {}) } };
+      localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(patched));
+      return deepMerge(DEFAULT_CONFIG, patched);
+    }
+    // admin 物件存在但欄位缺失時也補齊（不覆蓋既有值）
+    const admin = s.admin || {};
+    const needsUser = admin.username == null || String(admin.username).trim() === "";
+    const needsPass = admin.password == null || String(admin.password) === "";
+    if ((DEFAULT_CONFIG.admin && (needsUser || needsPass))) {
+      const patched = {
+        ...s,
+        admin: {
+          ...(DEFAULT_CONFIG.admin || {}),
+          ...admin,
+        },
+      };
+      localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(patched));
+      return deepMerge(DEFAULT_CONFIG, patched);
+    }
+  } catch {
+    // 補 admin 失敗不應阻止後台使用（仍回傳 merge 結果）
+  }
+
   return deepMerge(DEFAULT_CONFIG, saved);
 }
 

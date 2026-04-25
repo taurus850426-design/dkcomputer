@@ -25,6 +25,65 @@
     }
   }
 
+  // v2Esc：HTML escape helper（部分區塊會用到；避免因未定義而中斷整支後台 JS）
+  // 這裡提供上層可用版本；v2 DK 區塊內若有同名函式，屬於區域遮蔽，不互相影響。
+  function v2Esc(s) {
+    if (s == null || s === undefined) return "";
+    const t = String(s);
+    if (window.DK && typeof window.DK.escapeHtml === "function") return window.DK.escapeHtml(t);
+    const div = document.createElement("div");
+    div.textContent = t;
+    return div.innerHTML;
+  }
+
+  // ---------- keys（放在最前面避免 TDZ：Cannot access before initialization） ----------
+  const CUSTOMER_RECORDS_KEY = "dk_customer_records_v1";
+  const CREATE_ORDER_FROM_CUSTOMER_KEY = "dk_create_order_from_customer";
+  const PENDING_CUSTOMER_ORDER_LINK_KEY = "dk_pending_customer_order_link";
+  const VENDOR_QUOTES_KEY = "dk_vendor_quotes_v1";
+
+  // ---------- 緊急救援：repairAdmin=1 時只補回 config.admin ----------
+  (function repairAdminIfRequested() {
+    let repair = null;
+    try {
+      const sp = new URLSearchParams(String(location.search || "").replace(/^\?/, ""));
+      repair = sp.get("repairAdmin");
+    } catch (_) {
+      repair = null;
+    }
+    if (repair !== "1") return;
+
+    try {
+      const cfgKey = window.DK?.STORAGE_KEYS?.config || "dk_site_config_v1";
+      const raw = localStorage.getItem(cfgKey);
+      const saved = safeParse(raw, null);
+      const base = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+
+      const defAdmin =
+        (window.DK?.DEFAULT_CONFIG && window.DK.DEFAULT_CONFIG.admin) ||
+        { username: "admin", password: "admin123" };
+
+      const hasAdmin = base.admin && typeof base.admin === "object" && !Array.isArray(base.admin);
+      const next = hasAdmin
+        ? {
+            ...base,
+            admin: {
+              ...defAdmin,
+              ...base.admin,
+            },
+          }
+        : {
+            ...base,
+            admin: { ...defAdmin },
+          };
+
+      localStorage.setItem(cfgKey, JSON.stringify(next));
+      alert("admin 設定已修復，請移除網址 repairAdmin=1 後重新登入");
+    } catch (e) {
+      alert("admin 修復失敗：" + String(e?.message || e || "未知錯誤"));
+    }
+  })();
+
   function loadArr(key) {
     const v = safeParse(localStorage.getItem(key), null);
     return Array.isArray(v) ? v : [];
@@ -142,6 +201,8 @@
   const tabInv = document.getElementById("tab-inv");
   const tabPublish = document.getElementById("tab-publish");
   const tabFrontend = document.getElementById("tab-frontend");
+  const tabVendors = document.getElementById("tab-vendors");
+  const tabCustomers = document.getElementById("tab-customers");
 
   // publish
   const publishSubmitBtn = document.getElementById("publishSubmitBtn");
@@ -304,7 +365,7 @@
   }
 
   const ADMIN_TAB_KEY = "dk_admin_tab";
-  const VALID_TABS = ["inv", "publish", "frontend"];
+  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "customers"];
   function switchTab(name) {
     try { sessionStorage.setItem(ADMIN_TAB_KEY, name); } catch (_) {}
     try { localStorage.setItem("dk_admin_active_tab", name); } catch (_) {}
@@ -316,6 +377,8 @@
     if (tabInv) tabInv.hidden = name !== "inv";
     if (tabPublish) tabPublish.hidden = name !== "publish";
     if (tabFrontend) tabFrontend.hidden = name !== "frontend";
+    if (tabVendors) tabVendors.hidden = name !== "vendors";
+    if (tabCustomers) tabCustomers.hidden = name !== "customers";
     if (name === "inv") {
       const doRefresh = () => {
         if (typeof window.__adminV2Refresh === "function") window.__adminV2Refresh();
@@ -331,6 +394,15 @@
       renderPublish();
     }
     if (name === "frontend") loadFrontendForm();
+    if (name === "vendors") {
+      showVendorManageMsg("");
+      renderVendorOptions();
+      if (typeof renderVendorQuoteVendorSelect === "function") renderVendorQuoteVendorSelect();
+      if (typeof renderVendorQuotes === "function") renderVendorQuotes();
+    }
+    if (name === "customers") {
+      if (typeof renderCustomerRecordsPage === "function") renderCustomerRecordsPage();
+    }
   }
 
   // ---------- 上架管理（publish）：renderPublish / submitPublish / 編輯／圖片壓縮 ----------
@@ -692,7 +764,12 @@
   /* F5 重新整理後還原上次分頁：優先 localStorage dk_admin_active_tab，再 hash / sessionStorage */
   function restoreAdminTab() {
     const fromStorage = (function () { try { return localStorage.getItem("dk_admin_active_tab"); } catch (_) { return null; } })();
-    const hasPanel = (name) => (name === "inv" && tabInv) || (name === "publish" && tabPublish) || (name === "frontend" && tabFrontend);
+    const hasPanel = (name) =>
+      (name === "inv" && tabInv) ||
+      (name === "publish" && tabPublish) ||
+      (name === "frontend" && tabFrontend) ||
+      (name === "vendors" && tabVendors) ||
+      (name === "customers" && tabCustomers);
     if (fromStorage && VALID_TABS.includes(fromStorage) && hasPanel(fromStorage)) {
       switchTab(fromStorage);
       return;
@@ -706,7 +783,24 @@
 
   function doLogin() {
     hide(loginError);
-    const cfg = window.DK?.getConfig?.() || {};
+    let cfg = window.DK?.getConfig?.() || {};
+    // 防呆：若 cfg.admin 不存在，先用預設 admin 補一份，避免登入永久失效（不覆蓋既有 frontend / vendorOptions 等資料）
+    if (!cfg || typeof cfg !== "object") cfg = {};
+    if (!cfg.admin || typeof cfg.admin !== "object") {
+      const defAdmin =
+        (window.DK?.DEFAULT_CONFIG && window.DK.DEFAULT_CONFIG.admin) ||
+        { username: "admin", password: "admin123" };
+      cfg = { ...cfg, admin: { ...defAdmin } };
+      try {
+        const cfgKey = window.DK?.STORAGE_KEYS?.config || "dk_site_config_v1";
+        const raw = localStorage.getItem(cfgKey);
+        const saved = safeParse(raw, null);
+        const base = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+        if (!base.admin || typeof base.admin !== "object") {
+          localStorage.setItem(cfgKey, JSON.stringify({ ...base, admin: { ...defAdmin } }));
+        }
+      } catch (_) {}
+    }
     const u = String(usernameEl?.value || "").trim();
     const p = String(passwordEl?.value || "");
     // ① 先用設定檔的帳號密碼
@@ -718,7 +812,7 @@
       applyAuthUI();
       try {
         const saved = localStorage.getItem("dk_admin_active_tab") || sessionStorage.getItem(ADMIN_TAB_KEY);
-        if (saved === "publish" || saved === "inv" || saved === "frontend") switchTab(saved);
+        if (saved === "publish" || saved === "inv" || saved === "frontend" || saved === "vendors" || saved === "customers") switchTab(saved);
         else switchTab("inv");
       } catch (_) { switchTab("inv"); }
       return;
@@ -975,6 +1069,138 @@
     updateBrandLivePreview();
   }
 
+  // ===== 廠商清單（vendorOptions）：存於 config.frontend.vendorOptions =====
+  function normalizeVendorName(name) {
+    return String(name || "").trim();
+  }
+
+  function getVendorOptionsFromConfig() {
+    const cfg = window.DK?.getConfig?.() || {};
+    const raw = cfg?.frontend?.vendorOptions;
+    const list = Array.isArray(raw) ? raw : [];
+    const out = [];
+    const seen = new Set();
+    for (const v of list) {
+      const name = normalizeVendorName(v);
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(name);
+    }
+    return out;
+  }
+
+  function saveVendorOptionsToConfig(nextList) {
+    // 重要：只更新 config.frontend.vendorOptions，且必須保留 config 其他欄位（包含後台登入狀態相關設定）
+    // 若 DK.getConfig 不可用或回傳異常，退回讀 localStorage 目前整份設定，避免把 config 覆蓋成只剩 frontend.vendorOptions
+    let cfg = window.DK?.getConfig?.();
+    if (!cfg || typeof cfg !== "object") {
+      try {
+        const key = window.DK?.STORAGE_KEYS?.config || "dk_site_config_v1";
+        cfg = safeParse(localStorage.getItem(key), {}) || {};
+      } catch (_) {
+        cfg = {};
+      }
+    }
+    const fe = cfg.frontend || {};
+    const next = { ...cfg, frontend: { ...fe, vendorOptions: Array.isArray(nextList) ? nextList : [] } };
+    // 1) 先寫入本機（不得清除 localStorage / sessionStorage，不做 reload）
+    try {
+      window.DK?.saveConfig?.(next, { skipSupabase: true });
+    } catch (e) {
+      showVendorManageMsg("儲存失敗：" + String(e?.message || e || "未知錯誤"));
+      return;
+    }
+    // 2) 再嘗試同步到雲端（若有）
+    if (window.DK?.saveSiteConfigToSupabase) {
+      window.DK
+        .saveSiteConfigToSupabase(next)
+        .then((r) => showSyncToast(r, "廠商清單"))
+        .catch((e) => showSyncToast({ ok: false, error: String(e?.message || e || "同步失敗") }, "廠商清單"));
+    }
+  }
+
+  function renderVendorSelect(currentValue) {
+    const sel = document.getElementById("itemVendor");
+    if (!sel) return;
+    const list = getVendorOptionsFromConfig();
+    const cur = normalizeVendorName(currentValue);
+    const hasCur = cur && list.some((x) => x.toLowerCase() === cur.toLowerCase());
+    const options = [];
+    options.push('<option value="">請選擇廠商</option>');
+    for (const v of list) {
+      options.push(`<option value="${v2Esc(v)}">${v2Esc(v)}</option>`);
+    }
+    // 舊資料相容：若目前品項 vendor 不在清單內，動態補進 select，避免被洗掉
+    if (cur && !hasCur) {
+      options.push(`<option value="${v2Esc(cur)}">${v2Esc(cur)}（舊）</option>`);
+    }
+    sel.innerHTML = options.join("");
+    sel.value = cur || "";
+  }
+
+  function renderVendorOptions() {
+    const tbody = document.getElementById("vendorOptionsTbody");
+    if (!tbody) return;
+    const list = getVendorOptionsFromConfig();
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td class="muted" colspan="2">尚無廠商</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list
+      .map(
+        (v) =>
+          `<tr><td>${v2Esc(v)}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-remove-vendor" data-name="${v2Esc(
+            v,
+          )}">移除</button></td></tr>`,
+      )
+      .join("");
+    tbody.querySelectorAll(".btn-remove-vendor").forEach((btn) => {
+      btn.addEventListener("click", () => removeVendorOption(btn.getAttribute("data-name")));
+    });
+  }
+
+  function showVendorManageMsg(text) {
+    const el = document.getElementById("vendorManageMsg");
+    if (!el) return;
+    if (!text) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = text;
+  }
+
+  function addVendorOption() {
+    const inp = document.getElementById("newVendorName");
+    const raw = normalizeVendorName(inp?.value);
+    if (!raw) return showVendorManageMsg("廠商名稱不能為空");
+    const list = getVendorOptionsFromConfig();
+    const exists = list.some((x) => x.toLowerCase() === raw.toLowerCase());
+    if (exists) return showVendorManageMsg("已存在相同廠商（忽略空白與大小寫）");
+    const next = [...list, raw];
+    saveVendorOptionsToConfig(next);
+    if (inp) inp.value = "";
+    showVendorManageMsg("");
+    renderVendorOptions();
+    // 若目前正在編輯品項，同步更新 select（保留目前選擇）
+    renderVendorSelect(document.getElementById("itemVendor")?.value || "");
+  }
+
+  function removeVendorOption(name) {
+    const target = normalizeVendorName(name);
+    if (!target) return;
+    const list = getVendorOptionsFromConfig();
+    const next = list.filter((x) => x.toLowerCase() !== target.toLowerCase());
+    saveVendorOptionsToConfig(next);
+    showVendorManageMsg("");
+    renderVendorOptions();
+    // 更新 select，但如果目前選到被移除的廠商，要保留舊值（動態補 option）
+    renderVendorSelect(document.getElementById("itemVendor")?.value || "");
+  }
+
   function saveFrontend() {
     const trustItemsText = document.getElementById("feTrustItems").value;
     const trustItems = trustItemsText
@@ -1164,6 +1390,966 @@
   ["feTrustTitle", "feTrustItems", "feTrustNote"].forEach((id) => {
     document.getElementById(id)?.addEventListener("input", updateTrustLivePreview);
   });
+
+  // 初始化廠商管理區塊
+  (function initVendorManage() {
+    renderVendorOptions();
+    renderVendorSelect("");
+    document.getElementById("addVendorBtn")?.addEventListener("click", addVendorOption);
+    document.getElementById("newVendorName")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addVendorOption();
+      }
+    });
+  })();
+
+  // ===== 廠商報價紀錄（localStorage：dk_vendor_quotes_v1）=====
+
+  function vqNowISODate() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function vqNum(v) {
+    if (v === "" || v === null || v === undefined) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function vqNormalize(q) {
+    const r = q && typeof q === "object" ? q : {};
+    return {
+      id: String(r.id || ("vq_" + Date.now() + "_" + Math.random().toString(16).slice(2))),
+      date: String(r.date || ""),
+      vendor: String(r.vendor || ""),
+      category: String(r.category || ""),
+      brand: String(r.brand || ""),
+      spec: String(r.spec || ""),
+      price: vqNum(r.price),
+      marketPrice: vqNum(r.marketPrice),
+      taxIncluded: !!r.taxIncluded,
+      shippingIncluded: !!r.shippingIncluded,
+      warranty: String(r.warranty || ""),
+      inStock: !!r.inStock,
+      note: String(r.note || ""),
+    };
+  }
+
+  function vqEsc(s) {
+    return typeof v2Esc === "function" ? v2Esc(String(s ?? "")) : String(s ?? "");
+  }
+
+  function loadVendorQuotes() {
+    const raw = safeParse(localStorage.getItem(VENDOR_QUOTES_KEY), null);
+    const list = Array.isArray(raw) ? raw : [];
+    return list.map(vqNormalize);
+  }
+
+  function saveVendorQuotes(list) {
+    const safe = Array.isArray(list) ? list.map(vqNormalize) : [];
+    localStorage.setItem(VENDOR_QUOTES_KEY, JSON.stringify(safe));
+  }
+
+  function renderVendorQuoteVendorSelect() {
+    const sel = document.getElementById("vqVendor");
+    if (!sel) return;
+    const list = getVendorOptionsFromConfig();
+    const opts = ['<option value="">請選擇廠商</option>']
+      .concat(list.map((v) => `<option value="${vqEsc(v)}">${vqEsc(v)}</option>`));
+    sel.innerHTML = opts.join("");
+  }
+
+  function vqShowMsg(text) {
+    const el = document.getElementById("vqMsg");
+    if (!el) return;
+    if (!text) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = text;
+  }
+
+  function renderVendorQuotes() {
+    const tbody = document.getElementById("vendorQuotesTbody");
+    if (!tbody) return;
+    const list = loadVendorQuotes()
+      .slice()
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td class="muted" colspan="9">尚無報價</td></tr>`;
+      return;
+    }
+    const fmt = (n) => (n == null ? "" : Number(n).toLocaleString("zh-TW"));
+    const fmt1 = (n) => (n == null || !Number.isFinite(Number(n))) ? "" : Number(n).toFixed(1);
+    tbody.innerHTML = list
+      .map((q) => {
+        const stock = q.inStock ? `<span class="badge ok">現貨</span>` : `<span class="badge">—</span>`;
+        const mp = (q.marketPrice == null) ? null : Number(q.marketPrice);
+        const p = (q.price == null) ? null : Number(q.price);
+        const diff = (mp != null && p != null) ? (mp - p) : null;
+        const margin = (mp != null && mp > 0 && p != null) ? ((mp - p) / mp) : null;
+        const mpText = mp == null ? "-" : fmt(mp);
+        const diffText = diff == null ? "-" : fmt(diff);
+        const marginText = margin == null ? "-" : fmt1(margin * 100) + "%";
+        const marginBadge = (function () {
+          if (margin == null) return `<span class="badge">-</span>`;
+          if (margin < 0) return `<span class="badge danger">${vqEsc(marginText)}</span>`;
+          if (margin >= 0.001) return `<span class="badge ok">${vqEsc(marginText)}</span>`;
+          return `<span class="badge">${vqEsc(marginText)}</span>`;
+        })();
+        return `<tr>
+          <td class="nowrap">${vqEsc((q.date || "").slice(0, 10))}</td>
+          <td>${vqEsc(q.vendor)}</td>
+          <td>${vqEsc([q.brand, q.spec].filter(Boolean).join(" ").trim())}</td>
+          <td style="text-align:right">${vqEsc(fmt(q.price))}</td>
+          <td style="text-align:right">${vqEsc(mpText)}</td>
+          <td style="text-align:right">${vqEsc(diffText)}</td>
+          <td style="text-align:right">${marginBadge}</td>
+          <td>${stock}</td>
+          <td style="text-align:right; white-space:nowrap">
+            <button type="button" class="btn btn-ghost btn-sm btn-vq-create-inv" data-id="${vqEsc(q.id)}">建立庫存</button>
+            <button type="button" class="btn btn-ghost btn-sm btn-vq-del" data-id="${vqEsc(q.id)}">刪除</button>
+          </td>
+        </tr>`;
+      })
+      .join("");
+
+    // 報價更新後同步更新比價分析（不得影響既有 CRUD）
+    if (typeof renderVendorAnalysis === "function") renderVendorAnalysis();
+  }
+
+  // ===== 廠商報價：比價分析系統 =====
+  function normalizeSpecKey(q) {
+    const spec = String(q?.spec || "").trim();
+    if (spec) return spec.toLowerCase();
+    // 需求寫 brand + name；本系統結構沒有 name，故以 brand + (可能存在的 name/model) 退回，至少保持穩定 key
+    const brand = String(q?.brand || "").trim();
+    const name = String(q?.name || q?.model || "").trim();
+    return (brand + " " + name).trim().toLowerCase();
+  }
+
+  function getLowestQuotesBySpec(quotes) {
+    const list = Array.isArray(quotes) ? quotes : [];
+    const best = new Map(); // specKey -> quote
+    for (const q of list) {
+      const key = normalizeSpecKey(q);
+      if (!key) continue;
+      const price = Number(q?.price);
+      if (!Number.isFinite(price)) continue;
+      const cur = best.get(key);
+      if (!cur || price < Number(cur.price)) best.set(key, q);
+    }
+    return Array.from(best.entries()).map(([specKey, original]) => ({
+      specKey,
+      vendor: String(original?.vendor || ""),
+      price: Number(original?.price) || 0,
+      original,
+    }));
+  }
+
+  function getQuotesGroupedBySpec(quotes) {
+    const list = Array.isArray(quotes) ? quotes : [];
+    const out = {};
+    for (const q of list) {
+      const key = normalizeSpecKey(q);
+      if (!key) continue;
+      const price = Number(q?.price);
+      if (!Number.isFinite(price)) continue;
+      (out[key] = out[key] || []).push({
+        vendor: String(q?.vendor || ""),
+        price: price,
+        date: String(q?.date || ""),
+        marketPrice: (q?.marketPrice == null ? null : Number(q.marketPrice)),
+      });
+    }
+    return out;
+  }
+
+  function getPurchaseSuggestion(group) {
+    const rows = Array.isArray(group) ? group : [];
+    const prices = rows.map((x) => Number(x?.price)).filter((n) => Number.isFinite(n));
+    if (prices.length === 0) return { min: null, avg: null, diff: null, avgMarketPrice: null, margin: null, label: "不建議" };
+    const min = Math.min(...prices);
+    const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+
+    const mps = rows.map((x) => Number(x?.marketPrice)).filter((n) => Number.isFinite(n) && n > 0);
+    if (mps.length > 0) {
+      const avgMarketPrice = mps.reduce((a, b) => a + b, 0) / mps.length;
+      const margin = avgMarketPrice > 0 ? (avgMarketPrice - min) / avgMarketPrice : null;
+      const label = (margin != null && margin >= 0.20) ? "可進" : (margin != null && margin >= 0.10) ? "觀望" : "不建議";
+      return { min, avg, diff: null, avgMarketPrice, margin, label };
+    }
+
+    const diff = avg > 0 ? (avg - min) / avg : 0;
+    const label = diff >= 0.15 ? "可進" : diff >= 0.07 ? "觀望" : "不建議";
+    return { min, avg, diff, avgMarketPrice: null, margin: null, label };
+  }
+
+  function renderVendorAnalysis() {
+    // 建立/取得容器
+    let wrap = document.getElementById("vendorAnalysisSection");
+    if (!wrap) {
+      const host = document.getElementById("vendor-section") || document.getElementById("tab-vendors");
+      if (!host) return;
+      wrap = document.createElement("div");
+      wrap.id = "vendorAnalysisSection";
+      wrap.className = "card";
+      wrap.style.marginBottom = "12px";
+      wrap.innerHTML = `
+        <h3 class="h3">比價分析</h3>
+        <div class="table-wrap" style="margin-top:10px">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>規格</th>
+                <th style="text-align:right">最低價</th>
+                <th>最低廠商</th>
+                <th style="text-align:right">平均價</th>
+                <th style="text-align:right">價差%</th>
+                <th style="text-align:right">行情平均價</th>
+                <th style="text-align:right">平均毛利空間%</th>
+                <th>建議</th>
+              </tr>
+            </thead>
+            <tbody id="vendorAnalysisTbody"></tbody>
+          </table>
+        </div>
+        <div id="vendorAnalysisEmpty" class="muted" style="margin-top:8px" hidden>尚無可分析的報價</div>
+      `;
+      host.appendChild(wrap);
+    }
+
+    const tbody = document.getElementById("vendorAnalysisTbody");
+    const emptyEl = document.getElementById("vendorAnalysisEmpty");
+    if (!tbody || !emptyEl) return;
+
+    const quotes = loadVendorQuotes();
+    const grouped = getQuotesGroupedBySpec(quotes);
+    const keys = Object.keys(grouped);
+    if (keys.length === 0) {
+      tbody.innerHTML = "";
+      emptyEl.hidden = false;
+      return;
+    }
+    emptyEl.hidden = true;
+
+    const lowest = new Map(getLowestQuotesBySpec(quotes).map((x) => [x.specKey, x]));
+    const fmt = (n) => (n == null || !Number.isFinite(Number(n))) ? "" : Number(n).toLocaleString("zh-TW");
+    const pct = (n) => (n == null || !Number.isFinite(Number(n))) ? "" : (Number(n) * 100).toFixed(1) + "%";
+    const badge = (label) => {
+      if (label === "可進") return `<span class="badge ok">${vqEsc(label)}</span>`;
+      if (label === "觀望") return `<span class="badge warn">${vqEsc(label)}</span>`;
+      return `<span class="badge">${vqEsc(label)}</span>`;
+    };
+    const marginBadge = (n) => {
+      if (n == null || !Number.isFinite(Number(n))) return `<span class="badge">-</span>`;
+      const t = (Number(n) * 100).toFixed(1) + "%";
+      if (Number(n) < 0) return `<span class="badge danger">${vqEsc(t)}</span>`;
+      if (Number(n) >= 0.001) return `<span class="badge ok">${vqEsc(t)}</span>`;
+      return `<span class="badge">${vqEsc(t)}</span>`;
+    };
+
+    const rows = keys
+      .slice()
+      .sort((a, b) => a.localeCompare(b))
+      .map((specKey) => {
+        const group = grouped[specKey] || [];
+        const sug = getPurchaseSuggestion(group);
+        const low = lowest.get(specKey);
+        const mp = group.map((x) => Number(x?.marketPrice)).filter((n) => Number.isFinite(n) && n > 0);
+        const avgMarket = mp.length ? (mp.reduce((a, b) => a + b, 0) / mp.length) : null;
+        const margins = group
+          .map((x) => {
+            const m = Number(x?.marketPrice);
+            const p = Number(x?.price);
+            if (!Number.isFinite(m) || m <= 0) return null;
+            if (!Number.isFinite(p)) return null;
+            return (m - p) / m;
+          })
+          .filter((n) => n != null && Number.isFinite(Number(n)));
+        const avgMargin = margins.length ? (margins.reduce((a, b) => a + b, 0) / margins.length) : null;
+        return `<tr>
+          <td>${vqEsc(specKey)}</td>
+          <td style="text-align:right">${vqEsc(fmt(sug.min))}</td>
+          <td>${vqEsc(low?.vendor || "")}</td>
+          <td style="text-align:right">${vqEsc(fmt(sug.avg))}</td>
+          <td style="text-align:right">${vqEsc(pct(sug.diff))}</td>
+          <td style="text-align:right">${vqEsc(fmt(avgMarket))}</td>
+          <td style="text-align:right">${marginBadge(avgMargin)}</td>
+          <td>${badge(sug.label)}</td>
+        </tr>`;
+      });
+    tbody.innerHTML = rows.join("");
+
+    // 在比價分析後更新：廠商品類優勢分析
+    if (typeof renderVendorCategoryAdvantage === "function") renderVendorCategoryAdvantage(quotes);
+  }
+
+  function renderVendorCategoryAdvantage(quotes) {
+    const list = Array.isArray(quotes) ? quotes : loadVendorQuotes();
+
+    // 依 category -> specKey 找最低價，統計 vendor 低價次數
+    const byCat = new Map(); // category -> Map(specKey -> lowestQuote)
+    for (const q of list) {
+      const cat = String(q?.category || "").trim() || "未分類";
+      const specKey = normalizeSpecKey(q);
+      const price = Number(q?.price);
+      if (!specKey || !Number.isFinite(price)) continue;
+      if (!byCat.has(cat)) byCat.set(cat, new Map());
+      const m = byCat.get(cat);
+      const cur = m.get(specKey);
+      if (!cur || price < Number(cur.price)) m.set(specKey, q);
+    }
+
+    // 確保容器存在，放在 vendorAnalysisSection 下方
+    let wrap = document.getElementById("vendorCategoryAdvantageSection");
+    if (!wrap) {
+      const anchor = document.getElementById("vendorAnalysisSection");
+      const host = anchor?.parentElement || document.getElementById("vendor-section") || document.getElementById("tab-vendors");
+      if (!host) return;
+      wrap = document.createElement("div");
+      wrap.id = "vendorCategoryAdvantageSection";
+      wrap.className = "card";
+      wrap.style.marginBottom = "12px";
+      wrap.innerHTML = `
+        <h3 class="h3">廠商品類優勢分析</h3>
+        <div class="table-wrap" style="margin-top:10px">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>品類</th>
+                <th>優勢廠商</th>
+                <th style="text-align:right">最低價次數</th>
+                <th style="text-align:right">該品類報價筆數</th>
+                <th>建議</th>
+              </tr>
+            </thead>
+            <tbody id="vendorCategoryAdvantageTbody"></tbody>
+          </table>
+        </div>
+        <div id="vendorCategoryAdvantageEmpty" class="muted" style="margin-top:8px" hidden>尚無可分析的品類</div>
+      `;
+      if (anchor && anchor.nextSibling) host.insertBefore(wrap, anchor.nextSibling);
+      else host.appendChild(wrap);
+    }
+
+    const tbody = document.getElementById("vendorCategoryAdvantageTbody");
+    const emptyEl = document.getElementById("vendorCategoryAdvantageEmpty");
+    if (!tbody || !emptyEl) return;
+
+    const cats = Array.from(byCat.keys());
+    if (cats.length === 0) {
+      tbody.innerHTML = "";
+      emptyEl.hidden = false;
+      return;
+    }
+    emptyEl.hidden = true;
+
+    const catQuoteCount = new Map(); // category -> count (raw quotes)
+    for (const q of list) {
+      const cat = String(q?.category || "").trim() || "未分類";
+      const price = Number(q?.price);
+      const specKey = normalizeSpecKey(q);
+      if (!specKey || !Number.isFinite(price)) continue;
+      catQuoteCount.set(cat, (catQuoteCount.get(cat) || 0) + 1);
+    }
+
+    function suggestionBadge(label) {
+      if (label === "優先詢價") return `<span class="badge ok">${vqEsc(label)}</span>`;
+      if (label === "持續觀察") return `<span class="badge warn">${vqEsc(label)}</span>`;
+      return `<span class="badge">${vqEsc(label)}</span>`;
+    }
+
+    const rows = cats
+      .slice()
+      .sort((a, b) => a.localeCompare(b))
+      .map((cat) => {
+        const lowestBySpec = byCat.get(cat);
+        const winCount = new Map(); // vendor -> times lowest
+        for (const q of lowestBySpec.values()) {
+          const v = String(q?.vendor || "").trim() || "（未填廠商）";
+          winCount.set(v, (winCount.get(v) || 0) + 1);
+        }
+        let bestVendor = "";
+        let bestTimes = 0;
+        for (const [v, c] of winCount.entries()) {
+          if (c > bestTimes) { bestTimes = c; bestVendor = v; }
+        }
+        const totalQuotes = catQuoteCount.get(cat) || 0;
+        let suggestion = "持續觀察";
+        if (totalQuotes < 3) suggestion = "樣本不足";
+        else if (bestTimes >= 3) suggestion = "優先詢價";
+        return `<tr>
+          <td>${vqEsc(cat)}</td>
+          <td>${vqEsc(bestVendor)}</td>
+          <td style="text-align:right">${vqEsc(String(bestTimes))}</td>
+          <td style="text-align:right">${vqEsc(String(totalQuotes))}</td>
+          <td>${suggestionBadge(suggestion)}</td>
+        </tr>`;
+      });
+    tbody.innerHTML = rows.join("");
+  }
+
+  function addVendorQuoteFromForm() {
+    const dateEl = document.getElementById("vqDate");
+    const vendorEl = document.getElementById("vqVendor");
+    const catEl = document.getElementById("vqCategory");
+    const brandEl = document.getElementById("vqBrand");
+    const specEl = document.getElementById("vqSpec");
+    const priceEl = document.getElementById("vqPrice");
+    const mpEl = document.getElementById("vqMarketPrice");
+    const taxEl = document.getElementById("vqTaxIncluded");
+    const shipEl = document.getElementById("vqShippingIncluded");
+    const warrantyEl = document.getElementById("vqWarranty");
+    const stockEl = document.getElementById("vqInStock");
+    const noteEl = document.getElementById("vqNote");
+
+    const q = vqNormalize({
+      date: String(dateEl?.value || "").trim(),
+      vendor: String(vendorEl?.value || "").trim(),
+      category: String(catEl?.value || "").trim(),
+      brand: String(brandEl?.value || "").trim(),
+      spec: String(specEl?.value || "").trim(),
+      price: vqNum(priceEl?.value),
+      marketPrice: vqNum(mpEl?.value),
+      taxIncluded: !!taxEl?.checked,
+      shippingIncluded: !!shipEl?.checked,
+      warranty: String(warrantyEl?.value || "").trim(),
+      inStock: !!stockEl?.checked,
+      note: String(noteEl?.value || "").trim(),
+    });
+
+    if (!q.date) return vqShowMsg("請選日期");
+    if (!q.vendor) return vqShowMsg("請選廠商");
+    if (!q.spec) return vqShowMsg("請填型號 / 規格");
+    if (q.price == null || q.price < 0) return vqShowMsg("請填正確報價");
+
+    const list = loadVendorQuotes();
+    list.push(q); // 每次新增，不覆蓋
+    saveVendorQuotes(list);
+    vqShowMsg("已新增報價");
+    renderVendorQuotes();
+    // 新增成功後自動收合表單
+    try {
+      const wrap = document.getElementById("vqFormWrap");
+      if (wrap) wrap.hidden = true;
+    } catch (_) {}
+    setTimeout(() => vqShowMsg(""), 2500);
+
+    // 清空部分欄位（保留日期/廠商較方便連續輸入）
+    if (catEl) catEl.value = "";
+    if (brandEl) brandEl.value = "";
+    if (specEl) specEl.value = "";
+    if (priceEl) priceEl.value = "";
+    if (mpEl) mpEl.value = "";
+    if (taxEl) taxEl.checked = false;
+    if (shipEl) shipEl.checked = false;
+    if (warrantyEl) warrantyEl.value = "";
+    if (stockEl) stockEl.checked = false;
+    if (noteEl) noteEl.value = "";
+  }
+
+  function deleteVendorQuoteById(id) {
+    const target = String(id || "");
+    if (!target) return;
+    const list = loadVendorQuotes();
+    const next = list.filter((x) => String(x.id) !== target);
+    saveVendorQuotes(next);
+    renderVendorQuotes();
+  }
+
+  function createInventoryFromVendorQuote(id) {
+    const target = String(id || "");
+    if (!target) return;
+    const list = loadVendorQuotes();
+    const q = list.find((x) => String(x.id) === target);
+    if (!q) return;
+
+    // 依需求：呼叫既有 openV2ItemEditor(null)
+    switchTab("inv");
+    setTimeout(() => {
+      try {
+        const tabBtn = document.querySelector('.v2-tab[data-v2="items"]');
+        if (tabBtn) tabBtn.click();
+      } catch (_) {}
+      setTimeout(() => {
+        try {
+          if (typeof window.__openV2ItemEditor === "function") window.__openV2ItemEditor(null);
+          else document.getElementById("btnNewItem")?.click();
+        } catch (_) {}
+
+        // 帶入欄位（不填數量）
+        setTimeout(() => {
+          try {
+            if (q.vendor) {
+              // 重新 renderVendorSelect 以確保 select 內含廠商
+              if (typeof renderVendorSelect === "function") renderVendorSelect(q.vendor);
+              const vSel = document.getElementById("itemVendor");
+              if (vSel) vSel.value = q.vendor;
+            }
+            if (q.category) {
+              const cSel = document.getElementById("itemCategory");
+              if (cSel) cSel.value = q.category;
+            }
+            const name = [q.brand, q.spec].filter(Boolean).join(" ").trim();
+            const nameEl = document.getElementById("itemName");
+            if (nameEl) nameEl.value = name;
+            const costEl = document.getElementById("itemCost");
+            if (costEl && q.price != null) costEl.value = String(q.price);
+            const noteEl = document.getElementById("itemNotes");
+            if (noteEl) {
+              const base = String(noteEl.value || "");
+              const extra = "來源：廠商報價" + (q.note ? "｜" + q.note : "");
+              noteEl.value = base ? (base + "｜" + extra) : extra;
+            }
+          } catch (_) {}
+        }, 0);
+      }, 0);
+    }, 0);
+  }
+
+  (function initVendorQuotes() {
+    const root = document.getElementById("vendorQuotesCard");
+    if (!root) return;
+    const dateEl = document.getElementById("vqDate");
+    if (dateEl && !dateEl.value) dateEl.value = vqNowISODate();
+    renderVendorQuoteVendorSelect();
+    renderVendorQuotes();
+    if (typeof renderVendorAnalysis === "function") renderVendorAnalysis();
+    // 表單收合
+    (function initVendorQuoteFormCollapse() {
+      const wrap = document.getElementById("vqFormWrap");
+      const toggleBtn = document.getElementById("vqFormToggleBtn");
+      const cancelBtn = document.getElementById("vqCancelBtn");
+      if (!wrap || !toggleBtn) return;
+      function setOpen(open) {
+        wrap.hidden = !open;
+        if (open) {
+          try { wrap.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (_) {}
+        }
+      }
+      toggleBtn.addEventListener("click", () => setOpen(wrap.hidden));
+      cancelBtn?.addEventListener("click", () => setOpen(false));
+    })();
+    document.getElementById("vqAddBtn")?.addEventListener("click", addVendorQuoteFromForm);
+    root.addEventListener("click", (e) => {
+      const createBtn = e.target && e.target.closest ? e.target.closest(".btn-vq-create-inv") : null;
+      if (createBtn) {
+        createInventoryFromVendorQuote(createBtn.getAttribute("data-id") || "");
+        return;
+      }
+      const delBtn = e.target && e.target.closest ? e.target.closest(".btn-vq-del") : null;
+      if (delBtn) {
+        const id = delBtn.getAttribute("data-id") || "";
+        if (confirm("確定刪除此筆報價？")) deleteVendorQuoteById(id);
+      }
+    });
+  })();
+
+  // ===== 客戶紀錄（localStorage：dk_customer_records_v1）=====
+  function crNowISODate() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function crSafeNum(v) {
+    if (v === "" || v === null || v === undefined) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function crNormalize(rec) {
+    const r = rec && typeof rec === "object" ? rec : {};
+    return {
+      id: String(r.id || ("cr_" + Date.now() + "_" + Math.random().toString(16).slice(2))),
+      date: String(r.date || ""),
+      name: String(r.name || ""),
+      source: String(r.source || "其他"),
+      type: String(r.type || "其他"),
+      budget: crSafeNum(r.budget),
+      use: String(r.use || ""),
+      status: String(r.status || "未回覆"),
+      dealAmount: crSafeNum(r.dealAmount),
+      grossProfit: crSafeNum(r.grossProfit),
+      questions: String(r.questions || ""),
+      lostReason: String(r.lostReason || ""),
+      note: String(r.note || ""),
+    };
+  }
+
+  function loadCustomerRecords() {
+    const raw = safeParse(localStorage.getItem(CUSTOMER_RECORDS_KEY), null);
+    const list = Array.isArray(raw) ? raw : [];
+    return list.map(crNormalize);
+  }
+
+  function saveCustomerRecords(list) {
+    const safe = Array.isArray(list) ? list.map(crNormalize) : [];
+    localStorage.setItem(CUSTOMER_RECORDS_KEY, JSON.stringify(safe));
+  }
+
+  function crEsc(s) {
+    // 使用既有 escapeHtml（shared.js 全域）避免插入 HTML
+    if (typeof escapeHtml === "function") return escapeHtml(String(s ?? ""));
+    return v2Esc(String(s ?? ""));
+  }
+
+  function crEscNl(s) {
+    return crEsc(s).replaceAll("\n", "<br>");
+  }
+
+  function crWeekStart(d) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    const day = x.getDay(); // 0 Sun ... 6 Sat
+    const diff = (day + 6) % 7; // Mon=0
+    x.setDate(x.getDate() - diff);
+    return x;
+  }
+
+  function crParseDate(dateStr) {
+    const s = String(dateStr || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    const d = new Date(s + "T00:00:00");
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function crTopCounts(texts, topN) {
+    const map = new Map();
+    for (const t of texts) {
+      const parts = String(t || "")
+        .split(/\n|、|，|,|;|；|\||\/|／/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+      for (const p of parts) {
+        map.set(p, (map.get(p) || 0) + 1);
+      }
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, topN);
+  }
+
+  function renderCustomerDashboard(records) {
+    const cardsEl = document.getElementById("customerStatsCards");
+    const srcEl = document.getElementById("customerSourceRank");
+    const winSrcEl = document.getElementById("customerWinSourceRank");
+    const qEl = document.getElementById("customerQuestionTop");
+    const lostEl = document.getElementById("customerLostTop");
+    if (!cardsEl || !srcEl || !winSrcEl || !qEl || !lostEl) return;
+
+    const today = new Date();
+    const start = crWeekStart(today);
+    const weekRecs = records.filter((r) => {
+      const d = crParseDate(r.date);
+      return d && d >= start && d <= today;
+    });
+
+    const inquiries = weekRecs.length;
+    const wins = weekRecs.filter((r) => r.status === "成交").length;
+    const rate = inquiries > 0 ? (wins / inquiries) : 0;
+    const sumDeal = weekRecs.reduce((acc, r) => acc + (Number(r.dealAmount) || 0), 0);
+    const sumProfit = weekRecs.reduce((acc, r) => acc + (Number(r.grossProfit) || 0), 0);
+
+    const fmt = (n) => Number(n || 0).toLocaleString("zh-TW");
+    const pct = (n) => (Number.isFinite(n) ? (n * 100).toFixed(1) : "0.0") + "%";
+
+    const card = (title, value) =>
+      `<div class="card" style="padding:10px"><div class="muted small">${crEsc(title)}</div><div style="font-size:22px;font-weight:800">${crEsc(value)}</div></div>`;
+
+    cardsEl.innerHTML = [
+      card("本週詢問數", String(inquiries)),
+      card("本週成交數", String(wins)),
+      card("本週成交率", pct(rate)),
+      card("本週預估成交金額", "NT$ " + fmt(sumDeal)),
+      card("本週預估毛利", "NT$ " + fmt(sumProfit)),
+    ].join("");
+
+    const bySource = new Map();
+    for (const r of weekRecs) bySource.set(r.source, (bySource.get(r.source) || 0) + 1);
+    const srcRank = Array.from(bySource.entries()).sort((a, b) => b[1] - a[1]);
+
+    const byWinSource = new Map();
+    for (const r of weekRecs) {
+      if (r.status !== "成交") continue;
+      byWinSource.set(r.source, (byWinSource.get(r.source) || 0) + 1);
+    }
+    const winRank = Array.from(byWinSource.entries()).sort((a, b) => b[1] - a[1]);
+
+    const renderRank = (pairs) => {
+      if (!pairs.length) return `<div class="muted">無資料</div>`;
+      return `<ol style="margin:6px 0 0 18px">${pairs
+        .map(([k, v]) => `<li>${crEsc(k)} <span class="muted">(${crEsc(String(v))})</span></li>`)
+        .join("")}</ol>`;
+    };
+
+    srcEl.innerHTML = renderRank(srcRank);
+    winSrcEl.innerHTML = renderRank(winRank);
+
+    const qTop = crTopCounts(weekRecs.map((r) => r.questions), 5);
+    const lostTop = crTopCounts(weekRecs.map((r) => r.lostReason), 5);
+    qEl.innerHTML = renderRank(qTop);
+    lostEl.innerHTML = renderRank(lostTop);
+  }
+
+  function renderCustomerList(records) {
+    const tbody = document.getElementById("customerRecordsTbody");
+    if (!tbody) return;
+    if (!records.length) {
+      tbody.innerHTML = `<tr><td class="muted" colspan="12">尚無紀錄</td></tr>`;
+      return;
+    }
+    const statusBadgeClass = (s) => {
+      const v = String(s || "").trim();
+      if (v === "成交") return "badge ok";
+      if (v === "流失") return "badge danger";
+      if (v === "已報價") return "badge warn";
+      if (v === "洽談中") return "badge info";
+      return "badge"; // 未回覆/其他
+    };
+    const fmt = (n) => (n == null || n === "" ? "" : Number(n).toLocaleString("zh-TW"));
+    const rows = records
+      .slice()
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+      .map((r) => {
+        return `<tr data-id="${crEsc(r.id)}">
+          <td class="nowrap">${crEsc((r.date || "").slice(0, 10))}</td>
+          <td>${crEsc(r.name)}</td>
+          <td>${crEsc(r.source)}</td>
+          <td>${crEsc(r.type)}</td>
+          <td><span class="${statusBadgeClass(r.status)}">${crEsc(r.status)}</span></td>
+          <td style="text-align:right">${crEsc(fmt(r.dealAmount))}</td>
+          <td style="text-align:right">${crEsc(fmt(r.grossProfit))}</td>
+          <td>${crEsc(r.use)}</td>
+          <td class="muted small">${crEscNl(r.questions)}</td>
+          <td class="muted small">${crEsc(r.lostReason)}</td>
+          <td class="muted small">${crEscNl(r.note)}</td>
+          <td style="text-align:right; white-space:nowrap">
+            <button type="button" class="btn btn-ghost btn-sm btn-cr-create-order" data-id="${crEsc(r.id)}">建立訂單</button>
+            <button type="button" class="btn btn-ghost btn-sm btn-cr-del" data-id="${crEsc(r.id)}">刪除</button>
+          </td>
+        </tr>`;
+      });
+    tbody.innerHTML = rows.join("");
+  }
+
+  function renderCustomerTodayTodo(records) {
+    const tbody = document.getElementById("customerTodayTodoTbody");
+    const emptyEl = document.getElementById("customerTodayTodoEmpty");
+    if (!tbody || !emptyEl) return;
+
+    const allowed = new Set(["未回覆", "洽談中", "已報價"]);
+    const statusOrder = { "已報價": 0, "洽談中": 1, "未回覆": 2 };
+    const statusBadgeClass = (s) => {
+      const v = String(s || "").trim();
+      if (v === "已報價") return "badge warn";
+      if (v === "洽談中") return "badge info";
+      return "badge";
+    };
+    const fmt = (n) => (n == null || n === "" ? "" : Number(n).toLocaleString("zh-TW"));
+
+    const list = (Array.isArray(records) ? records : [])
+      .filter((r) => allowed.has(String(r.status || "").trim()))
+      .slice()
+      .sort((a, b) => {
+        const ao = statusOrder[String(a.status || "").trim()] ?? 9;
+        const bo = statusOrder[String(b.status || "").trim()] ?? 9;
+        if (ao !== bo) return ao - bo;
+        return String(b.date || "").localeCompare(String(a.date || ""));
+      });
+
+    if (list.length === 0) {
+      tbody.innerHTML = "";
+      emptyEl.hidden = false;
+      return;
+    }
+    emptyEl.hidden = true;
+    tbody.innerHTML = list
+      .map((r) => {
+        return `<tr>
+          <td>${crEsc(r.name)}</td>
+          <td>${crEsc(r.source)}</td>
+          <td>${crEsc(r.type)}</td>
+          <td style="text-align:right">${crEsc(fmt(r.dealAmount))}</td>
+          <td>${crEsc(r.use)}</td>
+          <td class="muted small">${crEscNl(r.questions)}</td>
+          <td><span class="${statusBadgeClass(r.status)}">${crEsc(r.status)}</span></td>
+          <td style="text-align:right; white-space:nowrap">
+            <button type="button" class="btn btn-ghost btn-sm btn-cr-create-order" data-id="${crEsc(r.id)}">建立訂單</button>
+          </td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  function renderCustomerRecordsPage() {
+    const list = loadCustomerRecords();
+    renderCustomerDashboard(list);
+    renderCustomerTodayTodo(list);
+    renderCustomerList(list);
+  }
+
+  function crShowMsg(text) {
+    const el = document.getElementById("customerMsg");
+    if (!el) return;
+    if (!text) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = text;
+  }
+
+  function addCustomerRecordFromForm() {
+    const dateEl = document.getElementById("crDate");
+    const nameEl = document.getElementById("crName");
+    const sourceEl = document.getElementById("crSource");
+    const typeEl = document.getElementById("crType");
+    const budgetEl = document.getElementById("crBudget");
+    const useEl = document.getElementById("crUse");
+    const statusEl = document.getElementById("crStatus");
+    const dealEl = document.getElementById("crDealAmount");
+    const gpEl = document.getElementById("crGrossProfit");
+    const qEl = document.getElementById("crQuestions");
+    const lostEl = document.getElementById("crLostReason");
+    const noteEl = document.getElementById("crNote");
+
+    const rec = crNormalize({
+      date: String(dateEl?.value || "").trim(),
+      name: String(nameEl?.value || "").trim(),
+      source: String(sourceEl?.value || "其他"),
+      type: String(typeEl?.value || "其他"),
+      budget: crSafeNum(budgetEl?.value),
+      use: String(useEl?.value || "").trim(),
+      status: String(statusEl?.value || "未回覆"),
+      dealAmount: crSafeNum(dealEl?.value),
+      grossProfit: crSafeNum(gpEl?.value),
+      questions: String(qEl?.value || "").trim(),
+      lostReason: String(lostEl?.value || "").trim(),
+      note: String(noteEl?.value || "").trim(),
+    });
+
+    if (!rec.date) return crShowMsg("請選日期");
+    if (!rec.name) return crShowMsg("請填客戶名稱 / 暱稱");
+
+    const list = loadCustomerRecords();
+    list.push(rec);
+    saveCustomerRecords(list);
+    crShowMsg("已新增");
+    renderCustomerRecordsPage();
+    // 新增成功後自動收合表單
+    try {
+      const formCard = document.getElementById("customerFormCard");
+      if (formCard) formCard.hidden = true;
+    } catch (_) {}
+
+    // 清空部分欄位（保留來源/類型/狀態讓你連續輸入更快）
+    if (nameEl) nameEl.value = "";
+    if (budgetEl) budgetEl.value = "";
+    if (useEl) useEl.value = "";
+    if (dealEl) dealEl.value = "";
+    if (gpEl) gpEl.value = "";
+    if (qEl) qEl.value = "";
+    if (lostEl) lostEl.value = "";
+    if (noteEl) noteEl.value = "";
+    setTimeout(() => crShowMsg(""), 2500);
+  }
+
+  function deleteCustomerRecordById(id) {
+    const target = String(id || "");
+    if (!target) return;
+    const list = loadCustomerRecords();
+    const next = list.filter((x) => String(x.id) !== target);
+    saveCustomerRecords(next);
+    renderCustomerRecordsPage();
+  }
+
+  function createOrderFromCustomerRecord(id) {
+    const target = String(id || "");
+    if (!target) return;
+    const list = loadCustomerRecords();
+    const rec = list.find((x) => String(x.id) === target);
+    if (!rec) return;
+
+    const parts = [];
+    if (rec.use) parts.push("用途：" + rec.use);
+    if (rec.questions) parts.push("客人問題：\n" + rec.questions);
+    if (rec.note) parts.push("備註：\n" + rec.note);
+    const note = parts.join("\n\n").trim();
+
+    const payload = {
+      customerId: String(rec.id || ""),
+      name: String(rec.name || ""),
+      amount: Number(rec.dealAmount) || 0,
+      note: note,
+    };
+
+    try {
+      sessionStorage.setItem(CREATE_ORDER_FROM_CUSTOMER_KEY, JSON.stringify(payload));
+    } catch (_) {
+      // 若 sessionStorage 寫入失敗，不做任何副作用
+      return;
+    }
+
+    // 切到「庫存＋記帳」並開啟「訂單」子分頁與新增訂單 UI
+    switchTab("inv");
+    setTimeout(() => {
+      try {
+        const tabBtn = document.querySelector('.v2-tab[data-v2="orders"]');
+        if (tabBtn) tabBtn.click();
+      } catch (_) {}
+      setTimeout(() => {
+        try {
+          const btn = document.getElementById("btnNewOrder");
+          if (btn) btn.click();
+        } catch (_) {}
+      }, 0);
+    }, 0);
+  }
+
+  (function initCustomerRecords() {
+    const root = document.getElementById("customer-section");
+    if (!root) return;
+    const dateEl = document.getElementById("crDate");
+    if (dateEl && !dateEl.value) dateEl.value = crNowISODate();
+    const formCard = document.getElementById("customerFormCard");
+    const toggleBtn = document.getElementById("customerFormToggleBtn");
+    const cancelBtn = document.getElementById("crCancelBtn");
+    function setFormOpen(open) {
+      if (!formCard) return;
+      formCard.hidden = !open;
+      if (open) {
+        try { formCard.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (_) {}
+      }
+    }
+    toggleBtn?.addEventListener("click", () => setFormOpen(formCard ? formCard.hidden : true));
+    cancelBtn?.addEventListener("click", () => setFormOpen(false));
+    document.getElementById("crAddBtn")?.addEventListener("click", addCustomerRecordFromForm);
+    root.addEventListener("click", (e) => {
+      const createBtn = e.target && e.target.closest ? e.target.closest(".btn-cr-create-order") : null;
+      if (createBtn) {
+        const id = createBtn.getAttribute("data-id") || "";
+        createOrderFromCustomerRecord(id);
+        return;
+      }
+      const delBtn = e.target && e.target.closest ? e.target.closest(".btn-cr-del") : null;
+      if (!delBtn) return;
+      const id = delBtn.getAttribute("data-id") || "";
+      if (confirm("確定刪除此筆客戶紀錄？")) deleteCustomerRecordById(id);
+    });
+    // 初始化一次（避免空白頁）
+    renderCustomerRecordsPage();
+  })();
 
   function updateCatImage(cat, dataUrl) {
     const cfg = window.DK?.getConfig?.() || {};
@@ -2001,6 +3187,7 @@
       set("itemCategory", item ? item.category : (DK.getInventoryCategories && DK.getInventoryCategories()[0]) || "處理器");
       const nameSpec = item ? ((item.name === item.spec || !String(item.spec || "").trim()) ? (item.name || item.spec || "") : [item.name, item.spec].filter(Boolean).join(" ").trim()) : "";
       set("itemName", nameSpec);
+      renderVendorSelect(item ? (item.vendor ?? "") : "");
       set("itemCondition", item ? item.condition : "USED");
       set("itemStatus", item ? item.status : "READY");
       set("itemQty", item ? item.qty_on_hand : 0);
@@ -2015,6 +3202,8 @@
       if (itemEditorModal) itemEditorModal.hidden = false;
       v2Hide(itemMsg);
     }
+    // 供其他區塊（例如廠商報價）呼叫：建立庫存時開啟品項編輯器
+    window.__openV2ItemEditor = openV2ItemEditor;
 
     function closeV2ItemEditor() {
       if (itemEditorModal) itemEditorModal.hidden = true;
@@ -2319,6 +3508,7 @@
         category: document.getElementById("itemCategory")?.value,
         name: nameSpec,
         spec: nameSpec,
+        vendor: String(document.getElementById("itemVendor")?.value || "").trim(),
         condition: document.getElementById("itemCondition")?.value || "USED",
         status: document.getElementById("itemStatus")?.value || "READY",
         qty_on_hand: Math.max(0, parseInt(document.getElementById("itemQty")?.value, 10) || 0),
@@ -2459,6 +3649,115 @@
     const orderLineItemSelect = document.getElementById("orderLineItem");
     let editingV2OrderId = null;
     let orderLineItems = [];
+
+    // 訂單新增/編輯：客戶欄位搜尋建議（讀客戶紀錄，只帶入名稱）
+    (function initOrderCustomerSuggest() {
+      const inp = document.getElementById("orderCustomer");
+      if (!inp) return;
+
+      const wrap = inp.parentElement || inp;
+      try { if (wrap && getComputedStyle(wrap).position === "static") wrap.style.position = "relative"; } catch (_) {}
+
+      const dd = document.createElement("div");
+      dd.className = "searchable-select-dropdown";
+      dd.id = "orderCustomerSuggestDropdown";
+      dd.hidden = true;
+      dd.style.maxHeight = "220px";
+      dd.style.overflow = "auto";
+      dd.style.position = "absolute";
+      dd.style.left = "0";
+      dd.style.right = "0";
+      dd.style.top = "100%";
+      dd.style.marginTop = "6px";
+      dd.style.zIndex = "50";
+      (wrap || inp).appendChild(dd);
+
+      function close() { dd.hidden = true; dd.innerHTML = ""; }
+      function esc(s) { return typeof v2Esc === "function" ? v2Esc(String(s ?? "")) : String(s ?? ""); }
+
+      function readCustomers() {
+        try {
+          if (typeof loadCustomerRecords === "function") return loadCustomerRecords();
+          const raw = safeParse(localStorage.getItem(CUSTOMER_RECORDS_KEY), null);
+          const list = Array.isArray(raw) ? raw : [];
+          return list.map(crNormalize);
+        } catch (_) {
+          return [];
+        }
+      }
+
+      function render(q) {
+        const query = String(q || "").trim().toLowerCase();
+        if (!query) return close();
+        const list = readCustomers();
+        const out = [];
+        const seen = new Set();
+        for (const r of list) {
+          const name = String(r?.name || "").trim();
+          if (!name) continue;
+          const key = name.toLowerCase();
+          if (seen.has(key)) continue;
+          if (!key.includes(query)) continue;
+          seen.add(key);
+          out.push({ name, source: String(r?.source || "其他") });
+          if (out.length >= 5) break;
+        }
+        if (out.length === 0) {
+          dd.innerHTML = '<div class="searchable-select-empty">無符合的客戶</div>';
+          dd.hidden = false;
+          return;
+        }
+        dd.innerHTML = out
+          .map((x) => `<div class="searchable-select-option" data-name="${esc(x.name)}">${esc(x.name)}（${esc(x.source)}）</div>`)
+          .join("");
+        dd.hidden = false;
+      }
+
+      inp.addEventListener("input", () => render(inp.value));
+      inp.addEventListener("focus", () => render(inp.value));
+      inp.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); close(); } });
+      inp.addEventListener("blur", () => setTimeout(close, 180));
+      dd.addEventListener("mousedown", (e) => {
+        const opt = e.target && e.target.closest ? e.target.closest(".searchable-select-option") : null;
+        if (!opt) return;
+        e.preventDefault();
+        const name = opt.getAttribute("data-name") || "";
+        inp.value = name; // 只帶入名稱
+        close();
+      });
+      document.addEventListener("click", (e) => {
+        if (dd.hidden) return;
+        const t = e.target;
+        if (t === inp || (wrap && wrap.contains(t)) || dd.contains(t)) return;
+        close();
+      });
+    })();
+
+    function consumeCreateOrderFromCustomerIfAny() {
+      let raw = null;
+      try { raw = sessionStorage.getItem(CREATE_ORDER_FROM_CUSTOMER_KEY); } catch (_) { raw = null; }
+      if (!raw) return;
+      const data = safeParse(raw, null);
+      try { sessionStorage.removeItem(CREATE_ORDER_FROM_CUSTOMER_KEY); } catch (_) {}
+      if (!data || typeof data !== "object") return;
+      const customerId = String(data.customerId || "");
+      if (customerId) {
+        try { sessionStorage.setItem(PENDING_CUSTOMER_ORDER_LINK_KEY, JSON.stringify({ customerId })); } catch (_) {}
+      }
+      const name = String(data.name || "");
+      const amount = Number(data.amount) || 0;
+      const note = String(data.note || "");
+      const customerEl = document.getElementById("orderCustomer");
+      const saleEl = document.getElementById("orderTotalSale");
+      if (customerEl) customerEl.value = name;
+      if (saleEl && ((parseFloat(saleEl.value) || 0) === 0)) saleEl.value = String(amount || 0);
+      // 訂單表單本身沒有 note 欄位；先把轉單備註顯示在 orderMsg，讓你可直接複製
+      if (orderMsg && note) {
+        orderMsg.hidden = false;
+        orderMsg.textContent = "（轉單帶入）備註：\n" + note;
+      }
+      try { updateV2OrderGrossDisplay(); } catch (_) {}
+    }
 
     function getOrderDateStr(o) {
       return (o.created_at || o.date || "").toString().slice(0, 10);
@@ -2674,7 +3973,10 @@
     }
     ["orderTotalSale", "orderShipping", "orderDiscount", "orderCogs"].forEach((id) => document.getElementById(id)?.addEventListener("input", updateV2OrderGrossDisplay));
     document.getElementById("orderStatus")?.addEventListener("change", applyOrderStatusSelectClass);
-    document.getElementById("btnNewOrder")?.addEventListener("click", () => openV2OrderEditor(null));
+    document.getElementById("btnNewOrder")?.addEventListener("click", () => {
+      openV2OrderEditor(null);
+      setTimeout(consumeCreateOrderFromCustomerIfAny, 0);
+    });
     document.getElementById("orderCancel")?.addEventListener("click", () => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); });
     document.getElementById("orderLineAdd")?.addEventListener("click", () => {
       const itemId = orderLineItemSelect?.value;
@@ -2706,6 +4008,31 @@
       const orderDate = document.getElementById("orderDate")?.value || todayStr();
       const createdAt = orderDate.includes("T") ? orderDate : orderDate + "T12:00:00.000Z";
       const payload = { order_no: orderNo, customer_name: document.getElementById("orderCustomer")?.value || "", total_sale: totalSale, shipping_income: parseFloat(document.getElementById("orderShipping")?.value) || 0, discount: parseFloat(document.getElementById("orderDiscount")?.value) || 0, payment_method: document.getElementById("orderPayment")?.value || "transfer", status: document.getElementById("orderStatus")?.value || "pending", cogs_total: cogsTotal, created_at: createdAt, items: orderLineItems };
+
+      function tryMarkLinkedCustomerAsWon() {
+        let raw = null;
+        try { raw = sessionStorage.getItem(PENDING_CUSTOMER_ORDER_LINK_KEY); } catch (_) { raw = null; }
+        if (!raw) return;
+        const link = safeParse(raw, null);
+        const customerId = String(link?.customerId || "");
+        if (!customerId) return;
+        try {
+          const listRaw = safeParse(localStorage.getItem(CUSTOMER_RECORDS_KEY), null);
+          const list = Array.isArray(listRaw) ? listRaw.map(crNormalize) : [];
+          const idx = list.findIndex((x) => String(x.id) === customerId);
+          if (idx < 0) {
+            v2Show(orderMsg, "訂單已儲存，但找不到對應客戶紀錄（未更新狀態）。");
+            return;
+          }
+          list[idx] = { ...list[idx], status: "成交" };
+          localStorage.setItem(CUSTOMER_RECORDS_KEY, JSON.stringify(list));
+          try { sessionStorage.removeItem(PENDING_CUSTOMER_ORDER_LINK_KEY); } catch (_) {}
+          if (typeof renderCustomerRecordsPage === "function") renderCustomerRecordsPage();
+        } catch (e) {
+          // 不要中斷訂單流程；也不要清除 pending key，避免資料遺失
+          v2Show(orderMsg, "訂單已儲存，但更新客戶狀態失敗：" + String(e?.message || e || ""));
+        }
+      }
       if (editingV2OrderId) {
         const idx = orders.findIndex((x) => x.id === editingV2OrderId);
         if (idx < 0) return v2Show(orderMsg, "找不到訂單");
@@ -2758,6 +4085,11 @@
         orders[idx] = { ...existingOrder, ...payload, id: orderId, updated_at: nowISO() };
         DK.saveOrders(orders);
         v2Show(orderMsg, "已更新（庫存已同步）");
+        // 只有訂單狀態為「已完成」才回寫客戶成交（避免未完成就把客戶改成成交）
+        const statusNow = String(document.getElementById("orderStatus")?.value || payload.status || "").trim();
+        if (statusNow === "completed" || statusNow === "已完成") {
+          tryMarkLinkedCustomerAsWon();
+        }
       } else {
         /* 新增訂單：庫存為 0 的品項不能成立訂單 */
         for (const line of orderLineItems) {
@@ -2780,6 +4112,11 @@
         orders.unshift(payload);
         DK.saveOrders(orders);
         v2Show(orderMsg, "已新增並已扣庫存");
+        // 只有訂單狀態為「已完成」才回寫客戶成交（避免未完成就把客戶改成成交）
+        const statusNow = String(document.getElementById("orderStatus")?.value || payload.status || "").trim();
+        if (statusNow === "completed" || statusNow === "已完成") {
+          tryMarkLinkedCustomerAsWon();
+        }
       }
       renderV2Orders();
       renderV2Items();
@@ -3084,7 +4421,7 @@
   applyAuthUI();
   if (window.DK?.isAdminAuthed?.()) {
     const saved = (function () { try { return localStorage.getItem("dk_admin_active_tab"); } catch (_) { return null; } })();
-    if (saved === "publish" || saved === "inv" || saved === "frontend") switchTab(saved);
+    if (saved === "publish" || saved === "inv" || saved === "frontend" || saved === "vendors" || saved === "customers") switchTab(saved);
     else switchTab("inv");
   }
 })();

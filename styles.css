@@ -1133,6 +1133,7 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
 .badge.warn{ border-color: rgba(255,204,102,0.35); background: rgba(255,204,102,0.14); }
 .badge.danger{ border-color: rgba(255,92,122,0.35); background: rgba(255,92,122,0.14); }
 .badge.tag{ border-color: rgba(17,24,39,0.10); background: rgba(17,24,39,0.02); color: rgba(18,24,38,0.76); }
+.badge.info{ border-color: rgba(93,214,255,0.35); background: rgba(93,214,255,0.14); }
 
 .spec{
   display:grid;

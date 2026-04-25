@@ -53,6 +53,8 @@
             <button class="tab active" data-tab="inv" type="button">庫存＋記帳</button>
             <button class="tab" data-tab="publish" type="button">上架管理</button>
             <button class="tab" data-tab="frontend" type="button">前台管理</button>
+            <button class="tab" data-tab="vendors" type="button">廠商管理</button>
+            <button class="tab" data-tab="customers" type="button">客戶紀錄</button>
           </div>
 
           <!-- ① 庫存＋記帳（品項／流水帳／訂單／支出／報表） -->
@@ -148,6 +150,7 @@
               <div class="form-grid">
                 <div class="field"><label for="itemCategory">品類</label><select id="itemCategory"></select></div>
                 <div class="field full"><label for="itemName">名稱／規格</label><input id="itemName" type="text" placeholder="型號、產品名稱或規格（例：RTX 3060 Ti 8G、480GB SSD）" /></div>
+                <div class="field"><label for="itemVendor">廠商</label><select id="itemVendor"></select></div>
                 <div class="field"><label for="itemCondition">成色</label><select id="itemCondition"><option value="NEW">全新</option><option value="USED">二手</option><option value="REFURB">整新</option></select></div>
                 <div class="field"><label for="itemStatus">狀態</label><select id="itemStatus"><option value="READY">可售</option><option value="TESTING">待測</option><option value="PREP">待整理</option><option value="RESERVED">保留</option><option value="CLEARANCE">待出清</option><option value="SCRAP">報廢拆料</option></select></div>
                 <div class="field"><label for="itemQty">現貨數量</label><input id="itemQty" type="number" min="0" value="0" /></div>
@@ -872,6 +875,244 @@
                 <button id="frontendResetBtn" class="btn btn-ghost" type="button">重置為預設</button>
               </div>
               <div id="frontendMsg" class="full muted" style="margin-top: 10px" hidden></div>
+            </div>
+          </section>
+
+          <!-- ⑥ 廠商管理 -->
+          <section id="tab-vendors" class="card" hidden>
+            <div id="vendor-section">
+              <div id="vendorManageCard" class="card" style="margin-bottom:12px">
+                <h2 class="h2">廠商管理</h2>
+                <div class="form-grid" style="grid-template-columns: 1fr auto; margin-top: 12px">
+                  <div class="field">
+                    <label for="newVendorName">新增廠商</label>
+                    <input id="newVendorName" type="text" placeholder="輸入廠商名稱" autocomplete="off" />
+                  </div>
+                  <div class="field" style="display:flex; align-items:flex-end">
+                    <button id="addVendorBtn" class="btn btn-ghost" type="button">新增</button>
+                  </div>
+                </div>
+                <table class="table" style="margin-top: 10px">
+                  <thead>
+                    <tr>
+                      <th>廠商</th>
+                      <th style="text-align:right; width:100px">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="vendorOptionsTbody"></tbody>
+                </table>
+                <div id="vendorManageMsg" class="muted small" style="margin-top: 8px" hidden></div>
+              </div>
+
+              <!-- 廠商報價紀錄（localStorage：dk_vendor_quotes_v1） -->
+              <div id="vendorQuotesCard" class="card" style="margin-bottom:12px">
+                <h3 class="h3">廠商報價紀錄</h3>
+                <div class="actions" style="margin-top:12px">
+                  <button id="vqFormToggleBtn" class="btn btn-primary" type="button">新增報價</button>
+                </div>
+                <div id="vqFormWrap" class="form-grid" style="margin-top:12px" hidden>
+                  <div class="field"><label for="vqDate">日期</label><input id="vqDate" type="date" /></div>
+                  <div class="field"><label for="vqVendor">廠商</label><select id="vqVendor"></select></div>
+                  <div class="field"><label for="vqCategory">品類</label><input id="vqCategory" type="text" placeholder="例如：顯示卡/SSD" /></div>
+                  <div class="field"><label for="vqBrand">品牌</label><input id="vqBrand" type="text" placeholder="例如：ASUS" /></div>
+                  <div class="field full"><label for="vqSpec">型號 / 規格</label><input id="vqSpec" type="text" placeholder="例如：RTX 4060 8G / 1TB SSD" /></div>
+                  <div class="field"><label for="vqPrice">報價</label><input id="vqPrice" type="number" min="0" step="1" /></div>
+                  <div class="field"><label for="vqMarketPrice">原價屋行情價</label><input id="vqMarketPrice" type="number" min="0" step="1" placeholder="可留空" /></div>
+                  <div class="field" style="display:flex; align-items:flex-end; gap:12px">
+                    <label class="muted" style="display:flex; align-items:center; gap:8px; margin:0">
+                      <input id="vqTaxIncluded" type="checkbox" /> 含稅
+                    </label>
+                    <label class="muted" style="display:flex; align-items:center; gap:8px; margin:0">
+                      <input id="vqShippingIncluded" type="checkbox" /> 含運
+                    </label>
+                  </div>
+                  <div class="field"><label for="vqWarranty">保固</label><input id="vqWarranty" type="text" placeholder="例如：1年/店保" /></div>
+                  <div class="field" style="display:flex; align-items:flex-end">
+                    <label class="muted" style="display:flex; align-items:center; gap:8px; margin:0">
+                      <input id="vqInStock" type="checkbox" /> 現貨
+                    </label>
+                  </div>
+                  <div class="field full"><label for="vqNote">備註</label><input id="vqNote" type="text" placeholder="例如：限量/到貨日/最低幾顆" /></div>
+                  <div class="full actions">
+                    <button id="vqAddBtn" class="btn btn-primary" type="button">新增報價</button>
+                    <button id="vqCancelBtn" class="btn btn-ghost" type="button">取消</button>
+                  </div>
+                </div>
+                <div id="vqMsg" class="muted small" style="margin-top:8px" hidden></div>
+                <div class="table-wrap" style="margin-top:10px">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>日期</th>
+                        <th>廠商</th>
+                        <th>規格</th>
+                        <th style="text-align:right">報價</th>
+                        <th style="text-align:right">行情價</th>
+                        <th style="text-align:right">價差</th>
+                        <th style="text-align:right">毛利空間%</th>
+                        <th>現貨</th>
+                        <th style="text-align:right; width:180px">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="vendorQuotesTbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ⑦ 客戶紀錄（localStorage：dk_customer_records_v1） -->
+          <section id="tab-customers" class="card" hidden>
+            <div id="customer-section">
+              <h2 class="h2">客戶紀錄</h2>
+
+              <!-- 儀表板 -->
+              <div id="customerDashboard" class="card" style="margin:12px 0">
+                <div class="section-head" style="margin-bottom:10px">
+                  <div>
+                    <h3 class="h3">回看儀表板（本週）</h3>
+                    <p class="muted">只做數字卡＋排行榜（不做圖表）。</p>
+                  </div>
+                </div>
+                <div class="badges" style="justify-content:flex-start; margin-bottom:8px">
+                  <span class="badge tag">狀態</span>
+                  <span class="badge">未回覆</span>
+                  <span class="badge info">洽談中</span>
+                  <span class="badge warn">已報價</span>
+                  <span class="badge ok">成交</span>
+                  <span class="badge danger">流失</span>
+                </div>
+                <div id="customerStatsCards" class="form-grid" style="grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px"></div>
+                <div class="form-grid" style="margin-top:10px">
+                  <div class="field">
+                    <label class="muted">來源排行榜（依詢問數）</label>
+                    <div id="customerSourceRank" class="muted small"></div>
+                  </div>
+                  <div class="field">
+                    <label class="muted">成交來源排行榜（狀態=成交）</label>
+                    <div id="customerWinSourceRank" class="muted small"></div>
+                  </div>
+                  <div class="field">
+                    <label class="muted">客人問題 TOP5</label>
+                    <div id="customerQuestionTop" class="muted small"></div>
+                  </div>
+                  <div class="field">
+                    <label class="muted">流失原因 TOP5</label>
+                    <div id="customerLostTop" class="muted small"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 今日待處理客戶 -->
+              <div id="customerTodayTodoCard" class="card" style="margin:12px 0">
+                <div class="section-head" style="margin-bottom:10px">
+                  <div>
+                    <h3 class="h3">今日待處理客戶</h3>
+                    <p class="muted">只顯示：未回覆／洽談中／已報價（今日）。</p>
+                  </div>
+                </div>
+                <div class="table-wrap">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>客戶</th>
+                        <th>來源</th>
+                        <th>類型</th>
+                        <th style="text-align:right">預估金額</th>
+                        <th>用途</th>
+                        <th>客戶問題</th>
+                        <th>狀態</th>
+                        <th style="text-align:right; width:160px">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="customerTodayTodoTbody"></tbody>
+                  </table>
+                </div>
+                <div id="customerTodayTodoEmpty" class="muted" style="margin-top:8px" hidden>目前沒有待處理客戶</div>
+              </div>
+
+              <!-- 新增表單 -->
+              <div class="actions" style="margin:12px 0">
+                <button id="customerFormToggleBtn" class="btn btn-primary" type="button">新增客戶紀錄</button>
+              </div>
+              <div id="customerFormCard" class="card" style="margin:12px 0" hidden>
+                <h3 class="h3">新增客戶紀錄</h3>
+                <div class="form-grid" style="margin-top:12px">
+                  <div class="field"><label for="crDate">日期</label><input id="crDate" type="date" /></div>
+                  <div class="field"><label for="crName">客戶名稱 / 暱稱</label><input id="crName" type="text" autocomplete="off" /></div>
+                  <div class="field">
+                    <label for="crSource">來源</label>
+                    <select id="crSource">
+                      <option value="IG">IG</option>
+                      <option value="FB社團">FB社團</option>
+                      <option value="TikTok">TikTok</option>
+                      <option value="LINE">LINE</option>
+                      <option value="Google商家">Google商家</option>
+                      <option value="朋友介紹">朋友介紹</option>
+                      <option value="回購">回購</option>
+                      <option value="其他">其他</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="crType">類型</label>
+                    <select id="crType">
+                      <option value="買電腦">買電腦</option>
+                      <option value="維修">維修</option>
+                      <option value="升級">升級</option>
+                      <option value="詢價">詢價</option>
+                      <option value="其他">其他</option>
+                    </select>
+                  </div>
+                  <div class="field"><label for="crBudget">預算</label><input id="crBudget" type="number" min="0" step="1" placeholder="例如 20000" /></div>
+                  <div class="field">
+                    <label for="crStatus">狀態</label>
+                    <select id="crStatus">
+                      <option value="未回覆">未回覆</option>
+                      <option value="洽談中">洽談中</option>
+                      <option value="已報價">已報價</option>
+                      <option value="成交">成交</option>
+                      <option value="流失">流失</option>
+                    </select>
+                  </div>
+                  <div class="field full"><label for="crUse">用途</label><input id="crUse" type="text" placeholder="文書/遊戲/剪輯/直播…" /></div>
+                  <div class="field"><label for="crDealAmount">預估金額</label><input id="crDealAmount" type="number" min="0" step="1" /></div>
+                  <div class="field"><label for="crGrossProfit">預估毛利</label><input id="crGrossProfit" type="number" step="1" /></div>
+                  <div class="field full"><label for="crQuestions">常見問題 / 客人問題</label><textarea id="crQuestions" rows="3" placeholder="可一行一個問題"></textarea></div>
+                  <div class="field full"><label for="crLostReason">流失原因</label><input id="crLostReason" type="text" /></div>
+                  <div class="field full"><label for="crNote">備註</label><textarea id="crNote" rows="3"></textarea></div>
+                  <div class="full actions">
+                    <button id="crAddBtn" class="btn btn-primary" type="button">新增紀錄</button>
+                    <button id="crCancelBtn" class="btn btn-ghost" type="button">取消</button>
+                  </div>
+                </div>
+                <div id="customerMsg" class="muted small" style="margin-top:8px" hidden></div>
+              </div>
+
+              <!-- 列表 -->
+              <div id="customerListCard" class="card" style="margin:12px 0">
+                <h3 class="h3">紀錄列表</h3>
+                <div class="table-wrap" style="margin-top:10px">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>日期</th>
+                        <th>客戶</th>
+                        <th>來源</th>
+                        <th>類型</th>
+                        <th>狀態</th>
+                        <th style="text-align:right">預估金額</th>
+                        <th style="text-align:right">預估毛利</th>
+                        <th>用途</th>
+                        <th>客人問題</th>
+                        <th>流失原因</th>
+                        <th>備註</th>
+                        <th style="text-align:right; width:80px">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="customerRecordsTbody"></tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </section>
 
