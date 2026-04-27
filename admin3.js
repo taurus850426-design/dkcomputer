@@ -398,6 +398,7 @@
       showVendorManageMsg("");
       renderVendorOptions();
       if (typeof renderVendorQuoteVendorSelect === "function") renderVendorQuoteVendorSelect();
+      if (typeof renderVendorQuoteCategorySelect === "function") renderVendorQuoteCategorySelect();
       if (typeof renderVendorQuotes === "function") renderVendorQuotes();
     }
     if (name === "customers") {
@@ -1463,6 +1464,24 @@
     sel.innerHTML = opts.join("");
   }
 
+  function renderVendorQuoteCategorySelect(currentValue) {
+    const sel = document.getElementById("vqCategory");
+    if (!sel) return;
+    const cats = DK.getInventoryCategories
+      ? DK.getInventoryCategories()
+      : ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼"];
+    const cur = String(currentValue != null ? currentValue : (sel.value || "")).trim();
+    const opts = ['<option value="">請選擇品類</option>'].concat(
+      cats.map((c) => `<option value="${vqEsc(c)}">${vqEsc(c)}</option>`),
+    );
+    // 舊資料相容：若目前值不在清單內，動態補進 select（僅供顯示/不報錯，不影響資料原樣保留）
+    if (cur && !cats.includes(cur)) {
+      opts.push(`<option value="${vqEsc(cur)}">${vqEsc(cur)}</option>`);
+    }
+    sel.innerHTML = opts.join("");
+    if (cur) sel.value = cur;
+  }
+
   function vqShowMsg(text) {
     const el = document.getElementById("vqMsg");
     if (!el) return;
@@ -1895,7 +1914,17 @@
             }
             if (q.category) {
               const cSel = document.getElementById("itemCategory");
-              if (cSel) cSel.value = q.category;
+              if (cSel) {
+                // 舊資料相容：若 category 不在目前庫存品類清單，動態補 option，避免帶入失敗
+                const exists = Array.from(cSel.options || []).some((o) => String(o?.value || "") === String(q.category));
+                if (!exists) {
+                  const opt = document.createElement("option");
+                  opt.value = String(q.category);
+                  opt.textContent = String(q.category);
+                  cSel.appendChild(opt);
+                }
+                cSel.value = q.category;
+              }
             }
             const name = [q.brand, q.spec].filter(Boolean).join(" ").trim();
             const nameEl = document.getElementById("itemName");
@@ -1920,6 +1949,7 @@
     const dateEl = document.getElementById("vqDate");
     if (dateEl && !dateEl.value) dateEl.value = vqNowISODate();
     renderVendorQuoteVendorSelect();
+    renderVendorQuoteCategorySelect();
     renderVendorQuotes();
     if (typeof renderVendorAnalysis === "function") renderVendorAnalysis();
     // 表單收合
