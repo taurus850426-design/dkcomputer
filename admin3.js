@@ -3231,6 +3231,8 @@
       if (itemDeleteBtn) itemDeleteBtn.hidden = !item;
       if (itemEditorModal) itemEditorModal.hidden = false;
       v2Hide(itemMsg);
+      // 開啟編輯器時同步更新重複品項提醒（不阻止儲存）
+      try { updateItemDuplicateHint(); } catch (_) {}
     }
     // 供其他區塊（例如廠商報價）呼叫：建立庫存時開啟品項編輯器
     window.__openV2ItemEditor = openV2ItemEditor;
@@ -3484,6 +3486,7 @@
             const parsedSpec = (parsed && parsed.spec != null && parsed.spec !== undefined) ? String(parsed.spec).trim() : (barcodeText ? "條碼:" + barcodeText : "");
             const merged = [parsedBrand ? parsedBrand + " " + parsedName : parsedName, parsedSpec].filter(Boolean).join(" ").trim();
             if (nameEl) nameEl.value = merged;
+            try { updateItemDuplicateHint(); } catch (_) {}
           }
           if (isBarcodeOnly) {
             setItemScanStatus("正在查詢網路…");
@@ -3568,6 +3571,138 @@
       }
       renderV2Items();
       setTimeout(closeV2ItemEditor, 800);
+    });
+
+    // ===== 重複品項提醒（名稱／規格相似比對）=====
+    const itemNameInput = document.getElementById("itemName");
+    const itemDuplicateHint = document.getElementById("itemDuplicateHint");
+    const DUP_HINT_MAX = 5;
+
+    function normalizeNameSpecText(s) {
+      return String(s ?? "")
+        .toLowerCase()
+        .replace(/[\u3000\s]+/g, " ")
+        .replace(/[()（）【】\[\]{}<>「」『』'"`~!@#$%^&*+=|\\:;,.?，。！？、／/_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function bigrams(s) {
+      const t = normalizeNameSpecText(s).replace(/\s/g, "");
+      if (!t) return [];
+      if (t.length === 1) return [t];
+      const out = [];
+      for (let i = 0; i < t.length - 1; i++) out.push(t.slice(i, i + 2));
+      return out;
+    }
+
+    function diceCoefficient(a, b) {
+      const A = bigrams(a);
+      const B = bigrams(b);
+      if (A.length === 0 || B.length === 0) return 0;
+      const counts = new Map();
+      for (const g of A) counts.set(g, (counts.get(g) || 0) + 1);
+      let overlap = 0;
+      for (const g of B) {
+        const c = counts.get(g) || 0;
+        if (c > 0) {
+          overlap++;
+          counts.set(g, c - 1);
+        }
+      }
+      return (2 * overlap) / (A.length + B.length);
+    }
+
+    function calcNameSpecSimilarity(query, target) {
+      const q = normalizeNameSpecText(query);
+      const t = normalizeNameSpecText(target);
+      if (!q || !t) return 0;
+      if (q === t) return 1;
+      // 包含關係給較高分（避免只有差一點點符號）
+      if (q.length >= 4 && t.includes(q)) return 0.92;
+      if (t.length >= 4 && q.includes(t)) return 0.92;
+      return diceCoefficient(q, t);
+    }
+
+    function getSimilarItemsByNameSpec(query, excludeId) {
+      if (!window.DK || typeof DK.getEnrichedItems !== "function") return [];
+      const q = String(query || "").trim();
+      if (!q) return [];
+      const ex = String(excludeId || "");
+      const items = DK.getEnrichedItems();
+      const scored = [];
+      for (const it of items) {
+        if (!it || !it.id) continue;
+        if (ex && String(it.id) === ex) continue;
+        const nameSpec = (it.name === it.spec || !String(it.spec || "").trim())
+          ? (it.name || it.spec || "")
+          : [it.name, it.spec].filter(Boolean).join(" ").trim();
+        const score = calcNameSpecSimilarity(q, nameSpec);
+        if (score >= 0.62) scored.push({ it, nameSpec, score });
+      }
+      scored.sort((a, b) => b.score - a.score);
+      return scored.slice(0, DUP_HINT_MAX);
+    }
+
+    function hideItemDuplicateHint() {
+      if (!itemDuplicateHint) return;
+      itemDuplicateHint.hidden = true;
+      itemDuplicateHint.innerHTML = "";
+    }
+
+    function renderItemDuplicateHint(rows) {
+      if (!itemDuplicateHint) return;
+      if (!rows || rows.length === 0) return hideItemDuplicateHint();
+      const fmtNum = (n) => (n == null || !Number.isFinite(Number(n))) ? "-" : Number(n).toLocaleString("zh-TW");
+      itemDuplicateHint.hidden = false;
+      itemDuplicateHint.innerHTML = `
+        <div class="card" style="margin:0; padding:10px; border:1px solid rgba(0,0,0,.08); background:rgba(255,210,0,.08)">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px">
+            <strong>重複品項提醒</strong>
+            <span class="muted">最多顯示 ${DUP_HINT_MAX} 筆</span>
+          </div>
+          <div class="table-wrap" style="margin-top:8px">
+            <table class="table">
+              <thead><tr><th>名稱</th><th>品類</th><th style="text-align:right">庫存</th><th style="text-align:right">成本</th><th style="text-align:right">操作</th></tr></thead>
+              <tbody>
+                ${rows.map(({ it, nameSpec }) => `
+                  <tr>
+                    <td>${v2Esc(String(nameSpec || ""))}</td>
+                    <td>${v2Esc(String(it.category || ""))}</td>
+                    <td style="text-align:right">${v2Esc(String(it.qty_on_hand ?? 0))}</td>
+                    <td style="text-align:right">${v2Esc(fmtNum(it.cost_unit))}</td>
+                    <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-dup-item" data-id="${v2Esc(String(it.id))}">改編輯此品項</button></td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function updateItemDuplicateHint() {
+      if (!itemDuplicateHint) return;
+      const q = String(itemNameInput?.value || "").trim();
+      if (!q) return hideItemDuplicateHint();
+      const rows = getSimilarItemsByNameSpec(q, editingV2ItemId);
+      if (!rows.length) return hideItemDuplicateHint();
+      renderItemDuplicateHint(rows);
+    }
+
+    // 不阻止新增/編輯，只做提示
+    itemNameInput?.addEventListener("input", () => {
+      try { updateItemDuplicateHint(); } catch (_) { hideItemDuplicateHint(); }
+    });
+    itemDuplicateHint?.addEventListener("click", (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest(".btn-edit-dup-item") : null;
+      if (!btn) return;
+      const id = btn.getAttribute("data-id") || "";
+      if (!id) return;
+      try {
+        hideItemDuplicateHint();
+        openV2ItemEditor(id); // 直接切換到該品項編輯視窗，不新增新資料
+      } catch (_) {}
     });
     itemsSearch?.addEventListener("input", () => { itemsPage = 1; renderV2Items(); });
     itemsCategory?.addEventListener("change", () => { itemsPage = 1; renderV2Items(); });
