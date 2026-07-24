@@ -1581,6 +1581,27 @@
     return typeof v2Esc === "function" ? v2Esc(String(s ?? "")) : String(s ?? "");
   }
 
+  /** 廠商報價品項顯示名（相容舊 brand + spec；不改寫資料） */
+  function getVendorQuoteDisplayName(quote) {
+    const brand = String(quote?.brand || "").trim();
+    const spec = String(quote?.spec || "").trim();
+    if (!brand && !spec) return "未填寫";
+    if (!brand) return spec;
+    if (!spec) return brand;
+    const brandLower = brand.toLowerCase();
+    const specLower = spec.toLowerCase();
+    // 型號／規格開頭已含相同品牌時不重複
+    if (
+      specLower === brandLower
+      || specLower.startsWith(brandLower + " ")
+      || specLower.startsWith(brandLower + "/")
+      || specLower.startsWith(brandLower + "／")
+    ) {
+      return spec;
+    }
+    return brand + " " + spec;
+  }
+
   function loadVendorQuotes() {
     const raw = safeParse(localStorage.getItem(VENDOR_QUOTES_KEY), null);
     const list = Array.isArray(raw) ? raw : [];
@@ -1766,7 +1787,7 @@
           return `<tr>
             <td class="nowrap">${vqEsc((q.date || "").slice(0, 10))}</td>
             <td>${vqEsc(q.vendor)}</td>
-            <td>${vqEsc([q.brand, q.spec].filter(Boolean).join(" ").trim())}</td>
+            <td>${vqEsc(getVendorQuoteDisplayName(q))}</td>
             <td style="text-align:right">${vqEsc(fmt(q.price))}</td>
             <td style="text-align:right">${vqEsc(mpText)}</td>
             <td style="text-align:right">${vqEsc(diffText)}</td>
@@ -1867,7 +1888,7 @@
           const mp = (q.marketPrice == null) ? null : Number(q.marketPrice);
           const p = (q.price == null) ? null : Number(q.price);
           const margin = (mp != null && mp > 0 && p != null) ? ((mp - p) / mp) * 100 : null;
-          const specText = [q.brand, q.spec].filter(Boolean).join(" ").trim();
+          const specText = getVendorQuoteDisplayName(q);
           const rawCat = String(q?.category || "").trim() || "—";
           return `<tr>
             <td class="nowrap">${vqEsc((q.date || "").slice(0, 10))}</td>
@@ -1888,7 +1909,7 @@
             <tr>
               <th>日期</th>
               <th>品類</th>
-              <th>規格</th>
+              <th>品項</th>
               <th style="text-align:right">報價</th>
               <th style="text-align:right">行情價</th>
               <th style="text-align:right">毛利%</th>
@@ -2350,11 +2371,12 @@
     const stockEl = document.getElementById("vqInStock");
     const noteEl = document.getElementById("vqNote");
 
+    // 新表單：單一欄「品牌／型號／規格」寫入 spec；brand 存空字串（欄位仍保留相容）
     const q = vqNormalize({
       date: String(dateEl?.value || "").trim(),
       vendor: String(vendorEl?.value || "").trim(),
       category: String(catEl?.value || "").trim(),
-      brand: String(brandEl?.value || "").trim(),
+      brand: "",
       spec: String(specEl?.value || "").trim(),
       price: vqNum(priceEl?.value),
       marketPrice: vqNum(mpEl?.value),
@@ -2367,7 +2389,7 @@
 
     if (!q.date) return vqShowMsg("請選日期");
     if (!q.vendor) return vqShowMsg("請選廠商");
-    if (!q.spec) return vqShowMsg("請填型號 / 規格");
+    if (!q.spec) return vqShowMsg("請填品牌／型號／規格");
     if (q.price == null || q.price < 0) return vqShowMsg("請填正確報價");
 
     const list = loadVendorQuotes();
@@ -2447,7 +2469,8 @@
                 cSel.value = q.category;
               }
             }
-            const name = [q.brand, q.spec].filter(Boolean).join(" ").trim();
+            const displayName = getVendorQuoteDisplayName(q);
+            const name = displayName === "未填寫" ? "" : displayName;
             const nameEl = document.getElementById("itemName");
             if (nameEl) nameEl.value = name;
             const costEl = document.getElementById("itemCost");

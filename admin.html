@@ -970,8 +970,9 @@
                   <div class="field"><label for="vqDate">日期</label><input id="vqDate" type="date" /></div>
                   <div class="field"><label for="vqVendor">廠商</label><select id="vqVendor"></select></div>
                   <div class="field"><label for="vqCategory">品類</label><select id="vqCategory"><option value="">請選擇品類</option></select></div>
-                  <div class="field"><label for="vqBrand">品牌</label><input id="vqBrand" type="text" placeholder="例如：ASUS" /></div>
-                  <div class="field full"><label for="vqSpec">型號 / 規格</label><input id="vqSpec" type="text" placeholder="例如：RTX 4060 8G / 1TB SSD" /></div>
+                  <!-- 舊 brand 欄位保留為隱藏，相容既有資料與 JS；新輸入統一寫入 vqSpec -->
+                  <input id="vqBrand" type="hidden" value="" />
+                  <div class="field full"><label for="vqSpec">品牌／型號／規格</label><input id="vqSpec" type="text" placeholder="例如：ASUS RTX 4060 8GB／ADATA LEGEND 710 512GB" /></div>
                   <div class="field"><label for="vqPrice">報價</label><input id="vqPrice" type="number" min="0" step="1" /></div>
                   <div class="field"><label for="vqMarketPrice">原價屋行情價</label><input id="vqMarketPrice" type="number" min="0" step="1" placeholder="可留空" /></div>
                   <div class="field" style="display:flex; align-items:flex-end; gap:12px">
@@ -998,7 +999,7 @@
                 <div class="vq-toolbar" style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end">
                   <div class="field" style="flex:1; min-width:180px; margin:0">
                     <label for="vendorQuoteSearch">搜尋</label>
-                    <input id="vendorQuoteSearch" type="search" placeholder="廠商／品類／品牌／規格／備註" autocomplete="off" />
+                    <input id="vendorQuoteSearch" type="search" placeholder="廠商／品類／品牌／品項／備註" autocomplete="off" />
                   </div>
                   <div class="field" style="margin:0; min-width:140px">
                     <label for="vendorQuoteVendorFilter">廠商</label>
@@ -1015,7 +1016,7 @@
                       <tr>
                         <th>日期</th>
                         <th>廠商</th>
-                        <th>規格</th>
+                        <th>品項</th>
                         <th style="text-align:right">報價</th>
                         <th style="text-align:right">行情價</th>
                         <th style="text-align:right">價差</th>
