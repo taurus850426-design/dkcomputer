@@ -105,40 +105,84 @@
 
   function buildMachineCard(item) {
     const name = DK.escapeHtml(item.name || "整機");
-    const price = item.price != null ? DK.formatPrice(item.price) : null;
-    const priceText = price ? `NT$ ${price}` : "價格請加 LINE 詢問";
+    const rawPrice = typeof item.price === "number" ? item.price : Number(item.price);
+    const hasPrice = Number.isFinite(rawPrice) && rawPrice > 0;
+    const priceFormatted = hasPrice && DK.formatPrice ? DK.formatPrice(rawPrice) : "";
+    const priceText = hasPrice && priceFormatted ? `NT$ ${priceFormatted}` : "洽詢價格";
     const qty = (() => { const n = typeof item.qty === "number" ? item.qty : Number(item.qty); return Number.isFinite(n) && n >= 0 ? n : null; })();
+    const catLabel = String(item.category || "").trim();
+    const stockStatus = String(item.stockStatus || "").trim();
     const photosRaw = Array.isArray(item.photos) ? item.photos : [];
     const photos = photosRaw
       .filter((p) => typeof p === "string")
       .map((p) => p.trim())
       .filter((p) => p && (p.startsWith("data:image/") || p.startsWith("http://") || p.startsWith("https://") || p.startsWith("blob:")));
 
+    const specParts = [];
+    const pushSpec = (v) => {
+      const s = String(v || "").trim();
+      if (!s || s === "未標示" || s === "undefined" || s === "null") return;
+      if (specParts.includes(s)) return;
+      if (specParts.length >= 3) return;
+      specParts.push(s);
+    };
+    pushSpec(item.cpu || item.spec_cpu);
+    pushSpec(item.gpu || item.spec_gpu);
+    pushSpec(item.ram || item.spec_ram);
+    pushSpec(item.ssd || item.spec_ssd);
+    const specText = specParts.length ? specParts.join(" · ") : "";
+
     const photoCarouselHtml = photos.length > 0
       ? `<div class="machine-card-photo-wrap">
           ${photos.length > 1 ? `<button type="button" class="machine-card-arrow machine-card-arrow-prev" aria-label="上一張"></button>` : ""}
           <div class="machine-card-photo machine-card-photo-carousel" data-photo-count="${photos.length}">
             <div class="machine-card-photo-carousel-inner" style="width:${photos.length * 100}%">
-              ${photos.map((p, i) => `<div class="machine-card-photo-slide" style="flex:0 0 ${100 / photos.length}%"><img src="${DK.escapeHtml(p)}" alt="" loading="lazy" /></div>`).join("")}
+              ${photos.map((p, i) => `<div class="machine-card-photo-slide" style="flex:0 0 ${100 / photos.length}%"><img src="${DK.escapeHtml(p)}" alt="" loading="lazy" onerror="this.closest('.machine-card-photo-wrap')?.classList.add('is-broken')" /></div>`).join("")}
             </div>
           </div>
           ${photos.length > 1 ? `<button type="button" class="machine-card-arrow machine-card-arrow-next" aria-label="下一張"></button>` : ""}
           ${photos.length > 1 ? `<div class="machine-card-dots">${photos.map((_, i) => `<button type="button" class="machine-card-dot${i === 0 ? " active" : ""}" aria-label="第${i + 1}張" data-i="${i}"></button>`).join("")}</div>` : ""}
         </div>`
-      : "";
+      : `<div class="machine-card-photo-wrap machine-card-photo-empty" aria-hidden="true"><div class="machine-card-photo"></div></div>`;
+
+    const tagsHtml = (() => {
+      const tags = [];
+      if (catLabel) tags.push(DK.escapeHtml(catLabel));
+      if (stockStatus) tags.push(DK.escapeHtml(stockStatus));
+      else if (qty != null && qty > 0) tags.push("現貨");
+      if (!tags.length) return "";
+      return `<div class="machine-card-tags">${tags.map((t) => `<span class="machine-card-tag">${t}</span>`).join("")}</div>`;
+    })();
 
     const productUrl = "product.html?id=" + encodeURIComponent(String(item.id));
     return `
       <article class="machine-card" data-item-id="${DK.escapeHtml(String(item.id))}">
         <a href="${DK.escapeHtml(productUrl)}" class="machine-card-link">
           ${photoCarouselHtml}
-          <h3 class="machine-card-title">${name}</h3>
-          <div class="machine-card-price">${priceText}</div>
-          ${qty != null ? `<div class="machine-card-qty">剩餘 ${qty} 件</div>` : ""}
+          <div class="machine-card-body">
+            ${tagsHtml}
+            <h3 class="machine-card-title">${name}</h3>
+            ${specText ? `<p class="machine-card-spec">${DK.escapeHtml(specText)}</p>` : ""}
+            <div class="machine-card-price">${priceText}</div>
+            ${qty != null ? `<div class="machine-card-qty">剩餘 ${qty} 件</div>` : `<div class="machine-card-qty machine-card-qty-spacer" aria-hidden="true"></div>`}
+          </div>
         </a>
-        <button type="button" class="btn btn-primary machine-line-btn" data-id="${DK.escapeHtml(item.id)}">加 LINE 詢問</button>
+        <button type="button" class="dk-btn dk-btn-primary machine-line-btn" data-id="${DK.escapeHtml(item.id)}">
+          加 LINE 詢問
+          <span class="dk-btn-arrow" aria-hidden="true">→</span>
+        </button>
       </article>
     `;
+  }
+
+  const productsSectionCount = document.getElementById("productsSectionCount");
+
+  function displayTitleForCat(catKey, fallbackTitle) {
+    if (catKey === "all" || !catKey) return "全部商品";
+    const activeCard = document.querySelector(`.cat-card[data-cat="${catKey}"] .cat-card-title`);
+    const fromCard = activeCard ? String(activeCard.textContent || "").trim() : "";
+    if (fromCard) return fromCard;
+    return String(fallbackTitle || "").replace(/^[①②③④⑤]\s*/, "").trim() || "商品";
   }
 
   function showCategory(catKey) {
@@ -162,15 +206,16 @@
       title = catCfg.title;
     }
 
-    if (productsSectionTitle) productsSectionTitle.textContent = title;
+    const niceTitle = displayTitleForCat(catKey === "all" || !CAT_MAP[catKey] ? "all" : catKey, title);
+    if (productsSectionTitle) productsSectionTitle.textContent = niceTitle;
+    if (productsSectionCount) {
+      productsSectionCount.textContent = filtered.length > 0 ? `共 ${filtered.length} 台可選` : "目前沒有可選商品";
+    }
     productsGrid.innerHTML = "";
 
     if (filtered.length === 0) {
       productsGrid.hidden = true;
-      if (productsEmpty) {
-        productsEmpty.hidden = false;
-        productsEmpty.textContent = "此分類目前沒有上架商品，加 LINE 詢問可客製配機。";
-      }
+      if (productsEmpty) productsEmpty.hidden = false;
     } else {
       productsGrid.hidden = false;
       if (productsEmpty) productsEmpty.hidden = true;

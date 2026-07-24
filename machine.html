@@ -3,19 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="color-scheme" content="light" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="color-scheme" content="dark" />
     <title>整機販售｜二手電腦・依用途配機</title>
     <meta name="description" content="整機販售：文書、遊戲入門、遊戲中階、工作效能。依用途分類，價格約略區間，詳細配備請加 LINE 詢問。" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20260217" />
+    <link rel="stylesheet" href="./styles.css?v=20260725m" />
   </head>
-  <body class="theme-apple">
+  <body class="theme-apple machine-page">
     <header class="site-header">
       <div class="container header-inner">
         <div class="brand">
+          <img id="brandLogoImg" class="brand-logo-img" alt="" width="40" height="40" hidden decoding="async" />
           <div id="brandMark" class="brand-mark" aria-hidden="true">DK</div>
           <div class="brand-text">
             <div id="brandTitle" class="brand-title">二手電腦・實測交付</div>
@@ -27,7 +28,7 @@
 
         <nav id="siteNav" class="nav" aria-label="主選單">
           <a href="./index.html">首頁</a>
-          <a href="./machine.html">整機販售</a>
+          <a href="./machine.html" aria-current="page">整機販售</a>
           <a href="./form.html?type=repair">電腦維修</a>
           <a href="./form.html">需求表單</a>
           <a href="./faq.html">常見問題</a>
@@ -39,11 +40,13 @@
     </header>
 
     <main>
-      <section class="section">
+      <section class="section machine-top">
         <div class="container">
-          <div class="page-head">
-            <h1 id="machinePageTitle" class="h1">整機販售</h1>
-            <p id="machinePageSub" class="lead muted">依用途分類，不寫一堆規格。價格是「約」，詳細配備請加 LINE 詢問。</p>
+          <div class="page-head machine-hero">
+            <p class="machine-hero-eyebrow">DK MACHINE</p>
+            <p id="machinePageTitle" class="machine-hero-label">整機販售</p>
+            <h1 class="machine-hero-title">依需求挑選你的下一台主機</h1>
+            <p id="machinePageSub" class="machine-hero-sub lead muted">依用途分類，不寫一堆規格。價格是「約」，詳細配備請加 LINE 詢問。</p>
           </div>
 
           <!-- 全部 + 五張分類卡片，點「全部商品」顯示全部，點分類則篩選該類別 -->
@@ -51,6 +54,7 @@
             <button type="button" class="cat-card cat-card-all" data-cat="all" role="tab">
               <span class="cat-card-num">全部</span>
               <span class="cat-card-title">全部商品</span>
+              <span class="cat-card-arrow" aria-hidden="true">→</span>
             </button>
             <button type="button" class="cat-card" data-cat="office" role="tab">
               <img class="cat-card-bg-img" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" alt="" />
@@ -59,6 +63,7 @@
               <div class="cat-card-text-wrap">
                 <span class="cat-card-title">文書／上網／學生</span>
               </div>
+              <span class="cat-card-arrow" aria-hidden="true">→</span>
             </button>
             <button type="button" class="cat-card" data-cat="game-entry" role="tab">
               <img class="cat-card-bg-img" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" alt="" />
@@ -67,6 +72,7 @@
               <div class="cat-card-text-wrap">
                 <span class="cat-card-title">遊戲入門</span>
               </div>
+              <span class="cat-card-arrow" aria-hidden="true">→</span>
             </button>
             <button type="button" class="cat-card" data-cat="game-mid" role="tab">
               <img class="cat-card-bg-img" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" alt="" />
@@ -75,6 +81,7 @@
               <div class="cat-card-text-wrap">
                 <span class="cat-card-title">遊戲中階（主力）</span>
               </div>
+              <span class="cat-card-arrow" aria-hidden="true">→</span>
             </button>
             <button type="button" class="cat-card" data-cat="work" role="tab">
               <img class="cat-card-bg-img" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" alt="" />
@@ -83,6 +90,7 @@
               <div class="cat-card-text-wrap">
                 <span class="cat-card-title">工作／效能取向</span>
               </div>
+              <span class="cat-card-arrow" aria-hidden="true">→</span>
             </button>
             <button type="button" class="cat-card" data-cat="peripherals" role="tab">
               <img class="cat-card-bg-img" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" alt="" />
@@ -91,21 +99,34 @@
               <div class="cat-card-text-wrap">
                 <span class="cat-card-title">電腦周邊</span>
               </div>
+              <span class="cat-card-arrow" aria-hidden="true">→</span>
             </button>
           </div>
 
           <!-- 點選後顯示的商品區 -->
           <div id="productsSection" class="products-section" hidden>
-            <h2 id="productsSectionTitle" class="h2 products-section-title"></h2>
+            <div class="products-head">
+              <div class="products-head-copy">
+                <h2 id="productsSectionTitle" class="h2 products-section-title"></h2>
+                <p id="productsSectionCount" class="products-section-count"></p>
+              </div>
+            </div>
             <div id="productsGrid" class="machine-cards"></div>
-            <div id="productsEmpty" class="products-empty muted" hidden>此分類目前沒有上架商品，加 LINE 詢問可客製配機。</div>
+            <div id="productsEmpty" class="products-empty" hidden>
+              <h3 class="products-empty-title">目前此分類暫無現貨</h3>
+              <p class="products-empty-desc">可加入官方 LINE，告訴我們需求與預算。</p>
+              <a class="dk-btn dk-btn-primary" href="https://lin.ee/p58Bkqp" target="_blank" rel="noreferrer">
+                加入 LINE 詢問
+                <span class="dk-btn-arrow" aria-hidden="true">→</span>
+              </a>
+            </div>
           </div>
 
           <div id="productsPrompt" class="products-prompt muted">點選上方分類查看商品</div>
         </div>
       </section>
 
-      <section class="section section-soft">
+      <section class="section section-soft machine-contact">
         <div class="container">
           <div class="contact-block">
             <div>
@@ -141,17 +162,17 @@
       </div>
     </footer>
 
-    <div class="sticky-bar">
+    <div class="sticky-bar" role="region" aria-label="快速聯絡">
       <div class="container sticky-inner">
         <div class="sticky-text">
-          <div class="sticky-title">加 LINE 詢問配備</div>
-          <div class="sticky-sub muted">價格約略，以當天報價為準</div>
+          <div class="sticky-title">找不到適合的配置？</div>
+          <div class="sticky-sub muted">告訴我們用途與預算</div>
         </div>
         <a id="lineStickyBtn" class="btn btn-primary btn-sm">加 LINE</a>
       </div>
     </div>
 
-    <script src="./shared.js?v=20260217"></script>
-    <script src="./machine.js?v=20260217"></script>
+    <script src="./shared.js?v=20260725m"></script>
+    <script src="./machine.js?v=20260725m"></script>
   </body>
 </html>

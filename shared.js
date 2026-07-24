@@ -114,6 +114,15 @@ const DEFAULT_CONFIG = {
         link: "./form.html",
       },
     ],
+    /** 首頁視覺效果（可選；缺欄位時用安全預設，不覆蓋其他 frontend 欄位） */
+    homeStyle: {
+      heroContentPosition: "left",
+      heroOverlayStrength: 70,
+      heroAccentGlow: true,
+      sectionReveal: true,
+      mouseGlow: true,
+      cardTilt: false,
+    },
   },
   shop: {
     name: "哈啦電競電腦維修",
@@ -645,6 +654,21 @@ async function fetchSiteConfigFromSupabase() {
   const raw = rows?.[0]?.data;
   if (!raw || typeof raw !== "object") return null;
   const merged = deepMerge(DEFAULT_CONFIG, raw);
+  // 雲端舊資料若尚未有 homeStyle：保留本機已存的 homeStyle，避免被 DEFAULT 覆寫
+  try {
+    const cloudHasHomeStyle =
+      raw.frontend &&
+      Object.prototype.hasOwnProperty.call(raw.frontend, "homeStyle") &&
+      raw.frontend.homeStyle &&
+      typeof raw.frontend.homeStyle === "object";
+    if (!cloudHasHomeStyle) {
+      const local = safeJsonParse(localStorage.getItem(STORAGE_KEYS.config), null);
+      const localHs = local && local.frontend && local.frontend.homeStyle;
+      if (localHs && typeof localHs === "object") {
+        merged.frontend = { ...(merged.frontend || {}), homeStyle: { ...localHs } };
+      }
+    }
+  } catch (_) {}
   saveConfigSyncMeta({
     currentSource: "cloud",
     lastCloudSyncStatus: "success-read",
@@ -1423,6 +1447,61 @@ function applyConfigToHomePage() {
   if (footerLineSentence) footerLineSentence.textContent = cfg.line.footerLineSentence || "";
   const footerLineSentenceFooter = document.getElementById("footerLineSentenceFooter");
   if (footerLineSentenceFooter) footerLineSentenceFooter.textContent = cfg.line.footerLineSentence || "";
+
+  // 首頁視覺效果（僅外觀；缺欄位用預設，不影響其他設定）
+  try {
+    applyHomeStyleToPage(cfg.frontend && cfg.frontend.homeStyle);
+  } catch (_) {}
+}
+
+/** 正規化 frontend.homeStyle；缺欄位時安全預設，不寫回 storage */
+function getDefaultHomeStyle() {
+  const def = (DEFAULT_CONFIG.frontend && DEFAULT_CONFIG.frontend.homeStyle) || {};
+  return {
+    heroContentPosition: def.heroContentPosition || "left",
+    heroOverlayStrength: Number.isFinite(Number(def.heroOverlayStrength)) ? Number(def.heroOverlayStrength) : 70,
+    heroAccentGlow: def.heroAccentGlow !== false,
+    sectionReveal: def.sectionReveal !== false,
+    mouseGlow: def.mouseGlow !== false,
+    cardTilt: def.cardTilt === true,
+  };
+}
+
+function normalizeHomeStyle(raw) {
+  const base = getDefaultHomeStyle();
+  const src = raw && typeof raw === "object" ? raw : {};
+  const pos = String(src.heroContentPosition || base.heroContentPosition || "left").toLowerCase();
+  const position = pos === "center" || pos === "right" || pos === "left" ? pos : "left";
+  let strength = Number(src.heroOverlayStrength);
+  if (!Number.isFinite(strength)) strength = base.heroOverlayStrength;
+  if (strength < 40) strength = 40;
+  if (strength > 90) strength = 90;
+  return {
+    heroContentPosition: position,
+    heroOverlayStrength: Math.round(strength),
+    heroAccentGlow: src.heroAccentGlow == null ? base.heroAccentGlow : !!src.heroAccentGlow,
+    sectionReveal: src.sectionReveal == null ? base.sectionReveal : !!src.sectionReveal,
+    mouseGlow: src.mouseGlow == null ? base.mouseGlow : !!src.mouseGlow,
+    cardTilt: src.cardTilt == null ? base.cardTilt : !!src.cardTilt,
+  };
+}
+
+function applyHomeStyleToPage(rawStyle) {
+  if (typeof document === "undefined" || !document.body) return normalizeHomeStyle(rawStyle);
+  if (!document.body.classList.contains("home-page")) return normalizeHomeStyle(rawStyle);
+  const hs = normalizeHomeStyle(rawStyle);
+  document.body.dataset.dkHeroPos = hs.heroContentPosition;
+  document.body.dataset.dkHeroOverlay = String(hs.heroOverlayStrength);
+  document.body.dataset.dkHeroGlow = hs.heroAccentGlow ? "1" : "0";
+  document.body.dataset.dkSectionReveal = hs.sectionReveal ? "1" : "0";
+  document.body.dataset.dkMouseGlow = hs.mouseGlow ? "1" : "0";
+  document.body.dataset.dkCardTilt = hs.cardTilt ? "1" : "0";
+  document.body.style.setProperty("--dk-hero-overlay-strength", String(hs.heroOverlayStrength));
+  document.body.classList.toggle("dk-reveal-off", !hs.sectionReveal);
+  document.body.classList.toggle("dk-mouse-glow-off", !hs.mouseGlow);
+  document.body.classList.toggle("dk-card-tilt-on", !!hs.cardTilt);
+  document.body.classList.toggle("dk-hero-glow-off", !hs.heroAccentGlow);
+  return hs;
 }
 
 async function tryCopy(text) {
@@ -1519,6 +1598,9 @@ window.DK = {
   stockBadgeClass,
   escapeHtml,
   applyConfigToHomePage,
+  normalizeHomeStyle,
+  applyHomeStyleToPage,
+  getDefaultHomeStyle,
   openLineOrder,
   tryCopy,
   isAdminAuthed,
@@ -1557,7 +1639,15 @@ if (window.DK && window.DK.fetchInventoryFromSupabase && window.DK.saveInventory
   window.DK
     .fetchInventoryFromSupabase()
     .then(function (items) {
-      if (Array.isArray(items) && items.length > 0) window.DK.saveInventory(items);
+      if (!Array.isArray(items) || items.length === 0) return;
+      window.DK.saveInventory(items);
+      try {
+        window.dispatchEvent(
+          new CustomEvent("dk:inventory-updated", {
+            detail: { source: "supabase", count: items.length },
+          }),
+        );
+      } catch (_) {}
     })
     .catch(function () {});
 }

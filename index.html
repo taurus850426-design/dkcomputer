@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="dark" />
     <title>二手電腦・實測交付｜依用途配機，不亂賣、不踩雷</title>
     <meta name="description" content="二手電腦・實測交付。依用途配機，不亂賣、不踩雷。買整機、不知道怎麼選、電腦維修，加 LINE 一次搞定。" />
     <meta name="keywords" content="二手電腦,實測交付,依用途配機,電腦維修,彰化員林" />
@@ -18,10 +18,11 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260201" />
+    <link rel="stylesheet" href="./styles.css?v=20260725" />
   </head>
-  <body class="theme-apple">
+  <body class="theme-apple home-page">
     <a class="skip-link" href="#main-cta">跳到主要操作</a>
+    <div id="dkMouseGlow" class="dk-mouse-glow" aria-hidden="true"></div>
 
     <header class="site-header">
       <div class="container header-inner">
@@ -39,7 +40,7 @@
         </button>
 
         <nav id="siteNav" class="nav" aria-label="主選單">
-          <a href="./index.html">首頁</a>
+          <a href="./index.html" aria-current="page">首頁</a>
           <a href="./machine.html">整機販售</a>
           <a href="./form.html?type=repair">電腦維修</a>
           <a href="./form.html">需求表單</a>
@@ -52,44 +53,66 @@
     </header>
 
     <main>
-      <!-- 首屏：Banner 圖片跑馬燈（第一區） -->
-      <section id="hero" class="section hero hero-first">
-        <div class="container">
+      <!-- 首屏：Banner 輪播＋文案層（文案可被後台 heroTagline／heroSub 覆寫） -->
+      <section id="hero" class="section hero hero-first dk-section">
+        <div class="hero-stage">
           <div class="hero-carousel" aria-label="重點主打" role="region">
             <div class="hero-slides"></div>
             <button class="hero-arrow hero-arrow-prev" type="button" aria-label="上一則"></button>
             <button class="hero-arrow hero-arrow-next" type="button" aria-label="下一則"></button>
             <div class="hero-dots" role="tablist" aria-label="主打輪播指示"></div>
           </div>
-        </div>
-      </section>
-
-      <!-- 主推主機（Hero 下方） -->
-      <section id="featuredMachines" class="section">
-        <div class="container"></div>
-      </section>
-
-      <!-- 首頁三大分類入口（第二區） -->
-      <section id="home-entries" class="section">
-        <div class="container">
-          <header class="home-entry-head">
-            <h1 id="heroTagline" class="home-entry-tagline">二手電腦・實測交付</h1>
-            <p id="heroSub" class="home-entry-sub muted">依用途配機，不亂賣、不踩雷</p>
-          </header>
-          <!-- 由 home.js 根據 frontend.homeEntries 動態渲染分類卡 -->
-          <div id="homeCategories" class="home-categories"></div>
-          <!-- 設定覆寫用的隱藏按鈕（保留 DK.applyConfigToHomePage 綁定） -->
-          <div class="home-entry-hidden" aria-hidden="true">
-            <a id="heroBtn1" href="./machine.html"></a>
-            <a id="heroBtn2" href="./form.html"></a>
+          <div class="hero-shade" aria-hidden="true"></div>
+          <div class="hero-texture" aria-hidden="true"></div>
+          <div class="hero-copy">
+            <div class="hero-copy-inner">
+              <p id="heroTagline" class="hero-eyebrow hero-anim">DK COMPUTER</p>
+              <h1 class="hero-title hero-anim">
+                你的下一台電腦，<br />不只要快，還要配得對。
+              </h1>
+              <p id="heroSub" class="hero-lead hero-anim">
+                依用途規劃、實機測試、售後支援。<br />
+                從遊戲主機到工作用電腦，由 DK 幫你配到位。
+              </p>
+              <div id="main-cta" class="hero-cta hero-anim">
+                <a id="heroBtn1" class="dk-btn dk-btn-primary" href="./machine.html">
+                  查看現貨主機
+                  <span class="dk-btn-arrow" aria-hidden="true">→</span>
+                </a>
+                <a id="heroLineBtn" class="dk-btn dk-btn-secondary" href="#">加入 LINE 詢問</a>
+                <a id="heroBtn2" class="home-entry-hidden" href="./form.html" tabindex="-1" aria-hidden="true"></a>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- 為什麼選 DK 電腦（第三區） -->
-      <section id="home-trust" class="section home-trust">
-        <div class="container">
-          <h2 id="homeTrustTitle" class="home-trust-title"></h2>
+      <!-- 主推主機 -->
+      <section id="featuredMachines" class="section dk-section dk-section-featured reveal">
+        <div class="container dk-section-inner"></div>
+      </section>
+
+      <!-- 分類入口 -->
+      <section id="home-entries" class="section dk-section dk-section-entries reveal">
+        <div class="container dk-section-inner">
+          <header class="dk-section-heading home-entry-head">
+            <p class="dk-section-eyebrow">DK SERVICES</p>
+            <h2 class="dk-section-title home-entry-tagline">你的需求，DK 幫你處理</h2>
+            <p class="dk-section-desc home-entry-sub">選主機、配規格、修電腦，一次處理。</p>
+          </header>
+          <div id="homeCategories" class="home-categories"></div>
+        </div>
+      </section>
+
+      <!-- 信任區 -->
+      <section id="home-trust" class="section home-trust dk-section dk-section-trust reveal">
+        <div class="container dk-section-inner">
+          <header class="dk-section-heading">
+            <p class="dk-section-eyebrow">DK STANDARD</p>
+            <h2 class="dk-section-title">每一台交到你手上的電腦，都要有理由被信任</h2>
+            <p class="dk-section-desc">實機測試、用途配對與售後處理，不只是在賣規格。</p>
+            <p id="homeTrustTitle" class="dk-section-kicker"></p>
+          </header>
           <div id="homeTrustGrid" class="home-trust-grid"></div>
         </div>
       </section>
@@ -121,7 +144,7 @@
       </div>
     </div>
 
-    <script src="./shared.js?v=20260201"></script>
-    <script src="./home.js?v=20260217"></script>
+    <script src="./shared.js?v=20260725"></script>
+    <script src="./home.js?v=20260725"></script>
   </body>
 </html>

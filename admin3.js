@@ -1113,6 +1113,35 @@
       }
     } catch (_) {}
 
+    // 首頁視覺效果（可選；缺欄位用預設，不寫回）
+    try {
+      const hs =
+        typeof window.DK?.normalizeHomeStyle === "function"
+          ? window.DK.normalizeHomeStyle(fe.homeStyle)
+          : {
+              heroContentPosition: "left",
+              heroOverlayStrength: 70,
+              heroAccentGlow: true,
+              sectionReveal: true,
+              mouseGlow: true,
+              cardTilt: false,
+            };
+      const posEl = document.getElementById("feHomeStyleHeroPos");
+      const overlayEl = document.getElementById("feHomeStyleOverlay");
+      const overlayVal = document.getElementById("feHomeStyleOverlayVal");
+      const glowEl = document.getElementById("feHomeStyleAccentGlow");
+      const revealEl = document.getElementById("feHomeStyleSectionReveal");
+      const mouseEl = document.getElementById("feHomeStyleMouseGlow");
+      const tiltEl = document.getElementById("feHomeStyleCardTilt");
+      if (posEl) posEl.value = hs.heroContentPosition || "left";
+      if (overlayEl) overlayEl.value = String(hs.heroOverlayStrength ?? 70);
+      if (overlayVal) overlayVal.textContent = String(hs.heroOverlayStrength ?? 70);
+      if (glowEl) glowEl.checked = hs.heroAccentGlow !== false;
+      if (revealEl) revealEl.checked = hs.sectionReveal !== false;
+      if (mouseEl) mouseEl.checked = hs.mouseGlow !== false;
+      if (tiltEl) tiltEl.checked = hs.cardTilt === true;
+    } catch (_) {}
+
     const msg = document.getElementById("frontendMsg");
     if (msg) msg.hidden = true;
     updateHeroLivePreview();
@@ -1348,6 +1377,27 @@
           }
           return fromDom;
         })(),
+        // 僅合併 homeStyle；保留既有 frontend 其餘欄位（由上方 ...cfg.frontend 保證）
+        homeStyle: (function () {
+          const existing =
+            cfg.frontend && cfg.frontend.homeStyle && typeof cfg.frontend.homeStyle === "object"
+              ? cfg.frontend.homeStyle
+              : {};
+          const pos = (document.getElementById("feHomeStyleHeroPos")?.value || "left").trim();
+          let strength = parseInt(document.getElementById("feHomeStyleOverlay")?.value, 10);
+          if (!Number.isFinite(strength)) strength = 70;
+          if (strength < 40) strength = 40;
+          if (strength > 90) strength = 90;
+          const nextStyle = {
+            heroContentPosition: pos === "center" || pos === "right" ? pos : "left",
+            heroOverlayStrength: strength,
+            heroAccentGlow: !!document.getElementById("feHomeStyleAccentGlow")?.checked,
+            sectionReveal: !!document.getElementById("feHomeStyleSectionReveal")?.checked,
+            mouseGlow: !!document.getElementById("feHomeStyleMouseGlow")?.checked,
+            cardTilt: !!document.getElementById("feHomeStyleCardTilt")?.checked,
+          };
+          return { ...existing, ...nextStyle };
+        })(),
       },
       line: {
         ...cfg.line,
@@ -1404,6 +1454,11 @@
   });
   ["feBrandMark", "feBrandTitle", "feBrandSubtitle"].forEach((id) => {
     document.getElementById(id)?.addEventListener("input", updateBrandLivePreview);
+  });
+  document.getElementById("feHomeStyleOverlay")?.addEventListener("input", function () {
+    const v = document.getElementById("feHomeStyleOverlay")?.value || "70";
+    const label = document.getElementById("feHomeStyleOverlayVal");
+    if (label) label.textContent = v;
   });
   document.getElementById("feBrandLogoFile")?.addEventListener("change", async function (e) {
     const inp = e.target;

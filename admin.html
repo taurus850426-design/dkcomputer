@@ -865,6 +865,43 @@
                 </div>
               </section>
 
+              <!-- 首頁視覺效果（可選外觀設定，不影響內容資料） -->
+              <section class="admin-collapsible full" data-collapsible="home-style">
+                <button type="button" class="admin-collapsible-toggle" aria-expanded="false">首頁視覺效果</button>
+                <div class="admin-collapsible-body">
+                  <div class="field full">
+                    <label class="h3" style="margin: 16px 0 4px">首頁視覺效果</label>
+                    <p class="muted small">僅控制首頁外觀互動，不會覆蓋 Banner、分類卡、信任區或商品資料。</p>
+                  </div>
+                  <div class="field">
+                    <label for="feHomeStyleHeroPos">Hero 文字位置</label>
+                    <select id="feHomeStyleHeroPos">
+                      <option value="left">左側</option>
+                      <option value="center">中央</option>
+                      <option value="right">右側</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="feHomeStyleOverlay">Hero 遮罩強度（<span id="feHomeStyleOverlayVal">70</span>）</label>
+                    <input id="feHomeStyleOverlay" type="range" min="40" max="90" step="1" value="70" />
+                  </div>
+                  <div class="field full" style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+                    <label class="muted" style="display:flex;align-items:center;gap:8px;margin:0">
+                      <input id="feHomeStyleAccentGlow" type="checkbox" checked /> Hero 品牌光暈
+                    </label>
+                    <label class="muted" style="display:flex;align-items:center;gap:8px;margin:0">
+                      <input id="feHomeStyleSectionReveal" type="checkbox" checked /> 區塊進場動畫
+                    </label>
+                    <label class="muted" style="display:flex;align-items:center;gap:8px;margin:0">
+                      <input id="feHomeStyleMouseGlow" type="checkbox" checked /> 滑鼠光暈（僅桌面）
+                    </label>
+                    <label class="muted" style="display:flex;align-items:center;gap:8px;margin:0">
+                      <input id="feHomeStyleCardTilt" type="checkbox" /> 商品卡 3D 傾斜（預設關閉，僅桌面）
+                    </label>
+                  </div>
+                </div>
+              </section>
+
               <!-- LINE 連結 -->
               <section class="admin-collapsible full" data-collapsible="line">
                 <button type="button" class="admin-collapsible-toggle" aria-expanded="false">LINE 連結</button>
