@@ -417,6 +417,15 @@
                   <input id="webEditQty" type="number" min="0" step="1" />
                   <span id="webEditQtyHint" class="muted small" style="display:none;margin-top:4px">由庫存+記帳自動帶入，請至「庫存+記帳」維護數量</span>
                 </div>
+                <div class="field" style="display:flex; align-items:flex-end">
+                  <label class="muted" style="display:flex; align-items:center; gap:8px; margin:0">
+                    <input id="webEditFeaturedHome" type="checkbox" /> 首頁主推
+                  </label>
+                </div>
+                <div class="field">
+                  <label for="webEditFeaturedOrder">首頁排序</label>
+                  <input id="webEditFeaturedOrder" type="number" min="1" step="1" placeholder="例如 1" disabled />
+                </div>
                 <div class="field full">
                   <label>產品介紹（可調整字體、格式與插入圖片）</label>
                   <div id="webEditNoteEditor" class="publish-rich-editor-wrap" style="min-height:180px"></div>
@@ -462,6 +471,15 @@
                 <div class="field">
                   <label for="publishQty">剩餘數量</label>
                   <input id="publishQty" type="number" min="0" step="1" value="1" placeholder="1" />
+                </div>
+                <div class="field" style="display:flex; align-items:flex-end">
+                  <label class="muted" style="display:flex; align-items:center; gap:8px; margin:0">
+                    <input id="publishFeaturedHome" type="checkbox" /> 首頁主推
+                  </label>
+                </div>
+                <div class="field">
+                  <label for="publishFeaturedOrder">首頁排序</label>
+                  <input id="publishFeaturedOrder" type="number" min="1" step="1" placeholder="例如 1" disabled />
                 </div>
                 <div class="field full">
                   <label for="publishPhotosInput">商品照片（1–5 張，選填，選檔後自動轉成 URL）</label>

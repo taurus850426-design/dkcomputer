@@ -5,8 +5,10 @@
 | 區塊 | 資料來源 | 說明 |
 |------|----------|------|
 | **前台（整機販售）** | Supabase `inventory` | machine.js 載入時先 `fetchInventoryFromSupabase()`，再 `saveInventory()` 到 localStorage，列表用 `getInventory()` 顯示。 |
-| **後台（admin.html）** | localStorage + Supabase | 庫存用 `dk_im_items_v1`；訂單用 `dk_im_orders_v1`；上架商品用 `getInventory`/`saveInventory`（同表 dk_inventory_v1），並會寫入 Supabase `inventory`。 |
-| **後台 v2（admin-v2.html）** | 僅 localStorage | `dk_v2_items` / `dk_v2_ledger` / `dk_v2_orders` / `dk_v2_expenses`，**目前不寫入 Supabase**。 |
+| **後台（admin.html + admin3.js）** | localStorage + Supabase | 上架商品用 `getInventory`/`saveInventory`（同表 dk_inventory_v1），並會寫入 Supabase `inventory`；庫存＋記帳 v2 用 `dk_v2_*`，並經 `shared.js` 同步 `v2_data`。 |
+
+> 已移除舊版：`admin.js`、`admin2.js`、`admin-v2.html`、`admin-v2.js`（請一律使用 **admin.html**）。
+
 
 ---
 
@@ -26,10 +28,7 @@
 - **上架管理**：新增/編輯/下架都會 `saveInventory` + `upsertInventoryItemToSupabase` 或 `deleteInventoryItemFromSupabase`，與 Supabase 一致。
 - **訂單管理**：讀取/儲存會呼叫 `fetchOrdersFromSupabase` / `saveOrdersToSupabase`，訂單存在 Supabase `orders_data`。
 - **報表**：使用本機訂單與庫存，無直接依賴 Supabase。
-
-### 後台 v2（admin-v2.html，庫存＋記帳）
-
-- 完全使用 localStorage（dk_v2_*），不讀寫 Supabase，與舊後台／前台獨立，無需改 Supabase。
+- **庫存＋記帳（v2）**：整合於 admin.html「庫存＋記帳」分頁（`admin3.js` + `inventory-ledger.js`），資料為 `dk_v2_*`，並可經 `shared.js` 同步 Supabase `v2_data`。
 
 ---
 
@@ -84,7 +83,7 @@
 
 - **若你已經照之前規劃建好** `inventory`、`site_config`、`stock_data`、`orders_data`，且欄位與上表一致，**不用再改**。
 - **若尚未建表**：在 SQL Editor 依上面結構建立這四張表，並設定好 RLS（anon 可讀 inventory；寫入依你的權限設計開放或改用 service role）。
-- **若你要把「庫存＋記帳」v2 也存到 Supabase**：需要再建 `items`、`inventory_ledger`、`orders`（v2）、`expenses`，並在 `inventory-ledger.js` 或 admin-v2 裡接上 Supabase API；目前 v2 僅用 localStorage，**不強制改**。
+- **若你要把「庫存＋記帳」v2 也存到 Supabase**：專案已透過 `shared.js`／`inventory-ledger.js` 對接 `v2_data`；若尚未建表，請執行 `supabase-tables.sql`。正式後台請使用 **admin.html**（`admin3.js`）。
 
 ---
 

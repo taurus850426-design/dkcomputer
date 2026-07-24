@@ -238,7 +238,16 @@
   }
   renderHomeTrust();
 
-  /* ===== 首頁主推主機（Hero 下方）：從 inventory 篩選 ===== */
+  /* ===== 首頁主推主機（Hero 下方）：優先 featuredHome，否則備援遊戲分類 ===== */
+  function isFeaturedHomeItem(it) {
+    return it?.featuredHome === true || String(it?.featuredHome).toLowerCase() === "true";
+  }
+
+  function featuredOrderValue(it) {
+    const n = Number(it?.featuredOrder);
+    return Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
+  }
+
   function renderFeaturedMachines(retriesLeft) {
     if (retriesLeft == null) retriesLeft = 5;
     const host = document.getElementById("featuredMachines");
@@ -256,14 +265,32 @@
       return;
     }
 
-    const picked = items
-      .filter((it) => {
-        const catRaw = String(it?.category || "");
-        const cat = catRaw.toLowerCase();
-        return cat.includes("game") || catRaw.includes("遊戲");
-      })
-      .sort((a, b) => (Number(b?.price) || 0) - (Number(a?.price) || 0))
-      .slice(0, 3);
+    const featuredItems = items.filter(isFeaturedHomeItem);
+    let picked;
+    if (featuredItems.length > 0) {
+      picked = featuredItems
+        .slice()
+        .sort((a, b) => {
+          const ao = featuredOrderValue(a);
+          const bo = featuredOrderValue(b);
+          const aHas = ao != null;
+          const bHas = bo != null;
+          if (aHas && bHas && ao !== bo) return ao - bo;
+          if (aHas && !bHas) return -1;
+          if (!aHas && bHas) return 1;
+          return (Number(b?.price) || 0) - (Number(a?.price) || 0);
+        })
+        .slice(0, 3);
+    } else {
+      picked = items
+        .filter((it) => {
+          const catRaw = String(it?.category || "");
+          const cat = catRaw.toLowerCase();
+          return cat.includes("game") || catRaw.includes("遊戲");
+        })
+        .sort((a, b) => (Number(b?.price) || 0) - (Number(a?.price) || 0))
+        .slice(0, 3);
+    }
 
     if (!picked.length) {
       inner.innerHTML = "";
@@ -276,7 +303,7 @@
     inner.innerHTML = `
       <div class="section-head" style="margin-bottom:12px">
         <h2 class="h2" style="margin:0">主推主機</h2>
-        <div class="muted small">30,000 以內精選（遊戲）</div>
+        <div class="muted small">DK 精選主機</div>
       </div>
       <div class="machine-cards">
         ${picked

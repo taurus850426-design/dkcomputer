@@ -1765,7 +1765,7 @@ body.admin-page .cat-image-slot > div[style*="margin-top:6px"]{
   font-size: 13px;
 }
 
-/* admin-v2 / admin 列表分頁 */
+/* admin 列表分頁 */
 .admin-shell .pagination{
   display: flex;
   align-items: center;

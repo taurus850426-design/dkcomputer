@@ -230,6 +230,10 @@
   const publishPhotosInput = document.getElementById("publishPhotosInput");
   const publishPhotoStrip = document.getElementById("publishPhotoStrip");
   const publishPhotoHint = document.getElementById("publishPhotoHint");
+  const publishFeaturedHome = document.getElementById("publishFeaturedHome");
+  const publishFeaturedOrder = document.getElementById("publishFeaturedOrder");
+  const webEditFeaturedHome = document.getElementById("webEditFeaturedHome");
+  const webEditFeaturedOrder = document.getElementById("webEditFeaturedOrder");
   if (!loginCard || !panel) return;
 
   // ---------- 產品介紹富文本編輯器（Quill）----------
@@ -585,6 +589,35 @@
     });
   }
 
+  function syncFeaturedOrderEnabled(checkEl, orderEl) {
+    if (!orderEl) return;
+    const on = !!(checkEl && checkEl.checked);
+    orderEl.disabled = !on;
+  }
+
+  function readFeaturedFromForm(checkEl, orderEl) {
+    const featuredHome = !!(checkEl && checkEl.checked);
+    let featuredOrder = null;
+    if (featuredHome && orderEl) {
+      const n = Number(orderEl.value);
+      if (Number.isFinite(n) && n >= 1) featuredOrder = Math.floor(n);
+    } else if (orderEl && orderEl.value !== "" && orderEl.value != null) {
+      const n = Number(orderEl.value);
+      if (Number.isFinite(n) && n >= 1) featuredOrder = Math.floor(n);
+    }
+    return { featuredHome, featuredOrder };
+  }
+
+  function fillFeaturedToForm(checkEl, orderEl, item) {
+    const on = item?.featuredHome === true || String(item?.featuredHome).toLowerCase() === "true";
+    if (checkEl) checkEl.checked = on;
+    if (orderEl) {
+      const n = Number(item?.featuredOrder);
+      orderEl.value = Number.isFinite(n) && n >= 1 ? String(Math.floor(n)) : "";
+    }
+    syncFeaturedOrderEnabled(checkEl, orderEl);
+  }
+
   function openPublishEditor(webId) {
     editingWebId = webId || null;
     const items = window.DK?.getInventory?.() || [];
@@ -609,6 +642,7 @@
     }
     const qtyHint = document.getElementById("webEditQtyHint");
     if (qtyHint) qtyHint.style.display = qtyFromStock != null ? "block" : "none";
+    fillFeaturedToForm(webEditFeaturedHome, webEditFeaturedOrder, it);
     if (webEditQuill && webEditQuill.root) webEditQuill.root.innerHTML = it?.note?.trim() ?? "";
     editPhotos = Array.isArray(it?.photos) ? [...it.photos] : [];
     renderEditPhotoStrip();
@@ -641,6 +675,7 @@
     try {
     const v2Item = typeof window.DK?.getItems === "function" ? window.DK.getItems().find((x) => String(x?.id) === String(editingWebId)) : null;
     const resolvedQty = v2Item != null && Number.isFinite(Number(v2Item.qty_on_hand)) ? Number(v2Item.qty_on_hand) : (Number(webEditQty?.value) ?? items[idx].qty);
+    const featured = readFeaturedFromForm(webEditFeaturedHome, webEditFeaturedOrder);
     items[idx] = {
         ...items[idx],
         name: webEditName?.value?.trim() ?? items[idx].name,
@@ -650,6 +685,8 @@
         qty: resolvedQty,
         note: (webEditQuill && webEditQuill.root ? webEditQuill.root.innerHTML.trim() : "") || items[idx].note,
         photos: [...editPhotos],
+        featuredHome: featured.featuredHome,
+        featuredOrder: featured.featuredOrder,
       };
       window.DK?.saveInventory?.(items);
       let msg = "已儲存";
@@ -712,6 +749,7 @@
       return;
     }
     const id = makeWebItemId();
+    const featured = readFeaturedFromForm(publishFeaturedHome, publishFeaturedOrder);
     const item = {
       id,
       name,
@@ -721,6 +759,8 @@
       tags: [],
       note: (publishQuill && publishQuill.root ? publishQuill.root.innerHTML.trim() : "") ?? "",
       photos: [...publishPhotos],
+      featuredHome: featured.featuredHome,
+      featuredOrder: featured.featuredOrder,
     };
     const items = window.DK?.getInventory?.() || [];
     items.push(item);
@@ -839,8 +879,11 @@
   // publish events
   publishSubmitBtn?.addEventListener("click", () => {
     if (publishFormCard) publishFormCard.hidden = false;
+    fillFeaturedToForm(publishFeaturedHome, publishFeaturedOrder, null);
     publishFormCard?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
+  publishFeaturedHome?.addEventListener("change", () => syncFeaturedOrderEnabled(publishFeaturedHome, publishFeaturedOrder));
+  webEditFeaturedHome?.addEventListener("change", () => syncFeaturedOrderEnabled(webEditFeaturedHome, webEditFeaturedOrder));
   document.getElementById("publishConfirmBtn")?.addEventListener("click", submitPublish);
   publishEditorCloseBtn?.addEventListener("click", closePublishEditor);
   webEditSaveBtn?.addEventListener("click", savePublishEditor);
@@ -1413,9 +1456,12 @@
 
   // ===== 廠商報價紀錄（localStorage：dk_vendor_quotes_v1）=====
 
-  const VQ_PAGE_SIZE = 20;
+  const VQ_PAGE_SIZE = 10;
   let vqListPage = 1;
+  const VQ_ANALYSIS_PAGE_SIZE = 10;
+  let vqAnalysisPage = 1;
   let vqSummaryExpandedVendor = "";
+  let vqAnalysisPagerBound = false;
 
   // 統計欄位顯示用（相容庫存品類別名；不改資料結構）
   const VQ_SUMMARY_CAT_COLS = [
@@ -1980,6 +2026,28 @@
     return { min, avg, diff, avgMarketPrice: null, margin: null, label };
   }
 
+  function renderVendorAnalysisPagination(total, page, totalPages) {
+    const pager = document.getElementById("vendorAnalysisPagination");
+    if (!pager) return;
+    const count = Number(total) || 0;
+    const pages = count <= 0 ? 0 : Math.max(1, Number(totalPages) || 1);
+    const cur = count <= 0 ? 0 : Math.min(Math.max(1, Number(page) || 1), pages);
+    const prevDisabled = count <= 0 || cur <= 1;
+    const nextDisabled = count <= 0 || cur >= pages || pages <= 1;
+    let html = `<span class="pagination-info">共 ${count} 筆｜每頁 ${VQ_ANALYSIS_PAGE_SIZE} 筆｜第 ${cur} / ${pages} 頁</span>`;
+    html += `<span class="pagination-btns">`;
+    html += `<button type="button" class="btn btn-ghost btn-sm page-btn prev" data-vq-analysis-page="${Math.max(1, cur - 1)}" ${prevDisabled ? "disabled" : ""}>上一頁</button>`;
+    if (pages > 1) {
+      for (let p = 1; p <= pages; p++) {
+        const active = p === cur ? " current" : "";
+        html += `<button type="button" class="btn btn-ghost btn-sm page-btn${active}" data-vq-analysis-page="${p}">${p}</button>`;
+      }
+    }
+    html += `<button type="button" class="btn btn-ghost btn-sm page-btn next" data-vq-analysis-page="${Math.min(pages || 1, cur + 1)}" ${nextDisabled ? "disabled" : ""}>下一頁</button>`;
+    html += `</span>`;
+    pager.innerHTML = html;
+  }
+
   function renderVendorAnalysis() {
     // 建立/取得容器
     let wrap = document.getElementById("vendorAnalysisSection");
@@ -2009,21 +2077,44 @@
             <tbody id="vendorAnalysisTbody"></tbody>
           </table>
         </div>
+        <div id="vendorAnalysisPagination" class="pagination"></div>
         <div id="vendorAnalysisEmpty" class="muted" style="margin-top:8px" hidden>尚無可分析的報價</div>
       `;
       host.appendChild(wrap);
+    } else if (!document.getElementById("vendorAnalysisPagination")) {
+      const emptyEl0 = document.getElementById("vendorAnalysisEmpty");
+      const pager = document.createElement("div");
+      pager.id = "vendorAnalysisPagination";
+      pager.className = "pagination";
+      if (emptyEl0) wrap.insertBefore(pager, emptyEl0);
+      else wrap.appendChild(pager);
+    }
+
+    if (!vqAnalysisPagerBound) {
+      wrap.addEventListener("click", (e) => {
+        const btn = e.target && e.target.closest ? e.target.closest("[data-vq-analysis-page]") : null;
+        if (!btn || btn.disabled) return;
+        const page = Number(btn.getAttribute("data-vq-analysis-page"));
+        if (!Number.isFinite(page) || page < 1) return;
+        vqAnalysisPage = page;
+        renderVendorAnalysis();
+      });
+      vqAnalysisPagerBound = true;
     }
 
     const tbody = document.getElementById("vendorAnalysisTbody");
     const emptyEl = document.getElementById("vendorAnalysisEmpty");
     if (!tbody || !emptyEl) return;
 
+    // 先用完整報價做分析（不先 slice 原始資料）
     const quotes = loadVendorQuotes();
     const grouped = getQuotesGroupedBySpec(quotes);
     const keys = Object.keys(grouped);
     if (keys.length === 0) {
       tbody.innerHTML = "";
       emptyEl.hidden = false;
+      vqAnalysisPage = 1;
+      renderVendorAnalysisPagination(0, 0, 0);
       return;
     }
     emptyEl.hidden = true;
@@ -2044,7 +2135,7 @@
       return `<span class="badge">${vqEsc(t)}</span>`;
     };
 
-    const rows = keys
+    const allRows = keys
       .slice()
       .sort((a, b) => a.localeCompare(b))
       .map((specKey) => {
@@ -2074,7 +2165,15 @@
           <td>${badge(sug.label)}</td>
         </tr>`;
       });
-    tbody.innerHTML = rows.join("");
+
+    const total = allRows.length;
+    const totalPages = Math.max(1, Math.ceil(total / VQ_ANALYSIS_PAGE_SIZE) || 1);
+    if (vqAnalysisPage > totalPages) vqAnalysisPage = totalPages;
+    if (vqAnalysisPage < 1) vqAnalysisPage = 1;
+    const start = (vqAnalysisPage - 1) * VQ_ANALYSIS_PAGE_SIZE;
+    const pageRows = allRows.slice(start, start + VQ_ANALYSIS_PAGE_SIZE);
+    tbody.innerHTML = pageRows.join("");
+    renderVendorAnalysisPagination(total, vqAnalysisPage, totalPages);
   }
 
   function renderVendorCategoryAdvantage(quotes) {

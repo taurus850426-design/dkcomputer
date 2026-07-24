@@ -493,6 +493,11 @@ async function fetchInventoryFromSupabase() {
     note: String(r.note || ""),
     photos: Array.isArray(r.photos) ? r.photos : [],
     qty: (() => { const n = typeof r.qty === "number" ? r.qty : Number(r.qty); return Number.isFinite(n) && n >= 0 ? n : null; })(),
+    featuredHome: r.featured_home === true || String(r.featured_home).toLowerCase() === "true",
+    featuredOrder: (() => {
+      const n = typeof r.featured_order === "number" ? r.featured_order : Number(r.featured_order);
+      return Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
+    })(),
   }));
 }
 
@@ -512,6 +517,11 @@ async function upsertInventoryItemToSupabase(item) {
     note: String(item.note || ""),
     photos: Array.isArray(item.photos) ? item.photos : [],
     qty: typeof item.qty === "number" && item.qty >= 0 ? item.qty : null,
+    featured_home: item.featuredHome === true || String(item.featuredHome).toLowerCase() === "true",
+    featured_order: (() => {
+      const n = typeof item.featuredOrder === "number" ? item.featuredOrder : Number(item.featuredOrder);
+      return Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
+    })(),
   };
 
   const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_INVENTORY_TABLE}?on_conflict=id`;

@@ -1,6 +1,6 @@
 -- 庫存＋記帳系統 - Supabase Schema
 -- 執行於 Supabase SQL Editor 建立 tables（可選；目前後台先用 localStorage，之後可遷移）
--- 後台頁面：admin-v2.html（庫存 Items / 流水帳 / 訂單 / 支出 / 報表，已由 admin.html 內整合版取代）
+-- 後台頁面：admin.html（庫存 Items / 流水帳 / 訂單 / 支出 / 報表；舊版 admin-v2.html 已移除）
 
 -- 1) Items 庫存品項
 -- category: PC成品 / GPU顯卡 / PART零件 / CONSUMABLE耗材

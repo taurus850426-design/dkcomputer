@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS inventory (
   price NUMERIC,
   note TEXT,
   photos JSONB,
+  qty NUMERIC,
+  featured_home BOOLEAN DEFAULT false,
+  featured_order INTEGER NULL,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
