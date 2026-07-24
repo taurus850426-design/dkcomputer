@@ -1419,14 +1419,29 @@
 
   // 統計欄位顯示用（相容庫存品類別名；不改資料結構）
   const VQ_SUMMARY_CAT_COLS = [
-    { label: "CPU", aliases: ["CPU", "處理器"] },
-    { label: "主機板", aliases: ["主機板"] },
-    { label: "顯示卡", aliases: ["顯示卡", "GPU"] },
-    { label: "SSD", aliases: ["SSD", "硬碟"] },
-    { label: "記憶體", aliases: ["記憶體"] },
-    { label: "電源", aliases: ["電源", "電源供應器"] },
-    { label: "機殼", aliases: ["機殼"] },
+    { label: "CPU", aliases: ["CPU", "處理器", "Processor"] },
+    { label: "主機板", aliases: ["主機板", "MB", "Motherboard", "Mainboard"] },
+    { label: "顯示卡", aliases: ["顯示卡", "GPU", "VGA", "Graphics Card", "顯卡"] },
+    { label: "SSD", aliases: ["SSD", "固態硬碟", "固態碟", "NVMe", "M.2 SSD", "SATA SSD", "硬碟"] },
+    { label: "記憶體", aliases: ["記憶體", "RAM", "Memory", "DRAM"] },
+    { label: "電源", aliases: ["電源", "電源供應器", "PSU", "Power Supply"] },
+    { label: "機殼", aliases: ["機殼", "Case", "Chassis"] },
   ];
+  const VQ_SUMMARY_OTHER_LABEL = "其他";
+
+  function vqSummaryEmptyCats() {
+    const cats = Object.fromEntries(VQ_SUMMARY_CAT_COLS.map((c) => [c.label, 0]));
+    cats[VQ_SUMMARY_OTHER_LABEL] = 0;
+    return cats;
+  }
+
+  function vqClassifySummaryCategory(category) {
+    const cat = String(category || "").trim();
+    for (const col of VQ_SUMMARY_CAT_COLS) {
+      if (vqCategoryMatchesAliases(cat, col.aliases)) return col.label;
+    }
+    return VQ_SUMMARY_OTHER_LABEL;
+  }
 
   function vqNowISODate() {
     const d = new Date();
@@ -1589,18 +1604,22 @@
   function renderVendorQuotePagination(total, page, totalPages) {
     const pager = document.getElementById("vendorQuotePagination");
     if (!pager) return;
-    const cur = Math.max(1, Number(page) || 1);
-    const pages = Math.max(1, Number(totalPages) || 1);
     const count = Number(total) || 0;
-    let html = `<span class="pagination-info">共 ${count} 筆，第 ${cur} / ${pages} 頁</span>`;
+    const pages = count <= 0 ? 0 : Math.max(1, Number(totalPages) || 1);
+    const cur = count <= 0 ? 0 : Math.min(Math.max(1, Number(page) || 1), pages);
+    const prevDisabled = count <= 0 || cur <= 1;
+    const nextDisabled = count <= 0 || cur >= pages || pages <= 1;
+    let html = `<span class="pagination-info">共 ${count} 筆｜每頁 ${VQ_PAGE_SIZE} 筆｜第 ${cur} / ${pages} 頁</span>`;
+    html += `<span class="pagination-btns">`;
+    html += `<button type="button" class="btn btn-ghost btn-sm page-btn prev" data-vq-page="${Math.max(1, cur - 1)}" ${prevDisabled ? "disabled" : ""}>上一頁</button>`;
     if (pages > 1) {
-      html += `<span class="pagination-btns"><button type="button" class="btn btn-ghost btn-sm page-btn prev" data-vq-page="${cur - 1}" ${cur <= 1 ? "disabled" : ""}>上一頁</button>`;
       for (let p = 1; p <= pages; p++) {
         const active = p === cur ? " current" : "";
         html += `<button type="button" class="btn btn-ghost btn-sm page-btn${active}" data-vq-page="${p}">${p}</button>`;
       }
-      html += `<button type="button" class="btn btn-ghost btn-sm page-btn next" data-vq-page="${cur + 1}" ${cur >= pages ? "disabled" : ""}>下一頁</button></span>`;
     }
+    html += `<button type="button" class="btn btn-ghost btn-sm page-btn next" data-vq-page="${Math.min(pages || 1, cur + 1)}" ${nextDisabled ? "disabled" : ""}>下一頁</button>`;
+    html += `</span>`;
     pager.innerHTML = html;
   }
 
@@ -1611,57 +1630,62 @@
     populateVendorQuoteFilterSelects(all);
     const list = getFilteredVendorQuotes(all);
     const total = list.length;
-    const totalPages = Math.max(1, Math.ceil(total / VQ_PAGE_SIZE) || 1);
-    if (vqListPage > totalPages) vqListPage = totalPages;
-    if (vqListPage < 1) vqListPage = 1;
-    const start = (vqListPage - 1) * VQ_PAGE_SIZE;
-    const pageRows = list.slice(start, start + VQ_PAGE_SIZE);
+    const totalPages = total <= 0 ? 0 : Math.max(1, Math.ceil(total / VQ_PAGE_SIZE) || 1);
+    if (total <= 0) {
+      vqListPage = 1;
+    } else {
+      if (vqListPage > totalPages) vqListPage = totalPages;
+      if (vqListPage < 1) vqListPage = 1;
+    }
+    const start = total <= 0 ? 0 : (vqListPage - 1) * VQ_PAGE_SIZE;
+    const pageRows = total <= 0 ? [] : list.slice(start, start + VQ_PAGE_SIZE);
 
     if (total === 0) {
       tbody.innerHTML = `<tr><td class="muted" colspan="9">尚無報價</td></tr>`;
-      renderVendorQuotePagination(0, 1, 1);
-      if (typeof renderVendorAnalysis === "function") renderVendorAnalysis();
-      return;
+      renderVendorQuotePagination(0, 0, 0);
+    } else {
+      const fmt = (n) => (n == null ? "" : Number(n).toLocaleString("zh-TW"));
+      const fmt1 = (n) => (n == null || !Number.isFinite(Number(n))) ? "" : Number(n).toFixed(1);
+      tbody.innerHTML = pageRows
+        .map((q) => {
+          const stock = q.inStock ? `<span class="badge ok">現貨</span>` : `<span class="badge">—</span>`;
+          const mp = (q.marketPrice == null) ? null : Number(q.marketPrice);
+          const p = (q.price == null) ? null : Number(q.price);
+          const diff = (mp != null && p != null) ? (mp - p) : null;
+          const margin = (mp != null && mp > 0 && p != null) ? ((mp - p) / mp) : null;
+          const mpText = mp == null ? "-" : fmt(mp);
+          const diffText = diff == null ? "-" : fmt(diff);
+          const marginText = margin == null ? "-" : fmt1(margin * 100) + "%";
+          const marginBadge = (function () {
+            if (margin == null) return `<span class="badge">-</span>`;
+            if (margin < 0) return `<span class="badge danger">${vqEsc(marginText)}</span>`;
+            if (margin >= 0.001) return `<span class="badge ok">${vqEsc(marginText)}</span>`;
+            return `<span class="badge">${vqEsc(marginText)}</span>`;
+          })();
+          return `<tr>
+            <td class="nowrap">${vqEsc((q.date || "").slice(0, 10))}</td>
+            <td>${vqEsc(q.vendor)}</td>
+            <td>${vqEsc([q.brand, q.spec].filter(Boolean).join(" ").trim())}</td>
+            <td style="text-align:right">${vqEsc(fmt(q.price))}</td>
+            <td style="text-align:right">${vqEsc(mpText)}</td>
+            <td style="text-align:right">${vqEsc(diffText)}</td>
+            <td style="text-align:right">${marginBadge}</td>
+            <td>${stock}</td>
+            <td style="text-align:right; white-space:nowrap">
+              <button type="button" class="btn btn-ghost btn-sm btn-vq-create-inv" data-id="${vqEsc(q.id)}">建立庫存</button>
+              <button type="button" class="btn btn-ghost btn-sm btn-vq-del" data-id="${vqEsc(q.id)}">刪除</button>
+            </td>
+          </tr>`;
+        })
+        .join("");
+      renderVendorQuotePagination(total, vqListPage, totalPages);
     }
-    const fmt = (n) => (n == null ? "" : Number(n).toLocaleString("zh-TW"));
-    const fmt1 = (n) => (n == null || !Number.isFinite(Number(n))) ? "" : Number(n).toFixed(1);
-    tbody.innerHTML = pageRows
-      .map((q) => {
-        const stock = q.inStock ? `<span class="badge ok">現貨</span>` : `<span class="badge">—</span>`;
-        const mp = (q.marketPrice == null) ? null : Number(q.marketPrice);
-        const p = (q.price == null) ? null : Number(q.price);
-        const diff = (mp != null && p != null) ? (mp - p) : null;
-        const margin = (mp != null && mp > 0 && p != null) ? ((mp - p) / mp) : null;
-        const mpText = mp == null ? "-" : fmt(mp);
-        const diffText = diff == null ? "-" : fmt(diff);
-        const marginText = margin == null ? "-" : fmt1(margin * 100) + "%";
-        const marginBadge = (function () {
-          if (margin == null) return `<span class="badge">-</span>`;
-          if (margin < 0) return `<span class="badge danger">${vqEsc(marginText)}</span>`;
-          if (margin >= 0.001) return `<span class="badge ok">${vqEsc(marginText)}</span>`;
-          return `<span class="badge">${vqEsc(marginText)}</span>`;
-        })();
-        return `<tr>
-          <td class="nowrap">${vqEsc((q.date || "").slice(0, 10))}</td>
-          <td>${vqEsc(q.vendor)}</td>
-          <td>${vqEsc([q.brand, q.spec].filter(Boolean).join(" ").trim())}</td>
-          <td style="text-align:right">${vqEsc(fmt(q.price))}</td>
-          <td style="text-align:right">${vqEsc(mpText)}</td>
-          <td style="text-align:right">${vqEsc(diffText)}</td>
-          <td style="text-align:right">${marginBadge}</td>
-          <td>${stock}</td>
-          <td style="text-align:right; white-space:nowrap">
-            <button type="button" class="btn btn-ghost btn-sm btn-vq-create-inv" data-id="${vqEsc(q.id)}">建立庫存</button>
-            <button type="button" class="btn btn-ghost btn-sm btn-vq-del" data-id="${vqEsc(q.id)}">刪除</button>
-          </td>
-        </tr>`;
-      })
-      .join("");
 
-    renderVendorQuotePagination(total, vqListPage, totalPages);
-
-    // 報價更新後同步更新比價分析（不得影響既有 CRUD）
+    // 明確各呼叫一次（不改分析公式；不由 analysis 內部再串 summary）
+    const quotesForPanels = all;
     if (typeof renderVendorAnalysis === "function") renderVendorAnalysis();
+    if (typeof renderVendorCategoryAdvantage === "function") renderVendorCategoryAdvantage(quotesForPanels);
+    if (typeof renderVendorQuoteSummary === "function") renderVendorQuoteSummary(quotesForPanels);
   }
 
   function vqCategoryMatchesAliases(category, aliases) {
@@ -1689,7 +1713,7 @@
         byVendor.set(vendor, {
           vendor,
           total: 0,
-          cats: Object.fromEntries(VQ_SUMMARY_CAT_COLS.map((c) => [c.label, 0])),
+          cats: vqSummaryEmptyCats(),
           lowestWins: 0,
           recent30: 0,
           quotes: [],
@@ -1698,10 +1722,8 @@
       const row = byVendor.get(vendor);
       row.total += 1;
       row.quotes.push(q);
-      const cat = String(q?.category || "").trim();
-      for (const col of VQ_SUMMARY_CAT_COLS) {
-        if (vqCategoryMatchesAliases(cat, col.aliases)) row.cats[col.label] += 1;
-      }
+      const bucket = vqClassifySummaryCategory(q?.category);
+      row.cats[bucket] = (row.cats[bucket] || 0) + 1;
       const ts = Date.parse(String(q?.date || "").slice(0, 10));
       if (Number.isFinite(ts) && (now - ts) <= day30 && (now - ts) >= 0) row.recent30 += 1;
     }
@@ -1711,7 +1733,7 @@
         byVendor.set(vendor, {
           vendor,
           total: 0,
-          cats: Object.fromEntries(VQ_SUMMARY_CAT_COLS.map((c) => [c.label, 0])),
+          cats: vqSummaryEmptyCats(),
           lowestWins: 0,
           recent30: 0,
           quotes: [],
@@ -1733,6 +1755,7 @@
     const fmt1 = (n) => (n == null || !Number.isFinite(Number(n))) ? "-" : Number(n).toFixed(1) + "%";
     const catBits = VQ_SUMMARY_CAT_COLS
       .map((c) => `${vqEsc(c.label)}：${vqEsc(String(stat.cats[c.label] || 0))}筆`)
+      .concat([`${vqEsc(VQ_SUMMARY_OTHER_LABEL)}：${vqEsc(String(stat.cats[VQ_SUMMARY_OTHER_LABEL] || 0))}筆`])
       .join("　");
     const recent = (stat.quotes || [])
       .slice()
@@ -1744,15 +1767,17 @@
           const p = (q.price == null) ? null : Number(q.price);
           const margin = (mp != null && mp > 0 && p != null) ? ((mp - p) / mp) * 100 : null;
           const specText = [q.brand, q.spec].filter(Boolean).join(" ").trim();
+          const rawCat = String(q?.category || "").trim() || "—";
           return `<tr>
             <td class="nowrap">${vqEsc((q.date || "").slice(0, 10))}</td>
+            <td>${vqEsc(rawCat)}</td>
             <td>${vqEsc(specText)}</td>
             <td style="text-align:right">${vqEsc(fmt(p))}</td>
             <td style="text-align:right">${vqEsc(fmt(mp))}</td>
             <td style="text-align:right">${vqEsc(fmt1(margin))}</td>
           </tr>`;
         }).join("")
-      : `<tr><td class="muted" colspan="5">尚無報價</td></tr>`;
+      : `<tr><td class="muted" colspan="6">尚無報價</td></tr>`;
     return `<div class="vq-summary-detail-inner">
       <div class="vq-summary-cats">${catBits}</div>
       <div>
@@ -1761,6 +1786,7 @@
           <thead>
             <tr>
               <th>日期</th>
+              <th>品類</th>
               <th>規格</th>
               <th style="text-align:right">報價</th>
               <th style="text-align:right">行情價</th>
@@ -1804,6 +1830,7 @@
                 <th style="text-align:right">記憶體</th>
                 <th style="text-align:right">電源</th>
                 <th style="text-align:right">機殼</th>
+                <th style="text-align:right">其他</th>
                 <th style="text-align:right">最低價次數</th>
                 <th style="text-align:right">最低價勝率</th>
                 <th style="text-align:right">最近30天新增</th>
@@ -1827,6 +1854,26 @@
     if (advantage) host.insertBefore(wrap, advantage);
     else if (analysis && analysis.nextSibling) host.insertBefore(wrap, analysis.nextSibling);
     else if (!wrap.parentElement) host.appendChild(wrap);
+
+    // 確保表頭含「其他」（相容舊 DOM 已建立的統計區塊）
+    const theadRow = wrap.querySelector("thead tr");
+    if (theadRow) {
+      theadRow.innerHTML = `
+        <th>廠商</th>
+        <th style="text-align:right">總報價筆數</th>
+        <th style="text-align:right">CPU</th>
+        <th style="text-align:right">主機板</th>
+        <th style="text-align:right">顯示卡</th>
+        <th style="text-align:right">SSD</th>
+        <th style="text-align:right">記憶體</th>
+        <th style="text-align:right">電源</th>
+        <th style="text-align:right">機殼</th>
+        <th style="text-align:right">其他</th>
+        <th style="text-align:right">最低價次數</th>
+        <th style="text-align:right">最低價勝率</th>
+        <th style="text-align:right">最近30天新增</th>
+      `;
+    }
 
     const tbody = document.getElementById("vendorQuoteSummaryTbody");
     const emptyEl = document.getElementById("vendorQuoteSummaryEmpty");
@@ -1854,12 +1901,13 @@
         <td style="text-align:right">${vqEsc(String(s.cats["記憶體"] || 0))}</td>
         <td style="text-align:right">${vqEsc(String(s.cats["電源"] || 0))}</td>
         <td style="text-align:right">${vqEsc(String(s.cats["機殼"] || 0))}</td>
+        <td style="text-align:right">${vqEsc(String(s.cats[VQ_SUMMARY_OTHER_LABEL] || 0))}</td>
         <td style="text-align:right">${vqEsc(String(s.lowestWins || 0))}</td>
         <td style="text-align:right">${vqEsc(pct(s.winRate))}</td>
         <td style="text-align:right">${vqEsc(String(s.recent30 || 0))}</td>
       </tr>`);
       if (expanded) {
-        rows.push(`<tr class="vq-summary-detail"><td colspan="12">${renderVendorQuoteSummaryDetail(s)}</td></tr>`);
+        rows.push(`<tr class="vq-summary-detail"><td colspan="13">${renderVendorQuoteSummaryDetail(s)}</td></tr>`);
       }
     }
     tbody.innerHTML = rows.join("");
@@ -1976,8 +2024,6 @@
     if (keys.length === 0) {
       tbody.innerHTML = "";
       emptyEl.hidden = false;
-      if (typeof renderVendorCategoryAdvantage === "function") renderVendorCategoryAdvantage(quotes);
-      if (typeof renderVendorQuoteSummary === "function") renderVendorQuoteSummary(quotes);
       return;
     }
     emptyEl.hidden = true;
@@ -2029,11 +2075,6 @@
         </tr>`;
       });
     tbody.innerHTML = rows.join("");
-
-    // 在比價分析後更新：廠商品類優勢分析
-    if (typeof renderVendorCategoryAdvantage === "function") renderVendorCategoryAdvantage(quotes);
-    // 廠商報價統計放在品類優勢分析上方（不改分析公式）
-    if (typeof renderVendorQuoteSummary === "function") renderVendorQuoteSummary(quotes);
   }
 
   function renderVendorCategoryAdvantage(quotes) {
@@ -2277,7 +2318,6 @@
     renderVendorQuoteVendorSelect();
     renderVendorQuoteCategorySelect();
     renderVendorQuotes();
-    if (typeof renderVendorAnalysis === "function") renderVendorAnalysis();
     // 表單收合
     (function initVendorQuoteFormCollapse() {
       const wrap = document.getElementById("vqFormWrap");
