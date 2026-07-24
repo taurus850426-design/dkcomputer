@@ -789,14 +789,26 @@ async function fetchV2DataFromSupabase() {
   const orders = Array.isArray(raw.orders) ? raw.orders : [];
   const expenses = Array.isArray(raw.expenses) ? raw.expenses : [];
   try {
-    localStorage.setItem(V2_STORAGE_KEYS.items, JSON.stringify(items));
-    localStorage.setItem(V2_STORAGE_KEYS.ledger, JSON.stringify(ledger));
-    localStorage.setItem(V2_STORAGE_KEYS.orders, JSON.stringify(orders));
-    localStorage.setItem(V2_STORAGE_KEYS.expenses, JSON.stringify(expenses));
+    // 保護：雲端某欄為空陣列時，不要立刻覆蓋本機已有資料
+    function pickWrite(key, cloudArr) {
+      const localArr = safeJsonParse(localStorage.getItem(key), null);
+      const localHas = Array.isArray(localArr) && localArr.length > 0;
+      const cloudHas = Array.isArray(cloudArr) && cloudArr.length > 0;
+      if (!cloudHas && localHas) return localArr;
+      return Array.isArray(cloudArr) ? cloudArr : (localHas ? localArr : []);
+    }
+    const nextItems = pickWrite(V2_STORAGE_KEYS.items, items);
+    const nextLedger = pickWrite(V2_STORAGE_KEYS.ledger, ledger);
+    const nextOrders = pickWrite(V2_STORAGE_KEYS.orders, orders);
+    const nextExpenses = pickWrite(V2_STORAGE_KEYS.expenses, expenses);
+    localStorage.setItem(V2_STORAGE_KEYS.items, JSON.stringify(nextItems));
+    localStorage.setItem(V2_STORAGE_KEYS.ledger, JSON.stringify(nextLedger));
+    localStorage.setItem(V2_STORAGE_KEYS.orders, JSON.stringify(nextOrders));
+    localStorage.setItem(V2_STORAGE_KEYS.expenses, JSON.stringify(nextExpenses));
+    return { items: nextItems, ledger: nextLedger, orders: nextOrders, expenses: nextExpenses };
   } catch (e) {
     return null;
   }
-  return { items, ledger, orders, expenses };
 }
 
 async function saveV2DataToSupabase() {
@@ -1509,7 +1521,23 @@ if (window.DK.fetchSiteConfigFromSupabase && window.DK.saveConfig) {
   window.DK
     .fetchSiteConfigFromSupabase()
     .then(function (c) {
-      if (c != null) window.DK.saveConfig(c, { skipSupabase: true });
+      if (c != null) {
+        // 保護：若本機已有 admin 帳密，不要被雲端設定蓋掉（避免登出後第二次無法用原帳密登入）
+        try {
+          const local = safeJsonParse(localStorage.getItem(STORAGE_KEYS.config), null);
+          if (local && local.admin && typeof local.admin === "object") {
+            const lu = local.admin.username;
+            const lp = local.admin.password;
+            const hasLocalAdmin =
+              (lu != null && String(lu).trim() !== "") ||
+              (lp != null && String(lp) !== "");
+            if (hasLocalAdmin) {
+              c = { ...c, admin: { ...(c.admin || {}), ...local.admin } };
+            }
+          }
+        } catch (_) {}
+        window.DK.saveConfig(c, { skipSupabase: true });
+      }
       if (typeof window.DK.applyConfigToHomePage === "function") window.DK.applyConfigToHomePage();
     })
     .catch(function () {});

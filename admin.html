@@ -940,6 +940,20 @@
                   </div>
                 </div>
                 <div id="vqMsg" class="muted small" style="margin-top:8px" hidden></div>
+                <div class="vq-toolbar" style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end">
+                  <div class="field" style="flex:1; min-width:180px; margin:0">
+                    <label for="vendorQuoteSearch">搜尋</label>
+                    <input id="vendorQuoteSearch" type="search" placeholder="廠商／品類／品牌／規格／備註" autocomplete="off" />
+                  </div>
+                  <div class="field" style="margin:0; min-width:140px">
+                    <label for="vendorQuoteVendorFilter">廠商</label>
+                    <select id="vendorQuoteVendorFilter"><option value="">全部</option></select>
+                  </div>
+                  <div class="field" style="margin:0; min-width:140px">
+                    <label for="vendorQuoteCategoryFilter">品類</label>
+                    <select id="vendorQuoteCategoryFilter"><option value="">全部</option></select>
+                  </div>
+                </div>
                 <div class="table-wrap" style="margin-top:10px">
                   <table class="table">
                     <thead>
@@ -958,6 +972,7 @@
                     <tbody id="vendorQuotesTbody"></tbody>
                   </table>
                 </div>
+                <div id="vendorQuotePagination" class="pagination"></div>
               </div>
             </div>
           </section>

@@ -358,9 +358,9 @@
 
   function applyAuthUI() {
     const authed = window.DK?.isAdminAuthed?.() === true;
-    loginCard.hidden = authed;
-    panel.hidden = !authed;
-    logoutBtn.hidden = !authed;
+    if (loginCard) loginCard.hidden = authed;
+    if (panel) panel.hidden = !authed;
+    if (logoutBtn) logoutBtn.hidden = !authed;
     if (authed) updateSyncStatusBar();
   }
 
@@ -779,9 +779,6 @@
     const saved = (VALID_TABS.includes(fromHash) ? fromHash : null) || (function () { try { return sessionStorage.getItem(ADMIN_TAB_KEY); } catch (_) { return null; } })();
     if (saved && VALID_TABS.includes(saved)) switchTab(saved);
   }
-  restoreAdminTab();
-  setTimeout(restoreAdminTab, 0);
-
   function doLogin() {
     hide(loginError);
     let cfg = window.DK?.getConfig?.() || {};
@@ -804,8 +801,10 @@
     }
     const u = String(usernameEl?.value || "").trim();
     const p = String(passwordEl?.value || "");
+    const cfgUser = String(cfg?.admin?.username ?? "").trim();
+    const cfgPass = String(cfg?.admin?.password ?? "");
     // ① 先用設定檔的帳號密碼
-    const cfgOk = cfg?.admin && u === cfg.admin.username && p === cfg.admin.password;
+    const cfgOk = !!cfg?.admin && u === cfgUser && p === cfgPass;
     // ② 若設定檔帳密有問題，保留一組固定備援：admin / admin123
     const fallbackOk = u === "admin" && p === "admin123";
     if (cfgOk || fallbackOk) {
@@ -815,20 +814,27 @@
         const saved = localStorage.getItem("dk_admin_active_tab") || sessionStorage.getItem(ADMIN_TAB_KEY);
         if (saved === "publish" || saved === "inv" || saved === "frontend" || saved === "vendors" || saved === "customers") switchTab(saved);
         else switchTab("inv");
-      } catch (_) { switchTab("inv"); }
+      } catch (_) {
+        try { switchTab("inv"); } catch (__) {}
+      }
       return;
     }
     show(loginError, "帳號或密碼錯誤。");
   }
 
+  // 先綁定登入/登出，避免 restoreAdminTab 若拋錯導致登入事件未綁定
   loginBtn?.addEventListener("click", doLogin);
   passwordEl?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") doLogin();
   });
   logoutBtn?.addEventListener("click", () => {
+    // 登出只清登入狀態，不清除 config / 業務資料
     window.DK?.setAdminAuthed?.(false);
     applyAuthUI();
   });
+
+  try { restoreAdminTab(); } catch (_) {}
+  setTimeout(function () { try { restoreAdminTab(); } catch (_) {} }, 0);
 
   // publish events
   publishSubmitBtn?.addEventListener("click", () => {
@@ -1407,6 +1413,21 @@
 
   // ===== 廠商報價紀錄（localStorage：dk_vendor_quotes_v1）=====
 
+  const VQ_PAGE_SIZE = 20;
+  let vqListPage = 1;
+  let vqSummaryExpandedVendor = "";
+
+  // 統計欄位顯示用（相容庫存品類別名；不改資料結構）
+  const VQ_SUMMARY_CAT_COLS = [
+    { label: "CPU", aliases: ["CPU", "處理器"] },
+    { label: "主機板", aliases: ["主機板"] },
+    { label: "顯示卡", aliases: ["顯示卡", "GPU"] },
+    { label: "SSD", aliases: ["SSD", "硬碟"] },
+    { label: "記憶體", aliases: ["記憶體"] },
+    { label: "電源", aliases: ["電源", "電源供應器"] },
+    { label: "機殼", aliases: ["機殼"] },
+  ];
+
   function vqNowISODate() {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -1494,19 +1515,117 @@
     el.textContent = text;
   }
 
+  function getVendorQuoteSearchQuery() {
+    const el = document.getElementById("vendorQuoteSearch");
+    return String(el?.value || "").trim().toLowerCase();
+  }
+
+  function getVendorQuoteVendorFilter() {
+    const el = document.getElementById("vendorQuoteVendorFilter");
+    return String(el?.value || "").trim();
+  }
+
+  function getVendorQuoteCategoryFilter() {
+    const el = document.getElementById("vendorQuoteCategoryFilter");
+    return String(el?.value || "").trim();
+  }
+
+  function matchVendorQuoteFilters(q, search, vendorFilter, categoryFilter) {
+    if (vendorFilter && String(q?.vendor || "").trim() !== vendorFilter) return false;
+    if (categoryFilter && String(q?.category || "").trim() !== categoryFilter) return false;
+    if (!search) return true;
+    const remark = String(q?.remark != null ? q.remark : (q?.note || ""));
+    const hay = [
+      String(q?.vendor || ""),
+      String(q?.category || ""),
+      String(q?.brand || ""),
+      String(q?.spec || ""),
+      remark,
+    ].join(" ").toLowerCase();
+    return hay.includes(search);
+  }
+
+  function getFilteredVendorQuotes(allQuotes) {
+    const list = Array.isArray(allQuotes) ? allQuotes : loadVendorQuotes();
+    const search = getVendorQuoteSearchQuery();
+    const vendorFilter = getVendorQuoteVendorFilter();
+    const categoryFilter = getVendorQuoteCategoryFilter();
+    return list
+      .filter((q) => matchVendorQuoteFilters(q, search, vendorFilter, categoryFilter))
+      .slice()
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  }
+
+  function populateVendorQuoteFilterSelects(allQuotes) {
+    const list = Array.isArray(allQuotes) ? allQuotes : loadVendorQuotes();
+    const vendorSel = document.getElementById("vendorQuoteVendorFilter");
+    const catSel = document.getElementById("vendorQuoteCategoryFilter");
+    const curVendor = vendorSel ? String(vendorSel.value || "") : "";
+    const curCat = catSel ? String(catSel.value || "") : "";
+
+    const vendors = Array.from(new Set(
+      list.map((q) => String(q?.vendor || "").trim()).filter(Boolean),
+    )).sort((a, b) => a.localeCompare(b, "zh-Hant"));
+    const cats = Array.from(new Set(
+      list.map((q) => String(q?.category || "").trim()).filter(Boolean),
+    )).sort((a, b) => a.localeCompare(b, "zh-Hant"));
+
+    if (vendorSel) {
+      vendorSel.innerHTML = ['<option value="">全部</option>']
+        .concat(vendors.map((v) => `<option value="${vqEsc(v)}">${vqEsc(v)}</option>`))
+        .join("");
+      if (curVendor && vendors.includes(curVendor)) vendorSel.value = curVendor;
+      else vendorSel.value = "";
+    }
+    if (catSel) {
+      catSel.innerHTML = ['<option value="">全部</option>']
+        .concat(cats.map((c) => `<option value="${vqEsc(c)}">${vqEsc(c)}</option>`))
+        .join("");
+      if (curCat && cats.includes(curCat)) catSel.value = curCat;
+      else catSel.value = "";
+    }
+  }
+
+  function renderVendorQuotePagination(total, page, totalPages) {
+    const pager = document.getElementById("vendorQuotePagination");
+    if (!pager) return;
+    const cur = Math.max(1, Number(page) || 1);
+    const pages = Math.max(1, Number(totalPages) || 1);
+    const count = Number(total) || 0;
+    let html = `<span class="pagination-info">共 ${count} 筆，第 ${cur} / ${pages} 頁</span>`;
+    if (pages > 1) {
+      html += `<span class="pagination-btns"><button type="button" class="btn btn-ghost btn-sm page-btn prev" data-vq-page="${cur - 1}" ${cur <= 1 ? "disabled" : ""}>上一頁</button>`;
+      for (let p = 1; p <= pages; p++) {
+        const active = p === cur ? " current" : "";
+        html += `<button type="button" class="btn btn-ghost btn-sm page-btn${active}" data-vq-page="${p}">${p}</button>`;
+      }
+      html += `<button type="button" class="btn btn-ghost btn-sm page-btn next" data-vq-page="${cur + 1}" ${cur >= pages ? "disabled" : ""}>下一頁</button></span>`;
+    }
+    pager.innerHTML = html;
+  }
+
   function renderVendorQuotes() {
     const tbody = document.getElementById("vendorQuotesTbody");
     if (!tbody) return;
-    const list = loadVendorQuotes()
-      .slice()
-      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-    if (list.length === 0) {
+    const all = loadVendorQuotes();
+    populateVendorQuoteFilterSelects(all);
+    const list = getFilteredVendorQuotes(all);
+    const total = list.length;
+    const totalPages = Math.max(1, Math.ceil(total / VQ_PAGE_SIZE) || 1);
+    if (vqListPage > totalPages) vqListPage = totalPages;
+    if (vqListPage < 1) vqListPage = 1;
+    const start = (vqListPage - 1) * VQ_PAGE_SIZE;
+    const pageRows = list.slice(start, start + VQ_PAGE_SIZE);
+
+    if (total === 0) {
       tbody.innerHTML = `<tr><td class="muted" colspan="9">尚無報價</td></tr>`;
+      renderVendorQuotePagination(0, 1, 1);
+      if (typeof renderVendorAnalysis === "function") renderVendorAnalysis();
       return;
     }
     const fmt = (n) => (n == null ? "" : Number(n).toLocaleString("zh-TW"));
     const fmt1 = (n) => (n == null || !Number.isFinite(Number(n))) ? "" : Number(n).toFixed(1);
-    tbody.innerHTML = list
+    tbody.innerHTML = pageRows
       .map((q) => {
         const stock = q.inStock ? `<span class="badge ok">現貨</span>` : `<span class="badge">—</span>`;
         const mp = (q.marketPrice == null) ? null : Number(q.marketPrice);
@@ -1539,8 +1658,211 @@
       })
       .join("");
 
+    renderVendorQuotePagination(total, vqListPage, totalPages);
+
     // 報價更新後同步更新比價分析（不得影響既有 CRUD）
     if (typeof renderVendorAnalysis === "function") renderVendorAnalysis();
+  }
+
+  function vqCategoryMatchesAliases(category, aliases) {
+    const cat = String(category || "").trim().toLowerCase();
+    if (!cat) return false;
+    return (aliases || []).some((a) => cat === String(a || "").trim().toLowerCase());
+  }
+
+  function buildVendorQuoteSummaryStats(quotes) {
+    const list = Array.isArray(quotes) ? quotes : [];
+    const lowest = getLowestQuotesBySpec(list);
+    const winByVendor = new Map();
+    for (const row of lowest) {
+      const v = String(row?.vendor || "").trim() || "（未填廠商）";
+      winByVendor.set(v, (winByVendor.get(v) || 0) + 1);
+    }
+
+    const now = Date.now();
+    const day30 = 30 * 24 * 60 * 60 * 1000;
+    const byVendor = new Map();
+
+    for (const q of list) {
+      const vendor = String(q?.vendor || "").trim() || "（未填廠商）";
+      if (!byVendor.has(vendor)) {
+        byVendor.set(vendor, {
+          vendor,
+          total: 0,
+          cats: Object.fromEntries(VQ_SUMMARY_CAT_COLS.map((c) => [c.label, 0])),
+          lowestWins: 0,
+          recent30: 0,
+          quotes: [],
+        });
+      }
+      const row = byVendor.get(vendor);
+      row.total += 1;
+      row.quotes.push(q);
+      const cat = String(q?.category || "").trim();
+      for (const col of VQ_SUMMARY_CAT_COLS) {
+        if (vqCategoryMatchesAliases(cat, col.aliases)) row.cats[col.label] += 1;
+      }
+      const ts = Date.parse(String(q?.date || "").slice(0, 10));
+      if (Number.isFinite(ts) && (now - ts) <= day30 && (now - ts) >= 0) row.recent30 += 1;
+    }
+
+    for (const [vendor, wins] of winByVendor.entries()) {
+      if (!byVendor.has(vendor)) {
+        byVendor.set(vendor, {
+          vendor,
+          total: 0,
+          cats: Object.fromEntries(VQ_SUMMARY_CAT_COLS.map((c) => [c.label, 0])),
+          lowestWins: 0,
+          recent30: 0,
+          quotes: [],
+        });
+      }
+      byVendor.get(vendor).lowestWins = wins;
+    }
+
+    return Array.from(byVendor.values())
+      .map((r) => {
+        const winRate = r.total > 0 ? (r.lowestWins / r.total) : 0;
+        return { ...r, winRate };
+      })
+      .sort((a, b) => b.total - a.total || a.vendor.localeCompare(b.vendor, "zh-Hant"));
+  }
+
+  function renderVendorQuoteSummaryDetail(stat) {
+    const fmt = (n) => (n == null || !Number.isFinite(Number(n))) ? "-" : Number(n).toLocaleString("zh-TW");
+    const fmt1 = (n) => (n == null || !Number.isFinite(Number(n))) ? "-" : Number(n).toFixed(1) + "%";
+    const catBits = VQ_SUMMARY_CAT_COLS
+      .map((c) => `${vqEsc(c.label)}：${vqEsc(String(stat.cats[c.label] || 0))}筆`)
+      .join("　");
+    const recent = (stat.quotes || [])
+      .slice()
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+      .slice(0, 10);
+    const recentRows = recent.length
+      ? recent.map((q) => {
+          const mp = (q.marketPrice == null) ? null : Number(q.marketPrice);
+          const p = (q.price == null) ? null : Number(q.price);
+          const margin = (mp != null && mp > 0 && p != null) ? ((mp - p) / mp) * 100 : null;
+          const specText = [q.brand, q.spec].filter(Boolean).join(" ").trim();
+          return `<tr>
+            <td class="nowrap">${vqEsc((q.date || "").slice(0, 10))}</td>
+            <td>${vqEsc(specText)}</td>
+            <td style="text-align:right">${vqEsc(fmt(p))}</td>
+            <td style="text-align:right">${vqEsc(fmt(mp))}</td>
+            <td style="text-align:right">${vqEsc(fmt1(margin))}</td>
+          </tr>`;
+        }).join("")
+      : `<tr><td class="muted" colspan="5">尚無報價</td></tr>`;
+    return `<div class="vq-summary-detail-inner">
+      <div class="vq-summary-cats">${catBits}</div>
+      <div>
+        <div class="muted small" style="margin-bottom:4px">最近報價（最近10筆）</div>
+        <table class="vq-summary-recent">
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>規格</th>
+              <th style="text-align:right">報價</th>
+              <th style="text-align:right">行情價</th>
+              <th style="text-align:right">毛利%</th>
+            </tr>
+          </thead>
+          <tbody>${recentRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  function renderVendorQuoteSummary(quotes) {
+    const list = Array.isArray(quotes) ? quotes : loadVendorQuotes();
+    let wrap = document.getElementById("vendorQuoteSummarySection");
+    const advantage = document.getElementById("vendorCategoryAdvantageSection");
+    const analysis = document.getElementById("vendorAnalysisSection");
+    const host = advantage?.parentElement
+      || analysis?.parentElement
+      || document.getElementById("vendor-section")
+      || document.getElementById("tab-vendors");
+    if (!host) return;
+
+    if (!wrap) {
+      wrap = document.createElement("div");
+      wrap.id = "vendorQuoteSummarySection";
+      wrap.className = "card";
+      wrap.style.marginBottom = "12px";
+      wrap.innerHTML = `
+        <h3 class="h3">廠商報價統計</h3>
+        <div class="table-wrap" style="margin-top:10px">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>廠商</th>
+                <th style="text-align:right">總報價筆數</th>
+                <th style="text-align:right">CPU</th>
+                <th style="text-align:right">主機板</th>
+                <th style="text-align:right">顯示卡</th>
+                <th style="text-align:right">SSD</th>
+                <th style="text-align:right">記憶體</th>
+                <th style="text-align:right">電源</th>
+                <th style="text-align:right">機殼</th>
+                <th style="text-align:right">最低價次數</th>
+                <th style="text-align:right">最低價勝率</th>
+                <th style="text-align:right">最近30天新增</th>
+              </tr>
+            </thead>
+            <tbody id="vendorQuoteSummaryTbody"></tbody>
+          </table>
+        </div>
+        <div id="vendorQuoteSummaryEmpty" class="muted" style="margin-top:8px" hidden>尚無報價統計</div>
+      `;
+      wrap.addEventListener("click", (e) => {
+        const row = e.target && e.target.closest ? e.target.closest("tr.vq-summary-row") : null;
+        if (!row) return;
+        const vendor = row.getAttribute("data-vendor") || "";
+        vqSummaryExpandedVendor = (vqSummaryExpandedVendor === vendor) ? "" : vendor;
+        renderVendorQuoteSummary(loadVendorQuotes());
+      });
+    }
+
+    // 固定放在「廠商品類優勢分析」上方
+    if (advantage) host.insertBefore(wrap, advantage);
+    else if (analysis && analysis.nextSibling) host.insertBefore(wrap, analysis.nextSibling);
+    else if (!wrap.parentElement) host.appendChild(wrap);
+
+    const tbody = document.getElementById("vendorQuoteSummaryTbody");
+    const emptyEl = document.getElementById("vendorQuoteSummaryEmpty");
+    if (!tbody || !emptyEl) return;
+
+    const stats = buildVendorQuoteSummaryStats(list);
+    if (stats.length === 0) {
+      tbody.innerHTML = "";
+      emptyEl.hidden = false;
+      return;
+    }
+    emptyEl.hidden = true;
+
+    const pct = (n) => (n == null || !Number.isFinite(Number(n))) ? "-" : (Number(n) * 100).toFixed(1) + "%";
+    const rows = [];
+    for (const s of stats) {
+      const expanded = vqSummaryExpandedVendor === s.vendor;
+      rows.push(`<tr class="vq-summary-row${expanded ? " is-open" : ""}" data-vendor="${vqEsc(s.vendor)}">
+        <td>${vqEsc(s.vendor)}</td>
+        <td style="text-align:right">${vqEsc(String(s.total))}</td>
+        <td style="text-align:right">${vqEsc(String(s.cats["CPU"] || 0))}</td>
+        <td style="text-align:right">${vqEsc(String(s.cats["主機板"] || 0))}</td>
+        <td style="text-align:right">${vqEsc(String(s.cats["顯示卡"] || 0))}</td>
+        <td style="text-align:right">${vqEsc(String(s.cats["SSD"] || 0))}</td>
+        <td style="text-align:right">${vqEsc(String(s.cats["記憶體"] || 0))}</td>
+        <td style="text-align:right">${vqEsc(String(s.cats["電源"] || 0))}</td>
+        <td style="text-align:right">${vqEsc(String(s.cats["機殼"] || 0))}</td>
+        <td style="text-align:right">${vqEsc(String(s.lowestWins || 0))}</td>
+        <td style="text-align:right">${vqEsc(pct(s.winRate))}</td>
+        <td style="text-align:right">${vqEsc(String(s.recent30 || 0))}</td>
+      </tr>`);
+      if (expanded) {
+        rows.push(`<tr class="vq-summary-detail"><td colspan="12">${renderVendorQuoteSummaryDetail(s)}</td></tr>`);
+      }
+    }
+    tbody.innerHTML = rows.join("");
   }
 
   // ===== 廠商報價：比價分析系統 =====
@@ -1654,6 +1976,8 @@
     if (keys.length === 0) {
       tbody.innerHTML = "";
       emptyEl.hidden = false;
+      if (typeof renderVendorCategoryAdvantage === "function") renderVendorCategoryAdvantage(quotes);
+      if (typeof renderVendorQuoteSummary === "function") renderVendorQuoteSummary(quotes);
       return;
     }
     emptyEl.hidden = true;
@@ -1708,6 +2032,8 @@
 
     // 在比價分析後更新：廠商品類優勢分析
     if (typeof renderVendorCategoryAdvantage === "function") renderVendorCategoryAdvantage(quotes);
+    // 廠商報價統計放在品類優勢分析上方（不改分析公式）
+    if (typeof renderVendorQuoteSummary === "function") renderVendorQuoteSummary(quotes);
   }
 
   function renderVendorCategoryAdvantage(quotes) {
@@ -1968,6 +2294,23 @@
       cancelBtn?.addEventListener("click", () => setOpen(false));
     })();
     document.getElementById("vqAddBtn")?.addEventListener("click", addVendorQuoteFromForm);
+
+    function resetVendorQuotePageAndRender() {
+      vqListPage = 1;
+      renderVendorQuotes();
+    }
+    document.getElementById("vendorQuoteSearch")?.addEventListener("input", resetVendorQuotePageAndRender);
+    document.getElementById("vendorQuoteVendorFilter")?.addEventListener("change", resetVendorQuotePageAndRender);
+    document.getElementById("vendorQuoteCategoryFilter")?.addEventListener("change", resetVendorQuotePageAndRender);
+    document.getElementById("vendorQuotePagination")?.addEventListener("click", (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest("[data-vq-page]") : null;
+      if (!btn || btn.disabled) return;
+      const page = Number(btn.getAttribute("data-vq-page"));
+      if (!Number.isFinite(page) || page < 1) return;
+      vqListPage = page;
+      renderVendorQuotes();
+    });
+
     root.addEventListener("click", (e) => {
       const createBtn = e.target && e.target.closest ? e.target.closest(".btn-vq-create-inv") : null;
       if (createBtn) {

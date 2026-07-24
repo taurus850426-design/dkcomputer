@@ -1811,6 +1811,34 @@ body.admin-page .cat-image-slot > div[style*="margin-top:6px"]{
 #itemsTbody tr:hover{ background: rgba(17,24,39,0.05); }
 #itemsTbody tr:hover td{ background: transparent; }
 
+/* 廠商報價統計：點擊展開 */
+#vendorQuoteSummaryTbody tr.vq-summary-row{ cursor: pointer; }
+#vendorQuoteSummaryTbody tr.vq-summary-row:hover{ background: rgba(17,24,39,0.05); }
+#vendorQuoteSummaryTbody tr.vq-summary-detail td{
+  background: rgba(17,24,39,0.03);
+  padding: 10px 12px;
+}
+#vendorQuoteSummaryTbody .vq-summary-detail-inner{
+  display: grid;
+  gap: 10px;
+  font-size: 13px;
+}
+#vendorQuoteSummaryTbody .vq-summary-cats{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+#vendorQuoteSummaryTbody .vq-summary-recent{
+  width: 100%;
+  border-collapse: collapse;
+}
+#vendorQuoteSummaryTbody .vq-summary-recent th,
+#vendorQuoteSummaryTbody .vq-summary-recent td{
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(17,24,39,0.08);
+  font-size: 12px;
+}
+
 /* 庫存數量為 0 時整排紅字顯示 */
 .table tr.qty-zero-row td{ color: var(--danger, #c00) !important; }
 .searchable-select-option.qty-zero{ color: var(--danger, #c00) !important; }
