@@ -1,0 +1,19 @@
+{
+  "name": "DK Computer",
+  "short_name": "DK Computer",
+  "description": "DK Computer 提供中古電腦、電競主機、電腦維修、客製化配單與售後服務。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "browser",
+  "lang": "zh-Hant",
+  "background_color": "#0b0b10",
+  "theme_color": "#0b0b10",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
