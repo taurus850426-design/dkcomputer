@@ -128,6 +128,17 @@
     const cfg = DK.getConfig ? DK.getConfig() : {};
     const ok = await (DK.tryCopy?.(msg) ?? Promise.resolve(false));
 
+    // 僅在驗證通過並完成送出流程後追蹤；不傳送表單內容或個資
+    try {
+      if (typeof window.trackGAEvent === "function") {
+        window.trackGAEvent("generate_lead", {
+          lead_source: "website_form",
+          form_type: isRepairMode ? "repair" : "demand",
+          page_path: String(location.pathname || ""),
+        });
+      }
+    } catch (_) {}
+
     if (cfg?.line?.url) {
       window.open(cfg.line.url, "_blank", "noreferrer");
       if (ok) {

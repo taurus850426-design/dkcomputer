@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="color-scheme" content="light" />
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-L7EZMWJYEL"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-L7EZMWJYEL');
+    </script>
     <title>DK Computer｜商品詳情</title>
     <meta name="description" content="查看主機商品詳情與配備說明，詳細規格可加 LINE 詢問。" />
     <link rel="canonical" href="https://taurus850426-design.github.io/dkcomputer/product.html" />
@@ -62,7 +70,7 @@
             <div id="productPageIntro" class="product-detail-intro"></div>
             <div id="productPagePrice" class="product-detail-price"></div>
             <div id="productPageQty" class="product-detail-qty" hidden></div>
-            <button type="button" class="btn btn-primary product-detail-line-btn" id="productPageLineBtn">加 LINE 詢問</button>
+            <a class="btn btn-primary product-detail-line-btn" id="productPageLineBtn" href="https://lin.ee/p58Bkqp" target="_blank" rel="noreferrer">加 LINE 詢問</a>
           </div>
 
           <div id="productPageNotFound" class="product-page-not-found muted" hidden>
@@ -102,6 +110,7 @@
     </footer>
 
     <script src="./shared.js?v=20260217"></script>
-    <script src="./product.js?v=20260217"></script>
+    <script src="./analytics.js?v=20260726b"></script>
+    <script src="./product.js?v=20260726b"></script>
   </body>
 </html>

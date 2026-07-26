@@ -167,10 +167,10 @@
             ${qty != null ? `<div class="machine-card-qty">剩餘 ${qty} 件</div>` : `<div class="machine-card-qty machine-card-qty-spacer" aria-hidden="true"></div>`}
           </div>
         </a>
-        <button type="button" class="dk-btn dk-btn-primary machine-line-btn" data-id="${DK.escapeHtml(item.id)}">
+        <a href="https://lin.ee/p58Bkqp" class="dk-btn dk-btn-primary machine-line-btn" target="_blank" rel="noreferrer" data-id="${DK.escapeHtml(item.id)}">
           加 LINE 詢問
           <span class="dk-btn-arrow" aria-hidden="true">→</span>
-        </button>
+        </a>
       </article>
     `;
   }
@@ -224,7 +224,13 @@
         div.innerHTML = buildMachineCard(item);
         const card = div.firstElementChild;
         const btn = card?.querySelector(".machine-line-btn");
-        if (btn) btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); DK.openLineOrder(item); });
+        if (btn) {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            DK.openLineOrder(item);
+          });
+        }
         if (card) {
           productsGrid.appendChild(card);
           const wrap = card.querySelector(".machine-card-photo-wrap");

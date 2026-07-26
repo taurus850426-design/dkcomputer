@@ -135,7 +135,7 @@ const DEFAULT_CONFIG = {
       "file:///C:/Users/Hi/.cursor/projects/c-Users-Hi-Desktop-2/assets/c__Users_Hi_AppData_Roaming_Cursor_User_workspaceStorage_fd07e6f51d41fe8bccbee3cc5dca28d0_images_S__5128195-53ab6056-6438-4d95-8ea3-209ff94139ed.png",
   },
   line: {
-    url: "https://lin.ee/VcxP0QO",
+    url: "https://lin.ee/p58Bkqp",
     lineId: "@315PEPPL",
     lineCtaText: "加 LINE 快速配單／看現貨",
     footerLineSentence: "不確定怎麼選？直接加 LINE：@315PEPPL，我用你的用途/預算給你最划算的配置或現貨選項。",

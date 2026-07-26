@@ -10,6 +10,7 @@
   const qtyEl = document.getElementById("productPageQty");
   const lineBtn = document.getElementById("productPageLineBtn");
   const ctaSection = document.getElementById("productPageCtaSection");
+  let viewItemTracked = false;
 
   function getProductId() {
     const params = new URLSearchParams(window.location.search);
@@ -81,6 +82,26 @@
     return items;
   }
 
+  function trackProductViewItem(item) {
+    try {
+      if (viewItemTracked || !item) return;
+      const gaItem = typeof window.__dkBuildGaItem === "function" ? window.__dkBuildGaItem(item) : null;
+      if (!gaItem || !gaItem.item_id) return;
+      viewItemTracked = true;
+      const payload = {
+        currency: "TWD",
+        items: [gaItem],
+      };
+      if (typeof window.__dkToGaPrice === "function") {
+        const price = window.__dkToGaPrice(item.price);
+        if (price != null) payload.value = price;
+      } else if (gaItem.price != null) {
+        payload.value = gaItem.price;
+      }
+      if (typeof window.trackGAEvent === "function") window.trackGAEvent("view_item", payload);
+    } catch (_) {}
+  }
+
   function renderProduct(item) {
     if (!item) return;
 
@@ -145,13 +166,34 @@
     }
 
     if (lineBtn) {
+      const OFFICIAL_LINE = "https://lin.ee/p58Bkqp";
+      try {
+        if (lineBtn.tagName === "A") {
+          // 公開 CTA href 固定官方網址，供 analytics.js 追蹤；實際開啟仍優先用 config
+          lineBtn.setAttribute("href", OFFICIAL_LINE);
+          lineBtn.setAttribute("target", "_blank");
+          lineBtn.setAttribute("rel", "noreferrer");
+        }
+      } catch (_) {}
+
       lineBtn.onclick = async (e) => {
         try {
           e?.preventDefault?.();
         } catch (_) {}
 
         const cfg = (window.DK && typeof window.DK.getConfig === "function") ? window.DK.getConfig() : {};
-        const lineUrl = cfg?.line?.url || "";
+        const lineUrl = (cfg?.line?.url && String(cfg.line.url).trim()) || OFFICIAL_LINE;
+
+        // 商品詢問：僅 select_item；LINE generate_lead 由 analytics.js 全域 <a> 監聽處理
+        try {
+          const gaItem = typeof window.__dkBuildGaItem === "function" ? window.__dkBuildGaItem(item) : null;
+          if (gaItem && gaItem.item_id && typeof window.trackGAEvent === "function") {
+            window.trackGAEvent("select_item", {
+              item_list_name: "product_inquiry",
+              items: [gaItem],
+            });
+          }
+        } catch (_) {}
 
         const name = String(item?.name || "").trim();
         const cpu = String(item?.cpu || item?.spec_cpu || "未標示");
@@ -180,7 +222,6 @@
         if (lineUrl) {
           window.open(lineUrl, "_blank", "noreferrer");
         } else {
-          // fallback：維持既有行為
           try {
             window.DK?.openLineOrder?.(item);
           } catch (_) {}
@@ -191,6 +232,7 @@
     if (content) content.hidden = false;
     if (notFound) notFound.hidden = true;
     if (ctaSection) ctaSection.hidden = false;
+    trackProductViewItem(item);
   }
 
   function showNotFound() {
