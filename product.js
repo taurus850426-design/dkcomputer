@@ -184,13 +184,25 @@
         const cfg = (window.DK && typeof window.DK.getConfig === "function") ? window.DK.getConfig() : {};
         const lineUrl = (cfg?.line?.url && String(cfg.line.url).trim()) || OFFICIAL_LINE;
 
-        // 商品詢問：僅 select_item；LINE generate_lead 由 analytics.js 全域 <a> 監聽處理
+        // 商品詢問：select_item；generate_lead 以官方 gtag + beacon 再送一次（與 analytics 去重）
         try {
           const gaItem = typeof window.__dkBuildGaItem === "function" ? window.__dkBuildGaItem(item) : null;
           if (gaItem && gaItem.item_id && typeof window.trackGAEvent === "function") {
             window.trackGAEvent("select_item", {
               item_list_name: "product_inquiry",
               items: [gaItem],
+            });
+          }
+          const btnText = (lineBtn.innerText || lineBtn.textContent || "").replace(/\s+/g, " ").trim();
+          if (typeof window.__dkTrackLineLead === "function") {
+            window.__dkTrackLineLead(OFFICIAL_LINE, btnText);
+          } else if (typeof window.gtag === "function") {
+            window.gtag("event", "generate_lead", {
+              lead_source: "line",
+              link_url: OFFICIAL_LINE,
+              page_path: String(location.pathname || ""),
+              button_text: btnText.slice(0, 100),
+              transport_type: "beacon",
             });
           }
         } catch (_) {}

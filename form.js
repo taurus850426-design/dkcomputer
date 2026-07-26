@@ -129,8 +129,22 @@
     const ok = await (DK.tryCopy?.(msg) ?? Promise.resolve(false));
 
     // 僅在驗證通過並完成送出流程後追蹤；不傳送表單內容或個資
+    // 使用 beacon，避免後續 window.open／alert 影響送出
     try {
-      if (typeof window.trackGAEvent === "function") {
+      if (typeof window.gtag === "function") {
+        window.gtag("event", "generate_lead", {
+          lead_source: "website_form",
+          form_type: isRepairMode ? "repair" : "demand",
+          page_path: String(location.pathname || ""),
+          transport_type: "beacon",
+        });
+      } else if (typeof window.__dkSendGenerateLead === "function") {
+        window.__dkSendGenerateLead({
+          lead_source: "website_form",
+          form_type: isRepairMode ? "repair" : "demand",
+          page_path: String(location.pathname || ""),
+        });
+      } else if (typeof window.trackGAEvent === "function") {
         window.trackGAEvent("generate_lead", {
           lead_source: "website_form",
           form_type: isRepairMode ? "repair" : "demand",

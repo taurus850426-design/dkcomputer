@@ -228,6 +228,21 @@
           btn.addEventListener("click", (e) => {
             e.preventDefault();
             e.stopPropagation();
+            try {
+              const btnText = (btn.innerText || btn.textContent || "").replace(/\s+/g, " ").trim();
+              const href = btn.getAttribute("href") || "https://lin.ee/p58Bkqp";
+              if (typeof window.__dkTrackLineLead === "function") {
+                window.__dkTrackLineLead(href, btnText);
+              } else if (typeof window.gtag === "function") {
+                window.gtag("event", "generate_lead", {
+                  lead_source: "line",
+                  link_url: href,
+                  page_path: String(location.pathname || ""),
+                  button_text: btnText.slice(0, 100),
+                  transport_type: "beacon",
+                });
+              }
+            } catch (_) {}
             DK.openLineOrder(item);
           });
         }
