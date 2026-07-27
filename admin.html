@@ -54,6 +54,7 @@
             <button class="tab" data-tab="publish" type="button">上架管理</button>
             <button class="tab" data-tab="frontend" type="button">前台管理</button>
             <button class="tab" data-tab="vendors" type="button">廠商管理</button>
+            <button class="tab" data-tab="purchase" type="button">採購／叫貨單</button>
             <button class="tab" data-tab="customers" type="button">客戶紀錄</button>
           </div>
 
@@ -1033,7 +1034,176 @@
             </div>
           </section>
 
-          <!-- ⑦ 客戶紀錄（localStorage：dk_customer_records_v1） -->
+          <!-- ⑦ 採購／叫貨單（localStorage：dk_purchase_orders_v1） -->
+          <section id="tab-purchase" class="card" hidden>
+            <div id="purchaseOrdersRoot" class="po-root">
+              <div class="section-head">
+                <div>
+                  <h2 class="h2">採購／叫貨單</h2>
+                  <p class="muted">查詢歷史廠商報價、比價後建立叫貨單；可依廠商複製叫貨文字。</p>
+                </div>
+                <div class="section-actions">
+                  <button id="poNewBtn" class="btn btn-primary" type="button">新增叫貨單</button>
+                </div>
+              </div>
+              <div id="poMsg" class="muted small" style="margin-top:8px" hidden></div>
+
+              <!-- 列表 -->
+              <div id="poListView">
+                <div class="po-toolbar" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+                  <div class="field" style="flex:1;min-width:180px;margin:0">
+                    <label for="poListSearch">搜尋</label>
+                    <input id="poListSearch" type="search" placeholder="單號／廠商／需求／規格／備註" autocomplete="off" />
+                  </div>
+                  <div class="field" style="margin:0;min-width:140px">
+                    <label for="poListStatusFilter">狀態</label>
+                    <select id="poListStatusFilter">
+                      <option value="">全部</option>
+                      <option value="draft">草稿</option>
+                      <option value="ordered">已叫貨</option>
+                      <option value="partial">部分到貨</option>
+                      <option value="received">已到貨</option>
+                      <option value="cancelled">已取消</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="table-wrap" style="margin-top:10px">
+                  <table class="table" id="poListTable">
+                    <thead>
+                      <tr>
+                        <th>叫貨單編號</th>
+                        <th>建立日期</th>
+                        <th>狀態</th>
+                        <th style="text-align:right">廠商數</th>
+                        <th style="text-align:right">品項數</th>
+                        <th style="text-align:right">預計總額</th>
+                        <th>預計到貨</th>
+                        <th>最後更新</th>
+                        <th style="text-align:right;width:220px">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="poListTbody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- 編輯／檢視 -->
+              <div id="poEditorView" hidden>
+                <div class="actions" style="margin-top:8px;flex-wrap:wrap;gap:8px">
+                  <button id="poBackToListBtn" class="btn btn-ghost" type="button">← 返回列表</button>
+                  <button id="poSaveBtn" class="btn btn-primary" type="button">儲存叫貨單</button>
+                  <button id="poCopyAllBtn" class="btn btn-ghost" type="button">複製全部叫貨文字</button>
+                  <button id="poPrintBtn" class="btn btn-ghost" type="button">列印叫貨單</button>
+                </div>
+
+                <div class="card" style="margin-top:12px">
+                  <h3 class="h3">叫貨單資訊</h3>
+                  <div class="form-grid" style="margin-top:10px">
+                    <div class="field"><label>單號</label><input id="poOrderNo" type="text" readonly /></div>
+                    <div class="field">
+                      <label for="poStatus">狀態</label>
+                      <select id="poStatus">
+                        <option value="draft">草稿</option>
+                        <option value="ordered">已叫貨</option>
+                        <option value="partial">部分到貨</option>
+                        <option value="received">已到貨</option>
+                        <option value="cancelled">已取消</option>
+                      </select>
+                    </div>
+                    <div class="field"><label for="poSupplierOrderDate">實際叫貨日期</label><input id="poSupplierOrderDate" type="date" /></div>
+                    <div class="field"><label for="poExpectedDate">預計到貨日</label><input id="poExpectedDate" type="date" /></div>
+                    <div class="field full"><label for="poNote">整單備註</label><input id="poNote" type="text" placeholder="例如：急件／分批到貨" /></div>
+                  </div>
+                  <div id="poEditorMeta" class="muted small" style="margin-top:8px"></div>
+                  <div id="poEditorLockHint" class="muted small" style="margin-top:6px" hidden></div>
+                </div>
+
+                <div class="card" style="margin-top:12px" id="poAddItemCard">
+                  <h3 class="h3">新增叫貨品項</h3>
+                  <div class="form-grid" style="margin-top:10px">
+                    <div class="field full">
+                      <label for="poRequestText">需求規格</label>
+                      <input id="poRequestText" type="text" placeholder="例如：DDR4 32G／Kingston DDR4 3200 32G／NVMe 1TB" />
+                    </div>
+                    <div class="field">
+                      <label for="poItemCategory">分類</label>
+                      <select id="poItemCategory"><option value="">（可空白）</option></select>
+                    </div>
+                    <div class="field">
+                      <label for="poItemQty">數量</label>
+                      <input id="poItemQty" type="number" min="1" step="1" value="1" />
+                    </div>
+                    <div class="field full">
+                      <label for="poItemNote">品項備註</label>
+                      <input id="poItemNote" type="text" placeholder="可空白" />
+                    </div>
+                    <div class="full actions" style="gap:8px">
+                      <button id="poSearchQuotesBtn" class="btn btn-primary" type="button">搜尋歷史報價</button>
+                      <button id="poAddManualItemBtn" class="btn btn-ghost" type="button">改用手動報價加入</button>
+                    </div>
+                  </div>
+
+                  <div id="poManualBox" class="form-grid" style="margin-top:10px" hidden>
+                    <div class="field">
+                      <label for="poManualVendor">手動廠商</label>
+                      <select id="poManualVendor"></select>
+                    </div>
+                    <div class="field">
+                      <label for="poManualPrice">手動單價</label>
+                      <input id="poManualPrice" type="number" min="0" step="1" placeholder="數字" />
+                    </div>
+                    <div class="field">
+                      <label for="poManualSpec">規格名稱</label>
+                      <input id="poManualSpec" type="text" placeholder="預設使用需求規格" />
+                    </div>
+                    <div class="full actions">
+                      <button id="poConfirmManualBtn" class="btn btn-primary" type="button">確認手動加入</button>
+                      <button id="poCancelManualBtn" class="btn btn-ghost" type="button">取消</button>
+                    </div>
+                  </div>
+
+                  <div id="poCompareSummary" class="po-compare-summary" style="margin-top:12px" hidden></div>
+                  <div id="poSearchResults" class="po-search-results" style="margin-top:10px" hidden></div>
+                </div>
+
+                <div class="card" style="margin-top:12px">
+                  <h3 class="h3">叫貨品項</h3>
+                  <div id="poItemsSummary" class="po-items-summary muted small" style="margin-top:8px"></div>
+                  <div class="table-wrap" style="margin-top:10px">
+                    <table class="table">
+                      <thead>
+                        <tr>
+                          <th>品項需求</th>
+                          <th>選定規格</th>
+                          <th>廠商</th>
+                          <th style="text-align:right">單價</th>
+                          <th style="text-align:right">數量</th>
+                          <th style="text-align:right">小計</th>
+                          <th>報價日期</th>
+                          <th>提示</th>
+                          <th>備註</th>
+                          <th style="text-align:right;width:160px">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody id="poItemsTbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="card" style="margin-top:12px">
+                  <div class="section-head" style="margin-bottom:8px">
+                    <h3 class="h3">依廠商檢視／複製</h3>
+                  </div>
+                  <div id="poVendorGroups" class="po-vendor-groups"></div>
+                </div>
+              </div>
+
+              <!-- 列印區（畫面隱藏，列印時顯示） -->
+              <div id="poPrintArea" class="po-print-area" aria-hidden="true"></div>
+            </div>
+          </section>
+
+          <!-- ⑧ 客戶紀錄（localStorage：dk_customer_records_v1） -->
           <section id="tab-customers" class="card" hidden>
             <div id="customer-section">
               <h2 class="h2">客戶紀錄</h2>
@@ -2196,12 +2366,13 @@
     </main>
 
     <div id="adminToast" class="admin-toast" aria-live="polite" hidden></div>
-    <script src="./shared.js?v=20260217"></script>
+    <script src="./shared.js?v=20260727cat"></script>
     <script src="./inventory-ledger.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260217"></script>
+    <script src="./admin3.js?v=20260727cat"></script>
+    <script src="./purchase-orders.js?v=20260727"></script>
   </body>
 </html>
 

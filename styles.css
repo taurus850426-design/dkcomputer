@@ -4221,3 +4221,71 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
     transform: none;
   }
 }
+
+/* ===== 採購／叫貨單 1.0 ===== */
+.po-root .po-toolbar .field label{ display:block; margin-bottom:4px; }
+.po-compare-summary .po-summary-card{
+  border: 1px solid rgba(17,24,39,0.12);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: rgba(17,24,39,0.03);
+  display: grid;
+  gap: 6px;
+}
+.po-search-results .po-result-group{ margin-top: 12px; }
+.po-search-results .po-result-group-title{
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.po-vendor-groups .po-vendor-block ul{
+  margin: 8px 0;
+  padding-left: 1.2em;
+}
+.po-items-summary{ line-height: 1.5; }
+.po-print-area{ display: none; }
+
+@media print{
+  body.po-printing #loginCard,
+  body.po-printing .tabs,
+  body.po-printing #syncStatusBar,
+  body.po-printing #adminToast,
+  body.po-printing #poListView,
+  body.po-printing #poEditorView,
+  body.po-printing .site-header,
+  body.po-printing .sticky-bar{
+    display: none !important;
+  }
+  body.po-printing #panel,
+  body.po-printing #tab-purchase,
+  body.po-printing #purchaseOrdersRoot{
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  body.po-printing .po-print-area{
+    display: block !important;
+  }
+  body.po-printing .po-print-inner{
+    font-size: 12pt;
+    color: #000;
+  }
+  body.po-printing .po-print-inner h1{
+    font-size: 18pt;
+    margin: 0 0 8pt;
+  }
+  body.po-printing .po-print-inner table{
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8pt 0;
+  }
+  body.po-printing .po-print-inner th,
+  body.po-printing .po-print-inner td{
+    border: 1px solid #333;
+    padding: 4pt 6pt;
+    text-align: left;
+  }
+}

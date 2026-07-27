@@ -145,8 +145,22 @@ const DEFAULT_CONFIG = {
     username: "admin",
     password: "admin123",
   },
-  // 庫存品項品類（可於後台新增/移除）
-  inventoryCategories: ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "周邊", "其他"],
+  // 庫存品項品類（可於後台新增/移除；讀取時會確保正式品類齊全）
+  inventoryCategories: [
+    "處理器",
+    "主機板",
+    "記憶體",
+    "硬碟",
+    "顯示卡",
+    "電源供應器",
+    "機殼",
+    "螢幕",
+    "鍵盤",
+    "滑鼠",
+    "耳機",
+    "周邊",
+    "其他",
+  ],
 };
 
 const DEFAULT_INVENTORY = [
@@ -422,16 +436,49 @@ function saveConfigSyncMeta(patch) {
   }
 }
 
+/** 正式庫存品類順序（顯示合併用；不批次改寫舊庫存資料） */
+const PREFERRED_INVENTORY_CATEGORIES = [
+  "處理器",
+  "主機板",
+  "記憶體",
+  "硬碟",
+  "顯示卡",
+  "電源供應器",
+  "機殼",
+  "螢幕",
+  "鍵盤",
+  "滑鼠",
+  "耳機",
+  "周邊",
+  "其他",
+];
+
 function getInventoryCategories() {
   const cfg = getConfig();
   let list = cfg.inventoryCategories;
   if (!Array.isArray(list) || list.length === 0) list = DEFAULT_CONFIG.inventoryCategories.slice();
-  else list = list.slice();
-  const extra = ["周邊", "其他"];
-  for (const c of extra) {
+  else list = list.slice().map((c) => String(c || "").trim()).filter(Boolean);
+
+  // 確保正式品類存在（僅影響回傳清單，不覆寫 localStorage／不改舊品項）
+  for (const c of PREFERRED_INVENTORY_CATEGORIES) {
     if (!list.includes(c)) list.push(c);
   }
-  return list;
+
+  const seen = new Set();
+  const ordered = [];
+  for (const c of PREFERRED_INVENTORY_CATEGORIES) {
+    if (list.includes(c) && !seen.has(c)) {
+      ordered.push(c);
+      seen.add(c);
+    }
+  }
+  for (const c of list) {
+    if (!seen.has(c)) {
+      ordered.push(c);
+      seen.add(c);
+    }
+  }
+  return ordered;
 }
 
 function getInventory() {

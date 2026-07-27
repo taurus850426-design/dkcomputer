@@ -153,7 +153,7 @@
   }
 
   function getCategoryOptions() {
-    return (window.DK && DK.getInventoryCategories && DK.getInventoryCategories()) || ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼"];
+    return (window.DK && DK.getInventoryCategories && DK.getInventoryCategories()) || ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "螢幕", "鍵盤", "滑鼠", "耳機", "周邊", "其他"];
   }
 
   function mapSuggestionToCategory(suggestion) {

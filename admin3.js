@@ -202,6 +202,7 @@
   const tabPublish = document.getElementById("tab-publish");
   const tabFrontend = document.getElementById("tab-frontend");
   const tabVendors = document.getElementById("tab-vendors");
+  const tabPurchase = document.getElementById("tab-purchase");
   const tabCustomers = document.getElementById("tab-customers");
 
   // publish
@@ -369,7 +370,7 @@
   }
 
   const ADMIN_TAB_KEY = "dk_admin_tab";
-  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "customers"];
+  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "customers"];
   function switchTab(name) {
     try { sessionStorage.setItem(ADMIN_TAB_KEY, name); } catch (_) {}
     try { localStorage.setItem("dk_admin_active_tab", name); } catch (_) {}
@@ -382,6 +383,7 @@
     if (tabPublish) tabPublish.hidden = name !== "publish";
     if (tabFrontend) tabFrontend.hidden = name !== "frontend";
     if (tabVendors) tabVendors.hidden = name !== "vendors";
+    if (tabPurchase) tabPurchase.hidden = name !== "purchase";
     if (tabCustomers) tabCustomers.hidden = name !== "customers";
     if (name === "inv") {
       const doRefresh = () => {
@@ -404,6 +406,11 @@
       if (typeof renderVendorQuoteVendorSelect === "function") renderVendorQuoteVendorSelect();
       if (typeof renderVendorQuoteCategorySelect === "function") renderVendorQuoteCategorySelect();
       if (typeof renderVendorQuotes === "function") renderVendorQuotes();
+    }
+    if (name === "purchase") {
+      try {
+        if (typeof window.__dkPurchaseOrdersOnShow === "function") window.__dkPurchaseOrdersOnShow();
+      } catch (_) {}
     }
     if (name === "customers") {
       if (typeof renderCustomerRecordsPage === "function") renderCustomerRecordsPage();
@@ -810,6 +817,7 @@
       (name === "publish" && tabPublish) ||
       (name === "frontend" && tabFrontend) ||
       (name === "vendors" && tabVendors) ||
+      (name === "purchase" && tabPurchase) ||
       (name === "customers" && tabCustomers);
     if (fromStorage && VALID_TABS.includes(fromStorage) && hasPanel(fromStorage)) {
       switchTab(fromStorage);
@@ -852,7 +860,7 @@
       applyAuthUI();
       try {
         const saved = localStorage.getItem("dk_admin_active_tab") || sessionStorage.getItem(ADMIN_TAB_KEY);
-        if (saved === "publish" || saved === "inv" || saved === "frontend" || saved === "vendors" || saved === "customers") switchTab(saved);
+        if (saved === "publish" || saved === "inv" || saved === "frontend" || saved === "vendors" || saved === "purchase" || saved === "customers") switchTab(saved);
         else switchTab("inv");
       } catch (_) {
         try { switchTab("inv"); } catch (__) {}
@@ -1527,8 +1535,24 @@
     { label: "記憶體", aliases: ["記憶體", "RAM", "Memory", "DRAM"] },
     { label: "電源", aliases: ["電源", "電源供應器", "PSU", "Power Supply"] },
     { label: "機殼", aliases: ["機殼", "Case", "Chassis"] },
+    { label: "螢幕", aliases: ["螢幕", "顯示器", "Monitor", "Display"] },
+    { label: "鍵盤", aliases: ["鍵盤", "Keyboard"] },
+    { label: "滑鼠", aliases: ["滑鼠", "Mouse"] },
+    { label: "耳機", aliases: ["耳機", "Headset", "Headphone", "Earphone"] },
   ];
   const VQ_SUMMARY_OTHER_LABEL = "其他";
+  const VQ_SUMMARY_COLSPAN = 2 + VQ_SUMMARY_CAT_COLS.length + 1 + 3; // 廠商+總筆數+品類欄+其他+3統計
+
+  function vqSummaryCatHeaderHtml() {
+    return VQ_SUMMARY_CAT_COLS.map((c) => `<th style="text-align:right">${vqEsc(c.label)}</th>`).join("")
+      + `<th style="text-align:right">${vqEsc(VQ_SUMMARY_OTHER_LABEL)}</th>`;
+  }
+
+  function vqSummaryCatCellsHtml(cats) {
+    const map = cats && typeof cats === "object" ? cats : {};
+    return VQ_SUMMARY_CAT_COLS.map((c) => `<td style="text-align:right">${vqEsc(String(map[c.label] || 0))}</td>`).join("")
+      + `<td style="text-align:right">${vqEsc(String(map[VQ_SUMMARY_OTHER_LABEL] || 0))}</td>`;
+  }
 
   function vqSummaryEmptyCats() {
     const cats = Object.fromEntries(VQ_SUMMARY_CAT_COLS.map((c) => [c.label, 0]));
@@ -1602,6 +1626,24 @@
     return brand + " " + spec;
   }
 
+  // 供採購／叫貨單模組沿用（不複製另一套顯示規則）
+  try {
+    window.DKPurchaseBridge = {
+      loadVendorQuotes: function () { return loadVendorQuotes(); },
+      getVendorQuoteDisplayName: getVendorQuoteDisplayName,
+      esc: v2Esc,
+      getVendors: function () { return getVendorOptionsFromConfig(); },
+      getCategories: function () {
+        try {
+          if (window.DK && typeof window.DK.getInventoryCategories === "function") {
+            return window.DK.getInventoryCategories() || [];
+          }
+        } catch (_) {}
+        return ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "螢幕", "鍵盤", "滑鼠", "耳機", "周邊", "其他"];
+      },
+    };
+  } catch (_) {}
+
   function loadVendorQuotes() {
     const raw = safeParse(localStorage.getItem(VENDOR_QUOTES_KEY), null);
     const list = Array.isArray(raw) ? raw : [];
@@ -1627,7 +1669,7 @@
     if (!sel) return;
     const cats = DK.getInventoryCategories
       ? DK.getInventoryCategories()
-      : ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼"];
+      : ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "螢幕", "鍵盤", "滑鼠", "耳機", "周邊", "其他"];
     const cur = String(currentValue != null ? currentValue : (sel.value || "")).trim();
     const opts = ['<option value="">請選擇品類</option>'].concat(
       cats.map((c) => `<option value="${vqEsc(c)}">${vqEsc(c)}</option>`),
@@ -1945,14 +1987,7 @@
               <tr>
                 <th>廠商</th>
                 <th style="text-align:right">總報價筆數</th>
-                <th style="text-align:right">CPU</th>
-                <th style="text-align:right">主機板</th>
-                <th style="text-align:right">顯示卡</th>
-                <th style="text-align:right">SSD</th>
-                <th style="text-align:right">記憶體</th>
-                <th style="text-align:right">電源</th>
-                <th style="text-align:right">機殼</th>
-                <th style="text-align:right">其他</th>
+                ${vqSummaryCatHeaderHtml()}
                 <th style="text-align:right">最低價次數</th>
                 <th style="text-align:right">最低價勝率</th>
                 <th style="text-align:right">最近30天新增</th>
@@ -1977,20 +2012,13 @@
     else if (analysis && analysis.nextSibling) host.insertBefore(wrap, analysis.nextSibling);
     else if (!wrap.parentElement) host.appendChild(wrap);
 
-    // 確保表頭含「其他」（相容舊 DOM 已建立的統計區塊）
+    // 確保表頭與品類欄同步（相容舊 DOM）
     const theadRow = wrap.querySelector("thead tr");
     if (theadRow) {
       theadRow.innerHTML = `
         <th>廠商</th>
         <th style="text-align:right">總報價筆數</th>
-        <th style="text-align:right">CPU</th>
-        <th style="text-align:right">主機板</th>
-        <th style="text-align:right">顯示卡</th>
-        <th style="text-align:right">SSD</th>
-        <th style="text-align:right">記憶體</th>
-        <th style="text-align:right">電源</th>
-        <th style="text-align:right">機殼</th>
-        <th style="text-align:right">其他</th>
+        ${vqSummaryCatHeaderHtml()}
         <th style="text-align:right">最低價次數</th>
         <th style="text-align:right">最低價勝率</th>
         <th style="text-align:right">最近30天新增</th>
@@ -2016,20 +2044,13 @@
       rows.push(`<tr class="vq-summary-row${expanded ? " is-open" : ""}" data-vendor="${vqEsc(s.vendor)}">
         <td>${vqEsc(s.vendor)}</td>
         <td style="text-align:right">${vqEsc(String(s.total))}</td>
-        <td style="text-align:right">${vqEsc(String(s.cats["CPU"] || 0))}</td>
-        <td style="text-align:right">${vqEsc(String(s.cats["主機板"] || 0))}</td>
-        <td style="text-align:right">${vqEsc(String(s.cats["顯示卡"] || 0))}</td>
-        <td style="text-align:right">${vqEsc(String(s.cats["SSD"] || 0))}</td>
-        <td style="text-align:right">${vqEsc(String(s.cats["記憶體"] || 0))}</td>
-        <td style="text-align:right">${vqEsc(String(s.cats["電源"] || 0))}</td>
-        <td style="text-align:right">${vqEsc(String(s.cats["機殼"] || 0))}</td>
-        <td style="text-align:right">${vqEsc(String(s.cats[VQ_SUMMARY_OTHER_LABEL] || 0))}</td>
+        ${vqSummaryCatCellsHtml(s.cats)}
         <td style="text-align:right">${vqEsc(String(s.lowestWins || 0))}</td>
         <td style="text-align:right">${vqEsc(pct(s.winRate))}</td>
         <td style="text-align:right">${vqEsc(String(s.recent30 || 0))}</td>
       </tr>`);
       if (expanded) {
-        rows.push(`<tr class="vq-summary-detail"><td colspan="13">${renderVendorQuoteSummaryDetail(s)}</td></tr>`);
+        rows.push(`<tr class="vq-summary-detail"><td colspan="${VQ_SUMMARY_COLSPAN}">${renderVendorQuoteSummaryDetail(s)}</td></tr>`);
       }
     }
     tbody.innerHTML = rows.join("");
@@ -3603,7 +3624,7 @@
     }
 
     function fillV2CategoryOptions() {
-      const cats = DK.getInventoryCategories ? DK.getInventoryCategories() : ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼"];
+      const cats = DK.getInventoryCategories ? DK.getInventoryCategories() : ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "螢幕", "鍵盤", "滑鼠", "耳機", "周邊", "其他"];
       if (itemsCategory) {
         itemsCategory.innerHTML = "<option value=\"\">全部品類</option>" + cats.map((c) => "<option value=\"" + v2Esc(c) + "\">" + v2Esc(c) + "</option>").join("");
       }
@@ -5146,7 +5167,7 @@
   applyAuthUI();
   if (window.DK?.isAdminAuthed?.()) {
     const saved = (function () { try { return localStorage.getItem("dk_admin_active_tab"); } catch (_) { return null; } })();
-    if (saved === "publish" || saved === "inv" || saved === "frontend" || saved === "vendors" || saved === "customers") switchTab(saved);
+    if (saved === "publish" || saved === "inv" || saved === "frontend" || saved === "vendors" || saved === "purchase" || saved === "customers") switchTab(saved);
     else switchTab("inv");
   }
 })();
