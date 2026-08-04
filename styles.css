@@ -1874,6 +1874,43 @@ body.admin-page .cat-image-slot > div[style*="margin-top:6px"]{
   font-size: 12px;
 }
 
+/* 廠商報價／叫貨單雲端同步面板 */
+.dk-sync-panel{
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(17,24,39,0.12);
+  border-radius: 12px;
+  background: rgba(17,24,39,0.03);
+}
+.dk-sync-panel__head{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 6px;
+}
+.dk-sync-panel__title{
+  font-weight: 600;
+  font-size: 14px;
+}
+.dk-sync-badge{
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid rgba(17,24,39,0.14);
+  background: rgba(255,255,255,0.85);
+  color: rgba(17,24,39,0.8);
+}
+.dk-sync-badge.is-synced{ border-color: rgba(16,185,129,0.45); color: #047857; background: rgba(16,185,129,0.1); }
+.dk-sync-badge.is-syncing{ border-color: rgba(59,130,246,0.45); color: #1d4ed8; background: rgba(59,130,246,0.1); }
+.dk-sync-badge.is-pending{ border-color: rgba(245,158,11,0.5); color: #b45309; background: rgba(245,158,11,0.12); }
+.dk-sync-badge.is-failed,.dk-sync-badge.is-not-enabled{ border-color: rgba(239,68,68,0.45); color: #b91c1c; background: rgba(239,68,68,0.1); }
+.dk-sync-panel__detail{ margin: 0 0 4px; }
+.dk-sync-panel__risk{ margin: 0 0 8px; }
+.dk-sync-panel__actions{ display: flex; flex-wrap: wrap; gap: 8px; }
+
 /* 庫存數量為 0 時整排紅字顯示 */
 .table tr.qty-zero-row td{ color: var(--danger, #c00) !important; }
 .searchable-select-option.qty-zero{ color: var(--danger, #c00) !important; }

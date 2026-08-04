@@ -406,6 +406,7 @@
       if (typeof renderVendorQuoteVendorSelect === "function") renderVendorQuoteVendorSelect();
       if (typeof renderVendorQuoteCategorySelect === "function") renderVendorQuoteCategorySelect();
       if (typeof renderVendorQuotes === "function") renderVendorQuotes();
+      if (typeof renderVendorQuotesSyncPanel === "function") renderVendorQuotesSyncPanel();
     }
     if (name === "purchase") {
       try {
@@ -1584,7 +1585,7 @@
 
   function vqNormalize(q) {
     const r = q && typeof q === "object" ? q : {};
-    return {
+    const out = {
       id: String(r.id || ("vq_" + Date.now() + "_" + Math.random().toString(16).slice(2))),
       date: String(r.date || ""),
       vendor: String(r.vendor || ""),
@@ -1592,13 +1593,33 @@
       brand: String(r.brand || ""),
       spec: String(r.spec || ""),
       price: vqNum(r.price),
-      marketPrice: vqNum(r.marketPrice),
+      marketPrice: vqNum(r.marketPrice != null ? r.marketPrice : r.market_price),
       taxIncluded: !!r.taxIncluded,
       shippingIncluded: !!r.shippingIncluded,
       warranty: String(r.warranty || ""),
       inStock: !!r.inStock,
       note: String(r.note || ""),
     };
+    // 同步用時間戳／tombstone：有才保留，不批次改寫舊資料內容
+    if (r.createdAt || r.created_at) out.createdAt = String(r.createdAt || r.created_at);
+    if (r.updatedAt || r.updated_at) out.updatedAt = String(r.updatedAt || r.updated_at);
+    if (r.deletedAt || r.deleted_at) out.deletedAt = String(r.deletedAt || r.deleted_at);
+    return out;
+  }
+
+  function vqIsDeleted(q) {
+    if (window.DK && typeof window.DK.vpIsDeleted === "function") return window.DK.vpIsDeleted(q);
+    const d = q && (q.deletedAt != null ? q.deletedAt : q.deleted_at);
+    return d != null && String(d).trim() !== "";
+  }
+
+  function vqStampNew(q) {
+    const now = new Date().toISOString();
+    const out = vqNormalize(q);
+    if (!out.createdAt) out.createdAt = now;
+    out.updatedAt = now;
+    if (out.deletedAt) delete out.deletedAt;
+    return out;
   }
 
   function vqEsc(s) {
@@ -1645,14 +1666,35 @@
   } catch (_) {}
 
   function loadVendorQuotes() {
-    const raw = safeParse(localStorage.getItem(VENDOR_QUOTES_KEY), null);
-    const list = Array.isArray(raw) ? raw : [];
+    let list = [];
+    if (window.DK && typeof window.DK.loadVendorQuotesRaw === "function") {
+      list = window.DK.loadVendorQuotesRaw(false);
+    } else {
+      const raw = safeParse(localStorage.getItem(VENDOR_QUOTES_KEY), null);
+      list = Array.isArray(raw) ? raw : [];
+      list = list.filter((q) => !vqIsDeleted(q));
+    }
     return list.map(vqNormalize);
   }
 
+  function loadVendorQuotesAll() {
+    if (window.DK && typeof window.DK.loadVendorQuotesRaw === "function") {
+      return window.DK.loadVendorQuotesRaw(true).map(vqNormalize);
+    }
+    const raw = safeParse(localStorage.getItem(VENDOR_QUOTES_KEY), null);
+    return (Array.isArray(raw) ? raw : []).map(vqNormalize);
+  }
+
   function saveVendorQuotes(list) {
-    const safe = Array.isArray(list) ? list.map(vqNormalize) : [];
-    localStorage.setItem(VENDOR_QUOTES_KEY, JSON.stringify(safe));
+    const active = Array.isArray(list) ? list.map(vqNormalize) : [];
+    const tombstones = loadVendorQuotesAll().filter((q) => vqIsDeleted(q));
+    const activeIds = new Set(active.map((q) => String(q.id)));
+    const merged = tombstones.filter((t) => !activeIds.has(String(t.id))).concat(active);
+    if (window.DK && typeof window.DK.saveVendorQuotesRaw === "function") {
+      window.DK.saveVendorQuotesRaw(merged, { skipEvent: true, source: "local" });
+    } else {
+      localStorage.setItem(VENDOR_QUOTES_KEY, JSON.stringify(merged));
+    }
   }
 
   function renderVendorQuoteVendorSelect() {
@@ -2393,7 +2435,7 @@
     const noteEl = document.getElementById("vqNote");
 
     // 新表單：單一欄「品牌／型號／規格」寫入 spec；brand 存空字串（欄位仍保留相容）
-    const q = vqNormalize({
+    const q = vqStampNew({
       date: String(dateEl?.value || "").trim(),
       vendor: String(vendorEl?.value || "").trim(),
       category: String(catEl?.value || "").trim(),
@@ -2416,14 +2458,27 @@
     const list = loadVendorQuotes();
     list.push(q); // 每次新增，不覆蓋
     saveVendorQuotes(list);
-    vqShowMsg("已新增報價");
+    vqShowMsg("已新增報價（本機）");
     renderVendorQuotes();
+    renderVendorQuotesSyncPanel();
+    // 雲端 upsert（失敗不回滾本機）
+    if (window.DK && typeof window.DK.upsertVendorQuoteToSupabase === "function" && !window.DK.isVpApplyingCloud?.()) {
+      window.DK.upsertVendorQuoteToSupabase(q).then((res) => {
+        if (res && res.ok) vqShowMsg("已新增報價，已同步到雲端");
+        else if (res && res.notEnabled) vqShowMsg("已新增報價（本機）。雲端尚未啟用，未上傳。");
+        else vqShowMsg("本機已儲存，雲端同步失敗" + (res?.error ? "：" + res.error : ""));
+        renderVendorQuotesSyncPanel();
+      }).catch(() => {
+        vqShowMsg("本機已儲存，雲端同步失敗");
+        renderVendorQuotesSyncPanel();
+      });
+    }
     // 新增成功後自動收合表單
     try {
       const wrap = document.getElementById("vqFormWrap");
       if (wrap) wrap.hidden = true;
     } catch (_) {}
-    setTimeout(() => vqShowMsg(""), 2500);
+    setTimeout(() => vqShowMsg(""), 3500);
 
     // 清空部分欄位（保留日期/廠商較方便連續輸入）
     if (catEl) catEl.value = "";
@@ -2438,12 +2493,30 @@
     if (noteEl) noteEl.value = "";
   }
 
-  function deleteVendorQuoteById(id) {
+  async function deleteVendorQuoteById(id) {
     const target = String(id || "");
     if (!target) return;
-    const list = loadVendorQuotes();
-    const next = list.filter((x) => String(x.id) !== target);
-    saveVendorQuotes(next);
+    if (window.DK && typeof window.DK.softDeleteVendorQuoteToSupabase === "function") {
+      const res = await window.DK.softDeleteVendorQuoteToSupabase(target);
+      renderVendorQuotes();
+      renderVendorQuotesSyncPanel();
+      if (res && res.cloud && res.cloud.ok) vqShowMsg("已刪除（本機＋雲端 soft delete）");
+      else if (res && res.localSaved) vqShowMsg("本機已刪除；雲端同步失敗或尚未啟用");
+      else vqShowMsg("刪除失敗");
+      setTimeout(() => vqShowMsg(""), 3500);
+      return;
+    }
+    // fallback：無 DK 時改為標記 deletedAt
+    const list = loadVendorQuotesAll();
+    const now = new Date().toISOString();
+    const next = list.map((x) =>
+      String(x.id) === target ? { ...x, deletedAt: now, updatedAt: now } : x,
+    );
+    if (window.DK && typeof window.DK.saveVendorQuotesRaw === "function") {
+      window.DK.saveVendorQuotesRaw(next, { skipEvent: true, source: "local" });
+    } else {
+      localStorage.setItem(VENDOR_QUOTES_KEY, JSON.stringify(next));
+    }
     renderVendorQuotes();
   }
 
@@ -2516,6 +2589,7 @@
     renderVendorQuoteVendorSelect();
     renderVendorQuoteCategorySelect();
     renderVendorQuotes();
+    renderVendorQuotesSyncPanel();
     // 表單收合
     (function initVendorQuoteFormCollapse() {
       const wrap = document.getElementById("vqFormWrap");
@@ -2558,10 +2632,149 @@
       const delBtn = e.target && e.target.closest ? e.target.closest(".btn-vq-del") : null;
       if (delBtn) {
         const id = delBtn.getAttribute("data-id") || "";
-        if (confirm("確定刪除此筆報價？")) deleteVendorQuoteById(id);
+        if (confirm("確定刪除此筆報價？（soft delete，另一裝置不會再帶回）")) deleteVendorQuoteById(id);
       }
     });
+
+    bindVendorQuotesSyncPanelOnce();
+    // 啟動後再拉一次狀態（shared 可能已在拉）
+    if (window.DK && typeof window.DK.pullVendorQuotesFromCloud === "function") {
+      window.DK.pullVendorQuotesFromCloud().then(() => {
+        renderVendorQuotes();
+        renderVendorQuotesSyncPanel();
+      }).catch(() => renderVendorQuotesSyncPanel());
+    }
   })();
+
+  function vqSyncSetMsg(text) {
+    const el = document.getElementById("vqSyncMsg");
+    if (!el) return;
+    if (!text) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = text;
+  }
+
+  function renderVendorQuotesSyncPanel() {
+    const badge = document.getElementById("vqSyncStatusBadge");
+    const detail = document.getElementById("vqSyncDetail");
+    const uploadBtn = document.getElementById("vqSyncUploadBtn");
+    if (!badge && !detail) return;
+    const meta = window.DK?.getVendorQuotesSyncMeta?.() || {};
+    const status = String(meta.status || "never");
+    const label = window.DK?.vpStatusLabel?.(status) || status;
+    const localCount = Number(meta.localCount) || loadVendorQuotes().length;
+    const cloudCount = Number(meta.cloudCount) || 0;
+    const src = meta.source === "cloud" ? "雲端" : "本機";
+    const last = meta.lastSyncAt ? String(meta.lastSyncAt).replace("T", " ").slice(0, 19) : "—";
+    if (badge) {
+      badge.textContent = label;
+      badge.className = "dk-sync-badge";
+      if (status === "synced") badge.classList.add("is-synced");
+      else if (status === "syncing") badge.classList.add("is-syncing");
+      else if (status === "pending_local") badge.classList.add("is-pending");
+      else if (status === "failed" || status === "not_enabled") badge.classList.add("is-failed");
+      else if (status === "not_enabled") badge.classList.add("is-not-enabled");
+    }
+    if (detail) {
+      let msg = `本機 ${localCount} 筆｜雲端 ${cloudCount} 筆｜來源：${src}｜最後同步：${last}`;
+      if (status === "not_enabled") {
+        msg += "。請先在 Supabase SQL Editor 執行 supabase-vendor-purchase-sync.sql（尚未正式可用）。";
+      } else if (status === "pending_local") {
+        msg += "。雲端尚無資料，可手動「上傳本機資料」。";
+      } else if (status === "failed" && meta.lastError) {
+        msg += "。錯誤：" + String(meta.lastError).slice(0, 120);
+      }
+      if (Array.isArray(meta.conflictWarnings) && meta.conflictWarnings.length) {
+        msg += `｜衝突警告 ${meta.conflictWarnings.length} 筆（同時間取雲端）`;
+      }
+      detail.textContent = msg;
+    }
+    if (uploadBtn) {
+      const canUpload = meta.cloudEnabled === true && status !== "not_enabled" && status !== "syncing" && localCount > 0;
+      uploadBtn.hidden = !canUpload;
+    }
+  }
+
+  function bindVendorQuotesSyncPanelOnce() {
+    if (window.__dkVqSyncPanelBound) return;
+    window.__dkVqSyncPanelBound = true;
+
+    document.getElementById("vqSyncNowBtn")?.addEventListener("click", async () => {
+      vqSyncSetMsg("同步中…");
+      renderVendorQuotesSyncPanel();
+      if (!window.DK?.pullVendorQuotesFromCloud) {
+        vqSyncSetMsg("同步模組未載入");
+        return;
+      }
+      const res = await window.DK.pullVendorQuotesFromCloud();
+      renderVendorQuotes();
+      renderVendorQuotesSyncPanel();
+      if (res?.notEnabled) vqSyncSetMsg("雲端尚未啟用：請先執行 supabase-vendor-purchase-sync.sql");
+      else if (res?.emptyCloud) vqSyncSetMsg("雲端為空，已保留本機資料（未覆蓋）");
+      else if (res?.ok) vqSyncSetMsg("已從雲端合併完成");
+      else vqSyncSetMsg("同步失敗，本機資料已保留");
+    });
+
+    document.getElementById("vqSyncPullBtn")?.addEventListener("click", async () => {
+      document.getElementById("vqSyncNowBtn")?.click();
+    });
+
+    document.getElementById("vqSyncUploadBtn")?.addEventListener("click", async () => {
+      if (!window.DK?.previewVendorQuotesUpload || !window.DK?.uploadLocalVendorQuotesToCloud) {
+        vqSyncSetMsg("同步模組未載入");
+        return;
+      }
+      vqSyncSetMsg("正在計算上傳預覽…");
+      const preview = await window.DK.previewVendorQuotesUpload();
+      if (!preview?.ok) {
+        vqSyncSetMsg(preview?.notEnabled ? "雲端尚未啟用，無法上傳" : ("預覽失敗：" + (preview?.error || "")));
+        renderVendorQuotesSyncPanel();
+        return;
+      }
+      const ok = confirm(
+        "將本機廠商報價同步到雲端？\n\n" +
+          `本機筆數（未刪除）：${preview.localCount}\n` +
+          `雲端筆數（未刪除）：${preview.cloudCount}\n` +
+          `預計新增：${preview.toInsert}\n` +
+          `預計更新：${preview.toUpdate}\n\n` +
+          "將依 id upsert，不會刪除雲端其他資料。\n" +
+          "安全風險：公開 anon 寫入。",
+      );
+      if (!ok) {
+        vqSyncSetMsg("已取消上傳");
+        return;
+      }
+      vqSyncSetMsg("上傳中…");
+      const result = await window.DK.uploadLocalVendorQuotesToCloud();
+      renderVendorQuotes();
+      renderVendorQuotesSyncPanel();
+      if (result?.ok) {
+        vqSyncSetMsg(`上傳完成：成功 ${result.success} 筆` + (result.failed ? `，失敗 ${result.failed}` : ""));
+      } else {
+        vqSyncSetMsg(
+          (result?.notEnabled ? "雲端尚未啟用。" : "上傳失敗。") +
+            `成功 ${result?.success || 0}／失敗 ${result?.failed || 0}` +
+            (result?.error ? "：" + result.error : "") +
+            "。本機資料已保留。",
+        );
+      }
+    });
+
+    if (!window.__dkVendorQuotesUpdatedBound) {
+      window.__dkVendorQuotesUpdatedBound = true;
+      window.addEventListener("dk:vendor-quotes-updated", (ev) => {
+        // 只重新渲染，不因 cloud 事件再上傳（避免循環）
+        try {
+          renderVendorQuotes();
+          renderVendorQuotesSyncPanel();
+        } catch (_) {}
+      });
+    }
+  }
 
   // ===== 客戶紀錄（localStorage：dk_customer_records_v1）=====
   function crNowISODate() {

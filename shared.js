@@ -1590,6 +1590,764 @@ function setAdminAuthed(v) {
   else localStorage.removeItem(STORAGE_KEYS.adminAuthed);
 }
 
+// ===== 廠商報價＋採購叫貨單雲端同步 1.0（REST anon；無 Supabase Auth）=====
+// 安全風險：公開 anon 可讀寫；不是多人帳號系統。SQL 未執行前不得假裝已同步。
+const SUPABASE_VENDOR_QUOTES_TABLE = "vendor_quotes";
+const SUPABASE_PURCHASE_ORDERS_TABLE = "purchase_orders";
+const VP_STORAGE_KEYS = {
+  vendorQuotes: "dk_vendor_quotes_v1",
+  purchaseOrders: "dk_purchase_orders_v1",
+  vendorQuotesMeta: "dk_vendor_quotes_sync_meta_v1",
+  purchaseOrdersMeta: "dk_purchase_orders_sync_meta_v1",
+};
+
+/** @type {{ applyingCloud: boolean, vendorPull: boolean, purchasePull: boolean }} */
+const __dkVpSyncGuard = { applyingCloud: false, vendorPull: false, purchasePull: false };
+
+function vpNowISO() {
+  return new Date().toISOString();
+}
+
+function vpParseTs(v) {
+  if (v == null || v === "") return 0;
+  const t = Date.parse(String(v));
+  return Number.isFinite(t) ? t : 0;
+}
+
+function vpIsDeleted(rec) {
+  const d = rec && (rec.deletedAt != null ? rec.deletedAt : rec.deleted_at);
+  return d != null && String(d).trim() !== "";
+}
+
+function vpDefaultMeta() {
+  return {
+    status: "never", // never | not_enabled | syncing | synced | pending_local | failed
+    lastSyncAt: null,
+    lastError: null,
+    localCount: 0,
+    cloudCount: 0,
+    source: "local",
+    conflictWarnings: [],
+    cloudEnabled: false,
+  };
+}
+
+function vpGetMeta(metaKey) {
+  const raw = safeJsonParse(localStorage.getItem(metaKey), null);
+  return raw && typeof raw === "object" ? { ...vpDefaultMeta(), ...raw } : vpDefaultMeta();
+}
+
+function vpSaveMeta(metaKey, patch) {
+  const next = { ...vpGetMeta(metaKey), ...(patch || {}) };
+  try {
+    localStorage.setItem(metaKey, JSON.stringify(next));
+  } catch (_) {}
+  return next;
+}
+
+function vpIsNotEnabledError(status, errText) {
+  const t = String(errText || "");
+  if (status === 404 || status === 406) return true;
+  return /does not exist|Could not find the table|PGRST205|PGRST116|42P01|relation .* does not exist/i.test(t);
+}
+
+function vpNumOrNull(v) {
+  if (v === "" || v === null || v === undefined) return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function vpReadLocalArray(storageKey) {
+  const raw = safeJsonParse(localStorage.getItem(storageKey), null);
+  return Array.isArray(raw) ? raw.filter((x) => x && typeof x === "object") : [];
+}
+
+function vpWriteLocalArray(storageKey, list) {
+  localStorage.setItem(storageKey, JSON.stringify(Array.isArray(list) ? list : []));
+}
+
+function vpActiveCount(list) {
+  return (list || []).filter((x) => !vpIsDeleted(x)).length;
+}
+
+function vpEnsureTimestamps(rec, { forceUpdated } = {}) {
+  const out = { ...(rec && typeof rec === "object" ? rec : {}) };
+  const now = vpNowISO();
+  if (!out.createdAt && !out.created_at) out.createdAt = now;
+  else if (!out.createdAt && out.created_at) out.createdAt = String(out.created_at);
+  if (forceUpdated || (!out.updatedAt && !out.updated_at)) out.updatedAt = now;
+  else if (!out.updatedAt && out.updated_at) out.updatedAt = String(out.updated_at);
+  return out;
+}
+
+/** 依 id 合併；較新 updatedAt 優先；時間相同取雲端並記警告；tombstone 視為一版 */
+function vpMergeByUpdatedAt(localList, cloudList) {
+  const map = new Map();
+  const warnings = [];
+  for (const item of localList || []) {
+    const id = String(item?.id || "").trim();
+    if (!id) continue;
+    map.set(id, item);
+  }
+  for (const cloud of cloudList || []) {
+    const id = String(cloud?.id || "").trim();
+    if (!id) continue;
+    const local = map.get(id);
+    if (!local) {
+      map.set(id, cloud);
+      continue;
+    }
+    const lt = vpParseTs(local.updatedAt || local.updated_at);
+    const ct = vpParseTs(cloud.updatedAt || cloud.updated_at);
+    if (ct > lt) {
+      map.set(id, cloud);
+    } else if (ct === lt) {
+      warnings.push({ id, reason: "equal_updated_at", kept: "cloud" });
+      map.set(id, cloud);
+    }
+    // ct < lt：保留本機（含較新的 tombstone）
+  }
+  return { list: Array.from(map.values()), warnings };
+}
+
+function vendorQuoteToCloudRow(q) {
+  const stamped = vpEnsureTimestamps(q);
+  const deletedAt = stamped.deletedAt || stamped.deleted_at || null;
+  const dataJson = { ...stamped };
+  return {
+    id: String(stamped.id),
+    date: stamped.date != null ? String(stamped.date) : null,
+    vendor: stamped.vendor != null ? String(stamped.vendor) : null,
+    category: stamped.category != null ? String(stamped.category) : null,
+    brand: stamped.brand != null ? String(stamped.brand) : null,
+    spec: stamped.spec != null ? String(stamped.spec) : null,
+    price: vpNumOrNull(stamped.price),
+    market_price: vpNumOrNull(stamped.marketPrice != null ? stamped.marketPrice : stamped.market_price),
+    note: stamped.note != null ? String(stamped.note) : null,
+    created_at: stamped.createdAt || stamped.created_at || null,
+    updated_at: stamped.updatedAt || stamped.updated_at || vpNowISO(),
+    deleted_at: deletedAt ? String(deletedAt) : null,
+    data_json: dataJson,
+  };
+}
+
+function cloudRowToVendorQuote(row) {
+  const j = row?.data_json && typeof row.data_json === "object" && !Array.isArray(row.data_json) ? { ...row.data_json } : {};
+  const price = row.price != null ? vpNumOrNull(row.price) : vpNumOrNull(j.price);
+  const marketPrice =
+    row.market_price != null ? vpNumOrNull(row.market_price) : vpNumOrNull(j.marketPrice != null ? j.marketPrice : j.market_price);
+  return {
+    ...j,
+    id: String(row.id || j.id || ""),
+    date: row.date != null ? String(row.date) : String(j.date || ""),
+    vendor: row.vendor != null ? String(row.vendor) : String(j.vendor || ""),
+    category: row.category != null ? String(row.category) : String(j.category || ""),
+    brand: row.brand != null ? String(row.brand) : String(j.brand || ""),
+    spec: row.spec != null ? String(row.spec) : String(j.spec || ""),
+    price,
+    marketPrice,
+    note: row.note != null ? String(row.note) : String(j.note || ""),
+    taxIncluded: !!(j.taxIncluded),
+    shippingIncluded: !!(j.shippingIncluded),
+    warranty: String(j.warranty || ""),
+    inStock: !!(j.inStock),
+    createdAt: row.created_at || j.createdAt || j.created_at || null,
+    updatedAt: row.updated_at || j.updatedAt || j.updated_at || null,
+    deletedAt: row.deleted_at || j.deletedAt || j.deleted_at || null,
+  };
+}
+
+function purchaseOrderToCloudRow(o) {
+  const stamped = vpEnsureTimestamps(o);
+  const deletedAt = stamped.deletedAt || stamped.deleted_at || null;
+  const items = Array.isArray(stamped.items) ? stamped.items : [];
+  const dataJson = { ...stamped, items };
+  return {
+    id: String(stamped.id),
+    order_no: stamped.orderNo != null ? String(stamped.orderNo) : String(stamped.order_no || ""),
+    status: stamped.status != null ? String(stamped.status) : "draft",
+    created_at: stamped.createdAt || stamped.created_at || null,
+    updated_at: stamped.updatedAt || stamped.updated_at || vpNowISO(),
+    supplier_order_date:
+      stamped.supplierOrderDate != null
+        ? String(stamped.supplierOrderDate)
+        : String(stamped.supplier_order_date || ""),
+    expected_date:
+      stamped.expectedDate != null ? String(stamped.expectedDate) : String(stamped.expected_date || ""),
+    note: stamped.note != null ? String(stamped.note) : null,
+    items_json: items,
+    deleted_at: deletedAt ? String(deletedAt) : null,
+    data_json: dataJson,
+  };
+}
+
+function cloudRowToPurchaseOrder(row) {
+  const j = row?.data_json && typeof row.data_json === "object" && !Array.isArray(row.data_json) ? { ...row.data_json } : {};
+  const itemsFromCol = Array.isArray(row.items_json) ? row.items_json : null;
+  const itemsFromJson = Array.isArray(j.items) ? j.items : [];
+  return {
+    ...j,
+    id: String(row.id || j.id || ""),
+    orderNo: row.order_no != null ? String(row.order_no) : String(j.orderNo || j.order_no || ""),
+    status: row.status != null ? String(row.status) : String(j.status || "draft"),
+    createdAt: row.created_at || j.createdAt || j.created_at || null,
+    updatedAt: row.updated_at || j.updatedAt || j.updated_at || null,
+    supplierOrderDate:
+      row.supplier_order_date != null
+        ? String(row.supplier_order_date)
+        : String(j.supplierOrderDate || j.supplier_order_date || ""),
+    expectedDate:
+      row.expected_date != null ? String(row.expected_date) : String(j.expectedDate || j.expected_date || ""),
+    note: row.note != null ? String(row.note) : String(j.note || ""),
+    items: itemsFromCol || itemsFromJson,
+    deletedAt: row.deleted_at || j.deletedAt || j.deleted_at || null,
+  };
+}
+
+async function vpRestFetchAll(tableName) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return { ok: false, notEnabled: true, error: "Supabase 未設定", rows: [] };
+  }
+  const url = `${SUPABASE_URL}/rest/v1/${tableName}?select=*&order=updated_at.desc.nullslast`;
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+    });
+  } catch (e) {
+    return { ok: false, notEnabled: false, error: String(e?.message || e || "網路錯誤"), rows: [] };
+  }
+  const errText = res.ok ? "" : await res.text();
+  if (!res.ok) {
+    if (vpIsNotEnabledError(res.status, errText)) {
+      return { ok: false, notEnabled: true, error: errText.slice(0, 200) || ("HTTP " + res.status), rows: [] };
+    }
+    return { ok: false, notEnabled: false, error: errText.slice(0, 200) || ("HTTP " + res.status), rows: [] };
+  }
+  const rows = await res.json();
+  return { ok: true, notEnabled: false, error: null, rows: Array.isArray(rows) ? rows : [] };
+}
+
+async function vpRestUpsertRows(tableName, rows) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return { ok: false, notEnabled: true, error: "Supabase 未設定", success: 0, failed: (rows || []).length };
+  }
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return { ok: true, notEnabled: false, error: null, success: 0, failed: 0 };
+  const url = `${SUPABASE_URL}/rest/v1/${tableName}?on_conflict=id`;
+  const chunkSize = 40;
+  let success = 0;
+  let failed = 0;
+  let lastError = null;
+  let notEnabled = false;
+  for (let i = 0; i < list.length; i += chunkSize) {
+    const chunk = list.slice(i, i + chunkSize);
+    let res;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation,resolution=merge-duplicates",
+        },
+        body: JSON.stringify(chunk),
+      });
+    } catch (e) {
+      failed += chunk.length;
+      lastError = String(e?.message || e || "網路錯誤");
+      continue;
+    }
+    if (!res.ok) {
+      const errText = await res.text();
+      if (vpIsNotEnabledError(res.status, errText)) notEnabled = true;
+      failed += chunk.length;
+      lastError = errText.slice(0, 200) || ("HTTP " + res.status);
+      continue;
+    }
+    success += chunk.length;
+  }
+  if (notEnabled) return { ok: false, notEnabled: true, error: lastError || "雲端尚未啟用", success, failed };
+  if (failed > 0) return { ok: false, notEnabled: false, error: lastError || "部分寫入失敗", success, failed };
+  return { ok: true, notEnabled: false, error: null, success, failed: 0 };
+}
+
+function vpDispatch(name, detail) {
+  try {
+    window.dispatchEvent(new CustomEvent(name, { detail: detail || {} }));
+  } catch (_) {}
+}
+
+function getVendorQuotesSyncMeta() {
+  return vpGetMeta(VP_STORAGE_KEYS.vendorQuotesMeta);
+}
+function getPurchaseOrdersSyncMeta() {
+  return vpGetMeta(VP_STORAGE_KEYS.purchaseOrdersMeta);
+}
+
+function loadVendorQuotesRaw(includeDeleted) {
+  const list = vpReadLocalArray(VP_STORAGE_KEYS.vendorQuotes);
+  if (includeDeleted) return list;
+  return list.filter((x) => !vpIsDeleted(x));
+}
+
+function saveVendorQuotesRaw(list, { skipEvent, source } = {}) {
+  vpWriteLocalArray(VP_STORAGE_KEYS.vendorQuotes, Array.isArray(list) ? list : []);
+  if (!skipEvent) {
+    vpDispatch("dk:vendor-quotes-updated", {
+      source: source || "local",
+      count: vpActiveCount(list),
+    });
+  }
+}
+
+function loadPurchaseOrdersRaw(includeDeleted) {
+  const list = vpReadLocalArray(VP_STORAGE_KEYS.purchaseOrders);
+  if (includeDeleted) return list;
+  return list.filter((x) => !vpIsDeleted(x));
+}
+
+function savePurchaseOrdersRaw(list, { skipEvent, source } = {}) {
+  vpWriteLocalArray(VP_STORAGE_KEYS.purchaseOrders, Array.isArray(list) ? list : []);
+  if (!skipEvent) {
+    vpDispatch("dk:purchase-orders-updated", {
+      source: source || "local",
+      count: vpActiveCount(list),
+    });
+  }
+}
+
+function vpStatusLabel(status) {
+  switch (String(status || "")) {
+    case "not_enabled":
+      return "雲端尚未啟用";
+    case "syncing":
+      return "同步中";
+    case "synced":
+      return "已同步";
+    case "pending_local":
+      return "本機待同步";
+    case "failed":
+      return "同步失敗";
+    case "never":
+    default:
+      return "尚未同步";
+  }
+}
+
+async function pullVendorQuotesFromCloud(opts) {
+  const options = opts || {};
+  if (__dkVpSyncGuard.vendorPull) return { ok: false, skipped: true, reason: "busy" };
+  __dkVpSyncGuard.vendorPull = true;
+  const localAll = loadVendorQuotesRaw(true);
+  vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+    status: "syncing",
+    localCount: vpActiveCount(localAll),
+    lastError: null,
+  });
+  try {
+    const fetched = await vpRestFetchAll(SUPABASE_VENDOR_QUOTES_TABLE);
+    if (fetched.notEnabled) {
+      const meta = vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+        status: "not_enabled",
+        cloudEnabled: false,
+        cloudCount: 0,
+        localCount: vpActiveCount(localAll),
+        lastError: fetched.error || "請先在 Supabase 執行 supabase-vendor-purchase-sync.sql",
+        source: "local",
+      });
+      return { ok: false, notEnabled: true, meta };
+    }
+    if (!fetched.ok) {
+      const meta = vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+        status: "failed",
+        cloudEnabled: true,
+        localCount: vpActiveCount(localAll),
+        lastError: fetched.error || "讀取失敗",
+        source: "local",
+      });
+      return { ok: false, meta };
+    }
+    const cloudList = fetched.rows.map(cloudRowToVendorQuote);
+    const cloudCount = vpActiveCount(cloudList);
+    // 空雲端保護：不得覆蓋本機，不得自動上傳
+    if (cloudList.length === 0) {
+      const hasLocal = localAll.length > 0;
+      const meta = vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+        status: hasLocal ? "pending_local" : "synced",
+        cloudEnabled: true,
+        cloudCount: 0,
+        localCount: vpActiveCount(localAll),
+        lastSyncAt: vpNowISO(),
+        lastError: null,
+        source: "local",
+        conflictWarnings: [],
+      });
+      return { ok: true, emptyCloud: true, meta, changed: false };
+    }
+    const merged = vpMergeByUpdatedAt(localAll, cloudList);
+    __dkVpSyncGuard.applyingCloud = true;
+    try {
+      saveVendorQuotesRaw(merged.list, { source: "cloud" });
+    } finally {
+      __dkVpSyncGuard.applyingCloud = false;
+    }
+    const meta = vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+      status: "synced",
+      cloudEnabled: true,
+      cloudCount,
+      localCount: vpActiveCount(merged.list),
+      lastSyncAt: vpNowISO(),
+      lastError: null,
+      source: "cloud",
+      conflictWarnings: merged.warnings || [],
+    });
+    return { ok: true, meta, warnings: merged.warnings, changed: true };
+  } finally {
+    __dkVpSyncGuard.vendorPull = false;
+  }
+}
+
+async function pullPurchaseOrdersFromCloud(opts) {
+  const options = opts || {};
+  if (__dkVpSyncGuard.purchasePull) return { ok: false, skipped: true, reason: "busy" };
+  __dkVpSyncGuard.purchasePull = true;
+  const localAll = loadPurchaseOrdersRaw(true);
+  vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+    status: "syncing",
+    localCount: vpActiveCount(localAll),
+    lastError: null,
+  });
+  try {
+    const fetched = await vpRestFetchAll(SUPABASE_PURCHASE_ORDERS_TABLE);
+    if (fetched.notEnabled) {
+      const meta = vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+        status: "not_enabled",
+        cloudEnabled: false,
+        cloudCount: 0,
+        localCount: vpActiveCount(localAll),
+        lastError: fetched.error || "請先在 Supabase 執行 supabase-vendor-purchase-sync.sql",
+        source: "local",
+      });
+      return { ok: false, notEnabled: true, meta };
+    }
+    if (!fetched.ok) {
+      const meta = vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+        status: "failed",
+        cloudEnabled: true,
+        localCount: vpActiveCount(localAll),
+        lastError: fetched.error || "讀取失敗",
+        source: "local",
+      });
+      return { ok: false, meta };
+    }
+    const cloudList = fetched.rows.map(cloudRowToPurchaseOrder);
+    const cloudCount = vpActiveCount(cloudList);
+    if (cloudList.length === 0) {
+      const hasLocal = localAll.length > 0;
+      const meta = vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+        status: hasLocal ? "pending_local" : "synced",
+        cloudEnabled: true,
+        cloudCount: 0,
+        localCount: vpActiveCount(localAll),
+        lastSyncAt: vpNowISO(),
+        lastError: null,
+        source: "local",
+        conflictWarnings: [],
+      });
+      return { ok: true, emptyCloud: true, meta, changed: false };
+    }
+    const merged = vpMergeByUpdatedAt(localAll, cloudList);
+    __dkVpSyncGuard.applyingCloud = true;
+    try {
+      savePurchaseOrdersRaw(merged.list, { source: "cloud" });
+    } finally {
+      __dkVpSyncGuard.applyingCloud = false;
+    }
+    const meta = vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+      status: "synced",
+      cloudEnabled: true,
+      cloudCount,
+      localCount: vpActiveCount(merged.list),
+      lastSyncAt: vpNowISO(),
+      lastError: null,
+      source: "cloud",
+      conflictWarnings: merged.warnings || [],
+    });
+    return { ok: true, meta, warnings: merged.warnings, changed: true };
+  } finally {
+    __dkVpSyncGuard.purchasePull = false;
+  }
+}
+
+function previewVendorQuotesUpload() {
+  const localAll = loadVendorQuotesRaw(true).map((q) => vpEnsureTimestamps(q));
+  return vpRestFetchAll(SUPABASE_VENDOR_QUOTES_TABLE).then((fetched) => {
+    if (fetched.notEnabled) {
+      return {
+        ok: false,
+        notEnabled: true,
+        error: fetched.error || "雲端尚未啟用",
+        localCount: vpActiveCount(localAll),
+        cloudCount: 0,
+        toInsert: 0,
+        toUpdate: 0,
+      };
+    }
+    if (!fetched.ok) {
+      return {
+        ok: false,
+        notEnabled: false,
+        error: fetched.error || "無法讀取雲端",
+        localCount: vpActiveCount(localAll),
+        cloudCount: 0,
+        toInsert: 0,
+        toUpdate: 0,
+      };
+    }
+    const cloudMap = new Map(fetched.rows.map((r) => [String(r.id), r]));
+    let toInsert = 0;
+    let toUpdate = 0;
+    for (const q of localAll) {
+      const id = String(q.id || "");
+      if (!id) continue;
+      if (cloudMap.has(id)) toUpdate += 1;
+      else toInsert += 1;
+    }
+    return {
+      ok: true,
+      notEnabled: false,
+      error: null,
+      localCount: vpActiveCount(localAll),
+      localTotalIncludingDeleted: localAll.length,
+      cloudCount: vpActiveCount(fetched.rows.map(cloudRowToVendorQuote)),
+      cloudTotalIncludingDeleted: fetched.rows.length,
+      toInsert,
+      toUpdate,
+    };
+  });
+}
+
+function previewPurchaseOrdersUpload() {
+  const localAll = loadPurchaseOrdersRaw(true).map((o) => vpEnsureTimestamps(o));
+  return vpRestFetchAll(SUPABASE_PURCHASE_ORDERS_TABLE).then((fetched) => {
+    if (fetched.notEnabled) {
+      return {
+        ok: false,
+        notEnabled: true,
+        error: fetched.error || "雲端尚未啟用",
+        localCount: vpActiveCount(localAll),
+        cloudCount: 0,
+        toInsert: 0,
+        toUpdate: 0,
+      };
+    }
+    if (!fetched.ok) {
+      return {
+        ok: false,
+        notEnabled: false,
+        error: fetched.error || "無法讀取雲端",
+        localCount: vpActiveCount(localAll),
+        cloudCount: 0,
+        toInsert: 0,
+        toUpdate: 0,
+      };
+    }
+    const cloudMap = new Map(fetched.rows.map((r) => [String(r.id), r]));
+    let toInsert = 0;
+    let toUpdate = 0;
+    for (const o of localAll) {
+      const id = String(o.id || "");
+      if (!id) continue;
+      if (cloudMap.has(id)) toUpdate += 1;
+      else toInsert += 1;
+    }
+    return {
+      ok: true,
+      notEnabled: false,
+      error: null,
+      localCount: vpActiveCount(localAll),
+      localTotalIncludingDeleted: localAll.length,
+      cloudCount: vpActiveCount(fetched.rows.map(cloudRowToPurchaseOrder)),
+      cloudTotalIncludingDeleted: fetched.rows.length,
+      toInsert,
+      toUpdate,
+    };
+  });
+}
+
+async function uploadLocalVendorQuotesToCloud() {
+  const localAll = loadVendorQuotesRaw(true);
+  if (!localAll.length) {
+    return { ok: false, error: "本機沒有可上傳的廠商報價", success: 0, failed: 0 };
+  }
+  // 僅補同步時間戳，不改 date/price/spec/vendor
+  const stamped = localAll.map((q) => vpEnsureTimestamps(q));
+  vpWriteLocalArray(VP_STORAGE_KEYS.vendorQuotes, stamped);
+  const rows = stamped.map(vendorQuoteToCloudRow);
+  vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, { status: "syncing", lastError: null });
+  const result = await vpRestUpsertRows(SUPABASE_VENDOR_QUOTES_TABLE, rows);
+  if (result.notEnabled) {
+    vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+      status: "not_enabled",
+      cloudEnabled: false,
+      lastError: result.error || "雲端尚未啟用",
+    });
+    return { ok: false, notEnabled: true, error: result.error, success: result.success, failed: result.failed };
+  }
+  if (!result.ok) {
+    vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+      status: "failed",
+      lastError: result.error || "上傳失敗",
+      localCount: vpActiveCount(stamped),
+    });
+    return { ok: false, error: result.error, success: result.success, failed: result.failed };
+  }
+  const pulled = await pullVendorQuotesFromCloud();
+  return {
+    ok: true,
+    success: result.success,
+    failed: 0,
+    meta: pulled.meta || getVendorQuotesSyncMeta(),
+  };
+}
+
+async function uploadLocalPurchaseOrdersToCloud() {
+  const localAll = loadPurchaseOrdersRaw(true);
+  if (!localAll.length) {
+    return { ok: false, error: "本機沒有可上傳的叫貨單", success: 0, failed: 0 };
+  }
+  const stamped = localAll.map((o) => vpEnsureTimestamps(o));
+  vpWriteLocalArray(VP_STORAGE_KEYS.purchaseOrders, stamped);
+  const rows = stamped.map(purchaseOrderToCloudRow);
+  vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, { status: "syncing", lastError: null });
+  const result = await vpRestUpsertRows(SUPABASE_PURCHASE_ORDERS_TABLE, rows);
+  if (result.notEnabled) {
+    vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+      status: "not_enabled",
+      cloudEnabled: false,
+      lastError: result.error || "雲端尚未啟用",
+    });
+    return { ok: false, notEnabled: true, error: result.error, success: result.success, failed: result.failed };
+  }
+  if (!result.ok) {
+    vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+      status: "failed",
+      lastError: result.error || "上傳失敗",
+      localCount: vpActiveCount(stamped),
+    });
+    return { ok: false, error: result.error, success: result.success, failed: result.failed };
+  }
+  const pulled = await pullPurchaseOrdersFromCloud();
+  return {
+    ok: true,
+    success: result.success,
+    failed: 0,
+    meta: pulled.meta || getPurchaseOrdersSyncMeta(),
+  };
+}
+
+async function upsertVendorQuoteToSupabase(quote) {
+  if (__dkVpSyncGuard.applyingCloud) return { ok: true, skipped: true };
+  if (!quote || !quote.id) return { ok: false, error: "缺少 id" };
+  const stamped = vpEnsureTimestamps(quote, { forceUpdated: false });
+  const result = await vpRestUpsertRows(SUPABASE_VENDOR_QUOTES_TABLE, [vendorQuoteToCloudRow(stamped)]);
+  if (result.notEnabled) {
+    vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+      status: "not_enabled",
+      cloudEnabled: false,
+      lastError: result.error || "雲端尚未啟用",
+    });
+    return { ok: false, notEnabled: true, error: result.error || "雲端尚未啟用" };
+  }
+  if (!result.ok) {
+    vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+      status: "failed",
+      lastError: result.error || "寫入失敗",
+    });
+    return { ok: false, error: result.error || "寫入失敗" };
+  }
+  vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+    status: "synced",
+    cloudEnabled: true,
+    lastSyncAt: vpNowISO(),
+    lastError: null,
+    source: "local",
+  });
+  return { ok: true };
+}
+
+async function upsertPurchaseOrderToSupabase(order) {
+  if (__dkVpSyncGuard.applyingCloud) return { ok: true, skipped: true };
+  if (!order || !order.id) return { ok: false, error: "缺少 id" };
+  const stamped = vpEnsureTimestamps(order, { forceUpdated: false });
+  const result = await vpRestUpsertRows(SUPABASE_PURCHASE_ORDERS_TABLE, [purchaseOrderToCloudRow(stamped)]);
+  if (result.notEnabled) {
+    vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+      status: "not_enabled",
+      cloudEnabled: false,
+      lastError: result.error || "雲端尚未啟用",
+    });
+    return { ok: false, notEnabled: true, error: result.error || "雲端尚未啟用" };
+  }
+  if (!result.ok) {
+    vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+      status: "failed",
+      lastError: result.error || "寫入失敗",
+    });
+    return { ok: false, error: result.error || "寫入失敗" };
+  }
+  vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+    status: "synced",
+    cloudEnabled: true,
+    lastSyncAt: vpNowISO(),
+    lastError: null,
+    source: "local",
+  });
+  return { ok: true };
+}
+
+/** soft delete：寫入 deletedAt 並 upsert（不硬刪雲端列） */
+async function softDeleteVendorQuoteToSupabase(id, deletedAt) {
+  const list = loadVendorQuotesRaw(true);
+  const idx = list.findIndex((x) => String(x.id) === String(id));
+  if (idx < 0) return { ok: false, error: "本機找不到此報價" };
+  const now = deletedAt || vpNowISO();
+  const next = {
+    ...list[idx],
+    deletedAt: now,
+    updatedAt: now,
+  };
+  list[idx] = next;
+  saveVendorQuotesRaw(list, { source: "local" });
+  const cloud = await upsertVendorQuoteToSupabase(next);
+  return { ok: true, localSaved: true, cloud };
+}
+
+async function softDeletePurchaseOrderToSupabase(id, deletedAt) {
+  const list = loadPurchaseOrdersRaw(true);
+  const idx = list.findIndex((x) => String(x.id) === String(id));
+  if (idx < 0) return { ok: false, error: "本機找不到此叫貨單" };
+  const now = deletedAt || vpNowISO();
+  const next = {
+    ...list[idx],
+    deletedAt: now,
+    updatedAt: now,
+  };
+  list[idx] = next;
+  savePurchaseOrdersRaw(list, { source: "local" });
+  const cloud = await upsertPurchaseOrderToSupabase(next);
+  return { ok: true, localSaved: true, cloud };
+}
+
+function isVpApplyingCloud() {
+  return !!__dkVpSyncGuard.applyingCloud;
+}
+
 window.DK = {
   STORAGE_KEYS,
   DEFAULT_CONFIG,
@@ -1653,6 +2411,29 @@ window.DK = {
   isAdminAuthed,
   setAdminAuthed,
   isSupabaseConfigured,
+  // 廠商報價＋叫貨單同步 1.0
+  VP_STORAGE_KEYS,
+  getVendorQuotesSyncMeta,
+  getPurchaseOrdersSyncMeta,
+  vpStatusLabel,
+  loadVendorQuotesRaw,
+  saveVendorQuotesRaw,
+  loadPurchaseOrdersRaw,
+  savePurchaseOrdersRaw,
+  pullVendorQuotesFromCloud,
+  pullPurchaseOrdersFromCloud,
+  previewVendorQuotesUpload,
+  previewPurchaseOrdersUpload,
+  uploadLocalVendorQuotesToCloud,
+  uploadLocalPurchaseOrdersToCloud,
+  upsertVendorQuoteToSupabase,
+  upsertPurchaseOrderToSupabase,
+  softDeleteVendorQuoteToSupabase,
+  softDeletePurchaseOrderToSupabase,
+  isVpApplyingCloud,
+  vpEnsureTimestamps,
+  vpActiveCount,
+  vpIsDeleted,
 };
 
 // 頁面載入時從 Supabase 拉官網設定，覆蓋本機（大家看到同一份設定）
@@ -1719,6 +2500,29 @@ if (window.DK && window.DK.fetchStockDataFromSupabase) {
     if (itemsRaw.length > 2 || ledgerRaw.length > 2) return;
   } catch (_) {}
   window.fetchV2DataFromSupabase().catch(function () {});
+})();
+
+// 廠商報價／叫貨單：啟動時先本機、再非同步拉雲（空雲端不覆蓋、不自動上傳）
+(function tryPullVendorPurchaseOnce() {
+  if (!isSupabaseConfigured()) {
+    try {
+      vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+        status: "not_enabled",
+        cloudEnabled: false,
+        lastError: "Supabase 未設定",
+        localCount: vpActiveCount(loadVendorQuotesRaw(true)),
+      });
+      vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+        status: "not_enabled",
+        cloudEnabled: false,
+        lastError: "Supabase 未設定",
+        localCount: vpActiveCount(loadPurchaseOrdersRaw(true)),
+      });
+    } catch (_) {}
+    return;
+  }
+  pullVendorQuotesFromCloud().catch(function () {});
+  pullPurchaseOrdersFromCloud().catch(function () {});
 })();
 
 // 手機選單（小螢幕可展開主選單/進後台）

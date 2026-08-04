@@ -118,20 +118,62 @@
   }
 
   function loadOrders() {
+    let list = [];
+    if (window.DK && typeof window.DK.loadPurchaseOrdersRaw === "function") {
+      list = window.DK.loadPurchaseOrdersRaw(false);
+    } else {
+      const raw = safeParse(localStorage.getItem(PO_KEY), null);
+      list = Array.isArray(raw) ? raw : [];
+      list = list.filter(function (o) { return !poIsDeleted(o); });
+    }
+    return list.map(normalizeOrder).filter(Boolean);
+  }
+
+  function loadOrdersAll() {
+    if (window.DK && typeof window.DK.loadPurchaseOrdersRaw === "function") {
+      return window.DK.loadPurchaseOrdersRaw(true).map(normalizeOrder).filter(Boolean);
+    }
     const raw = safeParse(localStorage.getItem(PO_KEY), null);
-    if (!Array.isArray(raw)) return [];
-    return raw.map(normalizeOrder).filter(Boolean);
+    return (Array.isArray(raw) ? raw : []).map(normalizeOrder).filter(Boolean);
+  }
+
+  function poIsDeleted(o) {
+    if (window.DK && typeof window.DK.vpIsDeleted === "function") return window.DK.vpIsDeleted(o);
+    const d = o && (o.deletedAt != null ? o.deletedAt : o.deleted_at);
+    return d != null && String(d).trim() !== "";
   }
 
   function saveOrders(list) {
     try {
-      const safe = Array.isArray(list) ? list.map(normalizeOrder).filter(Boolean) : [];
-      localStorage.setItem(PO_KEY, JSON.stringify(safe));
+      const active = Array.isArray(list) ? list.map(normalizeOrder).filter(Boolean) : [];
+      const tombstones = loadOrdersAll().filter(function (o) { return poIsDeleted(o); });
+      const activeIds = {};
+      active.forEach(function (o) { activeIds[String(o.id)] = true; });
+      const merged = tombstones.filter(function (t) { return !activeIds[String(t.id)]; }).concat(active);
+      if (window.DK && typeof window.DK.savePurchaseOrdersRaw === "function") {
+        window.DK.savePurchaseOrdersRaw(merged, { skipEvent: true, source: "local" });
+      } else {
+        localStorage.setItem(PO_KEY, JSON.stringify(merged));
+      }
       return true;
     } catch (e) {
       showMsg("儲存失敗：" + String(e && e.message ? e.message : e));
       return false;
     }
+  }
+
+  function syncPurchaseOrderToCloud(order, okMsg) {
+    if (!order || !window.DK || typeof window.DK.upsertPurchaseOrderToSupabase !== "function") return;
+    if (window.DK.isVpApplyingCloud && window.DK.isVpApplyingCloud()) return;
+    window.DK.upsertPurchaseOrderToSupabase(order).then(function (res) {
+      renderPurchaseOrdersSyncPanel();
+      if (res && res.ok) showMsg(okMsg || "已同步到雲端", 2500);
+      else if (res && res.notEnabled) showMsg("本機已儲存。雲端尚未啟用。", 3500);
+      else showMsg("本機已儲存，雲端同步失敗" + (res && res.error ? "：" + res.error : ""), 3500);
+    }).catch(function () {
+      renderPurchaseOrdersSyncPanel();
+      showMsg("本機已儲存，雲端同步失敗", 3500);
+    });
   }
 
   function normalizeItem(it) {
@@ -158,7 +200,7 @@
     if (!r) return null;
     let status = String(r.status || "draft");
     if (!STATUS_LABEL[status]) status = "draft";
-    return {
+    const out = {
       id: String(r.id || uid("po")),
       orderNo: String(r.orderNo || ""),
       createdAt: String(r.createdAt || new Date().toISOString()),
@@ -169,6 +211,8 @@
       note: String(r.note || ""),
       items: Array.isArray(r.items) ? r.items.map(normalizeItem) : [],
     };
+    if (r.deletedAt || r.deleted_at) out.deletedAt = String(r.deletedAt || r.deleted_at);
+    return out;
   }
 
   function nextOrderNo(list) {
@@ -509,9 +553,11 @@
     else list.push(copy);
     if (!saveOrders(list)) return;
     currentOrder = copy;
-    showMsg("已儲存 " + currentOrder.orderNo, 2000);
+    showMsg("已儲存 " + currentOrder.orderNo + "（本機）", 2000);
     fillEditor(false);
     renderList();
+    renderPurchaseOrdersSyncPanel();
+    syncPurchaseOrderToCloud(copy, "已儲存並同步 " + copy.orderNo);
   }
 
   function renderItems() {
@@ -1010,16 +1056,38 @@
           const o = loadOrders().find(function (x) { return x.id === id; });
           if (o) printOrder(o);
         } else if (act === "del") {
-          if (!confirm("確定刪除此叫貨單？此操作無法復原。")) return;
-          const next = loadOrders().filter(function (x) { return x.id !== id; });
-          if (saveOrders(next)) {
-            if (currentOrder && currentOrder.id === id) {
-              currentOrder = null;
-              setListVisible(true);
-            }
-            renderList();
-            showMsg("已刪除", 2000);
+          if (!confirm("確定刪除此叫貨單？（soft delete，另一裝置不會再帶回）")) return;
+          const targetId = id;
+          if (window.DK && typeof window.DK.softDeletePurchaseOrderToSupabase === "function") {
+            window.DK.softDeletePurchaseOrderToSupabase(targetId).then(function (res) {
+              if (currentOrder && currentOrder.id === targetId) {
+                currentOrder = null;
+                setListVisible(true);
+              }
+              renderList();
+              renderPurchaseOrdersSyncPanel();
+              if (res && res.cloud && res.cloud.ok) showMsg("已刪除（本機＋雲端 soft delete）", 2500);
+              else if (res && res.localSaved) showMsg("本機已刪除；雲端同步失敗或尚未啟用", 3500);
+              else showMsg("刪除失敗", 2500);
+            });
+            return;
           }
+          const now = new Date().toISOString();
+          const all = loadOrdersAll().map(function (x) {
+            if (String(x.id) !== String(targetId)) return x;
+            return Object.assign({}, x, { deletedAt: now, updatedAt: now });
+          });
+          if (window.DK && typeof window.DK.savePurchaseOrdersRaw === "function") {
+            window.DK.savePurchaseOrdersRaw(all, { skipEvent: true, source: "local" });
+          } else {
+            localStorage.setItem(PO_KEY, JSON.stringify(all));
+          }
+          if (currentOrder && currentOrder.id === targetId) {
+            currentOrder = null;
+            setListVisible(true);
+          }
+          renderList();
+          showMsg("已刪除", 2000);
         }
         return;
       }
@@ -1073,6 +1141,7 @@
       bind();
       fillCategorySelect();
       fillManualVendorSelect();
+      renderPurchaseOrdersSyncPanel();
       if (!currentOrder) {
         setListVisible(true);
         renderList();
@@ -1085,13 +1154,166 @@
     }
   }
 
+  function poSyncSetMsg(text) {
+    const el = document.getElementById("poSyncExtraMsg");
+    if (!el) return;
+    if (!text) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = text;
+  }
+
+  function renderPurchaseOrdersSyncPanel() {
+    const badge = document.getElementById("poSyncStatusBadge");
+    const detail = document.getElementById("poSyncDetail");
+    const uploadBtn = document.getElementById("poSyncUploadBtn");
+    if (!badge && !detail) return;
+    const meta = (window.DK && window.DK.getPurchaseOrdersSyncMeta && window.DK.getPurchaseOrdersSyncMeta()) || {};
+    const status = String(meta.status || "never");
+    const label = (window.DK && window.DK.vpStatusLabel && window.DK.vpStatusLabel(status)) || status;
+    const localCount = Number(meta.localCount) || loadOrders().length;
+    const cloudCount = Number(meta.cloudCount) || 0;
+    const src = meta.source === "cloud" ? "雲端" : "本機";
+    const last = meta.lastSyncAt ? String(meta.lastSyncAt).replace("T", " ").slice(0, 19) : "—";
+    if (badge) {
+      badge.textContent = label;
+      badge.className = "dk-sync-badge";
+      if (status === "synced") badge.classList.add("is-synced");
+      else if (status === "syncing") badge.classList.add("is-syncing");
+      else if (status === "pending_local") badge.classList.add("is-pending");
+      else if (status === "failed" || status === "not_enabled") badge.classList.add("is-failed");
+    }
+    if (detail) {
+      let msg = "本機 " + localCount + " 筆｜雲端 " + cloudCount + " 筆｜來源：" + src + "｜最後同步：" + last;
+      if (status === "not_enabled") {
+        msg += "。請先在 Supabase SQL Editor 執行 supabase-vendor-purchase-sync.sql（尚未正式可用）。";
+      } else if (status === "pending_local") {
+        msg += "。雲端尚無資料，可手動「上傳本機資料」。";
+      } else if (status === "failed" && meta.lastError) {
+        msg += "。錯誤：" + String(meta.lastError).slice(0, 120);
+      }
+      if (Array.isArray(meta.conflictWarnings) && meta.conflictWarnings.length) {
+        msg += "｜衝突警告 " + meta.conflictWarnings.length + " 筆（同時間取雲端）";
+      }
+      detail.textContent = msg;
+    }
+    if (uploadBtn) {
+      const canUpload = meta.cloudEnabled === true && status !== "not_enabled" && status !== "syncing" && localCount > 0;
+      uploadBtn.hidden = !canUpload;
+    }
+  }
+
+  function bindPurchaseOrdersSyncPanelOnce() {
+    if (window.__dkPoSyncPanelBound) return;
+    window.__dkPoSyncPanelBound = true;
+
+    const syncNow = async function () {
+      poSyncSetMsg("同步中…");
+      renderPurchaseOrdersSyncPanel();
+      if (!window.DK || typeof window.DK.pullPurchaseOrdersFromCloud !== "function") {
+        poSyncSetMsg("同步模組未載入");
+        return;
+      }
+      const res = await window.DK.pullPurchaseOrdersFromCloud();
+      renderList();
+      if (currentOrder) {
+        const fresh = loadOrders().find(function (o) { return o.id === currentOrder.id; });
+        if (fresh) {
+          currentOrder = fresh;
+          fillEditor(false);
+        }
+      }
+      renderPurchaseOrdersSyncPanel();
+      if (res && res.notEnabled) poSyncSetMsg("雲端尚未啟用：請先執行 supabase-vendor-purchase-sync.sql");
+      else if (res && res.emptyCloud) poSyncSetMsg("雲端為空，已保留本機資料（未覆蓋）");
+      else if (res && res.ok) poSyncSetMsg("已從雲端合併完成");
+      else poSyncSetMsg("同步失敗，本機資料已保留");
+    };
+
+    document.getElementById("poSyncNowBtn") && document.getElementById("poSyncNowBtn").addEventListener("click", syncNow);
+    document.getElementById("poSyncPullBtn") && document.getElementById("poSyncPullBtn").addEventListener("click", syncNow);
+
+    document.getElementById("poSyncUploadBtn") && document.getElementById("poSyncUploadBtn").addEventListener("click", async function () {
+      if (!window.DK || !window.DK.previewPurchaseOrdersUpload || !window.DK.uploadLocalPurchaseOrdersToCloud) {
+        poSyncSetMsg("同步模組未載入");
+        return;
+      }
+      poSyncSetMsg("正在計算上傳預覽…");
+      const preview = await window.DK.previewPurchaseOrdersUpload();
+      if (!preview || !preview.ok) {
+        poSyncSetMsg(preview && preview.notEnabled ? "雲端尚未啟用，無法上傳" : ("預覽失敗：" + ((preview && preview.error) || "")));
+        renderPurchaseOrdersSyncPanel();
+        return;
+      }
+      const ok = confirm(
+        "將本機叫貨單同步到雲端？\n\n" +
+          "本機筆數（未刪除）：" + preview.localCount + "\n" +
+          "雲端筆數（未刪除）：" + preview.cloudCount + "\n" +
+          "預計新增：" + preview.toInsert + "\n" +
+          "預計更新：" + preview.toUpdate + "\n\n" +
+          "將依 id upsert，不會刪除雲端其他資料。\n" +
+          "安全風險：公開 anon 寫入。"
+      );
+      if (!ok) {
+        poSyncSetMsg("已取消上傳");
+        return;
+      }
+      poSyncSetMsg("上傳中…");
+      const result = await window.DK.uploadLocalPurchaseOrdersToCloud();
+      renderList();
+      renderPurchaseOrdersSyncPanel();
+      if (result && result.ok) {
+        poSyncSetMsg("上傳完成：成功 " + result.success + " 筆" + (result.failed ? "，失敗 " + result.failed : ""));
+      } else {
+        poSyncSetMsg(
+          (result && result.notEnabled ? "雲端尚未啟用。" : "上傳失敗。") +
+            "成功 " + ((result && result.success) || 0) + "／失敗 " + ((result && result.failed) || 0) +
+            (result && result.error ? "：" + result.error : "") +
+            "。本機資料已保留。"
+        );
+      }
+    });
+
+    if (!window.__dkPurchaseOrdersUpdatedBound) {
+      window.__dkPurchaseOrdersUpdatedBound = true;
+      window.addEventListener("dk:purchase-orders-updated", function () {
+        try {
+          renderList();
+          renderPurchaseOrdersSyncPanel();
+          if (currentOrder) {
+            const fresh = loadOrders().find(function (o) { return o.id === currentOrder.id; });
+            if (fresh) {
+              currentOrder = fresh;
+              fillEditor(false);
+            } else if (poIsDeleted(currentOrder) || !loadOrders().some(function (o) { return o.id === currentOrder.id; })) {
+              // 被 soft delete 後離開編輯
+              currentOrder = null;
+              setListVisible(true);
+            }
+          }
+        } catch (_) {}
+      });
+    }
+  }
+
   window.__dkPurchaseOrdersOnShow = onShow;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
-      try { bind(); } catch (_) {}
+      try {
+        bind();
+        bindPurchaseOrdersSyncPanelOnce();
+        renderPurchaseOrdersSyncPanel();
+      } catch (_) {}
     });
   } else {
-    try { bind(); } catch (_) {}
+    try {
+      bind();
+      bindPurchaseOrdersSyncPanelOnce();
+      renderPurchaseOrdersSyncPanel();
+    } catch (_) {}
   }
 })();
