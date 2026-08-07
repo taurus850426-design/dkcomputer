@@ -1507,6 +1507,53 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
 .searchable-select-option:last-child{ border-bottom: none; }
 .searchable-select-empty{ padding: 12px 14px; color: var(--muted); font-size: 13px; }
 
+/* 補貨搜尋建議：左名稱省略、右剩餘／成本固定可見 */
+.searchable-select-option--meta{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+.searchable-select-option--meta .product-main{
+  flex: 1;
+  min-width: 0;
+}
+.searchable-select-option--meta .product-name{
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.searchable-select-option--meta .product-meta{
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--muted, rgba(18,24,38,0.62));
+}
+.searchable-select-option--meta .product-meta-full{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.searchable-select-option--meta .product-meta-compact{ display: none; white-space: nowrap; }
+.searchable-select-option--meta .product-stock,
+.searchable-select-option--meta .product-cost{ white-space: nowrap; }
+#restockItemDropdown{
+  max-width: 100%;
+  box-sizing: border-box;
+}
+@media (max-width: 480px){
+  .searchable-select-option--meta .product-meta-full{ display: none; }
+  .searchable-select-option--meta .product-meta-compact{ display: inline; }
+  .searchable-select-option--meta{ gap: 8px; padding: 10px 12px; }
+}
+
 /* 手機版：訂單明細列改單列、下拉與選項可讀 */
 @media (max-width: 768px){
   .order-detail-row{

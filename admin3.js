@@ -4768,7 +4768,14 @@
       if (!select || !input || !dropdown) return;
       function getFiltered() {
         const q = (input.value || "").trim().toLowerCase();
-        const items = DK.getItems();
+        let items = DK.getItems();
+        // 補貨建議：只顯示有庫存品項（不改全域「隱藏 0 庫存」設定）
+        if (opts.hideZeroQty) {
+          items = items.filter((i) => {
+            const qty = Number(i.qty_on_hand);
+            return Number.isFinite(qty) && qty > 0;
+          });
+        }
         if (!q) return items;
         return items.filter((i) =>
           String(i.name || "").toLowerCase().includes(q) ||
@@ -4779,7 +4786,25 @@
       function render() {
         const list = getFiltered();
         if (list.length === 0) {
-          dropdown.innerHTML = '<div class="searchable-select-empty">無符合的品項</div>';
+          const emptyMsg = opts.hideZeroQty
+            ? "找不到有庫存的品項，可使用『新增品項』建立。"
+            : "無符合的品項";
+          dropdown.innerHTML = `<div class="searchable-select-empty">${emptyMsg}</div>`;
+        } else if (opts.hideZeroQty && (opts.showQty || opts.showCost)) {
+          // 補貨建議：左右分區，長名稱省略，右側固定顯示剩餘／成本
+          dropdown.innerHTML = list.map((i) => {
+            const name = (i.name || "") + (i.spec ? " (" + (i.spec || "") + ")" : "");
+            const qty = Number(i.qty_on_hand);
+            const hasCost = i.cost_unit != null && i.cost_unit !== "";
+            const costNum = hasCost ? (Number(i.cost_unit) || 0) : null;
+            const stockFull = "剩餘 " + qty;
+            const costFull = costNum != null ? ("成本 NT$" + v2FmtNum(costNum)) : "";
+            const compact = costNum != null
+              ? ("剩 " + qty + "｜NT$" + v2FmtNum(costNum))
+              : ("剩 " + qty);
+            const aria = [name, stockFull].concat(costFull ? [costFull] : []).join("，");
+            return `<div class="searchable-select-option searchable-select-option--meta" role="option" data-id="${v2Esc(i.id)}" data-name="${v2Esc(i.name || "")}" title="${v2Esc(name)}" aria-label="${v2Esc(aria)}"><div class="product-main"><span class="product-name">${v2Esc(name)}</span></div><div class="product-meta"><span class="product-meta-full">${opts.showQty ? `<span class="product-stock">${v2Esc(stockFull)}</span>` : ""}${opts.showCost && costFull ? `<span class="product-cost">${v2Esc(costFull)}</span>` : ""}</span><span class="product-meta-compact">${v2Esc(compact)}</span></div></div>`;
+          }).join("");
         } else {
           dropdown.innerHTML = list.map((i) => {
             let label = (i.name || "") + (i.spec ? " (" + (i.spec || "") + ")" : "");
@@ -5099,6 +5124,7 @@
     makeSearchableItemSelect("restockItemId", "restockItemSearch", "restockItemDropdown", {
       showQty: true,
       showCost: true,
+      hideZeroQty: true,
       onPick: (itemId) => {
         const item = DK.findItemById(itemId);
         if (item) {
