@@ -15,6 +15,7 @@
   const LEDGER_TYPES = ["IN", "OUT", "ADJUST"];
   const REF_TYPES = ["PURCHASE", "ORDER", "RMA", "SCRAP", "MOVE", "ADJUST"];
   const ORDER_STATUSES = ["pending", "paid", "shipped", "completed", "refunded"];
+  const ORDER_SALES_TYPES = ["整機", "零組件", "維修／服務", "周邊", "其他"];
   const EXPENSE_TYPES = ["COGS", "OPEX", "OTHER"];
 
   const RULES = {
@@ -96,6 +97,45 @@
     const q = Number(item.qty_on_hand) || 0;
     const c = Number(item.cost_unit) || 0;
     return q * c;
+  }
+
+  /** 可售庫存：qty_on_hand 必須是有效數字且 > 0（0／負數／無效都不算） */
+  function isSellableOnHand(item) {
+    const qty = Number(item?.qty_on_hand);
+    return Number.isFinite(qty) && qty > 0;
+  }
+
+  function isItemArchived(item) {
+    if (!item) return false;
+    if (item.isArchived === true) return true;
+    if (item.isArchived === false) return false;
+    return Boolean(item.archivedAt);
+  }
+
+  /** 目前仍有庫存：未封存且 qty_on_hand > 0（報表「目前庫存型」清單用） */
+  function isCurrentOnHandItem(item) {
+    if (isItemArchived(item)) return false;
+    return isSellableOnHand(item);
+  }
+
+  /**
+   * qty 從 >0 變成 0（或無效／負數）時自動封存；qty 回到 >0 時自動解除封存。
+   * 寫入品項 JSON 欄位 isArchived / archivedAt，不改 Supabase schema。
+   */
+  function applyQtyArchiveState(item, prevQty, newQty) {
+    if (!item) return item;
+    const prev = Number(prevQty);
+    const next = Number(newQty);
+    const prevPositive = Number.isFinite(prev) && prev > 0;
+    const nextPositive = Number.isFinite(next) && next > 0;
+    if (prevPositive && !nextPositive) {
+      item.isArchived = true;
+      item.archivedAt = nowISO();
+    } else if (nextPositive) {
+      item.isArchived = false;
+      item.archivedAt = null;
+    }
+    return item;
   }
 
   function enrichItem(item) {
@@ -189,6 +229,7 @@
     item.qty_on_hand = newQty;
     item.cost_unit = newCostUnit;
     item.last_moved_at = now;
+    applyQtyArchiveState(item, currentQty, newQty);
     if (type === "IN") {
       if (inbound_date && /^\d{4}-\d{2}-\d{2}/.test(String(inbound_date))) item.inbound_date = String(inbound_date).slice(0, 10);
       else if (!item.inbound_date) item.inbound_date = dateStr;
@@ -227,6 +268,53 @@
     return orderGrossProfit(o) / rev;
   }
 
+  /** 營業額：與毛利率分母相同（售價＋運費−折扣），不另開公式 */
+  function orderRevenue(o) {
+    const sale = Number(o.total_sale) || 0;
+    const ship = Number(o.shipping_income) || 0;
+    const disc = Number(o.discount) || 0;
+    return sale + ship - disc;
+  }
+
+  function normalizeOrderSalesType(o) {
+    const v = String(o && (o.salesType != null ? o.salesType : o.sales_type) || "").trim();
+    if (ORDER_SALES_TYPES.indexOf(v) >= 0) return v;
+    return "";
+  }
+
+  function orderSalesTypeLabel(o) {
+    return normalizeOrderSalesType(o) || "未分類";
+  }
+
+  function reportSalesTypeStats(fromStr, toStr) {
+    const orders = getOrders().filter((o) => {
+      const d = (o.created_at || o.date || "").toString().slice(0, 10);
+      return d >= fromStr && d <= toStr && o.status !== "refunded";
+    });
+    const keys = ORDER_SALES_TYPES.concat(["未分類"]);
+    const buckets = {};
+    keys.forEach((k) => {
+      buckets[k] = { salesType: k, count: 0, revenue: 0, profit: 0, avg: 0 };
+    });
+    orders.forEach((o) => {
+      const key = orderSalesTypeLabel(o);
+      const b = buckets[key] || buckets["未分類"];
+      b.count += 1;
+      b.revenue += orderRevenue(o);
+      b.profit += orderGrossProfit(o);
+    });
+    keys.forEach((k) => {
+      const b = buckets[k];
+      b.avg = b.count > 0 ? b.revenue / b.count : 0;
+    });
+    return {
+      rows: keys.map((k) => buckets[k]),
+      pcCount: buckets["整機"].count,
+      partsCount: buckets["零組件"].count,
+      serviceCount: buckets["維修／服務"].count,
+    };
+  }
+
   function enrichOrder(o) {
     return {
       ...o,
@@ -258,17 +346,19 @@
   // ---------- Reports ----------
   function reportTop20IdleDays() {
     return getEnrichedItems()
+      .filter(isCurrentOnHandItem)
       .filter((x) => x.idle_days != null)
       .sort((a, b) => (b.idle_days ?? 0) - (a.idle_days ?? 0))
       .slice(0, 20);
   }
 
   function reportTestingPrep() {
-    return getEnrichedItems().filter((x) => x.status === "TESTING" || x.status === "PREP");
+    return getEnrichedItems().filter((x) => isCurrentOnHandItem(x) && (x.status === "TESTING" || x.status === "PREP"));
   }
 
   function reportClearance() {
     return getEnrichedItems().filter((x) => {
+      if (!isCurrentOnHandItem(x)) return false;
       if (x.status === "CLEARANCE") return true;
       if ((x.category === "PC" || x.category === "GPU") && (x.idle_days ?? 0) > RULES.PC_GPU_CLEARANCE_DAYS) return true;
       return false;
@@ -425,6 +515,7 @@
     LEDGER_TYPES,
     REF_TYPES,
     ORDER_STATUSES,
+    ORDER_SALES_TYPES,
     EXPENSE_TYPES,
     RULES,
     getItems,
@@ -436,6 +527,10 @@
     itemAgeDays,
     itemIdleDays,
     itemInventoryValue,
+    isSellableOnHand,
+    isItemArchived,
+    isCurrentOnHandItem,
+    applyQtyArchiveState,
     getItemAlert,
     suggestStatus,
     getLedger,
@@ -446,6 +541,10 @@
     enrichOrder,
     orderGrossProfit,
     orderGrossMargin,
+    orderRevenue,
+    normalizeOrderSalesType,
+    orderSalesTypeLabel,
+    reportSalesTypeStats,
     nextOrderNo,
     getExpenses,
     saveExpenses,

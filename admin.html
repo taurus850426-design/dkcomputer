@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260217" />
+    <link rel="stylesheet" href="./styles.css?v=20260813q5" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -145,28 +145,6 @@
               </table>
             </div>
             <div id="itemsPagination" class="pagination"></div>
-            <div id="itemEditorModal" class="item-editor-modal" hidden>
-              <div id="itemEditor" class="card item-editor-card" role="dialog" aria-modal="true" aria-labelledby="itemEditorTitle">
-              <h3 id="itemEditorTitle" class="h3">新增 / 編輯品項</h3>
-              <div class="form-grid">
-                <div class="field"><label for="itemCategory">品類</label><select id="itemCategory"></select></div>
-                <div class="field full"><label for="itemName">名稱／規格</label><input id="itemName" type="text" placeholder="型號、產品名稱或規格（例：RTX 3060 Ti 8G、480GB SSD）" /></div>
-                <div id="itemDuplicateHint" class="field full" hidden></div>
-                <div class="field"><label for="itemVendor">廠商</label><select id="itemVendor"></select></div>
-                <div class="field"><label for="itemCondition">成色</label><select id="itemCondition"><option value="NEW">全新</option><option value="USED">二手</option><option value="REFURB">整新</option></select></div>
-                <div class="field"><label for="itemStatus">狀態</label><select id="itemStatus"><option value="READY">可售</option><option value="TESTING">待測</option><option value="PREP">待整理</option><option value="RESERVED">保留</option><option value="CLEARANCE">待出清</option><option value="SCRAP">報廢拆料</option></select></div>
-                <div class="field"><label for="itemQty">現貨數量</label><input id="itemQty" type="number" min="0" value="0" /></div>
-                <div class="field"><label for="itemCost">單位成本</label><input id="itemCost" type="number" min="0" step="1" value="0" /></div>
-                <div class="field"><label for="itemPriceList">建議售價</label><input id="itemPriceList" type="number" min="0" step="1" /></div>
-                <div class="field"><label for="itemPriceFloor">最低價</label><input id="itemPriceFloor" type="number" min="0" step="1" /></div>
-                <div class="field"><label for="itemInboundDate">入庫日</label><input id="itemInboundDate" type="date" /></div>
-                <div class="field"><label for="itemReorderPoint">補貨警戒（耗材）</label><input id="itemReorderPoint" type="number" min="0" value="0" /></div>
-                <div class="field full"><label for="itemNotes">備註</label><input id="itemNotes" type="text" /></div>
-                <div class="full actions"><button id="itemSave" class="btn btn-primary" type="button">儲存</button><button id="itemCancel" class="btn btn-ghost" type="button">取消</button><button id="itemDelete" class="btn btn-ghost" type="button" style="margin-left:auto;color:var(--danger, #c00)">刪除品項</button></div>
-              </div>
-              <div id="itemMsg" class="muted" hidden></div>
-              </div>
-            </div>
             </div>
 
             <!-- 流水帳 -->
@@ -218,6 +196,17 @@
                   <div class="field"><label for="orderNo">訂單編號</label><input id="orderNo" type="text" placeholder="自動產生" /></div>
                   <div class="field"><label for="orderDate">訂單日期</label><input id="orderDate" type="date" /></div>
                   <div class="field full"><label for="orderCustomer">客戶</label><input id="orderCustomer" type="text" /></div>
+                  <div class="field full"><label for="orderSalesType">銷售類型</label>
+                    <select id="orderSalesType">
+                      <option value="">請選擇</option>
+                      <option value="整機">整機</option>
+                      <option value="零組件">零組件</option>
+                      <option value="維修／服務">維修／服務</option>
+                      <option value="周邊">周邊</option>
+                      <option value="其他">其他</option>
+                    </select>
+                    <div class="muted small" style="margin-top:4px">整張訂單的主要類型，不是單一商品品類。未選則報表歸入未分類。</div>
+                  </div>
                   <div class="field full">
                     <label>訂單明細（出庫品項，儲存後自動扣庫存）</label>
                     <div class="form-grid order-detail-row" style="grid-template-columns: 1fr auto auto auto;">
@@ -246,7 +235,13 @@
                   <div class="field"><label for="orderPayment">付款方式</label><select id="orderPayment"><option value="cash">現金</option><option value="transfer">轉帳</option><option value="card">刷卡</option></select></div>
                   <div class="field"><label for="orderStatus">狀態</label><select id="orderStatus"><option value="pending">待處理</option><option value="paid">已付款</option><option value="shipped">已出貨</option><option value="completed">已完成</option><option value="refunded">已退貨</option></select></div>
                   <div class="field full"><label>毛利（自動）</label><div id="orderGrossProfitDisplay" class="muted">-</div></div>
-                  <div class="field full actions"><button id="orderSave" class="btn btn-primary" type="button">儲存</button><button id="orderCancel" class="btn btn-ghost" type="button">取消</button></div>
+                  <div class="field full"><label for="orderQuoteNote">報價備註（僅出現在報價單，不寫入訂單）</label><input id="orderQuoteNote" type="text" placeholder="例如：價格有效 3 天、含組裝…" autocomplete="off" /></div>
+                  <div class="field full actions" style="flex-wrap:wrap;gap:8px">
+                    <button id="orderSave" class="btn btn-primary" type="button">儲存</button>
+                    <button id="orderCancel" class="btn btn-ghost" type="button">取消</button>
+                    <button id="orderQuotePreview" class="btn btn-ghost" type="button">預覽報價單</button>
+                    <button id="orderQuoteDownload" class="btn btn-ghost" type="button">下載報價單圖片</button>
+                  </div>
                 </div>
                 <div id="orderMsg" class="muted" hidden></div>
               </div>
@@ -341,6 +336,11 @@
               <div class="card" style="margin-bottom:12px">
                 <h3 class="h3">毛利摘要（查詢結果）</h3>
                 <div id="reportQueryResult" class="two-col"></div>
+              </div>
+              <div class="card" style="margin-bottom:12px">
+                <h3 class="h3">銷售類型統計</h3>
+                <div id="reportSalesTypeKpi" class="two-col" style="margin-bottom:10px"></div>
+                <div id="reportSalesTypeTable" class="table-wrap"></div>
               </div>
 
               <div class="card" style="margin-bottom:12px">
@@ -2394,12 +2394,49 @@
     </main>
 
     <div id="adminToast" class="admin-toast" aria-live="polite" hidden></div>
+    <div id="itemEditorModal" class="item-editor-modal" hidden>
+      <div id="itemEditor" class="card item-editor-card" role="dialog" aria-modal="true" aria-labelledby="itemEditorTitle">
+      <h3 id="itemEditorTitle" class="h3">新增 / 編輯品項</h3>
+      <div class="form-grid">
+        <div class="field"><label for="itemCategory">品類</label><select id="itemCategory"></select></div>
+        <div class="field full"><label for="itemName">名稱／規格</label><input id="itemName" type="text" placeholder="型號、產品名稱或規格（例：RTX 3060 Ti 8G、480GB SSD）" /></div>
+        <div id="itemDuplicateHint" class="field full" hidden></div>
+        <div class="field"><label for="itemVendor">廠商</label><select id="itemVendor"></select></div>
+        <div class="field"><label for="itemCondition">成色</label><select id="itemCondition"><option value="NEW">全新</option><option value="USED">二手</option><option value="REFURB">整新</option></select></div>
+        <div class="field"><label for="itemStatus">狀態</label><select id="itemStatus"><option value="READY">可售</option><option value="TESTING">待測</option><option value="PREP">待整理</option><option value="RESERVED">保留</option><option value="CLEARANCE">待出清</option><option value="SCRAP">報廢拆料</option></select></div>
+        <div class="field"><label for="itemQty">現貨數量</label><input id="itemQty" type="number" min="0" value="0" /></div>
+        <div class="field"><label for="itemCost">單位成本</label><input id="itemCost" type="number" min="0" step="1" value="0" /></div>
+        <div class="field"><label for="itemPriceList">建議售價</label><input id="itemPriceList" type="number" min="0" step="1" /></div>
+        <div class="field"><label for="itemPriceFloor">最低價</label><input id="itemPriceFloor" type="number" min="0" step="1" /></div>
+        <div class="field"><label for="itemInboundDate">入庫日</label><input id="itemInboundDate" type="date" /></div>
+        <div class="field"><label for="itemReorderPoint">補貨警戒（耗材）</label><input id="itemReorderPoint" type="number" min="0" value="0" /></div>
+        <div class="field full"><label for="itemNotes">備註</label><input id="itemNotes" type="text" /></div>
+        <div class="full actions"><button id="itemSave" class="btn btn-primary" type="button">儲存</button><button id="itemCancel" class="btn btn-ghost" type="button">取消</button><button id="itemDelete" class="btn btn-ghost" type="button" style="margin-left:auto;color:var(--danger, #c00)">刪除品項</button></div>
+      </div>
+      <div id="itemMsg" class="muted" hidden></div>
+      </div>
+    </div>
+    <div id="quotePreviewModal" class="quote-preview-modal" hidden>
+      <div class="quote-preview-card" role="dialog" aria-modal="true" aria-labelledby="quotePreviewTitle">
+        <div class="quote-preview-head">
+          <h3 id="quotePreviewTitle" class="h3">報價單預覽</h3>
+          <button id="quotePreviewClose" class="btn btn-ghost btn-sm" type="button">關閉</button>
+        </div>
+        <div class="quote-preview-scroll">
+          <img id="quotePreviewImg" alt="報價單預覽" />
+        </div>
+        <div class="quote-preview-actions">
+          <button id="quotePreviewDownload" class="btn btn-primary" type="button">下載圖片</button>
+          <button id="quotePreviewClose2" class="btn btn-ghost" type="button">關閉</button>
+        </div>
+      </div>
+    </div>
     <script src="./shared.js?v=20260805vp1"></script>
-    <script src="./inventory-ledger.js"></script>
+    <script src="./inventory-ledger.js?v=20260813q8"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260805vp1"></script>
+    <script src="./admin3.js?v=20260813q8"></script>
     <script src="./purchase-orders.js?v=20260805vp1"></script>
   </body>
 </html>

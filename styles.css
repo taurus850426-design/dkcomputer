@@ -789,6 +789,76 @@ body.theme-apple #home-entries .home-entry-sub{
   flex-shrink: 0;
 }
 
+/* 報價單預覽：不得超出 viewport；圖片本身維持 1080 寬輸出，僅顯示時縮放 */
+.quote-preview-modal{
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(0,0,0,0.55);
+  overflow: hidden;
+}
+.quote-preview-modal[hidden]{ display: none !important; }
+.quote-preview-card{
+  display: flex;
+  flex-direction: column;
+  width: min(1080px, 100%);
+  max-height: calc(100vh - 24px);
+  max-width: 100%;
+  background: var(--panel2, #fff);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.28);
+  overflow: hidden;
+}
+.quote-preview-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.quote-preview-head .h3{ margin: 0; }
+.quote-preview-scroll{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #ffffff;
+  padding: 12px;
+  text-align: center;
+}
+.quote-preview-scroll img{
+  display: block;
+  width: 100%;
+  max-width: 1080px;
+  height: auto;
+  margin: 0 auto;
+}
+.quote-preview-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.item-archived-badge{
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  background: rgba(18,24,38,0.08);
+  vertical-align: middle;
+}
+
 .radio-row{ display: flex; gap: 20px; flex-wrap: wrap; }
 .radio-wrap{ display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .radio-wrap input{ width: auto; }
