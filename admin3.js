@@ -83,26 +83,14 @@
       const saved = safeParse(raw, null);
       const base = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
 
-      const defAdmin =
-        (window.DK?.DEFAULT_CONFIG && window.DK.DEFAULT_CONFIG.admin) ||
-        { username: "admin", password: "admin123" };
-
       const hasAdmin = base.admin && typeof base.admin === "object" && !Array.isArray(base.admin);
-      const next = hasAdmin
-        ? {
-            ...base,
-            admin: {
-              ...defAdmin,
-              ...base.admin,
-            },
-          }
-        : {
-            ...base,
-            admin: { ...defAdmin },
-          };
-
-      localStorage.setItem(cfgKey, JSON.stringify(next));
-      alert("admin 設定已修復，請移除網址 repairAdmin=1 後重新登入");
+      if (!hasAdmin) {
+        alert("尚未設定有效的管理員帳號");
+        return;
+      }
+      // 只保留既有 admin 物件，不寫入任何預設帳密
+      localStorage.setItem(cfgKey, JSON.stringify(base));
+      alert("admin 設定已檢查，請移除網址 repairAdmin=1 後使用既有帳號登入");
     } catch (e) {
       alert("admin 修復失敗：" + String(e?.message || e || "未知錯誤"));
     }
@@ -228,6 +216,7 @@
   const tabVendors = document.getElementById("tab-vendors");
   const tabPurchase = document.getElementById("tab-purchase");
   const tabCustomers = document.getElementById("tab-customers");
+  const tabAccounts = document.getElementById("tab-accounts");
 
   // publish
   const publishSubmitBtn = document.getElementById("publishSubmitBtn");
@@ -385,17 +374,58 @@
     }
   }
 
+  function canPerm(perm) {
+    if (window.DK && typeof window.DK.canPermission === "function") return window.DK.canPermission(perm);
+    return window.DK?.isAdminAuthed?.() === true;
+  }
+  function requirePerm(perm) {
+    if (window.DK && typeof window.DK.requirePermission === "function") return window.DK.requirePermission(perm);
+    return canPerm(perm);
+  }
+  function auditAction(action, targetId) {
+    try { window.DK?.appendAuditLog?.({ action, targetId: targetId || "" }); } catch (_) {}
+  }
+
+  function applyRoleUI() {
+    const user = window.DK?.getCurrentAdminUser?.() || null;
+    const role = user && user.role ? user.role : "";
+    document.body.classList.toggle("dk-role-staff", role === "staff");
+    const label = document.getElementById("adminCurrentUser");
+    if (label) {
+      if (user && window.DK?.isAdminAuthed?.()) {
+        const roleText = window.DK.roleLabel ? window.DK.roleLabel(user.role) : (user.role === "staff" ? "員工" : "管理員");
+        label.textContent = (user.displayName || user.username || "") + "｜" + roleText;
+        label.hidden = false;
+      } else {
+        label.textContent = "";
+        label.hidden = true;
+      }
+    }
+  }
+
   function applyAuthUI() {
+    try { window.DK?.validateAdminSession?.(); } catch (_) {}
     const authed = window.DK?.isAdminAuthed?.() === true;
     if (loginCard) loginCard.hidden = authed;
     if (panel) panel.hidden = !authed;
     if (logoutBtn) logoutBtn.hidden = !authed;
+    applyRoleUI();
     if (authed) updateSyncStatusBar();
+    if (authed) {
+      const saved = (function () { try { return localStorage.getItem("dk_admin_active_tab"); } catch (_) { return null; } })();
+      if (saved && !canPerm(saved)) {
+        try { switchTab("inv"); } catch (_) {}
+      }
+    }
   }
 
   const ADMIN_TAB_KEY = "dk_admin_tab";
-  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "customers"];
+  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "customers", "accounts"];
   function switchTab(name) {
+    if (!canPerm(name)) {
+      requirePerm(name);
+      return;
+    }
     try { sessionStorage.setItem(ADMIN_TAB_KEY, name); } catch (_) {}
     try { localStorage.setItem("dk_admin_active_tab", name); } catch (_) {}
     if (VALID_TABS.includes(name)) try { location.hash = name; } catch (_) {}
@@ -409,6 +439,7 @@
     if (tabVendors) tabVendors.hidden = name !== "vendors";
     if (tabPurchase) tabPurchase.hidden = name !== "purchase";
     if (tabCustomers) tabCustomers.hidden = name !== "customers";
+    if (tabAccounts) tabAccounts.hidden = name !== "accounts";
     if (name === "inv") {
       const doRefresh = () => {
         if (typeof window.__adminV2Refresh === "function") window.__adminV2Refresh();
@@ -439,6 +470,9 @@
     }
     if (name === "customers") {
       if (typeof renderCustomerRecordsPage === "function") renderCustomerRecordsPage();
+    }
+    if (name === "accounts") {
+      if (typeof renderAccountsPage === "function") renderAccountsPage();
     }
   }
 
@@ -689,6 +723,7 @@
   }
 
   async function savePublishEditor() {
+    if (!requirePerm("publish")) return;
     if (!editingWebId) {
       showCenterToast("請先選擇要編輯的商品");
       return;
@@ -747,6 +782,7 @@
   }
 
   async function removeFromWeb(webId) {
+    if (!requirePerm("publish")) return;
     const items = (window.DK?.getInventory?.() || []).filter((x) => x.id !== webId);
     window.DK?.saveInventory?.(items);
     let syncOk = true;
@@ -770,6 +806,7 @@
   }
 
   async function submitPublish() {
+    if (!requirePerm("publish")) return;
     const name = document.getElementById("publishProductName")?.value?.trim();
     const category = document.getElementById("publishCategory")?.value ?? "文書";
     const priceEl = document.getElementById("publishPrice");
@@ -843,53 +880,47 @@
       (name === "frontend" && tabFrontend) ||
       (name === "vendors" && tabVendors) ||
       (name === "purchase" && tabPurchase) ||
-      (name === "customers" && tabCustomers);
-    if (fromStorage && VALID_TABS.includes(fromStorage) && hasPanel(fromStorage)) {
+      (name === "customers" && tabCustomers) ||
+      (name === "accounts" && tabAccounts);
+    if (fromStorage && VALID_TABS.includes(fromStorage) && hasPanel(fromStorage) && canPerm(fromStorage)) {
       switchTab(fromStorage);
       return;
     }
     const fromHash = (location.hash || "").replace(/^#/, "").trim().toLowerCase();
     const saved = (VALID_TABS.includes(fromHash) ? fromHash : null) || (function () { try { return sessionStorage.getItem(ADMIN_TAB_KEY); } catch (_) { return null; } })();
-    if (saved && VALID_TABS.includes(saved)) switchTab(saved);
+    if (saved && VALID_TABS.includes(saved) && canPerm(saved)) switchTab(saved);
   }
   function doLogin() {
     hide(loginError);
-    let cfg = window.DK?.getConfig?.() || {};
-    // 防呆：若 cfg.admin 不存在，先用預設 admin 補一份，避免登入永久失效（不覆蓋既有 frontend / vendorOptions 等資料）
-    if (!cfg || typeof cfg !== "object") cfg = {};
-    if (!cfg.admin || typeof cfg.admin !== "object") {
-      const defAdmin =
-        (window.DK?.DEFAULT_CONFIG && window.DK.DEFAULT_CONFIG.admin) ||
-        { username: "admin", password: "admin123" };
-      cfg = { ...cfg, admin: { ...defAdmin } };
-      try {
-        const cfgKey = window.DK?.STORAGE_KEYS?.config || "dk_site_config_v1";
-        const raw = localStorage.getItem(cfgKey);
-        const saved = safeParse(raw, null);
-        const base = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
-        if (!base.admin || typeof base.admin !== "object") {
-          localStorage.setItem(cfgKey, JSON.stringify({ ...base, admin: { ...defAdmin } }));
-        }
-      } catch (_) {}
-    }
     const u = String(usernameEl?.value || "").trim();
     const p = String(passwordEl?.value || "");
-    const cfgUser = String(cfg?.admin?.username ?? "").trim();
-    const cfgPass = String(cfg?.admin?.password ?? "");
-    // ① 先用設定檔的帳號密碼
-    const cfgOk = !!cfg?.admin && u === cfgUser && p === cfgPass;
-    // ② 若設定檔帳密有問題，保留一組固定備援：admin / admin123
-    const fallbackOk = u === "admin" && p === "admin123";
-    if (cfgOk || fallbackOk) {
-      window.DK?.setAdminAuthed?.(true);
+    const found = window.DK?.findAdminUserByCredentials ? window.DK.findAdminUserByCredentials(u, p) : null;
+    if (found) {
+      if (found.enabled === false) {
+        show(loginError, "此帳號已停用。");
+        return;
+      }
+      try { window.DK.ensureAdminUsersPersisted?.(); } catch (_) {}
+      window.DK.setAdminSession?.({
+        userId: found.id,
+        username: found.username,
+        displayName: found.displayName,
+        role: found.role,
+        loginAt: new Date().toISOString(),
+      });
       applyAuthUI();
       try {
         const saved = localStorage.getItem("dk_admin_active_tab") || sessionStorage.getItem(ADMIN_TAB_KEY);
-        if (saved === "publish" || saved === "inv" || saved === "frontend" || saved === "vendors" || saved === "purchase" || saved === "customers") switchTab(saved);
+        if (saved && VALID_TABS.includes(saved) && canPerm(saved)) switchTab(saved);
         else switchTab("inv");
       } catch (_) {
         try { switchTab("inv"); } catch (__) {}
       }
+      return;
+    }
+    const hasAdmin = window.DK?.hasEnabledAdminAccount ? window.DK.hasEnabledAdminAccount() : false;
+    if (!hasAdmin) {
+      show(loginError, "尚未設定有效的管理員帳號");
       return;
     }
     show(loginError, "帳號或密碼錯誤。");
@@ -905,12 +936,276 @@
     window.DK?.setAdminAuthed?.(false);
     applyAuthUI();
   });
+  window.addEventListener("dk:config-updated", () => {
+    applyAuthUI();
+    if (typeof renderAccountsPage === "function" && tabAccounts && !tabAccounts.hidden) renderAccountsPage();
+  });
+
+  function showAccountMsg(text) {
+    const el = document.getElementById("accountMsg");
+    if (!el) return;
+    if (!text) { el.hidden = true; el.textContent = ""; return; }
+    el.hidden = false;
+    el.textContent = text;
+  }
+  function resetAccountForm() {
+    const idEl = document.getElementById("accountEditId");
+    if (idEl) idEl.value = "";
+    const nameEl = document.getElementById("accountDisplayName");
+    const userEl = document.getElementById("accountUsername");
+    const passEl = document.getElementById("accountPassword");
+    const roleEl = document.getElementById("accountRole");
+    const enEl = document.getElementById("accountEnabled");
+    if (nameEl) nameEl.value = "";
+    if (userEl) userEl.value = "";
+    if (passEl) { passEl.value = ""; passEl.placeholder = "編輯時留空表示不變更"; }
+    if (roleEl) roleEl.value = "staff";
+    if (enEl) enEl.value = "1";
+    showAccountMsg("");
+    const formHelp = document.getElementById("accountFormRoleHelp");
+    if (formHelp && !formHelp.hidden) fillRoleHelpPanel(formHelp, "staff");
+  }
+  /** 僅供帳號管理畫面說明，對應目前 STAFF_ALLOWED_PERMS / ADMIN_ONLY_PERMS，不改實際權限 */
+  const ROLE_PERM_GUIDE = {
+    admin: {
+      title: "管理員",
+      badge: "完整後台權限",
+      intro: "管理員可使用所有後台功能，包括：",
+      allow: ["庫存管理", "流水帳", "訂單", "支出", "報表", "上架管理", "前台管理", "廠商管理", "採購／叫貨單", "客戶紀錄", "帳號管理", "成本／毛利資訊", "刪除操作"],
+      deny: [],
+    },
+    staff: {
+      title: "員工",
+      badge: "日常作業權限",
+      intro: "日常作業可用，成本與管理功能不可用。",
+      allow: ["查看庫存", "新增庫存", "編輯庫存", "補貨", "新增訂單", "編輯訂單", "製作報價單", "客戶紀錄", "搜尋／篩選"],
+      deny: ["查看單位成本", "查看成本小計", "查看毛利／毛利率", "查看庫存總成本", "刪除庫存", "刪除訂單", "刪除客戶", "流水帳", "支出", "報表", "上架管理", "前台管理", "廠商管理", "採購／叫貨單", "帳號管理", "網站／同步設定"],
+    },
+  };
+  function rolePermChipsHtml(items, kind) {
+    const mark = kind === "allow" ? "✓" : "✕";
+    const cls = kind === "allow" ? "is-allow" : "is-deny";
+    return (items || []).map((t) => `<span class="role-perm-chip ${cls}">${mark} ${v2Esc(t)}</span>`).join("");
+  }
+  function rolePermCardHtml(role, opts) {
+    const g = ROLE_PERM_GUIDE[role === "admin" ? "admin" : "staff"];
+    const compact = !!(opts && opts.compact);
+    let body = "";
+    if (role === "admin") {
+      body = `<p class="role-perm-intro">${v2Esc(g.intro)}</p><div class="role-perm-chips">${rolePermChipsHtml(g.allow, "allow")}</div>`;
+    } else {
+      body = (compact ? "" : `<p class="role-perm-intro">${v2Esc(g.intro)}</p>`) +
+        `<div class="role-perm-sub">可以使用</div><div class="role-perm-chips">${rolePermChipsHtml(g.allow, "allow")}</div>` +
+        `<div class="role-perm-sub">無權限</div><div class="role-perm-chips">${rolePermChipsHtml(g.deny, "deny")}</div>`;
+    }
+    return `<div class="role-perm-card"${compact ? "" : ` id="rolePermCard-${role === "admin" ? "admin" : "staff"}"`}>
+      <div class="role-perm-card-head"><h3 class="h3">${v2Esc(g.title)}</h3><span class="role-perm-badge">${v2Esc(g.badge)}</span></div>
+      ${body}
+    </div>`;
+  }
+  function renderRolePermCards() {
+    const host = document.getElementById("rolePermCards");
+    if (!host) return;
+    host.innerHTML = rolePermCardHtml("admin") + rolePermCardHtml("staff");
+  }
+  function fillRoleHelpPanel(el, role) {
+    if (!el) return;
+    el.innerHTML = rolePermCardHtml(role, { compact: true });
+  }
+  function showRoleHelpPanel(el, role, open) {
+    if (!el) return;
+    const nextOpen = open == null ? el.hidden : !!open;
+    if (nextOpen) {
+      fillRoleHelpPanel(el, role);
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+    }
+  }
+  function highlightRolePermCard(role) {
+    const key = role === "admin" ? "admin" : "staff";
+    document.querySelectorAll(".role-perm-card").forEach((c) => c.classList.remove("is-highlight"));
+    const card = document.getElementById("rolePermCard-" + key);
+    if (!card) return;
+    card.classList.add("is-highlight");
+    try { card.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (_) {}
+    setTimeout(() => { try { card.classList.remove("is-highlight"); } catch (_) {} }, 2200);
+  }
+  function selectedAccountRole() {
+    return document.getElementById("accountRole")?.value === "admin" ? "admin" : "staff";
+  }
+  function renderAccountsPage() {
+    if (!requirePerm("accounts")) return;
+    try { window.DK.ensureAdminUsersPersisted?.(); } catch (_) {}
+    const tbody = document.getElementById("accountsTbody");
+    if (!tbody) return;
+    const users = window.DK.getAdminUsers ? window.DK.getAdminUsers() : [];
+    const roleText = (r) => (window.DK.roleLabel ? window.DK.roleLabel(r) : (r === "staff" ? "員工" : "管理員"));
+    tbody.innerHTML = users.length
+      ? users.map((u) => {
+          const created = u.createdAt ? String(u.createdAt).slice(0, 10) : "—";
+          return `<tr>
+            <td>${v2Esc(u.displayName)}</td>
+            <td>${v2Esc(u.username)}</td>
+            <td class="nowrap">${v2Esc(roleText(u.role))}<button type="button" class="btn btn-ghost btn-sm btn-account-perm" data-role="${v2Esc(u.role === "admin" ? "admin" : "staff")}">權限</button></td>
+            <td>${u.enabled ? "啟用" : "停用"}</td>
+            <td class="nowrap">${v2Esc(created)}</td>
+            <td style="text-align:right;white-space:nowrap">
+              <button type="button" class="btn btn-ghost btn-sm btn-account-edit" data-id="${v2Esc(u.id)}">編輯</button>
+              <button type="button" class="btn btn-ghost btn-sm btn-account-toggle" data-id="${v2Esc(u.id)}">${u.enabled ? "停用" : "啟用"}</button>
+              <button type="button" class="btn btn-ghost btn-sm btn-account-resetpw" data-id="${v2Esc(u.id)}">重設密碼</button>
+            </td>
+          </tr>`;
+        }).join("")
+      : `<tr><td class="muted" colspan="6">尚無帳號</td></tr>`;
+    renderRolePermCards();
+  }
+  function countEnabledAdmins(users, exceptId) {
+    return users.filter((u) => u.role === "admin" && u.enabled && u.id !== exceptId).length;
+  }
+  function fillAccountForm(id) {
+    const users = window.DK.getAdminUsers ? window.DK.getAdminUsers() : [];
+    const u = users.find((x) => x.id === id);
+    if (!u) return;
+    document.getElementById("accountEditId").value = u.id;
+    document.getElementById("accountDisplayName").value = u.displayName || "";
+    document.getElementById("accountUsername").value = u.username || "";
+    document.getElementById("accountPassword").value = "";
+    document.getElementById("accountPassword").placeholder = "留空表示不變更";
+    document.getElementById("accountRole").value = u.role === "admin" ? "admin" : "staff";
+    document.getElementById("accountEnabled").value = u.enabled ? "1" : "0";
+    showAccountMsg("正在編輯：" + (u.displayName || u.username));
+    const formHelp = document.getElementById("accountFormRoleHelp");
+    if (formHelp && !formHelp.hidden) fillRoleHelpPanel(formHelp, u.role === "admin" ? "admin" : "staff");
+  }
+  function saveAccountFromForm() {
+    if (!requirePerm("accounts")) return;
+    const editId = String(document.getElementById("accountEditId")?.value || "").trim();
+    const displayName = String(document.getElementById("accountDisplayName")?.value || "").trim();
+    const username = String(document.getElementById("accountUsername")?.value || "").trim();
+    const password = String(document.getElementById("accountPassword")?.value || "");
+    const role = document.getElementById("accountRole")?.value === "admin" ? "admin" : "staff";
+    const enabled = document.getElementById("accountEnabled")?.value !== "0";
+    if (!displayName) return showAccountMsg("請填顯示名稱");
+    if (!username) return showAccountMsg("請填登入帳號");
+    const users = (window.DK.getAdminUsers ? window.DK.getAdminUsers() : []).map((u) => ({ ...u }));
+    const dup = users.find((u) => u.username.toLowerCase() === username.toLowerCase() && u.id !== editId);
+    if (dup) return showAccountMsg("登入帳號不可重複");
+    const now = new Date().toISOString();
+    const me = window.DK.getCurrentAdminUser ? window.DK.getCurrentAdminUser() : null;
+    if (editId) {
+      const idx = users.findIndex((u) => u.id === editId);
+      if (idx < 0) return showAccountMsg("找不到帳號");
+      const prev = users[idx];
+      if (!enabled && me && me.userId === editId) {
+        return showAccountMsg("不能停用目前登入中的帳號");
+      }
+      if (!enabled && prev.role === "admin" && countEnabledAdmins(users, editId) < 1) {
+        return showAccountMsg("不能停用最後一位管理員");
+      }
+      if (prev.role === "admin" && role !== "admin" && countEnabledAdmins(users, editId) < 1) {
+        return showAccountMsg("不能把最後一位管理員改成員工");
+      }
+      const nextUser = {
+        ...prev,
+        displayName,
+        username,
+        password: password ? password : prev.password,
+        role,
+        enabled,
+        updatedAt: now,
+      };
+      const nextList = users.map((u, i) => (i === idx ? nextUser : u));
+      if (!nextList.some((u) => u.role === "admin" && u.enabled)) {
+        return showAccountMsg("系統必須至少保留一位有效管理員");
+      }
+      users[idx] = nextUser;
+    } else {
+      if (!password) return showAccountMsg("新帳號必須設定密碼");
+      users.push({
+        id: "user-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+        displayName,
+        username,
+        password,
+        role,
+        enabled,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    window.DK.saveAdminUsers(users);
+    showAccountMsg(editId ? "已更新帳號" : "已新增帳號");
+    resetAccountForm();
+    renderAccountsPage();
+    applyRoleUI();
+  }
+  function toggleAccountEnabled(id) {
+    if (!requirePerm("accounts")) return;
+    const users = (window.DK.getAdminUsers ? window.DK.getAdminUsers() : []).map((u) => ({ ...u }));
+    const idx = users.findIndex((u) => u.id === id);
+    if (idx < 0) return;
+    const prev = users[idx];
+    const me = window.DK.getCurrentAdminUser ? window.DK.getCurrentAdminUser() : null;
+    if (prev.enabled) {
+      if (me && me.userId === id) return showAccountMsg("不能停用目前登入中的帳號");
+      if (prev.role === "admin" && countEnabledAdmins(users, id) < 1) return showAccountMsg("不能停用最後一位管理員");
+    }
+    const nextEnabled = !prev.enabled;
+    const nextList = users.map((u, i) => (i === idx ? { ...prev, enabled: nextEnabled, updatedAt: new Date().toISOString() } : u));
+    if (!nextList.some((u) => u.role === "admin" && u.enabled)) {
+      return showAccountMsg("系統必須至少保留一位有效管理員");
+    }
+    users[idx] = nextList[idx];
+    window.DK.saveAdminUsers(users);
+    showAccountMsg(users[idx].enabled ? "已啟用" : "已停用");
+    renderAccountsPage();
+  }
+  function resetAccountPassword(id) {
+    if (!requirePerm("accounts")) return;
+    const nextPw = window.prompt("請輸入新密碼");
+    if (nextPw == null) return;
+    if (!String(nextPw).trim()) return showAccountMsg("密碼不可空白");
+    const users = (window.DK.getAdminUsers ? window.DK.getAdminUsers() : []).map((u) => ({ ...u }));
+    const idx = users.findIndex((u) => u.id === id);
+    if (idx < 0) return;
+    users[idx] = { ...users[idx], password: String(nextPw), updatedAt: new Date().toISOString() };
+    window.DK.saveAdminUsers(users);
+    showAccountMsg("已重設密碼");
+    renderAccountsPage();
+  }
+  document.getElementById("accountSaveBtn")?.addEventListener("click", saveAccountFromForm);
+  document.getElementById("accountResetFormBtn")?.addEventListener("click", resetAccountForm);
+  document.getElementById("accountRoleHelpBtn")?.addEventListener("click", () => {
+    const el = document.getElementById("accountFormRoleHelp");
+    if (!el) return;
+    showRoleHelpPanel(el, selectedAccountRole(), el.hidden);
+  });
+  document.getElementById("accountRole")?.addEventListener("change", () => {
+    const el = document.getElementById("accountFormRoleHelp");
+    if (el && !el.hidden) fillRoleHelpPanel(el, selectedAccountRole());
+  });
+  document.getElementById("accountsTbody")?.addEventListener("click", (e) => {
+    const editBtn = e.target.closest?.(".btn-account-edit");
+    const togBtn = e.target.closest?.(".btn-account-toggle");
+    const pwBtn = e.target.closest?.(".btn-account-resetpw");
+    const permBtn = e.target.closest?.(".btn-account-perm");
+    if (editBtn) fillAccountForm(editBtn.getAttribute("data-id"));
+    else if (togBtn) toggleAccountEnabled(togBtn.getAttribute("data-id"));
+    else if (pwBtn) resetAccountPassword(pwBtn.getAttribute("data-id"));
+    else if (permBtn) {
+      const role = permBtn.getAttribute("data-role") === "admin" ? "admin" : "staff";
+      const listHelp = document.getElementById("accountListRoleHelp");
+      showRoleHelpPanel(listHelp, role, true);
+      highlightRolePermCard(role);
+    }
+  });
 
   try { restoreAdminTab(); } catch (_) {}
   setTimeout(function () { try { restoreAdminTab(); } catch (_) {} }, 0);
 
   // publish events
   publishSubmitBtn?.addEventListener("click", () => {
+    if (!requirePerm("publish")) return;
     if (publishFormCard) publishFormCard.hidden = false;
     fillFeaturedToForm(publishFeaturedHome, publishFeaturedOrder, null);
     publishFormCard?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1204,6 +1499,7 @@
   }
 
   function saveVendorOptionsToConfig(nextList) {
+    if (!requirePerm("vendors")) return;
     // 重要：只更新 config.frontend.vendorOptions，且必須保留 config 其他欄位（包含後台登入狀態相關設定）
     // 若 DK.getConfig 不可用或回傳異常，退回讀 localStorage 目前整份設定，避免把 config 覆蓋成只剩 frontend.vendorOptions
     let cfg = window.DK?.getConfig?.();
@@ -1314,6 +1610,7 @@
   }
 
   function saveFrontend() {
+    if (!requirePerm("frontend")) return;
     const trustItemsText = document.getElementById("feTrustItems").value;
     const trustItems = trustItemsText
       .split(/\n/)
@@ -2445,6 +2742,7 @@
   }
 
   function addVendorQuoteFromForm() {
+    if (!requirePerm("vendors")) return;
     const dateEl = document.getElementById("vqDate");
     const vendorEl = document.getElementById("vqVendor");
     const catEl = document.getElementById("vqCategory");
@@ -2518,6 +2816,7 @@
   }
 
   async function deleteVendorQuoteById(id) {
+    if (!requirePerm("vendors")) return;
     const target = String(id || "");
     if (!target) return;
     if (window.DK && typeof window.DK.softDeleteVendorQuoteToSupabase === "function") {
@@ -2545,6 +2844,7 @@
   }
 
   function createInventoryFromVendorQuote(id) {
+    if (!requirePerm("vendors")) return;
     const target = String(id || "");
     if (!target) {
       vqShowMsg("找不到該筆報價，無法建立庫存");
@@ -2956,14 +3256,14 @@
           <td>${crEsc(r.type)}</td>
           <td><span class="${statusBadgeClass(r.status)}">${crEsc(r.status)}</span></td>
           <td style="text-align:right">${crEsc(fmt(r.dealAmount))}</td>
-          <td style="text-align:right">${crEsc(fmt(r.grossProfit))}</td>
+          <td style="text-align:right" data-admin-only>${crEsc(fmt(r.grossProfit))}</td>
           <td>${crEsc(r.use)}</td>
           <td class="muted small">${crEscNl(r.questions)}</td>
           <td class="muted small">${crEsc(r.lostReason)}</td>
           <td class="muted small">${crEscNl(r.note)}</td>
           <td style="text-align:right; white-space:nowrap">
             <button type="button" class="btn btn-ghost btn-sm btn-cr-create-order" data-id="${crEsc(r.id)}">建立訂單</button>
-            <button type="button" class="btn btn-ghost btn-sm btn-cr-del" data-id="${crEsc(r.id)}">刪除</button>
+            <button type="button" class="btn btn-ghost btn-sm btn-cr-del" data-id="${crEsc(r.id)}" data-admin-only>刪除</button>
           </td>
         </tr>`;
       });
@@ -3094,6 +3394,7 @@
   }
 
   function deleteCustomerRecordById(id) {
+    if (!requirePerm("deleteCustomer")) return;
     const target = String(id || "");
     if (!target) return;
     const list = loadCustomerRecords();
@@ -3180,6 +3481,7 @@
   })();
 
   function updateCatImage(cat, dataUrl) {
+    if (!requirePerm("frontend")) return;
     const cfg = window.DK?.getConfig?.() || {};
     const fe = cfg.frontend || {};
     const catImages = { ...(fe.catImages || {}), [cat]: dataUrl || undefined };
@@ -3741,6 +4043,10 @@
       const t = e.target.closest(".v2-tab");
       if (!t) return;
       const name = (t.getAttribute("data-v2") || "items");
+      if ((name === "ledger" || name === "expenses" || name === "reports") && !canPerm(name)) {
+        requirePerm(name);
+        return;
+      }
       (window.__adminV2Handler || switchV2TabUIOnly)(name);
     });
   })();
@@ -3777,6 +4083,10 @@
     const v2Tabs = document.querySelectorAll(".v2-tab");
     const v2Panels = ["items", "ledger", "orders", "expenses", "reports"];
     function switchV2Tab(name) {
+      if ((name === "ledger" || name === "expenses" || name === "reports") && !canPerm(name)) {
+        requirePerm(name);
+        return;
+      }
       v2Tabs.forEach((t) => t.classList.toggle("active", (t.getAttribute("data-v2") || "") === name));
       v2Panels.forEach((p) => {
         const el = document.getElementById("v2-" + p);
@@ -3974,13 +4284,13 @@
           <td>${v2Esc(x.category || "")}</td>
           <td>${v2Esc(STATUS_LABEL[x.status] || x.status)}</td>
           <td>${x.qty_on_hand}</td>
-          <td>${v2FmtNum(x.cost_unit)}</td>
+          <td data-admin-only>${v2FmtNum(x.cost_unit)}</td>
           <td>${v2FmtNum(x.price_list)}</td>
           <td>${v2FmtNum(x.price_floor)}</td>
           <td>${v2Esc((x.inbound_date || "").toString().slice(0, 10))}</td>
           <td>${x.age_days != null ? x.age_days : "-"}</td>
           <td>${x.idle_days != null ? x.idle_days : "-"}</td>
-          <td>${v2FmtNum(x.inventory_value)}</td>
+          <td data-admin-only>${v2FmtNum(x.inventory_value)}</td>
           <td class="muted small">${v2Esc(alertText)}</td>
           <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-item" data-id="${v2Esc(x.id)}">編輯</button></td>
         </tr>`;
@@ -4052,7 +4362,7 @@
       set("itemReorderPoint", item ? (item.reorder_point ?? 0) : 0);
       set("itemNotes", item ? item.notes ?? "" : (preset.notes != null ? String(preset.notes) : ""));
       const itemDeleteBtn = getItemEditorField("itemDelete") || document.getElementById("itemDelete");
-      if (itemDeleteBtn) itemDeleteBtn.hidden = !item;
+      if (itemDeleteBtn) itemDeleteBtn.hidden = !item || !canPerm("deleteItem");
       if (itemEditorModal) itemEditorModal.hidden = false;
       v2Hide(itemMsg);
       try { updateItemDuplicateHint(); } catch (_) {}
@@ -4075,26 +4385,31 @@
         if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
         return s;
       };
-      const headers = ["編號", "名稱／規格", "品類", "狀態", "數量", "成本", "建議價", "最低價", "入庫日", "庫齡(天)", "滯留(天)", "庫存價值", "提醒"];
+      const headers = canPerm("viewCost")
+        ? ["編號", "名稱／規格", "品類", "狀態", "數量", "成本", "建議價", "最低價", "入庫日", "庫齡(天)", "滯留(天)", "庫存價值", "提醒"]
+        : ["編號", "名稱／規格", "品類", "狀態", "數量", "建議價", "最低價", "入庫日", "庫齡(天)", "滯留(天)", "提醒"];
       const rows = list.map((x) => {
         const alert = DK.getItemAlert(x);
         const alertText = alert ? alert.message : "";
         const nameSpec = (x.name === x.spec || !String(x.spec || "").trim()) ? (x.name || x.spec || "") : [x.name, x.spec].filter(Boolean).join(" ").trim();
-        return [
+        const base = [
           x.sku ?? "",
           nameSpec || "",
           x.category ?? "",
           STATUS_LABEL[x.status] || x.status || "",
           x.qty_on_hand ?? "",
-          x.cost_unit != null ? x.cost_unit : "",
+        ];
+        const prices = [
           x.price_list != null ? x.price_list : "",
           x.price_floor != null ? x.price_floor : "",
           (x.inbound_date || "").toString().slice(0, 10),
           x.age_days != null ? x.age_days : "",
           x.idle_days != null ? x.idle_days : "",
-          x.inventory_value != null ? x.inventory_value : "",
-          alertText,
-        ].map(escapeCsv);
+        ];
+        const rest = canPerm("viewCost")
+          ? [x.cost_unit != null ? x.cost_unit : "", ...prices, x.inventory_value != null ? x.inventory_value : "", alertText]
+          : [...prices, alertText];
+        return [...base, ...rest].map(escapeCsv);
       });
       const csv = "\uFEFF" + [headers.map(escapeCsv).join(","), ...rows.map((r) => r.join(","))].join("\r\n");
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -4133,6 +4448,7 @@
     document.getElementById("itemCancel")?.addEventListener("click", closeV2ItemEditor);
     /* 不再點空白關閉：僅能按「取消」或「關閉」按鈕關閉，避免誤觸流失資料 */
     document.getElementById("itemDelete")?.addEventListener("click", () => {
+      if (!requirePerm("deleteItem")) return;
       if (!editingV2ItemId) return;
       if (!confirm("確定要刪除此品項？刪除後無法復原。")) return;
       const items = DK.getItems().filter((x) => x.id !== editingV2ItemId);
@@ -4356,11 +4672,14 @@
       reader.readAsDataURL(file);
     }
     document.getElementById("itemSave")?.addEventListener("click", () => {
+      if (!requirePerm("editItem")) return;
       const nameSpec = String(getItemEditorField("itemName")?.value || "").trim();
       if (!nameSpec) return v2Show(itemMsg, "名稱／規格必填");
       const items = DK.getItems();
       const editingItem = editingV2ItemId ? DK.findItemById(editingV2ItemId) : null;
       const sku = editingItem ? editingItem.sku : generateUniqueSKU();
+      const costInput = parseFloat(getItemEditorField("itemCost")?.value) || 0;
+      const costUnit = canPerm("viewCost") ? costInput : (editingItem ? (Number(editingItem.cost_unit) || 0) : 0);
       const payload = {
         sku,
         category: getItemEditorField("itemCategory")?.value,
@@ -4370,7 +4689,7 @@
         condition: getItemEditorField("itemCondition")?.value || "USED",
         status: getItemEditorField("itemStatus")?.value || "READY",
         qty_on_hand: Math.max(0, parseInt(getItemEditorField("itemQty")?.value, 10) || 0),
-        cost_unit: parseFloat(getItemEditorField("itemCost")?.value) || 0,
+        cost_unit: costUnit,
         price_list: parseFloat(getItemEditorField("itemPriceList")?.value) || null,
         price_floor: parseFloat(getItemEditorField("itemPriceFloor")?.value) || null,
         inbound_date: getItemEditorField("itemInboundDate")?.value || null,
@@ -4386,6 +4705,7 @@
         if (typeof DK.applyQtyArchiveState === "function") DK.applyQtyArchiveState(items[idx], prevQty, payload.qty_on_hand);
         const syncP = DK.saveItems(items);
         v2Show(itemMsg, "已更新");
+        auditAction("編輯庫存", editingV2ItemId);
         if (syncP) syncP.then((r) => showSyncToast(r, "品項"));
       } else {
         payload.id = "i-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9);
@@ -4405,6 +4725,7 @@
         } else {
           v2Show(itemMsg, "已新增");
         }
+        auditAction("新增庫存", payload.id);
         if (syncP) syncP.then((r) => showSyncToast(r, "品項"));
       }
       renderV2Items();
@@ -4546,6 +4867,7 @@
     itemsCategory?.addEventListener("change", () => { itemsPage = 1; renderV2Items(); });
     itemsStatus?.addEventListener("change", () => { itemsStatusTouchedByUser = true; itemsPage = 1; renderV2Items(); });
     document.getElementById("btnDeleteSelectedItems")?.addEventListener("click", () => {
+      if (!requirePerm("deleteItem")) return;
       const checked = document.querySelectorAll("#itemsTbody .item-row-cb:checked");
       const ids = Array.from(checked).map((cb) => cb.getAttribute("data-id")).filter(Boolean);
       if (ids.length === 0) {
@@ -4607,6 +4929,7 @@
       }
     }
     document.getElementById("btnNewLedger")?.addEventListener("click", () => {
+      if (!requirePerm("ledger")) return;
       const sel = document.getElementById("ledgerItemId");
       if (sel) sel.innerHTML = '<option value="">— 選擇品項 —</option>' + DK.getItems().map((i) => `<option value="${v2Esc(i.id)}">${v2Esc(i.name)}</option>`).join("");
       sel.value = "";
@@ -4623,6 +4946,7 @@
     });
     document.getElementById("ledgerCancel")?.addEventListener("click", () => { if (ledgerForm) ledgerForm.hidden = true; v2Hide(ledgerMsg); });
     document.getElementById("ledgerSubmit")?.addEventListener("click", () => {
+      if (!requirePerm("ledger")) return;
       const itemId = document.getElementById("ledgerItemId")?.value;
       const type = document.getElementById("ledgerType")?.value;
       const qty = parseInt(document.getElementById("ledgerQty")?.value, 10);
@@ -4846,7 +5170,7 @@
             const name = (i.name || "") + (i.spec ? " (" + (i.spec || "") + ")" : "");
             const qty = Number(i.qty_on_hand);
             const qtyLabel = Number.isFinite(qty) ? qty : "-";
-            const hasCost = i.cost_unit != null && i.cost_unit !== "";
+        const hasCost = opts.showCost && canPerm("viewCost") && i.cost_unit != null && i.cost_unit !== "";
             const costNum = hasCost ? (Number(i.cost_unit) || 0) : null;
             const stockFull = "剩餘 " + qtyLabel + (archived ? " · 已封存" : "");
             const costFull = costNum != null ? ("成本 NT$" + v2FmtNum(costNum)) : "";
@@ -4862,7 +5186,7 @@
             let label = (i.name || "") + (i.spec ? " (" + (i.spec || "") + ")" : "");
             const qty = Number(i.qty_on_hand);
             if (opts.showQty) label += " · 剩餘 " + (Number.isFinite(qty) ? qty : "-");
-            if (opts.showCost && (i.cost_unit != null && i.cost_unit !== "")) label += " · 成本 " + v2FmtNum(Number(i.cost_unit) || 0);
+            if (opts.showCost && canPerm("viewCost") && (i.cost_unit != null && i.cost_unit !== "")) label += " · 成本 " + v2FmtNum(Number(i.cost_unit) || 0);
             const zeroClass = Number.isFinite(qty) && qty === 0 ? " qty-zero" : "";
             return `<div class="searchable-select-option${zeroClass}" data-id="${v2Esc(i.id)}" data-name="${v2Esc(i.name || "")}">${v2Esc(label)}</div>`;
           }).join("");
@@ -4899,7 +5223,7 @@
         const margin = o.gross_margin != null ? (o.gross_margin * 100).toFixed(1) + "%" : "-";
         const statusKey = (o.status && ORDER_STATUS_LABEL[o.status]) ? o.status : "pending";
         const statusClass = "order-status-badge order-status-" + statusKey;
-        return `<tr><td class="nowrap">${v2Esc(o.order_no)}</td><td>${v2Esc(o.customer_name)}</td><td>${v2FmtNum(o.total_sale)}</td><td>${v2FmtNum(o.shipping_income)}</td><td>${v2FmtNum(o.discount)}</td><td>${v2FmtNum(o.cogs_total)}</td><td>${v2FmtNum(o.gross_profit)}</td><td>${margin}</td><td><span class="${statusClass}">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</span></td><td class="nowrap">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td></tr>`;
+        return `<tr><td class="nowrap">${v2Esc(o.order_no)}</td><td>${v2Esc(o.customer_name)}</td><td>${v2FmtNum(o.total_sale)}</td><td>${v2FmtNum(o.shipping_income)}</td><td>${v2FmtNum(o.discount)}</td><td data-admin-only>${v2FmtNum(o.cogs_total)}</td><td data-admin-only>${v2FmtNum(o.gross_profit)}</td><td data-admin-only>${margin}</td><td><span class="${statusClass}">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</span></td><td class="nowrap">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td></tr>`;
       }).join("");
       ordersTbody.querySelectorAll(".btn-edit-order").forEach((btn) => btn.addEventListener("click", () => openV2OrderEditor(btn.getAttribute("data-id"))));
 
@@ -4942,7 +5266,7 @@
         const costUnit = Number(line.cost_unit) || 0;
         const cogsSub = costUnit * (Number(line.qty) || 0);
         const spec = line.spec != null ? line.spec : (DK.findItemById(line.item_id)?.spec ?? "");
-        return `<tr><td>${v2Esc(line.name || "")}</td><td class="muted small">${v2Esc(spec)}</td><td>${line.qty}</td><td>${v2FmtNum(line.unit_price)}</td><td>${v2FmtNum(costUnit)}</td><td>${v2FmtNum(cogsSub)}</td><td><button type="button" class="btn btn-ghost btn-sm order-line-remove" data-i="${i}">移除</button></td></tr>`;
+        return `<tr><td>${v2Esc(line.name || "")}</td><td class="muted small">${v2Esc(spec)}</td><td>${line.qty}</td><td>${v2FmtNum(line.unit_price)}</td><td data-admin-only>${v2FmtNum(costUnit)}</td><td data-admin-only>${v2FmtNum(cogsSub)}</td><td><button type="button" class="btn btn-ghost btn-sm order-line-remove" data-i="${i}">移除</button></td></tr>`;
       }).join("");
       orderLineTbody.querySelectorAll(".order-line-remove").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -5046,6 +5370,7 @@
       v2Hide(orderMsg);
     });
     document.getElementById("orderSave")?.addEventListener("click", async () => {
+      if (!requirePerm("orders")) return;
       const g = typeof window !== "undefined" ? window : typeof globalThis !== "undefined" ? globalThis : {};
       g._suppressV2Sync = true;
       try {
@@ -5137,6 +5462,7 @@
         }
         orders[idx] = { ...existingOrder, ...payload, id: orderId, updated_at: nowISO() };
         DK.saveOrders(orders);
+        auditAction("編輯訂單", orderId);
         v2Show(orderMsg, salesTypeHint ? "已更新（庫存已同步）。" + salesTypeHint : "已更新（庫存已同步）");
         // 只有訂單狀態為「已完成」才回寫客戶成交（避免未完成就把客戶改成成交）
         const statusNow = String(document.getElementById("orderStatus")?.value || payload.status || "").trim();
@@ -5164,6 +5490,7 @@
         }
         orders.unshift(payload);
         DK.saveOrders(orders);
+        auditAction("新增訂單", payload.id);
         v2Show(orderMsg, salesTypeHint ? "已新增並已扣庫存。" + salesTypeHint : "已新增並已扣庫存");
         // 只有訂單狀態為「已完成」才回寫客戶成交（避免未完成就把客戶改成成交）
         const statusNow = String(document.getElementById("orderStatus")?.value || payload.status || "").trim();
@@ -5216,15 +5543,21 @@
       v2Hide(restockMsg);
     });
     document.getElementById("restockSubmit")?.addEventListener("click", () => {
+      if (!requirePerm("restock")) return;
       const itemId = document.getElementById("restockItemId")?.value;
       const qty = parseInt(document.getElementById("restockQty")?.value, 10);
-      const unitCost = parseFloat(document.getElementById("restockUnitCost")?.value) || 0;
+      let unitCost = parseFloat(document.getElementById("restockUnitCost")?.value) || 0;
+      if (!canPerm("viewCost")) {
+        const item = DK.findItemById(itemId);
+        unitCost = Number(item?.cost_unit) || 0;
+      }
       const inboundDate = document.getElementById("restockInboundDate")?.value || "";
       if (!itemId) return v2Show(restockMsg, "請選擇品項");
       if (!Number.isFinite(qty) || qty <= 0) return v2Show(restockMsg, "數量需大於 0");
       if (unitCost < 0) return v2Show(restockMsg, "請填單位成本");
       const result = DK.addLedgerEntry({ item_id: itemId, type: "IN", qty, unit_cost: unitCost, ref_type: "PURCHASE", ref_id: "", note: "補貨", inbound_date: inboundDate || undefined });
       if (!result.ok) return v2Show(restockMsg, result.error || "入庫失敗");
+      auditAction("補貨", itemId);
       v2Show(restockMsg, "已入庫，入庫日已更新");
       if (result.syncPromise) result.syncPromise.then((r) => showSyncToast(r, "補貨"));
       renderV2Items();
@@ -5629,9 +5962,11 @@
       if (quoteModal) quoteModal.hidden = false;
     }
     document.getElementById("orderQuotePreview")?.addEventListener("click", () => {
+      if (!requirePerm("quoteImage")) return;
       openQuotePreview().catch(() => v2Show(orderMsg, "報價單預覽失敗"));
     });
     document.getElementById("orderQuoteDownload")?.addEventListener("click", () => {
+      if (!requirePerm("quoteImage")) return;
       buildQuoteCanvas()
         .then(({ canvas, filename }) => downloadQuoteCanvas(canvas, filename))
         .catch(() => v2Show(orderMsg, "報價單下載失敗"));
@@ -5661,6 +5996,7 @@
       expensesTbody.innerHTML = pageInfo.pageItems.map((e) => `<tr><td>${v2Esc(e.date)}</td><td>${v2Esc(EXPENSE_TYPE_LABEL[e.type] || e.type)}</td><td>${v2Esc(e.category)}</td><td>${v2FmtNum(e.amount)}</td><td class="muted">${v2Esc(e.note)}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-del-expense" data-id="${v2Esc(e.id)}">刪除</button></td></tr>`).join("");
       expensesTbody.querySelectorAll(".btn-del-expense").forEach((btn) => {
         btn.addEventListener("click", () => {
+          if (!requirePerm("deleteExpense")) return;
           if (!confirm("確定刪除？")) return;
           const id = btn.getAttribute("data-id");
           const rows = DK.getExpenses().filter((x) => x.id !== id);
@@ -5689,6 +6025,7 @@
       }
     }
     document.getElementById("btnNewExpense")?.addEventListener("click", () => {
+      if (!requirePerm("expenses")) return;
       document.getElementById("expenseDate").value = todayStr();
       document.getElementById("expenseType").value = "OPEX";
       document.getElementById("expenseCategory").value = "";
@@ -5699,6 +6036,7 @@
     });
     document.getElementById("expenseCancel")?.addEventListener("click", () => { if (expenseForm) expenseForm.hidden = true; v2Hide(expenseMsg); });
     document.getElementById("expenseSave")?.addEventListener("click", () => {
+      if (!requirePerm("expenses")) return;
       const date = document.getElementById("expenseDate")?.value;
       const amount = parseFloat(document.getElementById("expenseAmount")?.value);
       if (!date) return v2Show(expenseMsg, "請選日期");
@@ -5802,6 +6140,7 @@
       return s;
     }
     function exportReportCSV() {
+      if (!requirePerm("reports")) return;
       const params = getReportQueryParams();
       const summary = DK.reportSummaryByDateRange(params.fromStr, params.toStr);
       const orders = (DK.getOrdersInDateRange && DK.getOrdersInDateRange(params.fromStr, params.toStr)) || DK.getOrders();
@@ -5902,7 +6241,7 @@
   applyAuthUI();
   if (window.DK?.isAdminAuthed?.()) {
     const saved = (function () { try { return localStorage.getItem("dk_admin_active_tab"); } catch (_) { return null; } })();
-    if (saved === "publish" || saved === "inv" || saved === "frontend" || saved === "vendors" || saved === "purchase" || saved === "customers") switchTab(saved);
+    if (saved && VALID_TABS.includes(saved) && canPerm(saved)) switchTab(saved);
     else switchTab("inv");
   }
 })();

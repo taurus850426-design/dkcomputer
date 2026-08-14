@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   inventory: "dk_inventory_v1",
   inventoryBackup: "dk_inventory_backup_v1",
   adminAuthed: "dk_admin_authed_v1",
+  adminSession: "dk_admin_session_v1",
   computers: "dk_computers_v1",
   gpus: "dk_gpus_v1",
   misc: "dk_misc_v1",
@@ -39,7 +40,7 @@ const V2_DATA_ROW_ID = "default";
 const SUPABASE_STORAGE_BUCKET = "product-photos";
 // 專供站內資產（例如首頁 Banner）使用的 Storage bucket，請在 Supabase 建立並設為 Public
 const SUPABASE_SITE_ASSET_BUCKET = "site-assets";
-const V2_STORAGE_KEYS = { items: "dk_v2_items", ledger: "dk_v2_ledger", orders: "dk_v2_orders", expenses: "dk_v2_expenses" };
+const V2_STORAGE_KEYS = { items: "dk_v2_items", ledger: "dk_v2_ledger", orders: "dk_v2_orders", expenses: "dk_v2_expenses", auditLogs: "dk_v2_audit_logs" };
 
 const DEFAULT_CONFIG = {
   siteTitle: "二手電腦・實測交付｜依用途配機，不亂賣、不踩雷",
@@ -142,8 +143,8 @@ const DEFAULT_CONFIG = {
     orderMessageTemplate: "你好，我想詢問：{name}",
   },
   admin: {
-    username: "admin",
-    password: "admin123",
+    username: "",
+    password: "",
   },
   // 庫存品項品類（可於後台新增/移除；讀取時會確保正式品類齊全）
   inventoryCategories: [
@@ -370,20 +371,19 @@ function getConfig() {
     const s = saved && typeof saved === "object" ? saved : null;
     const hasAdmin = !!(s && s.admin && typeof s.admin === "object");
     if (!hasAdmin) {
-      const patched = { ...s, admin: { ...(DEFAULT_CONFIG.admin || {}) } };
+      const patched = { ...s, admin: { ...(s.admin && typeof s.admin === "object" ? s.admin : {}), users: Array.isArray(s.admin && s.admin.users) ? s.admin.users : [] } };
       localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(patched));
       return deepMerge(DEFAULT_CONFIG, patched);
     }
-    // admin 物件存在但欄位缺失時也補齊（不覆蓋既有值）
+    // 只補缺失的 username 結構，絕不把預設密碼寫進本機（避免 admin123 備援復活）
     const admin = s.admin || {};
-    const needsUser = admin.username == null || String(admin.username).trim() === "";
-    const needsPass = admin.password == null || String(admin.password) === "";
-    if ((DEFAULT_CONFIG.admin && (needsUser || needsPass))) {
+    const needsUser = admin.username == null;
+    if (needsUser) {
       const patched = {
         ...s,
         admin: {
-          ...(DEFAULT_CONFIG.admin || {}),
           ...admin,
+          username: String(admin.username || ""),
         },
       };
       localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(patched));
@@ -869,6 +869,7 @@ async function fetchV2DataFromSupabase() {
   const ledger = Array.isArray(raw.ledger) ? raw.ledger : [];
   const orders = Array.isArray(raw.orders) ? raw.orders : [];
   const expenses = Array.isArray(raw.expenses) ? raw.expenses : [];
+  const auditLogs = Array.isArray(raw.auditLogs) ? raw.auditLogs : [];
   try {
     // 保護：雲端某欄為空陣列時，不要立刻覆蓋本機已有資料
     function pickWrite(key, cloudArr) {
@@ -882,11 +883,13 @@ async function fetchV2DataFromSupabase() {
     const nextLedger = pickWrite(V2_STORAGE_KEYS.ledger, ledger);
     const nextOrders = pickWrite(V2_STORAGE_KEYS.orders, orders);
     const nextExpenses = pickWrite(V2_STORAGE_KEYS.expenses, expenses);
+    const nextAudit = pickWrite(V2_STORAGE_KEYS.auditLogs, auditLogs);
     localStorage.setItem(V2_STORAGE_KEYS.items, JSON.stringify(nextItems));
     localStorage.setItem(V2_STORAGE_KEYS.ledger, JSON.stringify(nextLedger));
     localStorage.setItem(V2_STORAGE_KEYS.orders, JSON.stringify(nextOrders));
     localStorage.setItem(V2_STORAGE_KEYS.expenses, JSON.stringify(nextExpenses));
-    return { items: nextItems, ledger: nextLedger, orders: nextOrders, expenses: nextExpenses };
+    localStorage.setItem(V2_STORAGE_KEYS.auditLogs, JSON.stringify(nextAudit));
+    return { items: nextItems, ledger: nextLedger, orders: nextOrders, expenses: nextExpenses, auditLogs: nextAudit };
   } catch (e) {
     return null;
   }
@@ -900,17 +903,19 @@ async function saveV2DataToSupabase() {
   let ledger = [];
   let orders = [];
   let expenses = [];
+  let auditLogs = [];
   try {
     items = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.items), []);
     ledger = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.ledger), []);
     orders = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.orders), []);
     expenses = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.expenses), []);
+    auditLogs = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.auditLogs), []);
   } catch (e) {
     return { ok: false, error: "讀取本機資料失敗" };
   }
   const payload = {
     id: V2_DATA_ROW_ID,
-    data: { items, ledger, orders, expenses },
+    data: { items, ledger, orders, expenses, auditLogs },
   };
   const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_V2_DATA_TABLE}?on_conflict=id`;
   try {
@@ -1581,13 +1586,329 @@ async function openLineOrder(item) {
   alert(ok ? "已複製詢問訊息（可貼到 LINE）。\n\n請到管理員後台設定 LINE 連結。" : "請到管理員後台設定 LINE 連結。");
 }
 
+const ADMIN_ROLE_LABEL = { admin: "管理員", staff: "員工" };
+const STAFF_ALLOWED_PERMS = {
+  inv: true,
+  items: true,
+  restock: true,
+  editItem: true,
+  orders: true,
+  customers: true,
+  quoteImage: true,
+};
+const ADMIN_ONLY_PERMS = {
+  accounts: true,
+  frontend: true,
+  publish: true,
+  vendors: true,
+  purchase: true,
+  settings: true,
+  sync: true,
+  deleteItem: true,
+  deleteOrder: true,
+  deleteCustomer: true,
+  deleteExpense: true,
+  ledger: true,
+  expenses: true,
+  reports: true,
+  viewCost: true,
+};
+
+function mergeAdminUsers(cloudUsers, localUsers) {
+  const a = Array.isArray(cloudUsers) ? cloudUsers : [];
+  const b = Array.isArray(localUsers) ? localUsers : [];
+  if (!a.length) return b.slice();
+  if (!b.length) return a.slice();
+  const byId = new Map();
+  function ingest(list) {
+    list.forEach((u) => {
+      if (!u || typeof u !== "object") return;
+      const id = String(u.id || "").trim();
+      if (!id) return;
+      const prev = byId.get(id);
+      if (!prev) {
+        byId.set(id, u);
+        return;
+      }
+      const ta = Date.parse(prev.updatedAt || prev.createdAt || 0) || 0;
+      const tb = Date.parse(u.updatedAt || u.createdAt || 0) || 0;
+      byId.set(id, tb >= ta ? u : prev);
+    });
+  }
+  ingest(a);
+  ingest(b);
+  return Array.from(byId.values());
+}
+
+function mergeAdminConfig(cloudAdmin, localAdmin) {
+  const cloud = cloudAdmin && typeof cloudAdmin === "object" ? cloudAdmin : {};
+  const local = localAdmin && typeof localAdmin === "object" ? localAdmin : {};
+  const merged = { ...cloud, ...local };
+  const cloudUsers = Array.isArray(cloud.users) ? cloud.users : [];
+  const localUsers = Array.isArray(local.users) ? local.users : [];
+  if (cloudUsers.length || localUsers.length) {
+    merged.users = mergeAdminUsers(cloudUsers, localUsers);
+  }
+  const lu = local.username;
+  const lp = local.password;
+  if (lu != null && String(lu).trim() !== "") merged.username = lu;
+  if (lp != null && String(lp) !== "") merged.password = lp;
+  return merged;
+}
+
+function normalizeAdminUser(u) {
+  if (!u || typeof u !== "object") return null;
+  const id = String(u.id || "").trim();
+  const username = String(u.username || "").trim();
+  if (!id || !username) return null;
+  return {
+    id,
+    username,
+    password: String(u.password ?? ""),
+    displayName: String(u.displayName || username).trim() || username,
+    role: u.role === "staff" ? "staff" : "admin",
+    enabled: u.enabled !== false,
+    createdAt: u.createdAt || null,
+    updatedAt: u.updatedAt || null,
+  };
+}
+
+function legacyAdminUserFromConfig(admin) {
+  const username = String((admin && admin.username) || "").trim();
+  if (!username) return null;
+  return {
+    id: "user-legacy-admin",
+    username,
+    password: String((admin && admin.password) ?? ""),
+    displayName: "管理員",
+    role: "admin",
+    enabled: true,
+    createdAt: null,
+    updatedAt: null,
+  };
+}
+
+function getAdminUsers() {
+  const cfg = getConfig();
+  const admin = (cfg && cfg.admin) || {};
+  const raw = Array.isArray(admin.users) ? admin.users : [];
+  const users = raw.map(normalizeAdminUser).filter(Boolean);
+  if (users.length) return users;
+  const legacy = legacyAdminUserFromConfig(admin);
+  return legacy ? [legacy] : [];
+}
+
+function findAdminUserByCredentials(username, password) {
+  const u = String(username || "").trim();
+  const p = String(password ?? "");
+  if (!u || p === "") return null;
+  const users = getAdminUsers();
+  const found = users.find((x) => x.username === u && String(x.password ?? "") === p);
+  if (found) return found;
+  const cfg = getConfig();
+  const admin = (cfg && cfg.admin) || {};
+  const lu = String(admin.username || "").trim();
+  const lp = String(admin.password ?? "");
+  if (lu && lp && u === lu && p === lp) return legacyAdminUserFromConfig(admin);
+  return null;
+}
+
+function hasEnabledAdminAccount() {
+  return getAdminUsers().some((u) => u.role === "admin" && u.enabled !== false && String(u.password ?? "") !== "");
+}
+
+function ensureAdminUsersPersisted() {
+  const cfg = getConfig();
+  const admin = (cfg && cfg.admin) || {};
+  if (Array.isArray(admin.users) && admin.users.length) return cfg;
+  const users = getAdminUsers();
+  if (!users.length) return cfg;
+  const next = { ...cfg, admin: { ...admin, users } };
+  saveConfig(next);
+  return next;
+}
+
+function saveAdminUsers(nextUsers, opts) {
+  const cfg = getConfig();
+  const admin = (cfg && cfg.admin) || {};
+  const list = (Array.isArray(nextUsers) ? nextUsers : []).map(normalizeAdminUser).filter(Boolean);
+  const nextAdmin = { ...admin, users: list };
+  const primary =
+    list.find((u) => u.id === "user-legacy-admin") ||
+    list.find((u) => u.role === "admin" && u.enabled);
+  if (primary) {
+    nextAdmin.username = primary.username;
+    nextAdmin.password = primary.password;
+  }
+  const next = { ...cfg, admin: nextAdmin };
+  saveConfig(next, opts);
+  return next;
+}
+
+function getAdminSession() {
+  const raw = safeJsonParse(localStorage.getItem(STORAGE_KEYS.adminSession), null);
+  if (!raw || typeof raw !== "object") return null;
+  const userId = String(raw.userId || "").trim();
+  const username = String(raw.username || "").trim();
+  const role = raw.role === "staff" ? "staff" : raw.role === "admin" ? "admin" : "";
+  const loginAt = String(raw.loginAt || "").trim();
+  if (!userId || !username || !role || !loginAt) return null;
+  return {
+    userId,
+    username,
+    displayName: String(raw.displayName || raw.username || ""),
+    role,
+    loginAt,
+  };
+}
+
+function setAdminSession(session) {
+  if (!session || typeof session !== "object") {
+    localStorage.removeItem(STORAGE_KEYS.adminSession);
+    localStorage.removeItem(STORAGE_KEYS.adminAuthed);
+    return;
+  }
+  const payload = {
+    userId: String(session.userId || "").trim(),
+    username: String(session.username || "").trim(),
+    displayName: String(session.displayName || session.username || "").trim(),
+    role: session.role === "staff" ? "staff" : session.role === "admin" ? "admin" : "",
+    loginAt: String(session.loginAt || "").trim() || new Date().toISOString(),
+  };
+  if (!payload.userId || !payload.username || !payload.role || !payload.loginAt) {
+    localStorage.removeItem(STORAGE_KEYS.adminSession);
+    localStorage.removeItem(STORAGE_KEYS.adminAuthed);
+    return;
+  }
+  localStorage.setItem(STORAGE_KEYS.adminSession, JSON.stringify(payload));
+  localStorage.setItem(STORAGE_KEYS.adminAuthed, "1");
+}
+
+function resolveLiveAdminUser(session) {
+  if (!session || !session.userId || !session.username || !session.role || !session.loginAt) return null;
+  const users = getAdminUsers();
+  let live = users.find((u) => u.id === session.userId);
+  if (!live) live = users.find((u) => u.username === session.username);
+  if (!live || live.enabled === false) return null;
+  if (String(live.password ?? "") === "") return null;
+  return live;
+}
+
 function isAdminAuthed() {
-  return localStorage.getItem(STORAGE_KEYS.adminAuthed) === "1";
+  return !!resolveLiveAdminUser(getAdminSession());
 }
 
 function setAdminAuthed(v) {
-  if (v) localStorage.setItem(STORAGE_KEYS.adminAuthed, "1");
-  else localStorage.removeItem(STORAGE_KEYS.adminAuthed);
+  if (v) {
+    if (resolveLiveAdminUser(getAdminSession())) {
+      localStorage.setItem(STORAGE_KEYS.adminAuthed, "1");
+    }
+    return;
+  }
+  localStorage.removeItem(STORAGE_KEYS.adminAuthed);
+  localStorage.removeItem(STORAGE_KEYS.adminSession);
+}
+
+function getCurrentAdminUser() {
+  const session = getAdminSession();
+  const live = resolveLiveAdminUser(session);
+  if (!live) return null;
+  return {
+    userId: live.id,
+    username: live.username,
+    displayName: live.displayName,
+    role: live.role,
+    enabled: true,
+    loginAt: session.loginAt,
+  };
+}
+
+function getCurrentRole() {
+  const u = getCurrentAdminUser();
+  return (u && u.role) || "";
+}
+
+function roleLabel(role) {
+  return ADMIN_ROLE_LABEL[role] || "未登入";
+}
+
+function canPermission(perm) {
+  const role = getCurrentRole();
+  if (role === "admin") return true;
+  if (role !== "staff") return false;
+  const key = String(perm || "");
+  if (ADMIN_ONLY_PERMS[key]) return false;
+  return !!STAFF_ALLOWED_PERMS[key];
+}
+
+function requirePermission(perm) {
+  if (canPermission(perm)) return true;
+  try {
+    alert("你沒有此操作權限");
+  } catch (_) {}
+  return false;
+}
+
+function validateAdminSession() {
+  const session = getAdminSession();
+  const live = resolveLiveAdminUser(session);
+  if (!live) {
+    if (session || localStorage.getItem(STORAGE_KEYS.adminAuthed) === "1") {
+      setAdminAuthed(false);
+    }
+    return { ok: false, reason: session ? "invalid" : "unauthed" };
+  }
+  setAdminSession({
+    userId: live.id,
+    username: live.username,
+    displayName: live.displayName,
+    role: live.role,
+    loginAt: session.loginAt,
+  });
+  return {
+    ok: true,
+    user: {
+      userId: live.id,
+      username: live.username,
+      displayName: live.displayName,
+      role: live.role,
+      enabled: true,
+      loginAt: session.loginAt,
+    },
+  };
+}
+
+function loadAuditLogs() {
+  const raw = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.auditLogs), []);
+  return Array.isArray(raw) ? raw : [];
+}
+
+function saveAuditLogs(list) {
+  const next = Array.isArray(list) ? list.slice(0, 400) : [];
+  localStorage.setItem(V2_STORAGE_KEYS.auditLogs, JSON.stringify(next));
+}
+
+function appendAuditLog(entry) {
+  try {
+    const user = getCurrentAdminUser() || {};
+    const row = {
+      id: "aud-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+      userId: String(user.userId || ""),
+      displayName: String(user.displayName || ""),
+      action: String((entry && entry.action) || ""),
+      targetId: String((entry && entry.targetId) || ""),
+      timestamp: new Date().toISOString(),
+    };
+    const list = loadAuditLogs();
+    list.unshift(row);
+    saveAuditLogs(list);
+    if (typeof window.__syncV2ToSupabase === "function" && !window._suppressV2Sync) {
+      window.__syncV2ToSupabase().catch(function () {});
+    }
+    return row;
+  } catch (_) {
+    return null;
+  }
 }
 
 // ===== 廠商報價＋採購叫貨單雲端同步 1.0（REST anon；無 Supabase Auth）=====
@@ -2410,6 +2731,22 @@ window.DK = {
   tryCopy,
   isAdminAuthed,
   setAdminAuthed,
+  getAdminUsers,
+  findAdminUserByCredentials,
+  hasEnabledAdminAccount,
+  ensureAdminUsersPersisted,
+  saveAdminUsers,
+  getAdminSession,
+  setAdminSession,
+  getCurrentAdminUser,
+  getCurrentRole,
+  roleLabel,
+  canPermission,
+  requirePermission,
+  validateAdminSession,
+  appendAuditLog,
+  loadAuditLogs,
+  ADMIN_ROLE_LABEL,
   isSupabaseConfigured,
   // 廠商報價＋叫貨單同步 1.0
   VP_STORAGE_KEYS,
@@ -2445,18 +2782,13 @@ if (window.DK.fetchSiteConfigFromSupabase && window.DK.saveConfig) {
         // 保護：若本機已有 admin 帳密，不要被雲端設定蓋掉（避免登出後第二次無法用原帳密登入）
         try {
           const local = safeJsonParse(localStorage.getItem(STORAGE_KEYS.config), null);
-          if (local && local.admin && typeof local.admin === "object") {
-            const lu = local.admin.username;
-            const lp = local.admin.password;
-            const hasLocalAdmin =
-              (lu != null && String(lu).trim() !== "") ||
-              (lp != null && String(lp) !== "");
-            if (hasLocalAdmin) {
-              c = { ...c, admin: { ...(c.admin || {}), ...local.admin } };
-            }
+          const localAdmin = local && local.admin && typeof local.admin === "object" ? local.admin : null;
+          if (localAdmin) {
+            c = { ...c, admin: mergeAdminConfig(c.admin, localAdmin) };
           }
         } catch (_) {}
         window.DK.saveConfig(c, { skipSupabase: true });
+        try { window.dispatchEvent(new CustomEvent("dk:config-updated")); } catch (_) {}
       }
       if (typeof window.DK.applyConfigToHomePage === "function") window.DK.applyConfigToHomePage();
     })

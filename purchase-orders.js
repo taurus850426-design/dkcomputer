@@ -1056,6 +1056,7 @@
           const o = loadOrders().find(function (x) { return x.id === id; });
           if (o) printOrder(o);
         } else if (act === "del") {
+          if (window.DK && typeof window.DK.requirePermission === "function" && !window.DK.requirePermission("purchase")) return;
           if (!confirm("確定刪除此叫貨單？（soft delete，另一裝置不會再帶回）")) return;
           const targetId = id;
           if (window.DK && typeof window.DK.softDeletePurchaseOrderToSupabase === "function") {
@@ -1137,6 +1138,7 @@
   }
 
   function onShow() {
+    if (window.DK && typeof window.DK.requirePermission === "function" && !window.DK.requirePermission("purchase")) return;
     try {
       bind();
       fillCategorySelect();

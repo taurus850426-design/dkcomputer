@@ -1496,6 +1496,98 @@ input:focus, textarea:focus, select:focus{ border-color: rgba(93,214,255,0.55); 
   margin:0;
 }
 .admin-head .muted{ font-size: 13px; }
+.admin-current-user{
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(17,24,39,0.78);
+  margin-right: 4px;
+  white-space: nowrap;
+}
+body.dk-role-staff [data-admin-only]{ display: none !important; }
+
+.role-perm-grid{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 10px;
+}
+@media (min-width: 860px){
+  .role-perm-grid{ grid-template-columns: 1fr 1fr; }
+}
+.role-perm-card{
+  border: 1px solid rgba(17,24,39,0.10);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.role-perm-card.is-highlight{
+  border-color: rgba(37,99,235,0.45);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+}
+.role-perm-card-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.role-perm-card-head .h3{ margin: 0; }
+.role-perm-badge{
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(17,24,39,0.06);
+  color: rgba(17,24,39,0.72);
+  white-space: nowrap;
+}
+.role-perm-intro{
+  font-size: 13px;
+  color: rgba(17,24,39,0.62);
+  margin: 0 0 8px;
+}
+.role-perm-sub{
+  font-size: 12px;
+  font-weight: 700;
+  margin: 10px 0 6px;
+  color: rgba(17,24,39,0.78);
+}
+.role-perm-chips{
+  display:flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.role-perm-chip{
+  font-size: 12px;
+  line-height: 1.3;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+.role-perm-chip.is-allow{
+  color: #166534;
+  background: rgba(22,163,74,0.08);
+  border-color: rgba(22,163,74,0.16);
+}
+.role-perm-chip.is-deny{
+  color: #9f1239;
+  background: rgba(225,29,72,0.06);
+  border-color: rgba(225,29,72,0.14);
+}
+.account-role-help{
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(17,24,39,0.10);
+  background: rgba(17,24,39,0.02);
+}
+.account-role-help .role-perm-card-head{ margin-bottom: 6px; }
+.btn-account-perm{
+  padding: 2px 8px !important;
+  font-size: 12px !important;
+  margin-left: 4px;
+}
 
 /* 後台懸浮提示（畫面中央，顯示後自動消失） */
 .admin-toast{
