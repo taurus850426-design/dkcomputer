@@ -1396,6 +1396,29 @@
                 <p class="muted">新增員工帳號、停用或重設密碼。帳號會隨網站設定同步到其他裝置。</p>
               </div>
             </div>
+            <div id="authMigrationStatus" class="card" style="margin-bottom:16px" data-admin-only hidden>
+              <h3 class="h3">Auth 遷移狀態</h3>
+              <p class="muted small">本階段僅接線檢查，尚未改用 Supabase Auth 登入。</p>
+              <ul class="muted" style="margin:10px 0 0; padding-left:18px; line-height:1.8">
+                <li>Supabase Auth：<span id="authMigWired">檢查中…</span></li>
+                <li>Auth Session：<span id="authMigSession">檢查中…</span></li>
+                <li>Profiles：<span id="authMigProfiles">檢查中…</span></li>
+                <li>正式登入：目前仍使用舊系統</li>
+              </ul>
+              <div id="authStage3Test" style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border, #e5e5e5)">
+                <h3 class="h3">Supabase Auth 測試</h3>
+                <p class="muted small">這只是遷移測試，不取代目前正式後台登入。</p>
+                <div class="form-grid" style="margin-top:12px">
+                  <div class="field"><label for="authTestUsername">登入帳號</label><input id="authTestUsername" type="text" autocomplete="off" /></div>
+                  <div class="field"><label for="authTestPassword">密碼</label><input id="authTestPassword" type="password" autocomplete="off" /></div>
+                  <div class="full actions">
+                    <button id="authTestSignInBtn" class="btn btn-primary" type="button">測試 Auth 登入</button>
+                    <button id="authTestSignOutBtn" class="btn btn-ghost" type="button">登出 Auth 測試</button>
+                  </div>
+                </div>
+                <pre id="authTestResult" class="muted small" style="margin-top:10px; white-space:pre-wrap; font-family:inherit" hidden></pre>
+              </div>
+            </div>
             <div class="card" style="margin-bottom:16px">
               <h3 class="h3">新增／編輯帳號</h3>
               <input type="hidden" id="accountEditId" value="" />
@@ -2490,13 +2513,14 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260814a2"></script>
+    <script src="./shared.js?v=20260815s3"></script>
     <script src="./inventory-ledger.js?v=20260813q8"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260814a3"></script>
+    <script src="./admin3.js?v=20260815s3"></script>
     <script src="./purchase-orders.js?v=20260814a1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </body>
 </html>
 

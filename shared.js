@@ -2669,6 +2669,246 @@ function isVpApplyingCloud() {
   return !!__dkVpSyncGuard.applyingCloud;
 }
 
+// ===== Stage 2：Supabase Auth client（已接線、尚未啟用正式登入）=====
+// 失敗必須隔離：不得影響舊登入、本機 session、site_config、前台。
+// 本 Stage 不建立 Auth 帳號、不使用管理金鑰、不改舊登入流程。
+const SUPABASE_JS_CDN_ESM = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+const SUPABASE_AUTH_STORAGE_KEY = "dk_supabase_auth_stage2";
+let __dkSupabaseAuthClient = null;
+let __dkSupabaseAuthClientPromise = null;
+
+function adminUsernameToAuthEmail(username) {
+  const u = String(username == null ? "" : username).trim().toLowerCase();
+  if (!u) return null;
+  if (u.indexOf("@") !== -1) return null;
+  if (/\s/.test(u)) return null;
+  // RFC 5321/5322 local-part（dot-atom）：atext，點不能開頭/結尾/連續
+  if (/[^a-z0-9.!#$%&'*+\/=?^_`{|}~-]/.test(u)) return null;
+  if (u.charAt(0) === "." || u.charAt(u.length - 1) === "." || u.indexOf("..") !== -1) return null;
+  return u + "@login.dkcomputer.internal";
+}
+
+function getSupabaseJsCreateClientSync() {
+  try {
+    if (typeof window !== "undefined" && window.supabase && typeof window.supabase.createClient === "function") {
+      return window.supabase.createClient;
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function getSupabaseAuthClient() {
+  if (__dkSupabaseAuthClient) return __dkSupabaseAuthClient;
+  if (__dkSupabaseAuthClientPromise) return __dkSupabaseAuthClientPromise;
+  __dkSupabaseAuthClientPromise = (async function () {
+    try {
+      if (!isSupabaseConfigured()) return null;
+      let createClient = getSupabaseJsCreateClientSync();
+      if (typeof createClient !== "function") {
+        const mod = await import(SUPABASE_JS_CDN_ESM);
+        createClient = mod && mod.createClient;
+      }
+      if (typeof createClient !== "function") return null;
+      const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+          storageKey: SUPABASE_AUTH_STORAGE_KEY,
+        },
+      });
+      if (client) __dkSupabaseAuthClient = client;
+      return client || null;
+    } catch (_) {
+      return null;
+    } finally {
+      __dkSupabaseAuthClientPromise = null;
+    }
+  })();
+  return __dkSupabaseAuthClientPromise;
+}
+
+async function getSupabaseAuthSession() {
+  try {
+    const client = await getSupabaseAuthClient();
+    if (!client || !client.auth || typeof client.auth.getSession !== "function") return null;
+    const result = await client.auth.getSession();
+    if (result && result.error) return null;
+    return (result && result.data && result.data.session) || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function getSupabaseAuthUser() {
+  try {
+    const session = await getSupabaseAuthSession();
+    return (session && session.user) || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function profilesProbeLooksMissing(status, bodyText) {
+  const t = String(bodyText || "").toLowerCase();
+  if (status === 404 || status === 406) return true;
+  return /does not exist|could not find the table|pgrst205|42p01|schema cache/.test(t);
+}
+
+async function probeProfilesAccess() {
+  try {
+    if (!isSupabaseConfigured()) return "missing";
+    const url = `${SUPABASE_URL}/rest/v1/profiles?select=id&limit=1`;
+    const res = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        Accept: "application/json",
+      },
+    });
+    const text = await res.text();
+    if (profilesProbeLooksMissing(res.status, text)) return "missing";
+    return "ok";
+  } catch (_) {
+    return "missing";
+  }
+}
+
+async function getAuthMigrationStatus() {
+  const out = {
+    authWired: false,
+    authSession: false,
+    profiles: "missing",
+    loginMode: "legacy",
+  };
+  try {
+    const client = await getSupabaseAuthClient();
+    out.authWired = !!client;
+    if (client) {
+      const session = await getSupabaseAuthSession();
+      out.authSession = !!(session && session.user);
+    }
+  } catch (_) {}
+  try {
+    out.profiles = await probeProfilesAccess();
+  } catch (_) {
+    out.profiles = "missing";
+  }
+  return out;
+}
+
+function sanitizeAuthProfileRow(row) {
+  if (!row || typeof row !== "object") return null;
+  const role = row.role === "admin" || row.role === "staff" ? row.role : "";
+  return {
+    username: String(row.username || ""),
+    displayName: String(row.display_name || row.displayName || ""),
+    role,
+    enabled: row.enabled === true,
+  };
+}
+
+function classifySupabaseAuthSignInError(err) {
+  try {
+    const code = String((err && err.code) || "").toLowerCase();
+    const msg = String((err && err.message) || "").toLowerCase();
+    if (code === "invalid_credentials" || msg.indexOf("invalid login credentials") !== -1) return "auth_failed";
+    if (code === "email_not_confirmed" || msg.indexOf("email not confirmed") !== -1) return "email_not_confirmed";
+  } catch (_) {}
+  return "network";
+}
+
+function authMigrationFail(code, extra) {
+  const out = { ok: false, code: code, profile: null };
+  if (extra && extra.authOk) out.authOk = true;
+  return out;
+}
+
+async function fetchOwnAuthProfile(client, userId) {
+  const result = await client
+    .from("profiles")
+    .select("id,username,display_name,role,enabled")
+    .eq("id", userId)
+    .maybeSingle();
+  if (result && result.error) {
+    const msg = String((result.error && result.error.message) || "").toLowerCase();
+    if (/does not exist|could not find the table|pgrst205|42p01/.test(msg)) {
+      return { errorCode: "profile_missing", row: null };
+    }
+    return { errorCode: "network", row: null };
+  }
+  return { errorCode: null, row: (result && result.data) || null };
+}
+
+function validateAuthProfileForMigration(row, username) {
+  if (!row) return authMigrationFail("profile_missing", { authOk: true });
+  const profile = sanitizeAuthProfileRow(row);
+  if (!profile || (profile.role !== "admin" && profile.role !== "staff")) {
+    return authMigrationFail("role_invalid", { authOk: true });
+  }
+  const expected = String(username || "").trim().toLowerCase();
+  const actual = String(profile.username || "").trim().toLowerCase();
+  if (!expected || actual !== expected) {
+    return authMigrationFail("username_mismatch", { authOk: true });
+  }
+  if (profile.enabled !== true) {
+    return { ok: false, code: "profile_disabled", authOk: true, profile: profile };
+  }
+  return { ok: true, code: "ok", authOk: true, profile: profile };
+}
+
+async function signInSupabaseAuthForMigration(username, password) {
+  try {
+    const email = adminUsernameToAuthEmail(username);
+    if (!email) return authMigrationFail("invalid_username");
+    if (String(password ?? "") === "") return authMigrationFail("auth_failed");
+    const client = await getSupabaseAuthClient();
+    if (!client || !client.auth || typeof client.auth.signInWithPassword !== "function") {
+      return authMigrationFail("network");
+    }
+    const signed = await client.auth.signInWithPassword({ email: email, password: String(password) });
+    if (signed && signed.error) {
+      return authMigrationFail(classifySupabaseAuthSignInError(signed.error));
+    }
+    const user = signed && signed.data && signed.data.user;
+    const userId = user && user.id;
+    if (!userId) return authMigrationFail("auth_failed");
+    const fetched = await fetchOwnAuthProfile(client, userId);
+    if (fetched.errorCode === "network") return authMigrationFail("network", { authOk: true });
+    return validateAuthProfileForMigration(fetched.row, username);
+  } catch (_) {
+    return authMigrationFail("network");
+  }
+}
+
+async function signOutSupabaseAuthForMigration() {
+  try {
+    const client = await getSupabaseAuthClient();
+    if (client && client.auth && typeof client.auth.signOut === "function") {
+      await client.auth.signOut();
+    }
+    return { ok: true };
+  } catch (_) {
+    return { ok: false, code: "network" };
+  }
+}
+
+async function getSupabaseAuthProfile() {
+  try {
+    const client = await getSupabaseAuthClient();
+    const user = await getSupabaseAuthUser();
+    if (!client || !user || !user.id) {
+      return { ok: false, code: "no_session", profile: null };
+    }
+    const fetched = await fetchOwnAuthProfile(client, user.id);
+    if (fetched.errorCode === "network") return { ok: false, code: "network", profile: null };
+    if (!fetched.row) return { ok: false, code: "profile_missing", profile: null };
+    return { ok: true, code: "ok", profile: sanitizeAuthProfileRow(fetched.row) };
+  } catch (_) {
+    return { ok: false, code: "network", profile: null };
+  }
+}
+
 window.DK = {
   STORAGE_KEYS,
   DEFAULT_CONFIG,
@@ -2748,6 +2988,14 @@ window.DK = {
   loadAuditLogs,
   ADMIN_ROLE_LABEL,
   isSupabaseConfigured,
+  getSupabaseAuthClient,
+  getSupabaseAuthSession,
+  getSupabaseAuthUser,
+  adminUsernameToAuthEmail,
+  getAuthMigrationStatus,
+  signInSupabaseAuthForMigration,
+  signOutSupabaseAuthForMigration,
+  getSupabaseAuthProfile,
   // 廠商報價＋叫貨單同步 1.0
   VP_STORAGE_KEYS,
   getVendorQuotesSyncMeta,
