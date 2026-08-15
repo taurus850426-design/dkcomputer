@@ -933,6 +933,11 @@
             if (typeof window.DK.pullPurchaseOrdersFromCloud === "function") {
               window.DK.pullPurchaseOrdersFromCloud().catch(function () {});
             }
+            if (typeof window.DK.fetchV2DataFromSupabase === "function") {
+              window.DK.fetchV2DataFromSupabase().then(function () {
+                try { if (typeof window.__adminV2Refresh === "function") window.__adminV2Refresh(); } catch (_) {}
+              }).catch(function () {});
+            }
           } catch (_) {}
           try {
             const saved = localStorage.getItem("dk_admin_active_tab") || sessionStorage.getItem(ADMIN_TAB_KEY);
@@ -6398,6 +6403,11 @@
         }
         if (typeof window.DK.pullPurchaseOrdersFromCloud === "function") {
           window.DK.pullPurchaseOrdersFromCloud().catch(function () {});
+        }
+        if (typeof window.DK.fetchV2DataFromSupabase === "function") {
+          window.DK.fetchV2DataFromSupabase().then(function () {
+            try { if (typeof window.__adminV2Refresh === "function") window.__adminV2Refresh(); } catch (_) {}
+          }).catch(function () {});
         }
       } catch (_) {}
       return;

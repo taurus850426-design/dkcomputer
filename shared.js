@@ -855,16 +855,18 @@ async function saveOrdersToSupabase(orders) {
 }
 
 // ===== Supabase：庫存＋記帳 v2（品項、流水帳、訂單、支出）讀寫 =====
+// Stage 5B：user JWT；admin+staff。無 session 不 fallback anon。失敗不寫 localStorage。
 async function fetchV2DataFromSupabase() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  const gate = requireVerifiedBackofficeCloudAccess();
+  if (!gate.ok) return null;
+  const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
+  if (!auth.ok || !auth.headers) return null;
   const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_V2_DATA_TABLE}?id=eq.${encodeURIComponent(
     V2_DATA_ROW_ID,
   )}&select=data`;
   const res = await fetch(url, {
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-    },
+    headers: auth.headers,
   });
   if (!res.ok) return null;
   const rows = await res.json();
@@ -904,6 +906,20 @@ async function saveV2DataToSupabase() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return { ok: false, error: "Supabase 未設定（請在 shared.js 填寫 SUPABASE_URL 與 SUPABASE_ANON_KEY）" };
   }
+  const gate = requireVerifiedBackofficeCloudAccess();
+  if (!gate.ok) {
+    return {
+      ok: false,
+      notAuthenticated: !!gate.notAuthenticated,
+      forbidden: !!gate.forbidden,
+      permissionDenied: !!gate.permissionDenied,
+      error: gate.error || (gate.notAuthenticated ? "請先登入後台" : "你沒有此資料權限"),
+    };
+  }
+  const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
+  if (!auth.ok || !auth.headers) {
+    return { ok: false, notAuthenticated: true, error: "請先登入後台" };
+  }
   let items = [];
   let ledger = [];
   let orders = [];
@@ -927,8 +943,8 @@ async function saveV2DataToSupabase() {
     const res = await fetch(url, {
       method: "POST",
       headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        apikey: auth.headers.apikey,
+        Authorization: auth.headers.Authorization,
         "Content-Type": "application/json",
         Prefer: "return=representation,resolution=merge-duplicates",
       },
@@ -936,6 +952,13 @@ async function saveV2DataToSupabase() {
     });
     if (!res.ok) {
       const errText = await res.text();
+      const kind = vpRestClassifyHttp(res.status, errText);
+      if (kind === "not_authenticated") {
+        return { ok: false, notAuthenticated: true, error: "請先登入後台" };
+      }
+      if (kind === "forbidden") {
+        return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
+      }
       console.warn("同步庫存＋記帳到 Supabase 失敗", errText);
       return { ok: false, error: `HTTP ${res.status}：${(errText || "連線失敗").slice(0, 80)}` };
     }
@@ -2265,6 +2288,31 @@ function vpRequireVerifiedAdminCloudAccess() {
   return denied;
 }
 
+/**
+ * Stage 5B：v2_data 過渡期。admin 或 staff（enabled）都可發 REST。
+ * 只讀 __dkCurrentAuthProfile，不讀 dk_admin_session_v1。
+ * 真正安全邊界仍是 RLS。staff 技術上仍能取得整包 JSONB（含成本）。
+ */
+function requireVerifiedBackofficeCloudAccess() {
+  if (!isAuthLoginModeSupabase()) {
+    return vpRestDeniedResult({ notAuthenticated: true, error: "請先登入後台" });
+  }
+  const p = __dkCurrentAuthProfile;
+  if (!p || typeof p !== "object") {
+    return vpRestDeniedResult({ notAuthenticated: true, error: "請先登入後台" });
+  }
+  if (p.enabled === true && (p.role === "admin" || p.role === "staff")) {
+    return { ok: true };
+  }
+  const denied = vpRestDeniedResult({
+    forbidden: true,
+    permissionDenied: true,
+    error: "你沒有此資料權限",
+  });
+  denied.code = "permission_denied";
+  return denied;
+}
+
 function vpNumOrNull(v) {
   if (v === "" || v === null || v === undefined) return null;
   const n = typeof v === "number" ? v : Number(v);
@@ -3529,6 +3577,7 @@ window.DK = {
   signOutSupabaseAuthForMigration,
   getSupabaseAuthProfile,
   getSupabaseRestAuthHeaders,
+  requireVerifiedBackofficeCloudAccess,
   // 廠商報價＋叫貨單同步 1.0
   VP_STORAGE_KEYS,
   getVendorQuotesSyncMeta,
@@ -3606,6 +3655,7 @@ if (window.DK && window.DK.fetchStockDataFromSupabase) {
     .catch(function () {});
 }
 // 頁面載入時：僅在「本機沒有 v2 資料」時才從 Supabase 拉取，避免剛補貨／編輯後按 F5 被雲端舊資料蓋掉
+// Stage 5B：profile 尚未驗證時不發 REST（不寫空、不覆蓋、不當作成功）。登入／boot 完成後再拉。
 (function tryFetchV2Once() {
   if (typeof window.fetchV2DataFromSupabase !== "function") return;
   try {
@@ -3613,6 +3663,8 @@ if (window.DK && window.DK.fetchStockDataFromSupabase) {
     const ledgerRaw = localStorage.getItem(V2_STORAGE_KEYS.ledger) || "";
     if (itemsRaw.length > 2 || ledgerRaw.length > 2) return;
   } catch (_) {}
+  const gate = requireVerifiedBackofficeCloudAccess();
+  if (!gate.ok) return;
   window.fetchV2DataFromSupabase().catch(function () {});
 })();
 
