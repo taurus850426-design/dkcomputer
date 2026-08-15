@@ -354,19 +354,36 @@
     });
   }
 
-  el("scanCamera").addEventListener("change", function (e) {
-    const file = e.target?.files?.[0];
-    e.target.value = "";
-    if (file) handleFile(file);
-  });
-  el("scanGallery").addEventListener("change", function (e) {
-    const file = e.target?.files?.[0];
-    e.target.value = "";
-    if (file) handleFile(file);
-  });
-  el("scanSaveBtn").addEventListener("click", saveScanInbound);
-  el("scanCancelBtn").addEventListener("click", showScanZone);
-  el("scanAgainBtn").addEventListener("click", showScanZone);
+  function initScanAddTool() {
+    el("scanCamera").addEventListener("change", function (e) {
+      const file = e.target?.files?.[0];
+      e.target.value = "";
+      if (file) handleFile(file);
+    });
+    el("scanGallery").addEventListener("change", function (e) {
+      const file = e.target?.files?.[0];
+      e.target.value = "";
+      if (file) handleFile(file);
+    });
+    el("scanSaveBtn").addEventListener("click", saveScanInbound);
+    el("scanCancelBtn").addEventListener("click", showScanZone);
+    el("scanAgainBtn").addEventListener("click", showScanZone);
+    el("scanInboundDate").value = todayStr();
+  }
 
-  el("scanInboundDate").value = todayStr();
+  const gate = window.DK && window.DK.gateBackofficeToolPage;
+  if (typeof gate !== "function") {
+    location.replace("./admin.html");
+    return;
+  }
+  gate({ roles: ["admin", "staff"] }).then(function (ok) {
+    if (!ok) return;
+    if (window.DK.revealBackofficeToolRoot) window.DK.revealBackofficeToolRoot("scanAddRoot");
+    function start() {
+      initScanAddTool();
+    }
+    if (typeof window.fetchV2DataFromSupabase === "function") {
+      window.fetchV2DataFromSupabase().then(start).catch(start);
+    } else start();
+  });
 })();

@@ -2455,6 +2455,48 @@ function requireVerifiedBackofficeCloudAccess() {
   return denied;
 }
 
+function redirectToAdminLogin() {
+  try {
+    location.replace("./admin.html");
+  } catch (_) {
+    location.href = "./admin.html";
+  }
+}
+
+function revealBackofficeToolRoot(rootId) {
+  const root = rootId ? document.getElementById(rootId) : null;
+  if (root) root.hidden = false;
+  if (document.body) document.body.removeAttribute("data-auth-pending");
+}
+
+/**
+ * Stage 6-7-1：工具頁 Auth Gate。
+ * 先 validateSupabaseAdminSession（Auth session + profiles），再檢查 enabled 與允許 roles。
+ * 失敗一律 replace admin.html；不做 open redirect。
+ * 不把 dk_admin_session_v1 / site_config.admin.users 當真權限來源。
+ */
+async function gateBackofficeToolPage(opts) {
+  const rawRoles = opts && Array.isArray(opts.roles) ? opts.roles : ["admin", "staff"];
+  const roles = rawRoles.filter(function (r) {
+    return r === "admin" || r === "staff";
+  });
+  if (!roles.length || !isAuthLoginModeSupabase()) {
+    redirectToAdminLogin();
+    return false;
+  }
+  const validated = await validateSupabaseAdminSession();
+  if (!validated || validated.ok !== true) {
+    redirectToAdminLogin();
+    return false;
+  }
+  const p = __dkCurrentAuthProfile;
+  if (!p || typeof p !== "object" || p.enabled !== true || roles.indexOf(p.role) === -1) {
+    redirectToAdminLogin();
+    return false;
+  }
+  return true;
+}
+
 function vpNumOrNull(v) {
   if (v === "" || v === null || v === undefined) return null;
   const n = typeof v === "number" ? v : Number(v);
@@ -3722,6 +3764,8 @@ window.DK = {
   getSupabaseRestAuthHeaders,
   requireVerifiedAdminCloudAccess,
   requireVerifiedBackofficeCloudAccess,
+  gateBackofficeToolPage,
+  revealBackofficeToolRoot,
   // 廠商報價＋叫貨單同步 1.0
   VP_STORAGE_KEYS,
   getVendorQuotesSyncMeta,

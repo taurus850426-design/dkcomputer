@@ -3,6 +3,7 @@
  * 依賴 inventory-ledger.js（window.DK）
  */
 (function () {
+  function initAdminV2() {
   if (typeof window.DK === "undefined") return;
 
   const DK = window.DK;
@@ -687,4 +688,21 @@
   fillCategoryOptions();
   fillReportPeriodOptions();
   renderItems();
+  }
+
+  var gate = window.DK && window.DK.gateBackofficeToolPage;
+  if (typeof gate !== "function") {
+    location.replace("./admin.html");
+    return;
+  }
+  gate({ roles: ["admin"] }).then(function (ok) {
+    if (!ok) return;
+    if (window.DK.revealBackofficeToolRoot) window.DK.revealBackofficeToolRoot("adminV2Root");
+    function start() {
+      initAdminV2();
+    }
+    if (typeof window.fetchV2DataFromSupabase === "function") {
+      window.fetchV2DataFromSupabase().then(start).catch(start);
+    } else start();
+  });
 })();

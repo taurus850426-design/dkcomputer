@@ -24,8 +24,8 @@
       @media (max-width: 400px) { .photo-rec-page .sub-type-row { grid-template-columns: 1fr; } }
     </style>
   </head>
-  <body class="theme-apple">
-    <div class="photo-rec-page">
+  <body class="theme-apple" data-auth-pending>
+    <div class="photo-rec-page" id="photoRecRoot" hidden>
       <a href="./admin.html" class="back-link">← 回到後台</a>
       <h1 class="h1">拍照辨識新增庫存</h1>
       <p class="muted" style="margin-bottom: 16px;">上傳產品盒子或本體照片，系統以 OCR 辨識文字並自動判斷品類與型號，確認後入庫。</p>
@@ -95,9 +95,9 @@
       </div>
     </div>
 
-    <script src="./shared.js?v=20260815s663"></script>
+    <script src="./shared.js?v=20260815s671"></script>
     <script src="./inventory-ledger.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="./photo-recognize-add.js?v=20260727cat"></script>
+    <script src="./photo-recognize-add.js?v=20260815s671"></script>
   </body>
 </html>

@@ -378,21 +378,38 @@
     reader.readAsDataURL(file);
   }
 
-  el("photoCamera").addEventListener("change", function (e) {
-    var file = e.target && e.target.files && e.target.files[0];
-    e.target.value = "";
-    if (file) handleFile(file);
-  });
-  el("photoGallery").addEventListener("change", function (e) {
-    var file = e.target && e.target.files && e.target.files[0];
-    e.target.value = "";
-    if (file) handleFile(file);
-  });
-  el("ocrReRunBtn").addEventListener("click", applyFromOcrText);
-  el("recSaveBtn").addEventListener("click", savePhotoRecInbound);
-  el("recCancelBtn").addEventListener("click", showUploadZone);
-  el("recAgainBtn").addEventListener("click", showUploadZone);
+  function initPhotoRecognizeAddTool() {
+    el("photoCamera").addEventListener("change", function (e) {
+      var file = e.target && e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (file) handleFile(file);
+    });
+    el("photoGallery").addEventListener("change", function (e) {
+      var file = e.target && e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (file) handleFile(file);
+    });
+    el("ocrReRunBtn").addEventListener("click", applyFromOcrText);
+    el("recSaveBtn").addEventListener("click", savePhotoRecInbound);
+    el("recCancelBtn").addEventListener("click", showUploadZone);
+    el("recAgainBtn").addEventListener("click", showUploadZone);
+    el("recInboundDate").value = todayStr();
+    fillRecCategorySelect();
+  }
 
-  el("recInboundDate").value = todayStr();
-  fillRecCategorySelect();
+  var gate = window.DK && window.DK.gateBackofficeToolPage;
+  if (typeof gate !== "function") {
+    location.replace("./admin.html");
+    return;
+  }
+  gate({ roles: ["admin", "staff"] }).then(function (ok) {
+    if (!ok) return;
+    if (window.DK.revealBackofficeToolRoot) window.DK.revealBackofficeToolRoot("photoRecRoot");
+    function start() {
+      initPhotoRecognizeAddTool();
+    }
+    if (typeof window.fetchV2DataFromSupabase === "function") {
+      window.fetchV2DataFromSupabase().then(start).catch(start);
+    } else start();
+  });
 })();

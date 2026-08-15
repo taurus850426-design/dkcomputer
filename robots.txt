@@ -1,8 +1,9 @@
 User-agent: *
 Allow: /
 
-# 後台與內部工具不列入搜尋索引（不阻擋 Googlebot 爬公開頁）
+# 後台與內部工具不列入搜尋索引（不是安全邊界；真正阻擋靠 Auth Gate）
 Disallow: /admin.html
+Disallow: /admin-v2.html
 Disallow: /scan-add.html
 Disallow: /photo-recognize-add.html
 

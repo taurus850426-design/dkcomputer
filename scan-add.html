@@ -20,8 +20,8 @@
       @media (max-width: 400px) { .scan-add-page .sub-type-row { grid-template-columns: 1fr; } }
     </style>
   </head>
-  <body class="theme-apple">
-    <div class="scan-add-page">
+  <body class="theme-apple" data-auth-pending>
+    <div class="scan-add-page" id="scanAddRoot" hidden>
       <a href="./admin.html" class="back-link">← 回到後台</a>
       <h1 class="h1">掃碼新增庫存</h1>
       <p class="muted" style="margin-bottom: 16px;">用手機相機或相簿掃描條碼／QR，自動帶入品類與規格，確認後入庫。</p>
@@ -84,10 +84,10 @@
       </div>
     </div>
 
-    <script src="./shared.js?v=20260815s663"></script>
+    <script src="./shared.js?v=20260815s671"></script>
     <script src="./inventory-ledger.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./scan-add.js?v=20260201"></script>
+    <script src="./scan-add.js?v=20260815s671"></script>
   </body>
 </html>
