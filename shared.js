@@ -974,45 +974,15 @@ async function saveAllStockDataToSupabase() {
   return;
 }
 
-// ===== Supabase：訂單資料（訂單管理、報表用）讀寫 =====
+// ===== Stage 6-6-3：orders_data cloud 已退役 =====
+// 正式訂單在 v2_data（JWT）。本表無正式呼叫端。
+// 保留函式名稱，避免 DK.* 炸掉。不發 REST、不 fallback anon、不建 JWT WRITE。
 async function fetchOrdersFromSupabase() {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
-  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_ORDERS_DATA_TABLE}?id=eq.${encodeURIComponent(
-    ORDERS_DATA_ROW_ID,
-  )}&select=data`;
-  const res = await fetch(url, {
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-    },
-  });
-  if (!res.ok) return null;
-  const rows = await res.json();
-  const raw = rows?.[0]?.data;
-  if (!raw || typeof raw !== "object" || !Array.isArray(raw.orders)) return null;
-  return raw.orders;
+  return null;
 }
 
 async function saveOrdersToSupabase(orders) {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !Array.isArray(orders)) return;
-  const payload = {
-    id: ORDERS_DATA_ROW_ID,
-    data: { orders: orders },
-  };
-  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_ORDERS_DATA_TABLE}?on_conflict=id`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation,resolution=merge-duplicates",
-    },
-    body: JSON.stringify([payload]),
-  });
-  if (!res.ok) {
-    console.warn("同步訂單到 Supabase 失敗", await res.text());
-  }
+  return;
 }
 
 // ===== Supabase：庫存＋記帳 v2（品項、流水帳、訂單、支出）讀寫 =====
