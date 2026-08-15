@@ -92,8 +92,10 @@
         alert("尚未設定有效的管理員帳號");
         return;
       }
-      // 只保留既有 admin 物件，不寫入任何預設帳密
-      localStorage.setItem(cfgKey, JSON.stringify(base));
+      // 只保留既有 admin 物件，不寫入任何預設帳密；寫入前仍必須 strip password
+      const sanitizer = window.DK?.sanitizeSiteConfigForStorage;
+      const clean = typeof sanitizer === "function" ? sanitizer(base) : base;
+      localStorage.setItem(cfgKey, JSON.stringify(clean));
       alert("admin 設定已檢查，請移除網址 repairAdmin=1 後使用既有帳號登入");
     } catch (e) {
       alert("admin 修復失敗：" + String(e?.message || e || "未知錯誤"));
@@ -1034,7 +1036,7 @@
     const enEl = document.getElementById("accountEnabled");
     if (nameEl) nameEl.value = "";
     if (userEl) userEl.value = "";
-    if (passEl) { passEl.value = ""; passEl.placeholder = "編輯時留空表示不變更"; }
+    if (passEl) { passEl.value = ""; }
     if (roleEl) roleEl.value = "staff";
     if (enEl) enEl.value = "1";
     showAccountMsg("");
@@ -1176,7 +1178,6 @@
             <td style="text-align:right;white-space:nowrap">
               <button type="button" class="btn btn-ghost btn-sm btn-account-edit" data-id="${v2Esc(u.id)}">編輯</button>
               <button type="button" class="btn btn-ghost btn-sm btn-account-toggle" data-id="${v2Esc(u.id)}">${u.enabled ? "停用" : "啟用"}</button>
-              <button type="button" class="btn btn-ghost btn-sm btn-account-resetpw" data-id="${v2Esc(u.id)}">重設密碼</button>
             </td>
           </tr>`;
         }).join("")
@@ -1193,8 +1194,8 @@
     document.getElementById("accountEditId").value = u.id;
     document.getElementById("accountDisplayName").value = u.displayName || "";
     document.getElementById("accountUsername").value = u.username || "";
-    document.getElementById("accountPassword").value = "";
-    document.getElementById("accountPassword").placeholder = "留空表示不變更";
+    const passEl = document.getElementById("accountPassword");
+    if (passEl) passEl.value = "";
     document.getElementById("accountRole").value = u.role === "admin" ? "admin" : "staff";
     document.getElementById("accountEnabled").value = u.enabled ? "1" : "0";
     showAccountMsg("正在編輯：" + (u.displayName || u.username));
@@ -1206,12 +1207,15 @@
     const editId = String(document.getElementById("accountEditId")?.value || "").trim();
     const displayName = String(document.getElementById("accountDisplayName")?.value || "").trim();
     const username = String(document.getElementById("accountUsername")?.value || "").trim();
-    const password = String(document.getElementById("accountPassword")?.value || "");
     const role = document.getElementById("accountRole")?.value === "admin" ? "admin" : "staff";
     const enabled = document.getElementById("accountEnabled")?.value !== "0";
     if (!displayName) return showAccountMsg("請填顯示名稱");
     if (!username) return showAccountMsg("請填登入帳號");
-    const users = (window.DK.getAdminUsers ? window.DK.getAdminUsers() : []).map((u) => ({ ...u }));
+    const users = (window.DK.getAdminUsers ? window.DK.getAdminUsers() : []).map((u) => {
+      const n = { ...u };
+      delete n.password;
+      return n;
+    });
     const dup = users.find((u) => u.username.toLowerCase() === username.toLowerCase() && u.id !== editId);
     if (dup) return showAccountMsg("登入帳號不可重複");
     const now = new Date().toISOString();
@@ -1233,38 +1237,41 @@
         ...prev,
         displayName,
         username,
-        password: password ? password : prev.password,
         role,
         enabled,
         updatedAt: now,
       };
+      delete nextUser.password;
       const nextList = users.map((u, i) => (i === idx ? nextUser : u));
       if (!nextList.some((u) => u.role === "admin" && u.enabled)) {
         return showAccountMsg("系統必須至少保留一位有效管理員");
       }
       users[idx] = nextUser;
     } else {
-      if (!password) return showAccountMsg("新帳號必須設定密碼");
-      users.push({
+      const nextUser = {
         id: "user-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
         displayName,
         username,
-        password,
         role,
         enabled,
         createdAt: now,
         updatedAt: now,
-      });
+      };
+      users.push(nextUser);
     }
     window.DK.saveAdminUsers(users);
-    showAccountMsg(editId ? "已更新帳號" : "已新增帳號");
+    showAccountMsg(editId ? "已更新帳號（不含密碼）" : "已新增帳號資料。登入密碼請在 Supabase Auth 管理，此頁不會保存密碼。");
     resetAccountForm();
     renderAccountsPage();
     applyRoleUI();
   }
   function toggleAccountEnabled(id) {
     if (!requirePerm("accounts")) return;
-    const users = (window.DK.getAdminUsers ? window.DK.getAdminUsers() : []).map((u) => ({ ...u }));
+    const users = (window.DK.getAdminUsers ? window.DK.getAdminUsers() : []).map((u) => {
+      const n = { ...u };
+      delete n.password;
+      return n;
+    });
     const idx = users.findIndex((u) => u.id === id);
     if (idx < 0) return;
     const prev = users[idx];
@@ -1283,18 +1290,9 @@
     showAccountMsg(users[idx].enabled ? "已啟用" : "已停用");
     renderAccountsPage();
   }
-  function resetAccountPassword(id) {
+  function resetAccountPassword() {
     if (!requirePerm("accounts")) return;
-    const nextPw = window.prompt("請輸入新密碼");
-    if (nextPw == null) return;
-    if (!String(nextPw).trim()) return showAccountMsg("密碼不可空白");
-    const users = (window.DK.getAdminUsers ? window.DK.getAdminUsers() : []).map((u) => ({ ...u }));
-    const idx = users.findIndex((u) => u.id === id);
-    if (idx < 0) return;
-    users[idx] = { ...users[idx], password: String(nextPw), updatedAt: new Date().toISOString() };
-    window.DK.saveAdminUsers(users);
-    showAccountMsg("已重設密碼");
-    renderAccountsPage();
+    showAccountMsg("登入密碼由 Supabase Auth 管理，此頁已停用舊版重設密碼，不會寫入 site_config。");
   }
   document.getElementById("accountSaveBtn")?.addEventListener("click", saveAccountFromForm);
   document.getElementById("accountResetFormBtn")?.addEventListener("click", resetAccountForm);

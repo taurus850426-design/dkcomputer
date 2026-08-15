@@ -29,8 +29,8 @@ const SUPABASE_URL = "https://npynqrsmduukulwgylkz.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_K0fyhespfyQIP-56bTZEFg_Gq1PJG4F";
 // ===== Stage 4 正式登入模式 =====
 // "supabase" = Supabase Auth + public.profiles（正式）
-// "legacy"  = 舊 site_config.admin 帳密（緊急 rollback）
-// 要回舊登入：只改下一行 "supabase" → "legacy"
+// "legacy"  = 舊 site_config.admin 帳密（已淘汰；Stage 6-2 起不再保存明文密碼）
+// 若人工改回 "legacy"：舊 password login 不再保證可用。這是刻意淘汰 insecure rollback，不是 bug。
 const AUTH_LOGIN_MODE = "supabase";
 const SUPABASE_INVENTORY_TABLE = "inventory";
 const SUPABASE_SITE_CONFIG_TABLE = "site_config";
@@ -149,7 +149,6 @@ const DEFAULT_CONFIG = {
   },
   admin: {
     username: "",
-    password: "",
   },
   // 庫存品項品類（可於後台新增/移除；讀取時會確保正式品類齊全）
   inventoryCategories: [
@@ -367,9 +366,50 @@ function deepMerge(base, patch) {
   return out;
 }
 
+/**
+ * Stage 6-2：寫入 localStorage / site_config 前移除明文密碼。
+ * 真正 delete password property，不用空字串。不 log 原密碼。
+ */
+function sanitizeSiteConfigForStorage(config) {
+  if (!config || typeof config !== "object" || Array.isArray(config)) return config;
+  const next = { ...config };
+  if (next.admin && typeof next.admin === "object" && !Array.isArray(next.admin)) {
+    const admin = { ...next.admin };
+    if (Object.prototype.hasOwnProperty.call(admin, "password")) delete admin.password;
+    if (Array.isArray(admin.users)) {
+      admin.users = admin.users.map(function (u) {
+        if (!u || typeof u !== "object" || Array.isArray(u)) return u;
+        if (!Object.prototype.hasOwnProperty.call(u, "password")) return u;
+        const nu = { ...u };
+        delete nu.password;
+        return nu;
+      });
+    }
+    next.admin = admin;
+  }
+  return next;
+}
+
+function siteConfigHasLegacyPassword(config) {
+  const admin = config && config.admin;
+  if (!admin || typeof admin !== "object" || Array.isArray(admin)) return false;
+  if (Object.prototype.hasOwnProperty.call(admin, "password")) return true;
+  const users = admin.users;
+  if (!Array.isArray(users)) return false;
+  return users.some(function (u) {
+    return !!(u && typeof u === "object" && !Array.isArray(u) && Object.prototype.hasOwnProperty.call(u, "password"));
+  });
+}
+
+function persistSiteConfigLocal(config) {
+  const clean = sanitizeSiteConfigForStorage(config);
+  localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(clean));
+  return clean;
+}
+
 function getConfig() {
   const saved = safeJsonParse(localStorage.getItem(STORAGE_KEYS.config), null);
-  if (!saved) return { ...DEFAULT_CONFIG };
+  if (!saved) return sanitizeSiteConfigForStorage({ ...DEFAULT_CONFIG });
 
   // 緊急修復：若曾經把整份 config 覆蓋成只剩 frontend.vendorOptions，這裡要自動補回缺失的 admin（只補缺失欄位，不覆蓋既有資料）
   try {
@@ -377,10 +417,9 @@ function getConfig() {
     const hasAdmin = !!(s && s.admin && typeof s.admin === "object");
     if (!hasAdmin) {
       const patched = { ...s, admin: { ...(s.admin && typeof s.admin === "object" ? s.admin : {}), users: Array.isArray(s.admin && s.admin.users) ? s.admin.users : [] } };
-      localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(patched));
-      return deepMerge(DEFAULT_CONFIG, patched);
+      persistSiteConfigLocal(patched);
+      return sanitizeSiteConfigForStorage(deepMerge(DEFAULT_CONFIG, patched));
     }
-    // 只補缺失的 username 結構，絕不把預設密碼寫進本機（避免 admin123 備援復活）
     const admin = s.admin || {};
     const needsUser = admin.username == null;
     if (needsUser) {
@@ -391,23 +430,27 @@ function getConfig() {
           username: String(admin.username || ""),
         },
       };
-      localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(patched));
-      return deepMerge(DEFAULT_CONFIG, patched);
+      persistSiteConfigLocal(patched);
+      return sanitizeSiteConfigForStorage(deepMerge(DEFAULT_CONFIG, patched));
     }
   } catch {
     // 補 admin 失敗不應阻止後台使用（仍回傳 merge 結果）
   }
 
-  return deepMerge(DEFAULT_CONFIG, saved);
+  const merged = sanitizeSiteConfigForStorage(deepMerge(DEFAULT_CONFIG, saved));
+  try {
+    if (siteConfigHasLegacyPassword(saved)) persistSiteConfigLocal(merged);
+  } catch (_) {}
+  return merged;
 }
 
 function saveConfig(nextConfig) {
-  localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(nextConfig));
+  const clean = persistSiteConfigLocal(nextConfig);
   const opts = arguments[1] || {};
   const skipSupabase = opts && opts.skipSupabase;
   // 預設仍會 fire-and-forget 寫入 Supabase；後台若需要精準同步結果，可傳 skipSupabase: true 並自行呼叫 saveSiteConfigToSupabase
   if (!skipSupabase && window.DK?.saveSiteConfigToSupabase) {
-    window.DK.saveSiteConfigToSupabase(nextConfig).catch(() => {});
+    window.DK.saveSiteConfigToSupabase(clean).catch(() => {});
   }
 }
 
@@ -727,7 +770,7 @@ async function fetchSiteConfigFromSupabase() {
     lastCloudReadAt: new Date().toISOString(),
     lastCloudError: null,
   });
-  return merged;
+  return sanitizeSiteConfigForStorage(merged);
 }
 
 async function saveSiteConfigToSupabase(config) {
@@ -739,6 +782,7 @@ async function saveSiteConfigToSupabase(config) {
     });
     return { ok: false, error: msg };
   }
+  const clean = sanitizeSiteConfigForStorage(config);
   const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_SITE_CONFIG_TABLE}?on_conflict=id`;
   const res = await fetch(url, {
     method: "POST",
@@ -748,7 +792,7 @@ async function saveSiteConfigToSupabase(config) {
       "Content-Type": "application/json",
       Prefer: "return=representation,resolution=merge-duplicates",
     },
-    body: JSON.stringify([{ id: SITE_CONFIG_ROW_ID, data: config }]),
+    body: JSON.stringify([{ id: SITE_CONFIG_ROW_ID, data: clean }]),
   });
   if (!res.ok) {
     const txt = await res.text();
@@ -1656,25 +1700,34 @@ const ADMIN_ONLY_PERMS = {
   viewCost: true,
 };
 
+function omitLegacyPassword(obj) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
+  if (!Object.prototype.hasOwnProperty.call(obj, "password")) return obj;
+  const next = { ...obj };
+  delete next.password;
+  return next;
+}
+
 function mergeAdminUsers(cloudUsers, localUsers) {
   const a = Array.isArray(cloudUsers) ? cloudUsers : [];
   const b = Array.isArray(localUsers) ? localUsers : [];
-  if (!a.length) return b.slice();
-  if (!b.length) return a.slice();
+  if (!a.length) return b.map(omitLegacyPassword);
+  if (!b.length) return a.map(omitLegacyPassword);
   const byId = new Map();
   function ingest(list) {
     list.forEach((u) => {
       if (!u || typeof u !== "object") return;
       const id = String(u.id || "").trim();
       if (!id) return;
+      const next = omitLegacyPassword(u);
       const prev = byId.get(id);
       if (!prev) {
-        byId.set(id, u);
+        byId.set(id, next);
         return;
       }
       const ta = Date.parse(prev.updatedAt || prev.createdAt || 0) || 0;
-      const tb = Date.parse(u.updatedAt || u.createdAt || 0) || 0;
-      byId.set(id, tb >= ta ? u : prev);
+      const tb = Date.parse(next.updatedAt || next.createdAt || 0) || 0;
+      byId.set(id, tb >= ta ? next : prev);
     });
   }
   ingest(a);
@@ -1685,16 +1738,14 @@ function mergeAdminUsers(cloudUsers, localUsers) {
 function mergeAdminConfig(cloudAdmin, localAdmin) {
   const cloud = cloudAdmin && typeof cloudAdmin === "object" ? cloudAdmin : {};
   const local = localAdmin && typeof localAdmin === "object" ? localAdmin : {};
-  const merged = { ...cloud, ...local };
+  const merged = omitLegacyPassword({ ...cloud, ...local });
   const cloudUsers = Array.isArray(cloud.users) ? cloud.users : [];
   const localUsers = Array.isArray(local.users) ? local.users : [];
   if (cloudUsers.length || localUsers.length) {
     merged.users = mergeAdminUsers(cloudUsers, localUsers);
   }
   const lu = local.username;
-  const lp = local.password;
   if (lu != null && String(lu).trim() !== "") merged.username = lu;
-  if (lp != null && String(lp) !== "") merged.password = lp;
   return merged;
 }
 
@@ -1706,7 +1757,6 @@ function normalizeAdminUser(u) {
   return {
     id,
     username,
-    password: String(u.password ?? ""),
     displayName: String(u.displayName || username).trim() || username,
     role: u.role === "staff" ? "staff" : "admin",
     enabled: u.enabled !== false,
@@ -1721,7 +1771,6 @@ function legacyAdminUserFromConfig(admin) {
   return {
     id: "user-legacy-admin",
     username,
-    password: String((admin && admin.password) ?? ""),
     displayName: "管理員",
     role: "admin",
     enabled: true,
@@ -1741,6 +1790,7 @@ function getAdminUsers() {
 }
 
 function findAdminUserByCredentials(username, password) {
+  // Stage 6-2：保留函式供 rollback 編譯，但 config 不再保存明文密碼；legacy password login 不再保證可用。
   const u = String(username || "").trim();
   const p = String(password ?? "");
   if (!u || p === "") return null;
@@ -1765,7 +1815,7 @@ function ensureAdminUsersPersisted() {
   if (Array.isArray(admin.users) && admin.users.length) return cfg;
   const users = getAdminUsers();
   if (!users.length) return cfg;
-  const next = { ...cfg, admin: { ...admin, users } };
+  const next = { ...cfg, admin: omitLegacyPassword({ ...admin, users }) };
   saveConfig(next);
   return next;
 }
@@ -1774,13 +1824,12 @@ function saveAdminUsers(nextUsers, opts) {
   const cfg = getConfig();
   const admin = (cfg && cfg.admin) || {};
   const list = (Array.isArray(nextUsers) ? nextUsers : []).map(normalizeAdminUser).filter(Boolean);
-  const nextAdmin = { ...admin, users: list };
+  const nextAdmin = omitLegacyPassword({ ...admin, users: list });
   const primary =
     list.find((u) => u.id === "user-legacy-admin") ||
     list.find((u) => u.role === "admin" && u.enabled);
   if (primary) {
     nextAdmin.username = primary.username;
-    nextAdmin.password = primary.password;
   }
   const next = { ...cfg, admin: nextAdmin };
   saveConfig(next, opts);
@@ -3504,6 +3553,7 @@ window.DK = {
   DEFAULT_INVENTORY,
   getConfig,
   saveConfig,
+  sanitizeSiteConfigForStorage,
   getConfigSyncMeta,
   saveConfigSyncMeta,
   getInventoryCategories,
@@ -3625,7 +3675,7 @@ if (window.DK.fetchSiteConfigFromSupabase && window.DK.saveConfig) {
     .fetchSiteConfigFromSupabase()
     .then(function (c) {
       if (c != null) {
-        // 保護：若本機已有 admin 帳密，不要被雲端設定蓋掉（避免登出後第二次無法用原帳密登入）
+        // 保護：合併本機 admin 非敏感 metadata（username/users/role）。Stage 6-2 起絕不把本機舊 password merge 回 config。
         try {
           const local = safeJsonParse(localStorage.getItem(STORAGE_KEYS.config), null);
           const localAdmin = local && local.admin && typeof local.admin === "object" ? local.admin : null;

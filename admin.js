@@ -330,7 +330,7 @@
     lineUrlInput.value = cfg.line?.url ?? "";
     lineTplInput.value = cfg.line?.orderMessageTemplate ?? "";
     adminUserInput.value = cfg.admin?.username ?? "";
-    adminPassInput.value = cfg.admin?.password ?? "";
+    if (adminPassInput) adminPassInput.value = "";
     currentInventoryCategories = (cfg.inventoryCategories && cfg.inventoryCategories.length) ? cfg.inventoryCategories.slice() : (DK.DEFAULT_CONFIG.inventoryCategories || []).slice();
     renderInventoryCategoriesTable();
   }
@@ -362,7 +362,6 @@
       admin: {
         ...cfg.admin,
         username: adminUserInput.value.trim() || "admin",
-        password: adminPassInput.value.trim() || "admin123",
       },
       inventoryCategories: currentInventoryCategories.slice(),
     };
