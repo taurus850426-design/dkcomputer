@@ -856,12 +856,20 @@ async function saveOrdersToSupabase(orders) {
 
 // ===== Supabase：庫存＋記帳 v2（品項、流水帳、訂單、支出）讀寫 =====
 // Stage 5B：user JWT；admin+staff。無 session 不 fallback anon。失敗不寫 localStorage。
+// 本機在 GET await 期間寫入後，不得用該次舊雲端快照覆蓋 localStorage。
+function bumpV2LocalWriteGen() {
+  if (typeof window === "undefined") return;
+  window.__dkV2LocalWriteGen = (Number(window.__dkV2LocalWriteGen) || 0) + 1;
+}
+if (typeof window !== "undefined") window.__dkBumpV2LocalWriteGen = bumpV2LocalWriteGen;
+
 async function fetchV2DataFromSupabase() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
   const gate = requireVerifiedBackofficeCloudAccess();
   if (!gate.ok) return null;
   const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
   if (!auth.ok || !auth.headers) return null;
+  const genAtStart = typeof window !== "undefined" ? (Number(window.__dkV2LocalWriteGen) || 0) : 0;
   const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_V2_DATA_TABLE}?id=eq.${encodeURIComponent(
     V2_DATA_ROW_ID,
   )}&select=data`;
@@ -878,6 +886,9 @@ async function fetchV2DataFromSupabase() {
   const expenses = Array.isArray(raw.expenses) ? raw.expenses : [];
   const auditLogs = Array.isArray(raw.auditLogs) ? raw.auditLogs : [];
   try {
+    if (typeof window !== "undefined" && (Number(window.__dkV2LocalWriteGen) || 0) !== genAtStart) {
+      return null;
+    }
     // 保護：雲端某欄為空陣列時，不要立刻覆蓋本機已有資料
     function pickWrite(key, cloudArr) {
       const localArr = safeJsonParse(localStorage.getItem(key), null);
@@ -891,6 +902,9 @@ async function fetchV2DataFromSupabase() {
     const nextOrders = pickWrite(V2_STORAGE_KEYS.orders, orders);
     const nextExpenses = pickWrite(V2_STORAGE_KEYS.expenses, expenses);
     const nextAudit = pickWrite(V2_STORAGE_KEYS.auditLogs, auditLogs);
+    if (typeof window !== "undefined" && (Number(window.__dkV2LocalWriteGen) || 0) !== genAtStart) {
+      return null;
+    }
     localStorage.setItem(V2_STORAGE_KEYS.items, JSON.stringify(nextItems));
     localStorage.setItem(V2_STORAGE_KEYS.ledger, JSON.stringify(nextLedger));
     localStorage.setItem(V2_STORAGE_KEYS.orders, JSON.stringify(nextOrders));
@@ -2155,6 +2169,7 @@ function loadAuditLogs() {
 function saveAuditLogs(list) {
   const next = Array.isArray(list) ? list.slice(0, 400) : [];
   localStorage.setItem(V2_STORAGE_KEYS.auditLogs, JSON.stringify(next));
+  bumpV2LocalWriteGen();
 }
 
 function appendAuditLog(entry) {

@@ -39,6 +39,9 @@
 
   function save(key, data) {
     localStorage.setItem(key, JSON.stringify(Array.isArray(data) ? data : []));
+    try {
+      if (typeof global.__dkBumpV2LocalWriteGen === "function") global.__dkBumpV2LocalWriteGen();
+    } catch (_) {}
   }
 
   function todayStr() {
