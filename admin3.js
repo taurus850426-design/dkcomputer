@@ -738,6 +738,16 @@
     editingWebId = null;
   }
 
+  function inventoryCloudFailMsg(result, fallback) {
+    if (result && result.notAuthenticated) return "請先登入後台";
+    if (result && (result.forbidden || result.permissionDenied || result.code === "permission_denied")) {
+      return "你沒有此資料權限";
+    }
+    const err = result && result.error ? String(result.error) : "";
+    if (err === "請先登入後台" || err === "你沒有此資料權限") return err;
+    return err || fallback || "雲端同步失敗";
+  }
+
   async function savePublishEditor() {
     if (!requirePerm("publish")) return;
     if (!editingWebId) {
@@ -776,7 +786,7 @@
       if (window.DK?.upsertInventoryItemToSupabase) {
         try {
           const result = await window.DK.upsertInventoryItemToSupabase(items[idx]);
-          if (result && !result.ok && result?.error) msg = "已存本機，Supabase 同步失敗：" + result.error;
+          if (result && !result.ok && result?.error) msg = "已存本機，Supabase 同步失敗：" + inventoryCloudFailMsg(result, result.error);
         } catch (e) {
           msg = "已存本機，Supabase 同步失敗：" + (e?.message || String(e));
         }
@@ -807,8 +817,8 @@
         const result = await window.DK.deleteInventoryItemFromSupabase(webId);
         syncOk = result && result.ok === true;
         if (!syncOk) {
-          show(publishMsg, "已從本機下架，但 Supabase 同步刪除失敗：" + (result?.error || ""));
-          if (typeof showSyncToast === "function") showSyncToast({ ok: false, error: result?.error || "下架同步失敗" }, "下架");
+          show(publishMsg, "已從本機下架，但 Supabase 同步刪除失敗：" + inventoryCloudFailMsg(result, "下架同步失敗"));
+          if (typeof showSyncToast === "function") showSyncToast({ ok: false, error: inventoryCloudFailMsg(result, "下架同步失敗") }, "下架");
         }
       } catch (e) {
         syncOk = false;
@@ -856,8 +866,8 @@
         const result = await window.DK.upsertInventoryItemToSupabase(item);
         syncOk = result && result.ok === true;
         if (!syncOk) {
-          show(publishMsg, "已存於本機，但 Supabase 同步失敗：" + (result?.error || ""));
-          if (typeof showSyncToast === "function") showSyncToast({ ok: false, error: result?.error || "上架同步失敗" }, "上架");
+          show(publishMsg, "已存於本機，但 Supabase 同步失敗：" + inventoryCloudFailMsg(result, "上架同步失敗"));
+          if (typeof showSyncToast === "function") showSyncToast({ ok: false, error: inventoryCloudFailMsg(result, "上架同步失敗") }, "上架");
         }
       } catch (e) {
         syncOk = false;

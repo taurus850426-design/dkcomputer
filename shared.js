@@ -605,12 +605,102 @@ async function fetchInventoryFromSupabase() {
   }));
 }
 
+/**
+ * Stage 6-3-2：inventory WRITE 通用 admin gate。
+ * 只讀 Stage 4 runtime profile（__dkCurrentAuthProfile）。
+ * 不讀 dk_admin_session_v1。真正安全邊界仍是 RLS。
+ */
+function requireVerifiedAdminCloudAccess() {
+  if (!isAuthLoginModeSupabase()) {
+    return {
+      ok: false,
+      notAuthenticated: true,
+      forbidden: false,
+      permissionDenied: false,
+      code: "not_authenticated",
+      error: "請先登入後台",
+    };
+  }
+  const p = __dkCurrentAuthProfile;
+  if (!p || typeof p !== "object") {
+    return {
+      ok: false,
+      notAuthenticated: true,
+      forbidden: false,
+      permissionDenied: false,
+      code: "not_authenticated",
+      error: "請先登入後台",
+    };
+  }
+  if (p.enabled === true && p.role === "admin") {
+    return { ok: true };
+  }
+  return {
+    ok: false,
+    notAuthenticated: false,
+    forbidden: true,
+    permissionDenied: true,
+    code: "permission_denied",
+    error: "你沒有此資料權限",
+  };
+}
+
+function inventoryWriteGateResult() {
+  const gate = requireVerifiedAdminCloudAccess();
+  if (gate.ok) return null;
+  return {
+    ok: false,
+    notAuthenticated: !!gate.notAuthenticated,
+    forbidden: !!gate.forbidden,
+    permissionDenied: !!gate.permissionDenied,
+    code: gate.code || (gate.notAuthenticated ? "not_authenticated" : "permission_denied"),
+    error: gate.error || (gate.notAuthenticated ? "請先登入後台" : "你沒有此資料權限"),
+  };
+}
+
+async function inventoryWriteFailFromResponse(res) {
+  let errText = "";
+  try {
+    errText = await res.text();
+  } catch (_) {}
+  const t = String(errText || "").toLowerCase();
+  const status = res && res.status;
+  if (
+    status === 401 &&
+    /jwt expired|invalid jwt|not authenticated|no authorization|unauthoriz/.test(t) &&
+    !/row-level security/.test(t)
+  ) {
+    return { ok: false, notAuthenticated: true, code: "not_authenticated", error: "請先登入後台" };
+  }
+  if (
+    status === 401 ||
+    status === 403 ||
+    /row-level security|violates row-level|42501|permission denied|pgrst301/.test(t)
+  ) {
+    return {
+      ok: false,
+      forbidden: true,
+      permissionDenied: true,
+      code: "permission_denied",
+      error: "你沒有此資料權限",
+    };
+  }
+  console.warn("同步商品到 Supabase 失敗", status || "");
+  return { ok: false, error: "雲端同步失敗" };
+}
+
 async function upsertInventoryItemToSupabase(item) {
   if (!item || !item.id) return { ok: true };
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     const msg = "未設定 SUPABASE_URL 或 SUPABASE_ANON_KEY，上架僅存於本機。請在 shared.js 填寫並重新部署。";
     console.warn("[Supabase]", msg);
     return { ok: false, error: msg };
+  }
+  const denied = inventoryWriteGateResult();
+  if (denied) return denied;
+  const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
+  if (!auth.ok || !auth.headers) {
+    return { ok: false, notAuthenticated: true, code: "not_authenticated", error: "請先登入後台" };
   }
   const payload = {
     id: String(item.id),
@@ -629,42 +719,48 @@ async function upsertInventoryItemToSupabase(item) {
   };
 
   const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_INVENTORY_TABLE}?on_conflict=id`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation,resolution=merge-duplicates",
-    },
-    body: JSON.stringify([payload]),
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error("同步商品到 Supabase 失敗 (" + res.status + ")", errText);
-    return { ok: false, error: `HTTP ${res.status}：${errText.slice(0, 100)}` };
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: auth.headers.apikey,
+        Authorization: auth.headers.Authorization,
+        "Content-Type": "application/json",
+        Prefer: "return=representation,resolution=merge-duplicates",
+      },
+      body: JSON.stringify([payload]),
+    });
+    if (!res.ok) return await inventoryWriteFailFromResponse(res);
+    return { ok: true };
+  } catch (_) {
+    return { ok: false, error: "雲端同步失敗" };
   }
-  return { ok: true };
 }
 
 async function deleteInventoryItemFromSupabase(id) {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !id) return { ok: true };
+  const denied = inventoryWriteGateResult();
+  if (denied) return denied;
+  const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
+  if (!auth.ok || !auth.headers) {
+    return { ok: false, notAuthenticated: true, code: "not_authenticated", error: "請先登入後台" };
+  }
   const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_INVENTORY_TABLE}?id=eq.${encodeURIComponent(
     String(id),
   )}`;
-  const res = await fetch(url, {
-    method: "DELETE",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-    },
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    console.warn("從 Supabase 刪除商品失敗", errText);
-    return { ok: false, error: `HTTP ${res.status}：${errText.slice(0, 80)}` };
+  try {
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        apikey: auth.headers.apikey,
+        Authorization: auth.headers.Authorization,
+      },
+    });
+    if (!res.ok) return await inventoryWriteFailFromResponse(res);
+    return { ok: true };
+  } catch (_) {
+    return { ok: false, error: "雲端同步失敗" };
   }
-  return { ok: true };
 }
 
 // ===== Supabase Storage：商品照片上傳（選用，可避免 localStorage 5MB 上限） =====
@@ -3642,6 +3738,7 @@ window.DK = {
   signOutSupabaseAuthForMigration,
   getSupabaseAuthProfile,
   getSupabaseRestAuthHeaders,
+  requireVerifiedAdminCloudAccess,
   requireVerifiedBackofficeCloudAccess,
   // 廠商報價＋叫貨單同步 1.0
   VP_STORAGE_KEYS,
