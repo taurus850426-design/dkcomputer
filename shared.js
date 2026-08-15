@@ -27,6 +27,11 @@ const STORAGE_KEYS = {
 // 若留空會退回使用 localStorage。
 const SUPABASE_URL = "https://npynqrsmduukulwgylkz.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_K0fyhespfyQIP-56bTZEFg_Gq1PJG4F";
+// ===== Stage 4 正式登入模式 =====
+// "supabase" = Supabase Auth + public.profiles（正式）
+// "legacy"  = 舊 site_config.admin 帳密（緊急 rollback）
+// 要回舊登入：只改下一行 "supabase" → "legacy"
+const AUTH_LOGIN_MODE = "supabase";
 const SUPABASE_INVENTORY_TABLE = "inventory";
 const SUPABASE_SITE_CONFIG_TABLE = "site_config";
 const SITE_CONFIG_ROW_ID = "default";
@@ -1794,11 +1799,33 @@ function resolveLiveAdminUser(session) {
   return live;
 }
 
+let __dkCurrentAuthProfile = null;
+
+function isAuthLoginModeSupabase() {
+  return AUTH_LOGIN_MODE === "supabase";
+}
+
+function getAuthLoginMode() {
+  return AUTH_LOGIN_MODE === "legacy" ? "legacy" : "supabase";
+}
+
 function isAdminAuthed() {
+  if (isAuthLoginModeSupabase()) {
+    const p = __dkCurrentAuthProfile;
+    return !!(p && p.enabled === true && (p.role === "admin" || p.role === "staff") && p.username);
+  }
   return !!resolveLiveAdminUser(getAdminSession());
 }
 
 function setAdminAuthed(v) {
+  if (isAuthLoginModeSupabase()) {
+    if (!v) {
+      __dkCurrentAuthProfile = null;
+      localStorage.removeItem(STORAGE_KEYS.adminAuthed);
+      localStorage.removeItem(STORAGE_KEYS.adminSession);
+    }
+    return;
+  }
   if (v) {
     if (resolveLiveAdminUser(getAdminSession())) {
       localStorage.setItem(STORAGE_KEYS.adminAuthed, "1");
@@ -1810,6 +1837,19 @@ function setAdminAuthed(v) {
 }
 
 function getCurrentAdminUser() {
+  if (isAuthLoginModeSupabase()) {
+    const p = __dkCurrentAuthProfile;
+    if (!p || p.enabled !== true || (p.role !== "admin" && p.role !== "staff")) return null;
+    const session = getAdminSession();
+    return {
+      userId: String(p.id || (session && session.userId) || ""),
+      username: p.username,
+      displayName: p.displayName || p.username,
+      role: p.role,
+      enabled: true,
+      loginAt: (session && session.loginAt) || "",
+    };
+  }
   const session = getAdminSession();
   const live = resolveLiveAdminUser(session);
   if (!live) return null;
@@ -1850,6 +1890,10 @@ function requirePermission(perm) {
 }
 
 function validateAdminSession() {
+  if (isAuthLoginModeSupabase()) {
+    if (!isAdminAuthed()) return { ok: false, reason: "unauthed" };
+    return { ok: true, user: getCurrentAdminUser() };
+  }
   const session = getAdminSession();
   const live = resolveLiveAdminUser(session);
   if (!live) {
@@ -1876,6 +1920,208 @@ function validateAdminSession() {
       loginAt: session.loginAt,
     },
   };
+}
+
+function clearAdminUiSessionCache() {
+  __dkCurrentAuthProfile = null;
+  try {
+    localStorage.removeItem(STORAGE_KEYS.adminAuthed);
+    localStorage.removeItem(STORAGE_KEYS.adminSession);
+  } catch (_) {}
+}
+
+function clearProjectSupabaseAuthStorage() {
+  try {
+    localStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY);
+  } catch (_) {}
+  try {
+    if (typeof __dkSupabaseAuthClient !== "undefined") __dkSupabaseAuthClient = null;
+    if (typeof __dkSupabaseAuthClientPromise !== "undefined") __dkSupabaseAuthClientPromise = null;
+  } catch (_) {}
+}
+
+async function signOutSupabaseAuthKeepGoing(client) {
+  let apiOk = false;
+  try {
+    if (client && client.auth && typeof client.auth.signOut === "function") {
+      const result = await client.auth.signOut({ scope: "local" });
+      apiOk = !(result && result.error);
+    }
+  } catch (_) {
+    apiOk = false;
+  }
+  if (!apiOk) {
+    try {
+      if (client && client.auth && typeof client.auth.stopAutoRefresh === "function") {
+        client.auth.stopAutoRefresh();
+      }
+    } catch (_) {}
+    clearProjectSupabaseAuthStorage();
+  }
+  return apiOk;
+}
+
+function applyVerifiedAuthProfile(userId, profile, loginAt) {
+  __dkCurrentAuthProfile = {
+    id: String(userId || ""),
+    username: profile.username,
+    displayName: profile.displayName || profile.username,
+    role: profile.role,
+    enabled: true,
+  };
+  setAdminSession({
+    userId: String(userId || ""),
+    username: profile.username,
+    displayName: profile.displayName || profile.username,
+    role: profile.role,
+    loginAt: loginAt || new Date().toISOString(),
+  });
+}
+
+async function validateSupabaseAdminSession() {
+  if (!isAuthLoginModeSupabase()) return validateAdminSession();
+  try {
+    const client = await getSupabaseAuthClient();
+    if (!client || !client.auth) {
+      __dkCurrentAuthProfile = null;
+      return { ok: false, reason: "network" };
+    }
+    const sessionResult = await client.auth.getSession();
+    if (sessionResult && sessionResult.error) {
+      __dkCurrentAuthProfile = null;
+      return { ok: false, reason: "network" };
+    }
+    const session = sessionResult && sessionResult.data && sessionResult.data.session;
+    const sessionUser = session && session.user;
+    if (!sessionUser || !sessionUser.id) {
+      clearAdminUiSessionCache();
+      return { ok: false, reason: "unauthed" };
+    }
+    let user = sessionUser;
+    if (typeof client.auth.getUser === "function") {
+      const userResult = await client.auth.getUser();
+      if (userResult && userResult.error) {
+        const status = Number((userResult.error && userResult.error.status) || 0);
+        const msg = String((userResult.error && userResult.error.message) || "").toLowerCase();
+        const invalid = status === 401 || status === 403 || /invalid|expired|not authenticated|user from sub claim/.test(msg);
+        if (invalid) {
+          await signOutSupabaseAuthKeepGoing(client);
+          clearAdminUiSessionCache();
+          return { ok: false, reason: "unauthed" };
+        }
+        __dkCurrentAuthProfile = null;
+        return { ok: false, reason: "network" };
+      }
+      user = (userResult && userResult.data && userResult.data.user) || null;
+      if (!user || !user.id) {
+        await signOutSupabaseAuthKeepGoing(client);
+        clearAdminUiSessionCache();
+        return { ok: false, reason: "unauthed" };
+      }
+    }
+    const fetched = await fetchOwnAuthProfile(client, user.id);
+    if (fetched.errorCode === "network") {
+      __dkCurrentAuthProfile = null;
+      return { ok: false, reason: "network" };
+    }
+    const row = fetched.row;
+    if (!row) {
+      await signOutSupabaseAuthKeepGoing(client);
+      clearAdminUiSessionCache();
+      return { ok: false, reason: "profile_missing" };
+    }
+    if (String(row.id || "") !== String(user.id)) {
+      await signOutSupabaseAuthKeepGoing(client);
+      clearAdminUiSessionCache();
+      return { ok: false, reason: "username_mismatch" };
+    }
+    const profile = sanitizeAuthProfileRow(row);
+    if (!profile || (profile.role !== "admin" && profile.role !== "staff")) {
+      await signOutSupabaseAuthKeepGoing(client);
+      clearAdminUiSessionCache();
+      return { ok: false, reason: "role_invalid" };
+    }
+    if (profile.enabled !== true) {
+      await signOutSupabaseAuthKeepGoing(client);
+      clearAdminUiSessionCache();
+      return { ok: false, reason: "profile_disabled" };
+    }
+    const mapped = adminUsernameToAuthEmail(profile.username);
+    const email = String(user.email || "").trim().toLowerCase();
+    if (!mapped || mapped !== email) {
+      await signOutSupabaseAuthKeepGoing(client);
+      clearAdminUiSessionCache();
+      return { ok: false, reason: "username_mismatch" };
+    }
+    const prev = getAdminSession();
+    const loginAt = prev && prev.userId === String(user.id) && prev.loginAt ? prev.loginAt : new Date().toISOString();
+    applyVerifiedAuthProfile(user.id, profile, loginAt);
+    return { ok: true, reason: "ok", user: getCurrentAdminUser() };
+  } catch (_) {
+    __dkCurrentAuthProfile = null;
+    return { ok: false, reason: "network" };
+  }
+}
+
+async function signInSupabaseAdmin(username, password) {
+  try {
+    const email = adminUsernameToAuthEmail(username);
+    if (!email || String(password ?? "") === "") return { ok: false, code: "auth_failed" };
+    const client = await getSupabaseAuthClient();
+    if (!client || !client.auth || typeof client.auth.signInWithPassword !== "function") {
+      return { ok: false, code: "network" };
+    }
+    const signed = await client.auth.signInWithPassword({ email: email, password: String(password) });
+    if (signed && signed.error) {
+      return { ok: false, code: classifySupabaseAuthSignInError(signed.error) };
+    }
+    const user = signed && signed.data && signed.data.user;
+    if (!user || !user.id) return { ok: false, code: "auth_failed" };
+    const fetched = await fetchOwnAuthProfile(client, user.id);
+    if (fetched.errorCode === "network") {
+      await signOutSupabaseAuthKeepGoing(client);
+      clearAdminUiSessionCache();
+      return { ok: false, code: "network" };
+    }
+    const row = fetched.row;
+    if (!row) {
+      await signOutSupabaseAuthKeepGoing(client);
+      clearAdminUiSessionCache();
+      return { ok: false, code: "profile_missing" };
+    }
+    if (String(row.id || "") !== String(user.id)) {
+      await signOutSupabaseAuthKeepGoing(client);
+      clearAdminUiSessionCache();
+      return { ok: false, code: "username_mismatch" };
+    }
+    const profile = sanitizeAuthProfileRow(row);
+    if (!profile || (profile.role !== "admin" && profile.role !== "staff")) {
+      await signOutSupabaseAuthKeepGoing(client);
+      clearAdminUiSessionCache();
+      return { ok: false, code: "role_invalid" };
+    }
+    if (String(profile.username || "").trim().toLowerCase() !== String(username || "").trim().toLowerCase()) {
+      await signOutSupabaseAuthKeepGoing(client);
+      clearAdminUiSessionCache();
+      return { ok: false, code: "username_mismatch" };
+    }
+    if (profile.enabled !== true) {
+      await signOutSupabaseAuthKeepGoing(client);
+      clearAdminUiSessionCache();
+      return { ok: false, code: "profile_disabled" };
+    }
+    applyVerifiedAuthProfile(user.id, profile, new Date().toISOString());
+    return { ok: true, code: "ok", profile: profile };
+  } catch (_) {
+    return { ok: false, code: "network" };
+  }
+}
+
+async function signOutSupabaseAdmin() {
+  const client = await getSupabaseAuthClient().catch(function () { return null; });
+  const apiOk = await signOutSupabaseAuthKeepGoing(client);
+  clearAdminUiSessionCache();
+  return { ok: true, apiOk: apiOk };
 }
 
 function loadAuditLogs() {
@@ -2712,7 +2958,7 @@ async function getSupabaseAuthClient() {
       const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         auth: {
           persistSession: true,
-          autoRefreshToken: false,
+          autoRefreshToken: true,
           detectSessionInUrl: false,
           storageKey: SUPABASE_AUTH_STORAGE_KEY,
         },
@@ -2801,6 +3047,7 @@ function sanitizeAuthProfileRow(row) {
   if (!row || typeof row !== "object") return null;
   const role = row.role === "admin" || row.role === "staff" ? row.role : "";
   return {
+    id: String(row.id || ""),
     username: String(row.username || ""),
     displayName: String(row.display_name || row.displayName || ""),
     role,
@@ -2884,11 +3131,10 @@ async function signInSupabaseAuthForMigration(username, password) {
 async function signOutSupabaseAuthForMigration() {
   try {
     const client = await getSupabaseAuthClient();
-    if (client && client.auth && typeof client.auth.signOut === "function") {
-      await client.auth.signOut();
-    }
+    await signOutSupabaseAuthKeepGoing(client);
     return { ok: true };
   } catch (_) {
+    try { clearProjectSupabaseAuthStorage(); } catch (__) {}
     return { ok: false, code: "network" };
   }
 }
@@ -2984,6 +3230,12 @@ window.DK = {
   canPermission,
   requirePermission,
   validateAdminSession,
+  AUTH_LOGIN_MODE,
+  getAuthLoginMode,
+  isAuthLoginModeSupabase,
+  validateSupabaseAdminSession,
+  signInSupabaseAdmin,
+  signOutSupabaseAdmin,
   appendAuditLog,
   loadAuditLogs,
   ADMIN_ROLE_LABEL,

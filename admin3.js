@@ -76,6 +76,10 @@
       repair = null;
     }
     if (repair !== "1") return;
+    if (window.DK && typeof window.DK.isAuthLoginModeSupabase === "function" && window.DK.isAuthLoginModeSupabase()) {
+      alert("Auth 模式下不使用 repairAdmin。請以 Supabase Auth 帳號登入。");
+      return;
+    }
 
     try {
       const cfgKey = window.DK?.STORAGE_KEYS?.config || "dk_site_config_v1";
@@ -249,6 +253,14 @@
   const webEditFeaturedHome = document.getElementById("webEditFeaturedHome");
   const webEditFeaturedOrder = document.getElementById("webEditFeaturedOrder");
   if (!loginCard || !panel) return;
+  const authBootCard = document.getElementById("authBootCard");
+  if (window.DK?.isAuthLoginModeSupabase?.()) {
+    window.__dkAuthBootPending = true;
+    loginCard.hidden = true;
+    panel.hidden = true;
+    if (logoutBtn) logoutBtn.hidden = true;
+    if (authBootCard) authBootCard.hidden = false;
+  }
 
   // ---------- 產品介紹富文本編輯器（Quill）----------
   let publishQuill = null;
@@ -404,8 +416,10 @@
   }
 
   function applyAuthUI() {
+    if (window.__dkAuthBootPending) return;
     try { window.DK?.validateAdminSession?.(); } catch (_) {}
     const authed = window.DK?.isAdminAuthed?.() === true;
+    if (authBootCard) authBootCard.hidden = true;
     if (loginCard) loginCard.hidden = authed;
     if (panel) panel.hidden = !authed;
     if (logoutBtn) logoutBtn.hidden = !authed;
@@ -890,10 +904,45 @@
     const saved = (VALID_TABS.includes(fromHash) ? fromHash : null) || (function () { try { return sessionStorage.getItem(ADMIN_TAB_KEY); } catch (_) { return null; } })();
     if (saved && VALID_TABS.includes(saved) && canPerm(saved)) switchTab(saved);
   }
-  function doLogin() {
+  function formatSupabaseLoginError(code) {
+    const c = String(code || "");
+    if (c === "profile_disabled") return "此帳號已停用";
+    if (c === "profile_missing" || c === "role_invalid") return "帳號資料不完整，無法登入";
+    if (c === "username_mismatch") return "帳號資料不一致，無法登入";
+    if (c === "network" || c === "email_not_confirmed") {
+      if (c === "email_not_confirmed") return "帳號尚未確認，無法登入";
+      return "登入服務暫時無法連線，請稍後再試。";
+    }
+    return "帳號或密碼錯誤。";
+  }
+  async function doLogin() {
     hide(loginError);
     const u = String(usernameEl?.value || "").trim();
     const p = String(passwordEl?.value || "");
+    if (window.DK?.isAuthLoginModeSupabase?.()) {
+      if (loginBtn) loginBtn.disabled = true;
+      try {
+        const fn = window.DK.signInSupabaseAdmin;
+        const res = typeof fn === "function" ? await fn(u, p) : null;
+        if (res && res.ok) {
+          applyAuthUI();
+          try {
+            const saved = localStorage.getItem("dk_admin_active_tab") || sessionStorage.getItem(ADMIN_TAB_KEY);
+            if (saved && VALID_TABS.includes(saved) && canPerm(saved)) switchTab(saved);
+            else switchTab("inv");
+          } catch (_) {
+            try { switchTab("inv"); } catch (__) {}
+          }
+          return;
+        }
+        show(loginError, formatSupabaseLoginError(res && res.code));
+      } catch (_) {
+        show(loginError, "登入服務暫時無法連線，請稍後再試。");
+      } finally {
+        if (loginBtn) loginBtn.disabled = false;
+      }
+      return;
+    }
     const found = window.DK?.findAdminUserByCredentials ? window.DK.findAdminUserByCredentials(u, p) : null;
     if (found) {
       if (found.enabled === false) {
@@ -933,6 +982,20 @@
   });
   logoutBtn?.addEventListener("click", () => {
     // 登出只清登入狀態，不清除 config / 業務資料
+    if (window.DK?.isAuthLoginModeSupabase?.()) {
+      const fn = window.DK.signOutSupabaseAdmin;
+      Promise.resolve(typeof fn === "function" ? fn() : null).then(function (res) {
+        applyAuthUI();
+        if (res && res.apiOk === false) {
+          show(loginError, "本機登入狀態已清除；雲端登出未完成。");
+        }
+      }).catch(function () {
+        try { window.DK?.setAdminAuthed?.(false); } catch (_) {}
+        applyAuthUI();
+        show(loginError, "本機登入狀態已清除；雲端登出未完成。");
+      });
+      return;
+    }
     window.DK?.setAdminAuthed?.(false);
     applyAuthUI();
   });
@@ -1044,96 +1107,45 @@
         return;
       }
       box.hidden = false;
-      const wiredEl = document.getElementById("authMigWired");
-      const sessEl = document.getElementById("authMigSession");
-      const profEl = document.getElementById("authMigProfiles");
-      if (wiredEl) wiredEl.textContent = "檢查中…";
+      const modeEl = document.getElementById("authMigLoginMode");
+      if (modeEl) {
+        modeEl.textContent = window.DK?.isAuthLoginModeSupabase?.() ? "Supabase Auth" : "目前仍使用舊系統";
+      }
+      const sessEl = document.getElementById("authDiagSession");
+      const profEl = document.getElementById("authDiagProfile");
+      const userEl = document.getElementById("authDiagUsername");
+      const roleEl = document.getElementById("authDiagRole");
+      const enEl = document.getElementById("authDiagEnabled");
       if (sessEl) sessEl.textContent = "檢查中…";
       if (profEl) profEl.textContent = "檢查中…";
+      const user = window.DK?.getCurrentAdminUser?.() || null;
       const loadStatus = window.DK?.getAuthMigrationStatus
         ? window.DK.getAuthMigrationStatus()
         : Promise.resolve(null);
       Promise.resolve(loadStatus).then(function (st) {
         const s = st || {};
-        if (wiredEl) wiredEl.textContent = s.authWired ? "已接線" : "未接線";
         if (sessEl) sessEl.textContent = s.authSession ? "有" : "無";
-        if (profEl) profEl.textContent = s.profiles === "ok" ? "可存取" : "尚未建立";
+        const profileOk = !!(user && user.username && (user.role === "admin" || user.role === "staff") && user.enabled !== false);
+        if (profEl) profEl.textContent = profileOk ? "正常" : "異常";
+        if (userEl) userEl.textContent = user && user.username ? String(user.username) : "—";
+        if (roleEl) roleEl.textContent = user && user.role ? String(user.role) : "—";
+        if (enEl) enEl.textContent = user && user.enabled !== false ? "是" : "否";
       }).catch(function () {
-        if (wiredEl) wiredEl.textContent = "未接線";
         if (sessEl) sessEl.textContent = "無";
-        if (profEl) profEl.textContent = "尚未建立";
+        if (profEl) profEl.textContent = "異常";
+        if (userEl) userEl.textContent = "—";
+        if (roleEl) roleEl.textContent = "—";
+        if (enEl) enEl.textContent = "—";
       });
     } catch (_) {
       try { box.hidden = true; } catch (__) {}
     }
   }
-  function showAuthTestResult(text) {
-    const el = document.getElementById("authTestResult");
-    if (!el) return;
-    if (!text) { el.hidden = true; el.textContent = ""; return; }
-    el.hidden = false;
-    el.textContent = text;
-  }
-  function formatAuthTestResult(res) {
-    if (!res) return "失敗：網路／Supabase 錯誤";
-    if (res.ok && res.profile) {
-      return [
-        "Auth：成功",
-        "Profile：成功",
-        "Username：" + String(res.profile.username || ""),
-        "顯示名稱：" + String(res.profile.displayName || ""),
-        "Role：" + String(res.profile.role || ""),
-        "Enabled：" + (res.profile.enabled ? "是" : "否"),
-      ].join("\n");
-    }
-    const code = String(res.code || "");
-    if (code === "auth_failed") return "失敗：Auth 帳號不存在／密碼錯誤";
-    if (code === "invalid_username") return "失敗：登入帳號格式無效";
-    if (code === "email_not_confirmed") return "失敗：Auth 帳號尚未確認 Email";
-    if (code === "profile_missing") return "Auth：成功\n失敗：Auth 成功但 profile 不存在";
-    if (code === "profile_disabled") return "Auth：成功\n失敗：profile 已停用（enabled = false）";
-    if (code === "username_mismatch") return "Auth：成功\n失敗：profile username 不一致";
-    if (code === "role_invalid") return "Auth：成功\n失敗：profile role 無效";
-    return "失敗：網路／Supabase 錯誤";
-  }
-  async function runAuthMigrationTestSignIn() {
-    if (window.DK?.getCurrentRole?.() !== "admin") return;
-    const userEl = document.getElementById("authTestUsername");
-    const passEl = document.getElementById("authTestPassword");
-    const btn = document.getElementById("authTestSignInBtn");
-    const username = String(userEl?.value || "").trim();
-    const password = String(passEl?.value || "");
-    showAuthTestResult("測試中…");
-    if (btn) btn.disabled = true;
-    try {
-      const fn = window.DK?.signInSupabaseAuthForMigration;
-      const res = typeof fn === "function" ? await fn(username, password) : null;
-      showAuthTestResult(formatAuthTestResult(res));
-    } catch (_) {
-      showAuthTestResult("失敗：網路／Supabase 錯誤");
-    } finally {
-      if (btn) btn.disabled = false;
-      try { renderAuthMigrationStatus(); } catch (__) {}
-    }
-  }
-  async function runAuthMigrationTestSignOut() {
-    if (window.DK?.getCurrentRole?.() !== "admin") return;
-    const btn = document.getElementById("authTestSignOutBtn");
-    if (btn) btn.disabled = true;
-    try {
-      const fn = window.DK?.signOutSupabaseAuthForMigration;
-      if (typeof fn === "function") await fn();
-      showAuthTestResult("Auth 測試 session 已登出。正式後台登入未變更。");
-    } catch (_) {
-      showAuthTestResult("失敗：網路／Supabase 錯誤");
-    } finally {
-      if (btn) btn.disabled = false;
-      try { renderAuthMigrationStatus(); } catch (__) {}
-    }
-  }
   function renderAccountsPage() {
     if (!requirePerm("accounts")) return;
     try { renderAuthMigrationStatus(); } catch (_) {}
+    const hint = document.getElementById("authAccountsLegacyHint");
+    if (hint) hint.hidden = !window.DK?.isAuthLoginModeSupabase?.();
     try { window.DK.ensureAdminUsersPersisted?.(); } catch (_) {}
     const tbody = document.getElementById("accountsTbody");
     if (!tbody) return;
@@ -1273,11 +1285,6 @@
   }
   document.getElementById("accountSaveBtn")?.addEventListener("click", saveAccountFromForm);
   document.getElementById("accountResetFormBtn")?.addEventListener("click", resetAccountForm);
-  document.getElementById("authTestSignInBtn")?.addEventListener("click", () => { runAuthMigrationTestSignIn(); });
-  document.getElementById("authTestSignOutBtn")?.addEventListener("click", () => { runAuthMigrationTestSignOut(); });
-  document.getElementById("authTestPassword")?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") runAuthMigrationTestSignIn();
-  });
   document.getElementById("accountRoleHelpBtn")?.addEventListener("click", () => {
     const el = document.getElementById("accountFormRoleHelp");
     if (!el) return;
@@ -6341,11 +6348,40 @@
   tryInitV2DK();
 
   // ---------- init ----------
-  applyAuthUI();
-  if (window.DK?.isAdminAuthed?.()) {
-    const saved = (function () { try { return localStorage.getItem("dk_admin_active_tab"); } catch (_) { return null; } })();
-    if (saved && VALID_TABS.includes(saved) && canPerm(saved)) switchTab(saved);
-    else switchTab("inv");
+  async function bootAuthUI() {
+    function restoreTabIfAuthed() {
+      if (!window.DK?.isAdminAuthed?.()) return;
+      const saved = (function () { try { return localStorage.getItem("dk_admin_active_tab"); } catch (_) { return null; } })();
+      if (saved && VALID_TABS.includes(saved) && canPerm(saved)) switchTab(saved);
+      else switchTab("inv");
+    }
+    if (!window.DK?.isAuthLoginModeSupabase?.()) {
+      applyAuthUI();
+      restoreTabIfAuthed();
+      return;
+    }
+    if (loginCard) loginCard.hidden = true;
+    if (panel) panel.hidden = true;
+    if (logoutBtn) logoutBtn.hidden = true;
+    if (authBootCard) authBootCard.hidden = false;
+    window.__dkAuthBootPending = true;
+    let result = { ok: false, reason: "unauthed" };
+    try {
+      const fn = window.DK.validateSupabaseAdminSession;
+      result = typeof fn === "function" ? await fn() : result;
+    } catch (_) {
+      result = { ok: false, reason: "network" };
+    }
+    window.__dkAuthBootPending = false;
+    if (authBootCard) authBootCard.hidden = true;
+    applyAuthUI();
+    if (result && result.ok) {
+      restoreTabIfAuthed();
+      return;
+    }
+    if (result && result.reason === "profile_disabled") show(loginError, "此帳號已停用");
+    else if (result && result.reason === "network") show(loginError, "登入服務暫時無法連線，請稍後再試。");
   }
+  bootAuthUI();
 })();
 
