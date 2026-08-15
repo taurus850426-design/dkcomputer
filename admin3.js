@@ -372,16 +372,17 @@
 
   function showSyncToast(result, context) {
     const ok = result && result.ok === true;
+    const failMsg = inventoryCloudFailMsg(result, result?.error || "未知錯誤");
     const msg = ok
       ? (context ? context + " 已儲存並同步到 Supabase ✓" : "已同步到 Supabase ✓")
-      : "同步失敗，其他裝置無法看到： " + (result?.error || "未知錯誤");
+      : "同步失敗，其他裝置無法看到： " + failMsg;
     showCenterToast(msg);
     if (!ok) {
       const bar = document.getElementById("syncStatusBar");
       const txt = document.getElementById("syncStatusText");
       if (bar && txt) {
         bar.className = "sync-status-bar error";
-        txt.textContent = "⚠ 上次同步失敗：" + (result?.error || "").slice(0, 60);
+        txt.textContent = "⚠ 上次同步失敗：" + failMsg.slice(0, 60);
       }
     } else {
       updateSyncStatusBar();
@@ -1912,9 +1913,23 @@
         .saveSiteConfigToSupabase(next)
         .then((result) => {
           showSyncToast(result, "前台設定");
+          if (msg) {
+            msg.hidden = false;
+            if (result && result.ok === true) {
+              msg.textContent = "已儲存並同步到雲端。";
+              msg.style.color = "";
+            } else {
+              msg.textContent = "本機已儲存。" + inventoryCloudFailMsg(result, "雲端同步失敗");
+              msg.style.color = "";
+            }
+          }
         })
         .catch((e) => {
           showSyncToast({ ok: false, error: String(e?.message || e || "同步失敗") }, "前台設定");
+          if (msg) {
+            msg.hidden = false;
+            msg.textContent = "本機已儲存。雲端同步失敗";
+          }
         });
     } else {
       showSyncToast({ ok: false, error: "環境未提供 saveSiteConfigToSupabase" }, "前台設定");

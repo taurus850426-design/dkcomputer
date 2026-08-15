@@ -910,27 +910,50 @@ async function saveSiteConfigToSupabase(config) {
     });
     return { ok: false, error: msg };
   }
-  const clean = sanitizeSiteConfigForStorage(config);
-  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_SITE_CONFIG_TABLE}?on_conflict=id`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation,resolution=merge-duplicates",
-    },
-    body: JSON.stringify([{ id: SITE_CONFIG_ROW_ID, data: clean }]),
-  });
-  if (!res.ok) {
-    const txt = await res.text();
-    console.warn("同步官網設定到 Supabase 失敗", txt);
-    const errMsg = (txt || ("HTTP " + res.status)).slice(0, 200);
+  const denied = inventoryWriteGateResult();
+  if (denied) {
     saveConfigSyncMeta({
       lastCloudSyncStatus: "failed",
-      lastCloudError: errMsg,
+      lastCloudError: denied.error,
     });
-    return { ok: false, error: errMsg };
+    return denied;
+  }
+  const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
+  if (!auth.ok || !auth.headers) {
+    const fail = { ok: false, notAuthenticated: true, code: "not_authenticated", error: "請先登入後台" };
+    saveConfigSyncMeta({
+      lastCloudSyncStatus: "failed",
+      lastCloudError: fail.error,
+    });
+    return fail;
+  }
+  const clean = sanitizeSiteConfigForStorage(config);
+  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_SITE_CONFIG_TABLE}?on_conflict=id`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: auth.headers.apikey,
+        Authorization: auth.headers.Authorization,
+        "Content-Type": "application/json",
+        Prefer: "return=representation,resolution=merge-duplicates",
+      },
+      body: JSON.stringify([{ id: SITE_CONFIG_ROW_ID, data: clean }]),
+    });
+    if (!res.ok) {
+      const fail = await inventoryWriteFailFromResponse(res);
+      saveConfigSyncMeta({
+        lastCloudSyncStatus: "failed",
+        lastCloudError: fail.error || "雲端同步失敗",
+      });
+      return fail;
+    }
+  } catch (_) {
+    saveConfigSyncMeta({
+      lastCloudSyncStatus: "failed",
+      lastCloudError: "雲端同步失敗",
+    });
+    return { ok: false, error: "雲端同步失敗" };
   }
   saveConfigSyncMeta({
     lastCloudSyncStatus: "success-write",
