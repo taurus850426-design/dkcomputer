@@ -58,28 +58,9 @@
   }
 
   function getItems() {
-    let items = (typeof DK.getInventoryForDisplay === "function" ? DK.getInventoryForDisplay() : DK.getInventory?.()) || [];
-    if (items.length === 0 && typeof DK.getStock === "function") {
-      items = DK.getStock()
-        .filter((s) => s?.web?.publish && s?.status !== "已售出")
-        .map((s) => {
-          const w = s.web || {};
-          const qty = (() => {
-            const n = Number(w?.qty ?? s?.qty);
-            return Number.isFinite(n) && n >= 0 ? n : null;
-          })();
-          return {
-            id: s.id,
-            name: w.name || s.modelSpec || s.stockNo,
-            category: w.category || "遊戲",
-            price: typeof w.price === "number" ? w.price : DK.toNumber?.(w.price) ?? null,
-            note: w.note || "",
-            photos: Array.isArray(w.photos) ? w.photos : [],
-            qty,
-          };
-        });
-    }
-    return items;
+    // Stage 6-6-2：公開頁只顯示 inventory。inventory 為空時顯示空狀態，
+    // 不 fallback getStock()／DEFAULT_STOCK，避免訪客看到本機 legacy 假資料。
+    return (typeof DK.getInventoryForDisplay === "function" ? DK.getInventoryForDisplay() : DK.getInventory?.()) || [];
   }
 
   function trackProductViewItem(item) {

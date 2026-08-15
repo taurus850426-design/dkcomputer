@@ -963,49 +963,15 @@ async function saveSiteConfigToSupabase(config) {
   return { ok: true };
 }
 
-// ===== Supabase：庫存資料（stock + stockKinds + stockSchema）讀寫 =====
+// ===== Stage 6-6-2：stock_data cloud 已退役 =====
+// 正式前台用 inventory；庫存＋記帳用 v2_data。不再 anon GET/POST stock_data。
+// 保留函式名稱，避免 legacy admin2.js / DK.* 呼叫炸掉。不發 REST、不 fallback anon。
 async function fetchStockDataFromSupabase() {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
-  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_STOCK_DATA_TABLE}?id=eq.${encodeURIComponent(
-    STOCK_DATA_ROW_ID,
-  )}&select=data`;
-  const res = await fetch(url, {
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-    },
-  });
-  if (!res.ok) return null;
-  const rows = await res.json();
-  const raw = rows?.[0]?.data;
-  if (!raw || typeof raw !== "object") return null;
-  return raw;
+  return null;
 }
 
 async function saveAllStockDataToSupabase() {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
-  const payload = {
-    id: STOCK_DATA_ROW_ID,
-    data: {
-      stock: getStock(),
-      stockKinds: getStockKinds(),
-      stockSchema: getStockSchema(),
-    },
-  };
-  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_STOCK_DATA_TABLE}?on_conflict=id`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation,resolution=merge-duplicates",
-    },
-    body: JSON.stringify([payload]),
-  });
-  if (!res.ok) {
-    console.warn("同步庫存到 Supabase 失敗", await res.text());
-  }
+  return;
 }
 
 // ===== Supabase：訂單資料（訂單管理、報表用）讀寫 =====
@@ -1235,9 +1201,6 @@ function getStockKinds() {
 
 function saveStockKinds(kinds, skipSupabaseSync) {
   localStorage.setItem(STORAGE_KEYS.stockKinds, JSON.stringify(kinds));
-  if (!skipSupabaseSync && window.DK?.saveAllStockDataToSupabase) {
-    window.DK.saveAllStockDataToSupabase().catch(function () {});
-  }
 }
 
 function getStockSchema() {
@@ -1251,9 +1214,6 @@ function getStockSchema() {
 
 function saveStockSchema(schema, skipSupabaseSync) {
   localStorage.setItem(STORAGE_KEYS.stockSchema, JSON.stringify(schema));
-  if (!skipSupabaseSync && window.DK?.saveAllStockDataToSupabase) {
-    window.DK.saveAllStockDataToSupabase().catch(function () {});
-  }
 }
 
 function getStock() {
@@ -1264,9 +1224,6 @@ function getStock() {
 
 function saveStock(items, skipSupabaseSync) {
   localStorage.setItem(STORAGE_KEYS.stock, JSON.stringify(items));
-  if (!skipSupabaseSync && window.DK?.saveAllStockDataToSupabase) {
-    window.DK.saveAllStockDataToSupabase().catch(function () {});
-  }
 }
 
 function formatPrice(n) {
@@ -3856,18 +3813,6 @@ if (window.DK && window.DK.fetchInventoryFromSupabase && window.DK.saveInventory
           }),
         );
       } catch (_) {}
-    })
-    .catch(function () {});
-}
-// 頁面載入時從 Supabase 拉庫存（stock + 類別 + 欄位），多裝置看到同一份（不觸發回寫）
-if (window.DK && window.DK.fetchStockDataFromSupabase) {
-  window.DK
-    .fetchStockDataFromSupabase()
-    .then(function (data) {
-      if (!data) return;
-      if (Array.isArray(data.stock)) window.DK.saveStock(data.stock, true);
-      if (Array.isArray(data.stockKinds)) window.DK.saveStockKinds(data.stockKinds, true);
-      if (Array.isArray(data.stockSchema)) window.DK.saveStockSchema(data.stockSchema, true);
     })
     .catch(function () {});
 }
