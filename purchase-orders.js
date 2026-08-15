@@ -167,8 +167,10 @@
     if (window.DK.isVpApplyingCloud && window.DK.isVpApplyingCloud()) return;
     window.DK.upsertPurchaseOrderToSupabase(order).then(function (res) {
       renderPurchaseOrdersSyncPanel();
+      const authMsg = window.DK.vpCloudUserMessage ? window.DK.vpCloudUserMessage(res) : null;
       if (res && res.ok) showMsg(okMsg || "已同步到雲端", 2500);
       else if (res && res.notEnabled) showMsg("本機已儲存。雲端尚未啟用。", 3500);
+      else if (authMsg) showMsg("本機已儲存。" + authMsg, 3500);
       else showMsg("本機已儲存，雲端同步失敗" + (res && res.error ? "：" + res.error : ""), 3500);
     }).catch(function () {
       renderPurchaseOrdersSyncPanel();
@@ -1068,7 +1070,10 @@
               renderList();
               renderPurchaseOrdersSyncPanel();
               if (res && res.cloud && res.cloud.ok) showMsg("已刪除（本機＋雲端 soft delete）", 2500);
-              else if (res && res.localSaved) showMsg("本機已刪除；雲端同步失敗或尚未啟用", 3500);
+              else if (res && res.localSaved) {
+                const authMsg = window.DK.vpCloudUserMessage ? window.DK.vpCloudUserMessage(res.cloud) : null;
+                showMsg(authMsg ? "本機已刪除；" + authMsg : "本機已刪除；雲端同步失敗或尚未啟用", 3500);
+              }
               else showMsg("刪除失敗", 2500);
             });
             return;
@@ -1230,6 +1235,7 @@
       }
       renderPurchaseOrdersSyncPanel();
       if (res && res.notEnabled) poSyncSetMsg("雲端尚未啟用：請先執行 supabase-vendor-purchase-sync.sql");
+      else if (window.DK && window.DK.vpCloudUserMessage && window.DK.vpCloudUserMessage(res)) poSyncSetMsg(window.DK.vpCloudUserMessage(res));
       else if (res && res.emptyCloud) poSyncSetMsg("雲端為空，已保留本機資料（未覆蓋）");
       else if (res && res.ok) poSyncSetMsg("已從雲端合併完成");
       else poSyncSetMsg("同步失敗，本機資料已保留");
@@ -1246,7 +1252,8 @@
       poSyncSetMsg("正在計算上傳預覽…");
       const preview = await window.DK.previewPurchaseOrdersUpload();
       if (!preview || !preview.ok) {
-        poSyncSetMsg(preview && preview.notEnabled ? "雲端尚未啟用，無法上傳" : ("預覽失敗：" + ((preview && preview.error) || "")));
+        const authMsg = window.DK && window.DK.vpCloudUserMessage ? window.DK.vpCloudUserMessage(preview) : null;
+        poSyncSetMsg(preview && preview.notEnabled ? "雲端尚未啟用，無法上傳" : (authMsg || ("預覽失敗：" + ((preview && preview.error) || ""))));
         renderPurchaseOrdersSyncPanel();
         return;
       }
@@ -1257,7 +1264,7 @@
           "預計新增：" + preview.toInsert + "\n" +
           "預計更新：" + preview.toUpdate + "\n\n" +
           "將依 id upsert，不會刪除雲端其他資料。\n" +
-          "安全風險：公開 anon 寫入。"
+          "僅管理員可寫入雲端。"
       );
       if (!ok) {
         poSyncSetMsg("已取消上傳");
@@ -1271,9 +1278,9 @@
         poSyncSetMsg("上傳完成：成功 " + result.success + " 筆" + (result.failed ? "，失敗 " + result.failed : ""));
       } else {
         poSyncSetMsg(
-          (result && result.notEnabled ? "雲端尚未啟用。" : "上傳失敗。") +
+          (result && result.notEnabled ? "雲端尚未啟用。" : (window.DK && window.DK.vpCloudUserMessage && window.DK.vpCloudUserMessage(result) ? window.DK.vpCloudUserMessage(result) + "。" : "上傳失敗。")) +
             "成功 " + ((result && result.success) || 0) + "／失敗 " + ((result && result.failed) || 0) +
-            (result && result.error ? "：" + result.error : "") +
+            (result && result.error && !(window.DK && window.DK.vpCloudUserMessage && window.DK.vpCloudUserMessage(result)) ? "：" + result.error : "") +
             "。本機資料已保留。"
         );
       }

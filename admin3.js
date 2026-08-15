@@ -927,6 +927,14 @@
         if (res && res.ok) {
           applyAuthUI();
           try {
+            if (typeof window.DK.pullVendorQuotesFromCloud === "function") {
+              window.DK.pullVendorQuotesFromCloud().catch(function () {});
+            }
+            if (typeof window.DK.pullPurchaseOrdersFromCloud === "function") {
+              window.DK.pullPurchaseOrdersFromCloud().catch(function () {});
+            }
+          } catch (_) {}
+          try {
             const saved = localStorage.getItem("dk_admin_active_tab") || sessionStorage.getItem(ADMIN_TAB_KEY);
             if (saved && VALID_TABS.includes(saved) && canPerm(saved)) switchTab(saved);
             else switchTab("inv");
@@ -2896,8 +2904,10 @@
     // 雲端 upsert（失敗不回滾本機）
     if (window.DK && typeof window.DK.upsertVendorQuoteToSupabase === "function" && !window.DK.isVpApplyingCloud?.()) {
       window.DK.upsertVendorQuoteToSupabase(q).then((res) => {
+        const authMsg = window.DK.vpCloudUserMessage?.(res);
         if (res && res.ok) vqShowMsg("已新增報價，已同步到雲端");
         else if (res && res.notEnabled) vqShowMsg("已新增報價（本機）。雲端尚未啟用，未上傳。");
+        else if (authMsg) vqShowMsg("已新增報價（本機）。" + authMsg);
         else vqShowMsg("本機已儲存，雲端同步失敗" + (res?.error ? "：" + res.error : ""));
         renderVendorQuotesSyncPanel();
       }).catch(() => {
@@ -2934,7 +2944,10 @@
       renderVendorQuotes();
       renderVendorQuotesSyncPanel();
       if (res && res.cloud && res.cloud.ok) vqShowMsg("已刪除（本機＋雲端 soft delete）");
-      else if (res && res.localSaved) vqShowMsg("本機已刪除；雲端同步失敗或尚未啟用");
+      else if (res && res.localSaved) {
+        const authMsg = window.DK.vpCloudUserMessage?.(res.cloud);
+        vqShowMsg(authMsg ? "本機已刪除；" + authMsg : "本機已刪除；雲端同步失敗或尚未啟用");
+      }
       else vqShowMsg("刪除失敗");
       setTimeout(() => vqShowMsg(""), 3500);
       return;
@@ -3128,6 +3141,7 @@
       renderVendorQuotes();
       renderVendorQuotesSyncPanel();
       if (res?.notEnabled) vqSyncSetMsg("雲端尚未啟用：請先執行 supabase-vendor-purchase-sync.sql");
+      else if (window.DK?.vpCloudUserMessage?.(res)) vqSyncSetMsg(window.DK.vpCloudUserMessage(res));
       else if (res?.emptyCloud) vqSyncSetMsg("雲端為空，已保留本機資料（未覆蓋）");
       else if (res?.ok) vqSyncSetMsg("已從雲端合併完成");
       else vqSyncSetMsg("同步失敗，本機資料已保留");
@@ -3145,7 +3159,8 @@
       vqSyncSetMsg("正在計算上傳預覽…");
       const preview = await window.DK.previewVendorQuotesUpload();
       if (!preview?.ok) {
-        vqSyncSetMsg(preview?.notEnabled ? "雲端尚未啟用，無法上傳" : ("預覽失敗：" + (preview?.error || "")));
+        const authMsg = window.DK?.vpCloudUserMessage?.(preview);
+        vqSyncSetMsg(preview?.notEnabled ? "雲端尚未啟用，無法上傳" : (authMsg || ("預覽失敗：" + (preview?.error || ""))));
         renderVendorQuotesSyncPanel();
         return;
       }
@@ -3156,7 +3171,7 @@
           `預計新增：${preview.toInsert}\n` +
           `預計更新：${preview.toUpdate}\n\n` +
           "將依 id upsert，不會刪除雲端其他資料。\n" +
-          "安全風險：公開 anon 寫入。",
+          "僅管理員可寫入雲端。",
       );
       if (!ok) {
         vqSyncSetMsg("已取消上傳");
@@ -3170,9 +3185,9 @@
         vqSyncSetMsg(`上傳完成：成功 ${result.success} 筆` + (result.failed ? `，失敗 ${result.failed}` : ""));
       } else {
         vqSyncSetMsg(
-          (result?.notEnabled ? "雲端尚未啟用。" : "上傳失敗。") +
+          (result?.notEnabled ? "雲端尚未啟用。" : (window.DK?.vpCloudUserMessage?.(result) ? window.DK.vpCloudUserMessage(result) + "。" : "上傳失敗。")) +
             `成功 ${result?.success || 0}／失敗 ${result?.failed || 0}` +
-            (result?.error ? "：" + result.error : "") +
+            (result?.error && !window.DK?.vpCloudUserMessage?.(result) ? "：" + result.error : "") +
             "。本機資料已保留。",
         );
       }
@@ -6377,6 +6392,14 @@
     applyAuthUI();
     if (result && result.ok) {
       restoreTabIfAuthed();
+      try {
+        if (typeof window.DK.pullVendorQuotesFromCloud === "function") {
+          window.DK.pullVendorQuotesFromCloud().catch(function () {});
+        }
+        if (typeof window.DK.pullPurchaseOrdersFromCloud === "function") {
+          window.DK.pullPurchaseOrdersFromCloud().catch(function () {});
+        }
+      } catch (_) {}
       return;
     }
     if (result && result.reason === "profile_disabled") show(loginError, "此帳號已停用");

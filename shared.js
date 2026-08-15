@@ -2157,8 +2157,7 @@ function appendAuditLog(entry) {
   }
 }
 
-// ===== 廠商報價＋採購叫貨單雲端同步 1.0（REST anon；無 Supabase Auth）=====
-// 安全風險：公開 anon 可讀寫；不是多人帳號系統。SQL 未執行前不得假裝已同步。
+// ===== 廠商報價＋採購叫貨單雲端同步 1.0（Stage 5A：user JWT；不再用 anon 讀寫這兩張表）=====
 const SUPABASE_VENDOR_QUOTES_TABLE = "vendor_quotes";
 const SUPABASE_PURCHASE_ORDERS_TABLE = "purchase_orders";
 const VP_STORAGE_KEYS = {
@@ -2216,6 +2215,54 @@ function vpIsNotEnabledError(status, errText) {
   const t = String(errText || "");
   if (status === 404 || status === 406) return true;
   return /does not exist|Could not find the table|PGRST205|PGRST116|42P01|relation .* does not exist/i.test(t);
+}
+
+function vpRestClassifyHttp(status, errText) {
+  if (vpIsNotEnabledError(status, errText)) return "not_enabled";
+  const t = String(errText || "").toLowerCase();
+  if (status === 401) {
+    if (/jwt expired|invalid jwt|not authenticated|no authorization|unauthoriz/.test(t) && !/row-level security/.test(t)) {
+      return "not_authenticated";
+    }
+    return "forbidden";
+  }
+  if (status === 403) return "forbidden";
+  if (/row-level security|violates row-level|42501|permission denied|pgrst301/.test(t)) {
+    return "forbidden";
+  }
+  return "error";
+}
+
+function vpCloudUserMessage(res) {
+  if (!res) return null;
+  if (res.notAuthenticated) return "請先登入後台";
+  if (res.forbidden || res.permissionDenied) return "你沒有此資料權限";
+  return null;
+}
+
+/**
+ * vendor / purchase 發 REST 前的 UI 防呆。
+ * 只讀 Stage 4 已驗證的 runtime profile（__dkCurrentAuthProfile），
+ * 不讀 dk_admin_session_v1。真正安全邊界仍是 RLS。
+ */
+function vpRequireVerifiedAdminCloudAccess() {
+  if (!isAuthLoginModeSupabase()) {
+    return vpRestDeniedResult({ notAuthenticated: true, error: "請先登入後台" });
+  }
+  const p = __dkCurrentAuthProfile;
+  if (!p || typeof p !== "object") {
+    return vpRestDeniedResult({ notAuthenticated: true, error: "請先登入後台" });
+  }
+  if (p.role === "admin" && p.enabled === true) {
+    return { ok: true };
+  }
+  const denied = vpRestDeniedResult({
+    forbidden: true,
+    permissionDenied: true,
+    error: "你沒有此資料權限",
+  });
+  denied.code = "permission_denied";
+  return denied;
 }
 
 function vpNumOrNull(v) {
@@ -2371,45 +2418,83 @@ function cloudRowToPurchaseOrder(row) {
   };
 }
 
+function vpRestDeniedResult(authOrKind, extra) {
+  const extraObj = extra || {};
+  const notAuthenticated = !!(authOrKind && (authOrKind.notAuthenticated || authOrKind === "not_authenticated"));
+  const forbidden = !!(authOrKind && (authOrKind.forbidden || authOrKind === "forbidden" || authOrKind.permissionDenied));
+  const permissionDenied = !!(authOrKind && (authOrKind.permissionDenied || forbidden));
+  const error =
+    (authOrKind && authOrKind.error) ||
+    (notAuthenticated ? "請先登入後台" : forbidden ? "你沒有此資料權限" : "同步失敗");
+  return {
+    ok: false,
+    notEnabled: false,
+    notAuthenticated,
+    forbidden,
+    permissionDenied,
+    error,
+    rows: extraObj.rows || [],
+    success: extraObj.success || 0,
+    failed: extraObj.failed != null ? extraObj.failed : 0,
+  };
+}
+
 async function vpRestFetchAll(tableName) {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return { ok: false, notEnabled: true, error: "Supabase 未設定", rows: [] };
+    return { ok: false, notEnabled: true, notAuthenticated: false, forbidden: false, error: "Supabase 未設定", rows: [] };
+  }
+  const gate = vpRequireVerifiedAdminCloudAccess();
+  if (!gate.ok) return gate;
+  const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
+  if (!auth.ok) {
+    return vpRestDeniedResult(auth, { rows: [] });
   }
   const url = `${SUPABASE_URL}/rest/v1/${tableName}?select=*&order=updated_at.desc.nullslast`;
   let res;
   try {
     res = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
+      headers: auth.headers,
     });
   } catch (e) {
-    return { ok: false, notEnabled: false, error: String(e?.message || e || "網路錯誤"), rows: [] };
+    return { ok: false, notEnabled: false, notAuthenticated: false, forbidden: false, error: String(e?.message || e || "網路錯誤"), rows: [] };
   }
   const errText = res.ok ? "" : await res.text();
   if (!res.ok) {
-    if (vpIsNotEnabledError(res.status, errText)) {
-      return { ok: false, notEnabled: true, error: errText.slice(0, 200) || ("HTTP " + res.status), rows: [] };
+    const kind = vpRestClassifyHttp(res.status, errText);
+    if (kind === "not_enabled") {
+      return { ok: false, notEnabled: true, notAuthenticated: false, forbidden: false, error: errText.slice(0, 200) || ("HTTP " + res.status), rows: [] };
     }
-    return { ok: false, notEnabled: false, error: errText.slice(0, 200) || ("HTTP " + res.status), rows: [] };
+    if (kind === "not_authenticated" || kind === "forbidden") {
+      return vpRestDeniedResult(kind);
+    }
+    return { ok: false, notEnabled: false, notAuthenticated: false, forbidden: false, error: errText.slice(0, 200) || ("HTTP " + res.status), rows: [] };
   }
   const rows = await res.json();
-  return { ok: true, notEnabled: false, error: null, rows: Array.isArray(rows) ? rows : [] };
+  return { ok: true, notEnabled: false, notAuthenticated: false, forbidden: false, error: null, rows: Array.isArray(rows) ? rows : [] };
 }
 
 async function vpRestUpsertRows(tableName, rows) {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return { ok: false, notEnabled: true, error: "Supabase 未設定", success: 0, failed: (rows || []).length };
+    return { ok: false, notEnabled: true, notAuthenticated: false, forbidden: false, error: "Supabase 未設定", success: 0, failed: (rows || []).length };
   }
   const list = Array.isArray(rows) ? rows : [];
-  if (!list.length) return { ok: true, notEnabled: false, error: null, success: 0, failed: 0 };
+  if (!list.length) return { ok: true, notEnabled: false, notAuthenticated: false, forbidden: false, error: null, success: 0, failed: 0 };
+  const gate = vpRequireVerifiedAdminCloudAccess();
+  if (!gate.ok) {
+    return vpRestDeniedResult(gate, { failed: list.length });
+  }
+  const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
+  if (!auth.ok) {
+    return vpRestDeniedResult(auth, { failed: list.length });
+  }
   const url = `${SUPABASE_URL}/rest/v1/${tableName}?on_conflict=id`;
   const chunkSize = 40;
   let success = 0;
   let failed = 0;
   let lastError = null;
   let notEnabled = false;
+  let notAuthenticated = false;
+  let forbidden = false;
   for (let i = 0; i < list.length; i += chunkSize) {
     const chunk = list.slice(i, i + chunkSize);
     let res;
@@ -2417,8 +2502,8 @@ async function vpRestUpsertRows(tableName, rows) {
       res = await fetch(url, {
         method: "POST",
         headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          apikey: auth.headers.apikey,
+          Authorization: auth.headers.Authorization,
           "Content-Type": "application/json",
           Prefer: "return=representation,resolution=merge-duplicates",
         },
@@ -2431,16 +2516,30 @@ async function vpRestUpsertRows(tableName, rows) {
     }
     if (!res.ok) {
       const errText = await res.text();
-      if (vpIsNotEnabledError(res.status, errText)) notEnabled = true;
+      const kind = vpRestClassifyHttp(res.status, errText);
       failed += chunk.length;
+      if (kind === "not_authenticated") {
+        notAuthenticated = true;
+        lastError = "請先登入後台";
+        break;
+      }
+      if (kind === "forbidden") {
+        forbidden = true;
+        lastError = "你沒有此資料權限";
+        break;
+      }
+      if (kind === "not_enabled") notEnabled = true;
       lastError = errText.slice(0, 200) || ("HTTP " + res.status);
+      if (notEnabled) break;
       continue;
     }
     success += chunk.length;
   }
-  if (notEnabled) return { ok: false, notEnabled: true, error: lastError || "雲端尚未啟用", success, failed };
-  if (failed > 0) return { ok: false, notEnabled: false, error: lastError || "部分寫入失敗", success, failed };
-  return { ok: true, notEnabled: false, error: null, success, failed: 0 };
+  if (notAuthenticated) return { ok: false, notEnabled: false, notAuthenticated: true, forbidden: false, error: lastError || "請先登入後台", success, failed };
+  if (forbidden) return { ok: false, notEnabled: false, notAuthenticated: false, forbidden: true, error: lastError || "你沒有此資料權限", success, failed };
+  if (notEnabled) return { ok: false, notEnabled: true, notAuthenticated: false, forbidden: false, error: lastError || "雲端尚未啟用", success, failed };
+  if (failed > 0) return { ok: false, notEnabled: false, notAuthenticated: false, forbidden: false, error: lastError || "部分寫入失敗", success, failed };
+  return { ok: true, notEnabled: false, notAuthenticated: false, forbidden: false, error: null, success, failed: 0 };
 }
 
 function vpDispatch(name, detail) {
@@ -2529,6 +2628,24 @@ async function pullVendorQuotesFromCloud(opts) {
       });
       return { ok: false, notEnabled: true, meta };
     }
+    if (fetched.notAuthenticated || fetched.forbidden) {
+      const msg = vpCloudUserMessage(fetched) || fetched.error;
+      const meta = vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+        status: "failed",
+        cloudEnabled: false,
+        localCount: vpActiveCount(localAll),
+        lastError: msg,
+        source: "local",
+      });
+      return {
+        ok: false,
+        notAuthenticated: !!fetched.notAuthenticated,
+        forbidden: !!fetched.forbidden,
+        permissionDenied: !!fetched.permissionDenied,
+        code: fetched.code || (fetched.permissionDenied ? "permission_denied" : null),
+        meta,
+      };
+    }
     if (!fetched.ok) {
       const meta = vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
         status: "failed",
@@ -2602,6 +2719,24 @@ async function pullPurchaseOrdersFromCloud(opts) {
       });
       return { ok: false, notEnabled: true, meta };
     }
+    if (fetched.notAuthenticated || fetched.forbidden) {
+      const msg = vpCloudUserMessage(fetched) || fetched.error;
+      const meta = vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+        status: "failed",
+        cloudEnabled: false,
+        localCount: vpActiveCount(localAll),
+        lastError: msg,
+        source: "local",
+      });
+      return {
+        ok: false,
+        notAuthenticated: !!fetched.notAuthenticated,
+        forbidden: !!fetched.forbidden,
+        permissionDenied: !!fetched.permissionDenied,
+        code: fetched.code || (fetched.permissionDenied ? "permission_denied" : null),
+        meta,
+      };
+    }
     if (!fetched.ok) {
       const meta = vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
         status: "failed",
@@ -2658,7 +2793,22 @@ function previewVendorQuotesUpload() {
       return {
         ok: false,
         notEnabled: true,
+        notAuthenticated: false,
+        forbidden: false,
         error: fetched.error || "雲端尚未啟用",
+        localCount: vpActiveCount(localAll),
+        cloudCount: 0,
+        toInsert: 0,
+        toUpdate: 0,
+      };
+    }
+    if (fetched.notAuthenticated || fetched.forbidden) {
+      return {
+        ok: false,
+        notEnabled: false,
+        notAuthenticated: !!fetched.notAuthenticated,
+        forbidden: !!fetched.forbidden,
+        error: vpCloudUserMessage(fetched) || fetched.error,
         localCount: vpActiveCount(localAll),
         cloudCount: 0,
         toInsert: 0,
@@ -2669,6 +2819,8 @@ function previewVendorQuotesUpload() {
       return {
         ok: false,
         notEnabled: false,
+        notAuthenticated: false,
+        forbidden: false,
         error: fetched.error || "無法讀取雲端",
         localCount: vpActiveCount(localAll),
         cloudCount: 0,
@@ -2706,7 +2858,22 @@ function previewPurchaseOrdersUpload() {
       return {
         ok: false,
         notEnabled: true,
+        notAuthenticated: false,
+        forbidden: false,
         error: fetched.error || "雲端尚未啟用",
+        localCount: vpActiveCount(localAll),
+        cloudCount: 0,
+        toInsert: 0,
+        toUpdate: 0,
+      };
+    }
+    if (fetched.notAuthenticated || fetched.forbidden) {
+      return {
+        ok: false,
+        notEnabled: false,
+        notAuthenticated: !!fetched.notAuthenticated,
+        forbidden: !!fetched.forbidden,
+        error: vpCloudUserMessage(fetched) || fetched.error,
         localCount: vpActiveCount(localAll),
         cloudCount: 0,
         toInsert: 0,
@@ -2717,6 +2884,8 @@ function previewPurchaseOrdersUpload() {
       return {
         ok: false,
         notEnabled: false,
+        notAuthenticated: false,
+        forbidden: false,
         error: fetched.error || "無法讀取雲端",
         localCount: vpActiveCount(localAll),
         cloudCount: 0,
@@ -2766,6 +2935,23 @@ async function uploadLocalVendorQuotesToCloud() {
     });
     return { ok: false, notEnabled: true, error: result.error, success: result.success, failed: result.failed };
   }
+  if (result.notAuthenticated || result.forbidden) {
+    const msg = vpCloudUserMessage(result) || result.error;
+    vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+      status: "failed",
+      cloudEnabled: false,
+      lastError: msg,
+      localCount: vpActiveCount(stamped),
+    });
+    return {
+      ok: false,
+      notAuthenticated: !!result.notAuthenticated,
+      forbidden: !!result.forbidden,
+      error: msg,
+      success: result.success,
+      failed: result.failed,
+    };
+  }
   if (!result.ok) {
     vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
       status: "failed",
@@ -2801,6 +2987,23 @@ async function uploadLocalPurchaseOrdersToCloud() {
     });
     return { ok: false, notEnabled: true, error: result.error, success: result.success, failed: result.failed };
   }
+  if (result.notAuthenticated || result.forbidden) {
+    const msg = vpCloudUserMessage(result) || result.error;
+    vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+      status: "failed",
+      cloudEnabled: false,
+      lastError: msg,
+      localCount: vpActiveCount(stamped),
+    });
+    return {
+      ok: false,
+      notAuthenticated: !!result.notAuthenticated,
+      forbidden: !!result.forbidden,
+      error: msg,
+      success: result.success,
+      failed: result.failed,
+    };
+  }
   if (!result.ok) {
     vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
       status: "failed",
@@ -2831,6 +3034,20 @@ async function upsertVendorQuoteToSupabase(quote) {
     });
     return { ok: false, notEnabled: true, error: result.error || "雲端尚未啟用" };
   }
+  if (result.notAuthenticated || result.forbidden) {
+    const msg = vpCloudUserMessage(result) || result.error;
+    vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
+      status: "failed",
+      cloudEnabled: false,
+      lastError: msg,
+    });
+    return {
+      ok: false,
+      notAuthenticated: !!result.notAuthenticated,
+      forbidden: !!result.forbidden,
+      error: msg,
+    };
+  }
   if (!result.ok) {
     vpSaveMeta(VP_STORAGE_KEYS.vendorQuotesMeta, {
       status: "failed",
@@ -2860,6 +3077,20 @@ async function upsertPurchaseOrderToSupabase(order) {
       lastError: result.error || "雲端尚未啟用",
     });
     return { ok: false, notEnabled: true, error: result.error || "雲端尚未啟用" };
+  }
+  if (result.notAuthenticated || result.forbidden) {
+    const msg = vpCloudUserMessage(result) || result.error;
+    vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
+      status: "failed",
+      cloudEnabled: false,
+      lastError: msg,
+    });
+    return {
+      ok: false,
+      notAuthenticated: !!result.notAuthenticated,
+      forbidden: !!result.forbidden,
+      error: msg,
+    };
   }
   if (!result.ok) {
     vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
@@ -2992,6 +3223,55 @@ async function getSupabaseAuthUser() {
     return (session && session.user) || null;
   } catch (_) {
     return null;
+  }
+}
+
+/**
+ * Stage 5A REST headers。
+ * requireUser=true：必須帶目前 Auth session 的 access_token；沒有 session 不 fallback anon。
+ * 不得把 access_token 印 console、寫 UI、寫 localStorage、寫 site_config。
+ */
+async function getSupabaseRestAuthHeaders(opts) {
+  const requireUser = !!(opts && opts.requireUser);
+  try {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      return { ok: false, notAuthenticated: false, forbidden: false, error: "Supabase 未設定", headers: null };
+    }
+    if (!requireUser) {
+      return {
+        ok: true,
+        notAuthenticated: false,
+        forbidden: false,
+        usingUserToken: false,
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: "Bearer " + SUPABASE_ANON_KEY,
+        },
+      };
+    }
+    const session = await getSupabaseAuthSession();
+    const token = session && session.access_token;
+    if (!token || typeof token !== "string") {
+      return { ok: false, notAuthenticated: true, forbidden: false, error: "請先登入後台", headers: null };
+    }
+    return {
+      ok: true,
+      notAuthenticated: false,
+      forbidden: false,
+      usingUserToken: true,
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: "Bearer " + token,
+      },
+    };
+  } catch (_) {
+    return {
+      ok: false,
+      notAuthenticated: requireUser,
+      forbidden: false,
+      error: requireUser ? "請先登入後台" : "網路錯誤",
+      headers: null,
+    };
   }
 }
 
@@ -3248,11 +3528,13 @@ window.DK = {
   signInSupabaseAuthForMigration,
   signOutSupabaseAuthForMigration,
   getSupabaseAuthProfile,
+  getSupabaseRestAuthHeaders,
   // 廠商報價＋叫貨單同步 1.0
   VP_STORAGE_KEYS,
   getVendorQuotesSyncMeta,
   getPurchaseOrdersSyncMeta,
   vpStatusLabel,
+  vpCloudUserMessage,
   loadVendorQuotesRaw,
   saveVendorQuotesRaw,
   loadPurchaseOrdersRaw,
