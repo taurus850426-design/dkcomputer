@@ -763,62 +763,94 @@ async function deleteInventoryItemFromSupabase(id) {
   }
 }
 
-// ===== Supabase Storage：商品照片上傳（選用，可避免 localStorage 5MB 上限） =====
-/** 上傳圖片到 Supabase Storage，回傳公開網址；失敗或未設定 bucket 時回傳 null。 */
-async function uploadImageToSupabaseStorage(blob, pathOrFilename) {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_STORAGE_BUCKET) return null;
-  const path = String(pathOrFilename || "img.jpg").replace(/^\/+/, "");
-  const url = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_STORAGE_BUCKET}/${path}`;
+// ===== Supabase Storage：商品照片／站內資產上傳 =====
+// Stage 6-4-2 S1：前端改 user JWT。bucket / path / public URL / x-upsert 不改。
+// 真正 WRITE 邊界仍是 Storage RLS；本 gate 只擋未登入與 staff。不 fallback anon。
+
+function storageWriteGateResult() {
+  const gate = requireVerifiedAdminCloudAccess();
+  if (gate.ok) return null;
+  return {
+    ok: false,
+    url: null,
+    notAuthenticated: !!gate.notAuthenticated,
+    forbidden: !!gate.forbidden,
+    permissionDenied: !!gate.permissionDenied,
+    code: gate.code || (gate.notAuthenticated ? "not_authenticated" : "permission_denied"),
+    error: gate.error || (gate.notAuthenticated ? "請先登入後台" : "你沒有此資料權限"),
+  };
+}
+
+async function storageWriteFailFromResponse(res) {
+  let errText = "";
+  try {
+    errText = await res.text();
+  } catch (_) {}
+  const t = String(errText || "").toLowerCase();
+  const status = res && res.status;
+  if (
+    status === 401 &&
+    /jwt expired|invalid jwt|not authenticated|no authorization|unauthoriz/.test(t) &&
+    !/row-level security/.test(t)
+  ) {
+    return { ok: false, url: null, notAuthenticated: true, code: "not_authenticated", error: "請先登入後台" };
+  }
+  if (
+    status === 401 ||
+    status === 403 ||
+    /row-level security|violates row-level|42501|permission denied|not allowed|unauthorized/.test(t)
+  ) {
+    return {
+      ok: false,
+      url: null,
+      forbidden: true,
+      permissionDenied: true,
+      code: "permission_denied",
+      error: "你沒有此資料權限",
+    };
+  }
+  console.warn("[Supabase Storage] 上傳失敗", status || "");
+  return { ok: false, url: null, error: "雲端同步失敗" };
+}
+
+async function uploadToSupabaseStorageBucket(bucket, blob, pathOrFilename, defaultFilename) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !bucket) {
+    return { ok: false, url: null, error: "雲端同步失敗" };
+  }
+  const denied = storageWriteGateResult();
+  if (denied) return denied;
+  const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
+  if (!auth.ok || !auth.headers) {
+    return { ok: false, url: null, notAuthenticated: true, code: "not_authenticated", error: "請先登入後台" };
+  }
+  const path = String(pathOrFilename || defaultFilename || "file.jpg").replace(/^\/+/, "");
+  const url = `${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`;
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": blob.type || "image/jpeg",
+        apikey: auth.headers.apikey,
+        Authorization: auth.headers.Authorization,
+        "Content-Type": (blob && blob.type) || "image/jpeg",
         "x-upsert": "true",
       },
       body: blob,
     });
-    if (!res.ok) {
-      const err = await res.text();
-      console.warn("[Supabase Storage] 上傳失敗", res.status, err.slice(0, 100));
-      return null;
-    }
-    return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_STORAGE_BUCKET}/${path}`;
-  } catch (e) {
-    console.warn("[Supabase Storage] 上傳錯誤", e?.message || e);
-    return null;
+    if (!res.ok) return await storageWriteFailFromResponse(res);
+    return { ok: true, url: `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}` };
+  } catch (_) {
+    return { ok: false, url: null, error: "雲端同步失敗" };
   }
 }
 
-// ===== Supabase Storage：站內資產上傳（例如首頁 Banner） =====
-/** 上傳站內資產（如 Banner 圖片）到 Supabase Storage，回傳公開網址；失敗時回傳 null。 */
+/** 上傳商品圖到 product-photos。成功回 { ok, url }；未登入／staff 不發 request。 */
+async function uploadImageToSupabaseStorage(blob, pathOrFilename) {
+  return uploadToSupabaseStorageBucket(SUPABASE_STORAGE_BUCKET, blob, pathOrFilename, "img.jpg");
+}
+
+/** 上傳站內資產到 site-assets。成功回 { ok, url }；未登入／staff 不發 request。 */
 async function uploadSiteAssetToSupabaseStorage(blob, pathOrFilename) {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SITE_ASSET_BUCKET) return null;
-  const path = String(pathOrFilename || "asset.jpg").replace(/^\/+/, "");
-  const url = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_SITE_ASSET_BUCKET}/${path}`;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": blob.type || "image/jpeg",
-        "x-upsert": "true",
-      },
-      body: blob,
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      console.warn("[SiteAssets] 上傳失敗", res.status, err.slice(0, 100));
-      return null;
-    }
-    return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_SITE_ASSET_BUCKET}/${path}`;
-  } catch (e) {
-    console.warn("[SiteAssets] 上傳錯誤", e?.message || e);
-    return null;
-  }
+  return uploadToSupabaseStorageBucket(SUPABASE_SITE_ASSET_BUCKET, blob, pathOrFilename, "asset.jpg");
 }
 
 // ===== Supabase：官網設定（site_config）讀寫 =====

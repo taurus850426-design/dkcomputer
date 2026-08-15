@@ -535,15 +535,24 @@
     return new Blob([arr], { type: mime });
   }
 
-  /** 壓縮並取得照片 URL：若已設定 Supabase Storage bucket 則上傳到雲端回傳網址，否則回傳 data URL。 */
+  /**
+   * 壓縮並取得照片 URL。
+   * Auth / 401 / 403 不得 fallback data URL（會掩蓋權限錯誤並把 base64 寫進 inventory）。
+   * 僅網路／Storage 非權限失敗時保留 data URL fallback。
+   */
   async function compressAndResolvePhotoUrl(file, opts = {}) {
     const dataUrl = await fileToCompressedDataUrl(file, opts);
     const upload = window.DK?.uploadImageToSupabaseStorage;
-    if (typeof upload === "function") {
-      const blob = dataURLToBlob(dataUrl);
-      const path = "products/" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + ".jpg";
-      const publicUrl = await upload(blob, path);
-      if (publicUrl) return publicUrl;
+    if (typeof upload !== "function") return dataUrl;
+    const blob = dataURLToBlob(dataUrl);
+    const path = "products/" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + ".jpg";
+    const result = await upload(blob, path);
+    if (typeof result === "string" && result) return result;
+    if (result && result.ok && result.url) return result.url;
+    if (isStorageAuthDenied(result)) {
+      const err = new Error(inventoryCloudFailMsg(result, "你沒有此資料權限"));
+      err.code = result.code || (result.notAuthenticated ? "not_authenticated" : "permission_denied");
+      throw err;
     }
     return dataUrl;
   }
@@ -746,6 +755,26 @@
     const err = result && result.error ? String(result.error) : "";
     if (err === "請先登入後台" || err === "你沒有此資料權限") return err;
     return err || fallback || "雲端同步失敗";
+  }
+
+  function isStorageAuthDenied(result) {
+    if (!result || typeof result !== "object") return false;
+    if (result.notAuthenticated || result.permissionDenied || result.forbidden) return true;
+    return result.code === "not_authenticated" || result.code === "permission_denied";
+  }
+
+  function storagePublicUrlFromUpload(result) {
+    if (typeof result === "string" && result) return result;
+    if (result && result.ok && result.url) return result.url;
+    return "";
+  }
+
+  function photoProcessFailMsg(e) {
+    const code = e && e.code;
+    const msg = String((e && e.message) || "");
+    if (code === "not_authenticated" || msg === "請先登入後台") return "請先登入後台";
+    if (code === "permission_denied" || msg === "你沒有此資料權限") return "你沒有此資料權限";
+    return "相片處理失敗：" + (msg || String(e));
   }
 
   async function savePublishEditor() {
@@ -1369,7 +1398,7 @@
       renderEditPhotoStrip();
       if (publishEditorMsg) publishEditorMsg.hidden = true;
     } catch (e) {
-      show(publishEditorMsg, "相片處理失敗：" + (e?.message || String(e)));
+      show(publishEditorMsg, photoProcessFailMsg(e));
       if (publishEditorMsg) publishEditorMsg.hidden = false;
     }
     webEditPhotosInput.value = "";
@@ -1392,7 +1421,7 @@
       renderPublishPhotoStrip();
       hide(publishMsg);
     } catch (e) {
-      show(publishMsg, "相片處理失敗：" + (e && e.message ? e.message : String(e)));
+      show(publishMsg, photoProcessFailMsg(e));
     }
     publishPhotosInput.value = "";
   });
@@ -1935,9 +1964,10 @@
     const ext = file.type.includes("png") ? "png" : file.type.includes("webp") ? "webp" : file.type.includes("gif") ? "gif" : "jpg";
     const path = "brand/" + ts + "-" + rand + "." + ext;
     try {
-      const url = await window.DK.uploadSiteAssetToSupabaseStorage(file, path);
+      const result = await window.DK.uploadSiteAssetToSupabaseStorage(file, path);
+      const url = storagePublicUrlFromUpload(result);
       if (!url) {
-        alert("Logo 上傳失敗，請稍後再試。");
+        alert(inventoryCloudFailMsg(result, "Logo 上傳失敗，請稍後再試。"));
         return;
       }
       const urlEl = document.getElementById("feBrandLogoUrl");
@@ -1945,7 +1975,7 @@
       updateBrandLogoAdminPreview();
     } catch (err) {
       console.warn("Logo 上傳錯誤", err);
-      alert("Logo 上傳失敗，請稍後再試。");
+      alert(inventoryCloudFailMsg(err, "Logo 上傳失敗，請稍後再試。"));
     }
   });
   document.getElementById("feBrandLogoClear")?.addEventListener("click", function () {
@@ -3863,14 +3893,15 @@
       const path = `home/${ts}-${rand}.webp`;
 
       try {
-        const url = await window.DK.uploadSiteAssetToSupabaseStorage(file, path, {
+        const result = await window.DK.uploadSiteAssetToSupabaseStorage(file, path, {
           compress: true,
           maxWidth: 1200,
           mimeType: "image/webp",
           quality: 0.82,
         });
+        const url = storagePublicUrlFromUpload(result);
         if (!url) {
-          alert("分類圖片上傳失敗，請稍後再試。");
+          alert(inventoryCloudFailMsg(result, "分類圖片上傳失敗，請稍後再試。"));
           return;
         }
 
@@ -3899,7 +3930,7 @@
         }
       } catch (err) {
         console.warn("上傳分類圖片發生錯誤", err);
-        alert("分類圖片上傳失敗，請稍後再試。");
+        alert(inventoryCloudFailMsg(err, "分類圖片上傳失敗，請稍後再試。"));
       }
     });
   })();
@@ -4104,9 +4135,10 @@
         const ts = now.toISOString().replace(/[:.]/g, "-");
         const rand = Math.random().toString(16).slice(2);
         const path = `banner/${ts}-${rand}${ext}`;
-        const url = await window.DK.uploadSiteAssetToSupabaseStorage(file, path);
+        const result = await window.DK.uploadSiteAssetToSupabaseStorage(file, path);
+        const url = storagePublicUrlFromUpload(result);
         if (!url) {
-          alert("Banner 圖片上傳失敗，請稍後再試。");
+          alert(inventoryCloudFailMsg(result, "Banner 圖片上傳失敗，請稍後再試。"));
           return;
         }
         if (imgInput) {
