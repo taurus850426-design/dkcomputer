@@ -44,6 +44,84 @@
     } catch (_) {}
   }
 
+  function rpcError(res) {
+    if (!res) return "寫入失敗";
+    if (res.ok) return "";
+    return res.error || (res.data && res.data.message) || "寫入失敗";
+  }
+
+  function rpcData(res) {
+    const d = res && res.data;
+    if (d && typeof d === "object" && !Array.isArray(d)) return d;
+    if (Array.isArray(d) && d[0] && typeof d[0] === "object") return d[0];
+    return d;
+  }
+
+  async function refreshFromCloud() {
+    if (typeof global.fetchV2DataFromSupabase === "function") {
+      await global.fetchV2DataFromSupabase();
+    }
+  }
+
+  function saveItems(items) {
+    const prev = load(KEYS.items);
+    save(KEYS.items, items);
+    if (global._suppressV2Sync) return Promise.resolve({ ok: true, skipped: true });
+    return persistItemsSnapshot(items, prev);
+  }
+
+  async function persistItemsSnapshot(items, prevItems) {
+    const next = Array.isArray(items) ? items : [];
+    const prev = Array.isArray(prevItems) ? prevItems : [];
+    const prevIds = new Set(prev.map((x) => String(x.id)));
+    const nextIds = new Set(next.map((x) => String(x.id)));
+    if (typeof global.stage7DeleteItem === "function") {
+      for (const old of prev) {
+        if (!nextIds.has(String(old.id))) {
+          const del = await global.stage7DeleteItem(old.id);
+          if (!del.ok) return del;
+        }
+      }
+    }
+    if (typeof global.stage7UpsertItem !== "function") {
+      return { ok: false, error: "Stage 7 寫入未載入" };
+    }
+    function stamp(it) {
+      return JSON.stringify({
+        sku: it.sku, category: it.category, sub_type: it.sub_type, brand: it.brand, model: it.model,
+        name: it.name, spec: it.spec, vendor: it.vendor, condition: it.condition, status: it.status,
+        price_list: it.price_list, price_floor: it.price_floor, inbound_date: it.inbound_date,
+        reorder_point: it.reorder_point, location: it.location, notes: it.notes,
+        cost_unit: it.cost_unit, qty_on_hand: it.qty_on_hand,
+      });
+    }
+    const prevMap = Object.fromEntries(prev.map((x) => [String(x.id), x]));
+    for (const item of next) {
+      const wasNew = !prevIds.has(String(item.id));
+      const prevItem = prevMap[String(item.id)];
+      if (!wasNew && stamp(item) === stamp(prevItem)) continue;
+      const up = await global.stage7UpsertItem(item);
+      if (!up.ok) return up;
+      const data = rpcData(up);
+      if (data && data.id && !item.id) item.id = data.id;
+      const prevQty = wasNew ? 0 : Number(prevItem && prevItem.qty_on_hand) || 0;
+      const nextQty = Number(item.qty_on_hand);
+      const targetQty = Number.isFinite(nextQty) ? Math.max(0, nextQty) : 0;
+      if (targetQty !== prevQty && typeof global.stage7RpcAdjustStock === "function") {
+        const adj = await global.stage7RpcAdjustStock({
+          item_id: item.id,
+          type: "ADJUST",
+          qty: targetQty,
+          unit_cost: item.cost_unit,
+          note: wasNew ? "新增品項數量" : "品項數量調整",
+        });
+        if (!adj.ok) return adj;
+      }
+    }
+    await refreshFromCloud();
+    return { ok: true };
+  }
+
   function todayStr() {
     const d = new Date();
     return d.toISOString().slice(0, 10);
@@ -70,12 +148,6 @@
   // ---------- Items ----------
   function getItems() {
     return load(KEYS.items);
-  }
-
-  function saveItems(items) {
-    save(KEYS.items, items);
-    if (global._suppressV2Sync) return;
-    if (typeof global.__syncV2ToSupabase === "function") return global.__syncV2ToSupabase();
   }
 
   function findItemBySku(sku) {
@@ -188,59 +260,27 @@
 
   function saveLedger(rows) {
     save(KEYS.ledger, rows);
-    if (global._suppressV2Sync) return;
-    if (typeof global.__syncV2ToSupabase === "function") return global.__syncV2ToSupabase();
   }
 
-  function addLedgerEntry(entry) {
-    const { item_id, type, qty, unit_cost, ref_type, ref_id, note, inbound_date } = entry;
-    const items = getItems();
-    const item = items.find((x) => String(x.id) === String(item_id));
+  async function addLedgerEntry(entry) {
+    const { item_id, type, qty, unit_cost, note, inbound_date } = entry || {};
+    const item = findItemById(item_id);
     if (!item) return { ok: false, error: "找不到品項" };
-
-    const now = nowISO();
-    const dateStr = now.slice(0, 10);
-    const numQty = Number(qty) || 0;
-    const currentQty = Number(item.qty_on_hand) || 0;
-
-    let newQty = currentQty;
-    if (type === "IN") newQty = currentQty + Math.abs(numQty);
-    else if (type === "OUT") newQty = Math.max(0, currentQty - Math.abs(numQty));
-    else if (type === "ADJUST") newQty = Math.max(0, numQty);
-
-    const cost = type === "IN" ? (Number(unit_cost) || Number(item.cost_unit) || 0) : (Number(item.cost_unit) || 0);
-    const newCostUnit = type === "IN" && numQty > 0 && cost > 0
-      ? (currentQty * Number(item.cost_unit || 0) + numQty * cost) / (currentQty + numQty)
-      : Number(item.cost_unit) || 0;
-
-    const row = {
-      id: "L-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9),
+    if (typeof global.stage7RpcAdjustStock !== "function") {
+      return { ok: false, error: "Stage 7 寫入未載入" };
+    }
+    const res = await global.stage7RpcAdjustStock({
       item_id,
       type,
-      qty: type === "OUT" ? -Math.abs(numQty) : type === "ADJUST" ? numQty - currentQty : Math.abs(numQty),
-      unit_cost: cost,
-      ref_type: ref_type || (type === "ADJUST" ? "ADJUST" : "PURCHASE"),
-      ref_id: ref_id || "",
-      created_at: now,
-      note: note || "",
-    };
-
-    const ledger = getLedger();
-    ledger.unshift(row);
-    saveLedger(ledger);
-
-    item.qty_on_hand = newQty;
-    item.cost_unit = newCostUnit;
-    item.last_moved_at = now;
-    applyQtyArchiveState(item, currentQty, newQty);
-    if (type === "IN") {
-      if (inbound_date && /^\d{4}-\d{2}-\d{2}/.test(String(inbound_date))) item.inbound_date = String(inbound_date).slice(0, 10);
-      else if (!item.inbound_date) item.inbound_date = dateStr;
-    }
-    item.updated_at = now;
-    const syncPromise = saveItems(items);
-
-    return { ok: true, row, syncPromise };
+      qty,
+      unit_cost,
+      note,
+      inbound_date,
+    });
+    if (!res.ok) return { ok: false, error: rpcError(res) };
+    await refreshFromCloud();
+    const data = rpcData(res);
+    return { ok: true, row: data, syncPromise: Promise.resolve({ ok: true }) };
   }
 
   // ---------- Orders ----------
@@ -249,9 +289,26 @@
   }
 
   function saveOrders(orders) {
+    const prev = load(KEYS.orders);
     save(KEYS.orders, orders);
-    if (global._suppressV2Sync) return;
-    if (typeof global.__syncV2ToSupabase === "function") return global.__syncV2ToSupabase();
+    if (global._suppressV2Sync) return Promise.resolve({ ok: true, skipped: true });
+    return persistOrdersSnapshot(orders, prev);
+  }
+
+  async function persistOrdersSnapshot(orders, prevOrders) {
+    const next = Array.isArray(orders) ? orders : [];
+    const prev = Array.isArray(prevOrders) ? prevOrders : [];
+    const prevMap = Object.fromEntries(prev.map((x) => [String(x.id), x]));
+    for (const o of next) {
+      const old = prevMap[String(o.id)];
+      if (old && JSON.stringify(old) === JSON.stringify(o)) continue;
+      const fn = old ? global.stage7UpdateOrder : global.stage7CreateOrder;
+      if (typeof fn !== "function") return { ok: false, error: "Stage 7 寫入未載入" };
+      const res = await fn(o);
+      if (!res.ok) return res;
+    }
+    await refreshFromCloud();
+    return { ok: true };
   }
 
   function orderGrossProfit(o) {
@@ -340,9 +397,31 @@
   }
 
   function saveExpenses(rows) {
+    const prev = load(KEYS.expenses);
     save(KEYS.expenses, rows);
-    if (global._suppressV2Sync) return;
-    if (typeof global.__syncV2ToSupabase === "function") return global.__syncV2ToSupabase();
+    if (global._suppressV2Sync) return Promise.resolve({ ok: true, skipped: true });
+    return persistExpensesSnapshot(rows, prev);
+  }
+
+  async function persistExpensesSnapshot(rows, prevRows) {
+    if (typeof global.stage7SaveExpense !== "function") {
+      return { ok: false, error: "Stage 7 寫入未載入" };
+    }
+    const next = Array.isArray(rows) ? rows : [];
+    const prev = Array.isArray(prevRows) ? prevRows : [];
+    const nextIds = new Set(next.map((x) => String(x.id)));
+    for (const old of prev) {
+      if (!nextIds.has(String(old.id)) && typeof global.stage7DeleteExpense === "function") {
+        const del = await global.stage7DeleteExpense(old.id);
+        if (!del.ok) return del;
+      }
+    }
+    for (const row of next) {
+      const res = await global.stage7SaveExpense(row);
+      if (!res.ok) return res;
+    }
+    await refreshFromCloud();
+    return { ok: true };
   }
 
 
@@ -485,6 +564,8 @@
       { id: id(), sku: "RAM-DDR4-8", category: "記憶體", name: "DDR4 8G", spec: "DDR4 2666 8G", condition: "USED", status: "READY", qty_on_hand: 10, cost_unit: 350, price_list: 499, price_floor: 400, inbound_date: past(20), last_moved_at: past(3) + "T10:00:00Z", reorder_point: 0, location: "零件區", notes: "", created_at: nowISO(), updated_at: nowISO() },
       { id: id(), sku: "SSD-512", category: "硬碟", name: "SSD 512G SATA", spec: "512G SATA", condition: "NEW", status: "READY", qty_on_hand: 2, cost_unit: 650, price_list: 899, price_floor: 750, inbound_date: past(10), last_moved_at: past(10) + "T10:00:00Z", reorder_point: 3, location: "耗材區", notes: "", created_at: nowISO(), updated_at: nowISO() },
     ];
+    const prevSuppress = global._suppressV2Sync;
+    global._suppressV2Sync = true;
     saveItems(items);
 
     const ledger = [
@@ -503,6 +584,7 @@
       { id: "ex-seed-2", date: past(2), type: "COGS", category: "進貨", amount: 5000, note: "顯卡進貨", ref_item_id: "", created_at: nowISO() },
     ];
     saveExpenses(expenses);
+    global._suppressV2Sync = prevSuppress;
 
     return { items: items.length, ledger: ledger.length, orders: orders.length, expenses: expenses.length };
   }
@@ -539,6 +621,20 @@
     getLedger,
     saveLedger,
     addLedgerEntry,
+    createOrder: function (payload) {
+      if (typeof global.stage7CreateOrder !== "function") return Promise.resolve({ ok: false, error: "Stage 7 寫入未載入" });
+      return global.stage7CreateOrder(payload).then(async function (res) {
+        if (res && res.ok) await refreshFromCloud();
+        return res;
+      });
+    },
+    updateOrder: function (payload) {
+      if (typeof global.stage7UpdateOrder !== "function") return Promise.resolve({ ok: false, error: "Stage 7 寫入未載入" });
+      return global.stage7UpdateOrder(payload).then(async function (res) {
+        if (res && res.ok) await refreshFromCloud();
+        return res;
+      });
+    },
     getOrders,
     saveOrders,
     enrichOrder,

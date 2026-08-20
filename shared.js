@@ -964,7 +964,7 @@ async function saveSiteConfigToSupabase(config) {
 }
 
 // ===== Stage 6-6-2：stock_data cloud 已退役 =====
-// 正式前台用 inventory；庫存＋記帳用 v2_data。不再 anon GET/POST stock_data。
+// 正式前台用 inventory；庫存＋記帳用 Stage 7 正規表 + RPC。不再 anon GET/POST stock_data。
 // 保留函式名稱，避免 legacy admin2.js / DK.* 呼叫炸掉。不發 REST、不 fallback anon。
 async function fetchStockDataFromSupabase() {
   return null;
@@ -975,7 +975,7 @@ async function saveAllStockDataToSupabase() {
 }
 
 // ===== Stage 6-6-3：orders_data cloud 已退役 =====
-// 正式訂單在 v2_data（JWT）。本表無正式呼叫端。
+// 正式訂單在 Stage 7 orders / order_items。本表無正式呼叫端。
 // 保留函式名稱，避免 DK.* 炸掉。不發 REST、不 fallback anon、不建 JWT WRITE。
 async function fetchOrdersFromSupabase() {
   return null;
@@ -985,72 +985,304 @@ async function saveOrdersToSupabase(orders) {
   return;
 }
 
-// ===== Supabase：庫存＋記帳 v2（品項、流水帳、訂單、支出）讀寫 =====
-// Stage 5B：user JWT；admin+staff。無 session 不 fallback anon。失敗不寫 localStorage。
-// 本機在 GET await 期間寫入後，不得用該次舊雲端快照覆蓋 localStorage。
+// ===== Stage 7：庫存＋記帳改走 normalized tables + RPC =====
+// v2_data 保留作 archive，不再作為 Stage 7 runtime SoT。禁止 blob POST。
+const STAGE7_REST_LIMIT = 10000;
+const STAGE7_COST_KEYS = ["cost_unit", "costUnit", "unit_cost", "unitCost", "cogs", "cogs_total", "cogsTotal", "inventory_value", "gross_profit", "gross_margin"];
+
 function bumpV2LocalWriteGen() {
   if (typeof window === "undefined") return;
   window.__dkV2LocalWriteGen = (Number(window.__dkV2LocalWriteGen) || 0) + 1;
 }
 if (typeof window !== "undefined") window.__dkBumpV2LocalWriteGen = bumpV2LocalWriteGen;
 
+function stage7IsAdminRole() {
+  return getCurrentRole() === "admin";
+}
+
+function stage7OmitCostKeys(obj) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
+  const next = { ...obj };
+  for (let i = 0; i < STAGE7_COST_KEYS.length; i++) delete next[STAGE7_COST_KEYS[i]];
+  return next;
+}
+
+function stage7StripCostArray(list) {
+  return (Array.isArray(list) ? list : []).map(stage7OmitCostKeys);
+}
+
+function stage7WriteLocalCache(payload, admin) {
+  const items = admin ? (payload.items || []) : stage7StripCostArray(payload.items);
+  const ledger = admin ? (payload.ledger || []) : stage7StripCostArray(payload.ledger);
+  const orders = admin ? (payload.orders || []) : stage7StripCostArray(payload.orders);
+  const expenses = admin ? (payload.expenses || []) : [];
+  const auditLogs = admin ? (payload.auditLogs || []) : [];
+  localStorage.setItem(V2_STORAGE_KEYS.items, JSON.stringify(items));
+  localStorage.setItem(V2_STORAGE_KEYS.ledger, JSON.stringify(ledger));
+  localStorage.setItem(V2_STORAGE_KEYS.orders, JSON.stringify(orders));
+  localStorage.setItem(V2_STORAGE_KEYS.expenses, JSON.stringify(expenses));
+  localStorage.setItem(V2_STORAGE_KEYS.auditLogs, JSON.stringify(auditLogs));
+  bumpV2LocalWriteGen();
+  return { items, ledger, orders, expenses, auditLogs };
+}
+
+async function stage7RestJson(path, opts) {
+  const gate = requireVerifiedBackofficeCloudAccess();
+  if (!gate.ok) {
+    return {
+      ok: false,
+      notAuthenticated: !!gate.notAuthenticated,
+      forbidden: !!gate.forbidden,
+      permissionDenied: !!gate.permissionDenied,
+      error: gate.error || (gate.notAuthenticated ? "請先登入後台" : "你沒有此資料權限"),
+      data: null,
+    };
+  }
+  const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
+  if (!auth.ok || !auth.headers) {
+    return { ok: false, notAuthenticated: true, error: "請先登入後台", data: null };
+  }
+  const method = (opts && opts.method) || "GET";
+  const headers = {
+    apikey: auth.headers.apikey,
+    Authorization: auth.headers.Authorization,
+    Accept: "application/json",
+  };
+  if (opts && opts.body != null) headers["Content-Type"] = "application/json";
+  if (opts && opts.prefer) headers.Prefer = opts.prefer;
+  const url = `${SUPABASE_URL}/rest/v1/${path}`;
+  try {
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: opts && opts.body != null ? JSON.stringify(opts.body) : undefined,
+    });
+    const text = await res.text();
+    let data = null;
+    if (text) {
+      try { data = JSON.parse(text); } catch (_) { data = text; }
+    }
+    if (!res.ok) {
+      const kind = vpRestClassifyHttp(res.status, text);
+      const errMsg = typeof data === "object" && data && data.message ? data.message : String(text || "").slice(0, 160);
+      if (kind === "not_authenticated") {
+        return { ok: false, notAuthenticated: true, error: "請先登入後台", data: null };
+      }
+      if (kind === "forbidden") {
+        return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限", data: null };
+      }
+      return { ok: false, error: errMsg || ("HTTP " + res.status), data: null, status: res.status };
+    }
+    return { ok: true, data: data };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message ? e.message : e || "網路連線失敗"), data: null };
+  }
+}
+
+async function stage7Rpc(fnName, args) {
+  return stage7RestJson("rpc/" + fnName, {
+    method: "POST",
+    body: args || {},
+    prefer: "return=representation",
+  });
+}
+
+async function stage7GetTable(table, select) {
+  const q = encodeURIComponent(select || "*");
+  return stage7RestJson(`${table}?select=${q}&limit=${STAGE7_REST_LIMIT}`);
+}
+
+function stage7MapItemRow(row, costMap, admin) {
+  const extra = row && row.extra && typeof row.extra === "object" && !Array.isArray(row.extra) ? row.extra : {};
+  const item = {
+    ...extra,
+    id: row.id,
+    sku: row.sku,
+    category: row.category,
+    sub_type: row.sub_type,
+    brand: row.brand,
+    model: row.model,
+    name: row.name,
+    spec: row.spec,
+    vendor: row.vendor,
+    condition: row.condition,
+    status: row.status,
+    qty_on_hand: row.qty_on_hand,
+    price_list: row.price_list,
+    price_floor: row.price_floor,
+    inbound_date: row.inbound_date,
+    last_moved_at: row.last_moved_at,
+    reorder_point: row.reorder_point,
+    location: row.location,
+    notes: row.notes,
+    is_archived: row.is_archived,
+    archived_at: row.archived_at,
+    isArchived: !!row.is_archived,
+    archivedAt: row.archived_at || null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+  if (admin && costMap && Object.prototype.hasOwnProperty.call(costMap, row.id)) {
+    item.cost_unit = costMap[row.id];
+  }
+  return admin ? item : stage7OmitCostKeys(item);
+}
+
+function stage7MapLedgerRow(row, costMap, admin) {
+  const extra = row && row.extra && typeof row.extra === "object" && !Array.isArray(row.extra) ? row.extra : {};
+  const rec = {
+    ...extra,
+    id: row.id,
+    item_id: row.item_id,
+    type: row.type,
+    qty: row.qty,
+    ref_type: row.ref_type,
+    ref_id: row.ref_id,
+    note: row.note,
+    created_at: row.created_at,
+  };
+  if (admin && costMap && Object.prototype.hasOwnProperty.call(costMap, row.id)) {
+    rec.unit_cost = costMap[row.id];
+  }
+  return admin ? rec : stage7OmitCostKeys(rec);
+}
+
+function stage7MapOrderRow(row, lines, cogsMap, admin) {
+  const extra = row && row.extra && typeof row.extra === "object" && !Array.isArray(row.extra) ? row.extra : {};
+  const items = (lines || []).map((line) => {
+    const mapped = {
+      id: line.id,
+      item_id: line.item_id,
+      sku: line.sku,
+      name: line.name,
+      spec: line.spec,
+      qty: line.qty,
+      unit_price: line.unit_price,
+    };
+    if (admin && line.cost_unit != null) mapped.cost_unit = line.cost_unit;
+    return admin ? mapped : stage7OmitCostKeys(mapped);
+  });
+  const rec = {
+    ...extra,
+    id: row.id,
+    order_no: row.order_no,
+    customer_name: row.customer_name,
+    sales_type: row.sales_type,
+    salesType: row.sales_type,
+    total_sale: row.total_sale,
+    shipping_income: row.shipping_income,
+    discount: row.discount,
+    payment_method: row.payment_method,
+    status: row.status,
+    shipped_at: row.shipped_at,
+    date: row.date,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    items,
+  };
+  if (admin && cogsMap && Object.prototype.hasOwnProperty.call(cogsMap, row.id)) {
+    rec.cogs_total = cogsMap[row.id];
+  }
+  return admin ? rec : stage7OmitCostKeys(rec);
+}
+
 async function fetchV2DataFromSupabase() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
   const gate = requireVerifiedBackofficeCloudAccess();
   if (!gate.ok) return null;
-  const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
-  if (!auth.ok || !auth.headers) return null;
-  const genAtStart = typeof window !== "undefined" ? (Number(window.__dkV2LocalWriteGen) || 0) : 0;
-  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_V2_DATA_TABLE}?id=eq.${encodeURIComponent(
-    V2_DATA_ROW_ID,
-  )}&select=data`;
-  const res = await fetch(url, {
-    headers: auth.headers,
+  const admin = stage7IsAdminRole();
+  const [itemsRes, ledgerRes, ordersRes, orderItemsRes] = await Promise.all([
+    stage7GetTable("inventory_items", "*"),
+    stage7GetTable("inventory_ledger", "*"),
+    stage7GetTable("orders", "*"),
+    stage7GetTable("order_items", "*"),
+  ]);
+  if (!itemsRes.ok || !ledgerRes.ok || !ordersRes.ok || !orderItemsRes.ok) return null;
+  const itemRows = Array.isArray(itemsRes.data) ? itemsRes.data : [];
+  const ledgerRows = Array.isArray(ledgerRes.data) ? ledgerRes.data : [];
+  const orderRows = Array.isArray(ordersRes.data) ? ordersRes.data : [];
+  const orderItemRows = Array.isArray(orderItemsRes.data) ? orderItemsRes.data : [];
+
+  let costMap = {};
+  let ledgerCostMap = {};
+  let cogsMap = {};
+  let lineCostMap = {};
+  let expenses = [];
+  let auditLogs = [];
+  if (admin) {
+    const [ic, lc, oc, oic, ex, au] = await Promise.all([
+      stage7GetTable("inventory_costs", "item_id,cost_unit"),
+      stage7GetTable("inventory_ledger_costs", "ledger_id,unit_cost"),
+      stage7GetTable("order_costs", "order_id,cogs_total"),
+      stage7GetTable("order_item_costs", "order_item_id,cost_unit"),
+      stage7GetTable("expenses", "*"),
+      stage7GetTable("audit_logs", "*"),
+    ]);
+    if (ic.ok && Array.isArray(ic.data)) {
+      ic.data.forEach((r) => { costMap[r.item_id] = r.cost_unit; });
+    }
+    if (lc.ok && Array.isArray(lc.data)) {
+      lc.data.forEach((r) => { ledgerCostMap[r.ledger_id] = r.unit_cost; });
+    }
+    if (oc.ok && Array.isArray(oc.data)) {
+      oc.data.forEach((r) => { cogsMap[r.order_id] = r.cogs_total; });
+    }
+    if (oic.ok && Array.isArray(oic.data)) {
+      oic.data.forEach((r) => { lineCostMap[r.order_item_id] = r.cost_unit; });
+    }
+    if (ex.ok && Array.isArray(ex.data)) {
+      expenses = ex.data.map((r) => ({
+        id: r.id,
+        date: r.date,
+        type: r.type,
+        category: r.category,
+        amount: r.amount,
+        note: r.note,
+        ref_item_id: r.ref_item_id,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+      }));
+    }
+    if (au.ok && Array.isArray(au.data)) {
+      auditLogs = au.data.map((r) => ({
+        id: r.id,
+        userId: r.user_id,
+        displayName: r.display_name,
+        action: r.action,
+        targetId: r.target_id,
+        timestamp: r.created_at,
+      }));
+    }
+  }
+
+  const items = itemRows.map((r) => stage7MapItemRow(r, costMap, admin));
+  const ledger = ledgerRows
+    .map((r) => stage7MapLedgerRow(r, ledgerCostMap, admin))
+    .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+  const linesByOrder = {};
+  orderItemRows.forEach((line) => {
+    const oid = line.order_id;
+    if (!linesByOrder[oid]) linesByOrder[oid] = [];
+    linesByOrder[oid].push({
+      ...line,
+      cost_unit: admin ? lineCostMap[line.id] : undefined,
+    });
   });
-  if (!res.ok) return null;
-  const rows = await res.json();
-  const raw = rows?.[0]?.data;
-  if (!raw || typeof raw !== "object") return null;
-  const items = Array.isArray(raw.items) ? raw.items : [];
-  const ledger = Array.isArray(raw.ledger) ? raw.ledger : [];
-  const orders = Array.isArray(raw.orders) ? raw.orders : [];
-  const expenses = Array.isArray(raw.expenses) ? raw.expenses : [];
-  const auditLogs = Array.isArray(raw.auditLogs) ? raw.auditLogs : [];
+  Object.keys(linesByOrder).forEach((oid) => {
+    linesByOrder[oid].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  });
+  const orders = orderRows
+    .map((r) => stage7MapOrderRow(r, linesByOrder[r.id] || [], cogsMap, admin))
+    .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+
   try {
-    if (typeof window !== "undefined" && (Number(window.__dkV2LocalWriteGen) || 0) !== genAtStart) {
-      return null;
-    }
-    // 保護：雲端某欄為空陣列時，不要立刻覆蓋本機已有資料
-    function pickWrite(key, cloudArr) {
-      const localArr = safeJsonParse(localStorage.getItem(key), null);
-      const localHas = Array.isArray(localArr) && localArr.length > 0;
-      const cloudHas = Array.isArray(cloudArr) && cloudArr.length > 0;
-      if (!cloudHas && localHas) return localArr;
-      return Array.isArray(cloudArr) ? cloudArr : (localHas ? localArr : []);
-    }
-    const nextItems = pickWrite(V2_STORAGE_KEYS.items, items);
-    const nextLedger = pickWrite(V2_STORAGE_KEYS.ledger, ledger);
-    const nextOrders = pickWrite(V2_STORAGE_KEYS.orders, orders);
-    const nextExpenses = pickWrite(V2_STORAGE_KEYS.expenses, expenses);
-    const nextAudit = pickWrite(V2_STORAGE_KEYS.auditLogs, auditLogs);
-    if (typeof window !== "undefined" && (Number(window.__dkV2LocalWriteGen) || 0) !== genAtStart) {
-      return null;
-    }
-    localStorage.setItem(V2_STORAGE_KEYS.items, JSON.stringify(nextItems));
-    localStorage.setItem(V2_STORAGE_KEYS.ledger, JSON.stringify(nextLedger));
-    localStorage.setItem(V2_STORAGE_KEYS.orders, JSON.stringify(nextOrders));
-    localStorage.setItem(V2_STORAGE_KEYS.expenses, JSON.stringify(nextExpenses));
-    localStorage.setItem(V2_STORAGE_KEYS.auditLogs, JSON.stringify(nextAudit));
-    return { items: nextItems, ledger: nextLedger, orders: nextOrders, expenses: nextExpenses, auditLogs: nextAudit };
-  } catch (e) {
+    return stage7WriteLocalCache({ items, ledger, orders, expenses, auditLogs }, admin);
+  } catch (_) {
     return null;
   }
 }
 
 async function saveV2DataToSupabase() {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return { ok: false, error: "Supabase 未設定（請在 shared.js 填寫 SUPABASE_URL 與 SUPABASE_ANON_KEY）" };
-  }
   const gate = requireVerifiedBackofficeCloudAccess();
   if (!gate.ok) {
     return {
@@ -1061,57 +1293,162 @@ async function saveV2DataToSupabase() {
       error: gate.error || (gate.notAuthenticated ? "請先登入後台" : "你沒有此資料權限"),
     };
   }
-  const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
-  if (!auth.ok || !auth.headers) {
-    return { ok: false, notAuthenticated: true, error: "請先登入後台" };
-  }
-  let items = [];
-  let ledger = [];
-  let orders = [];
-  let expenses = [];
-  let auditLogs = [];
-  try {
-    items = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.items), []);
-    ledger = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.ledger), []);
-    orders = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.orders), []);
-    expenses = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.expenses), []);
-    auditLogs = safeJsonParse(localStorage.getItem(V2_STORAGE_KEYS.auditLogs), []);
-  } catch (e) {
-    return { ok: false, error: "讀取本機資料失敗" };
-  }
-  const payload = {
-    id: V2_DATA_ROW_ID,
-    data: { items, ledger, orders, expenses, auditLogs },
-  };
-  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_V2_DATA_TABLE}?on_conflict=id`;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        apikey: auth.headers.apikey,
-        Authorization: auth.headers.Authorization,
-        "Content-Type": "application/json",
-        Prefer: "return=representation,resolution=merge-duplicates",
-      },
-      body: JSON.stringify([payload]),
+  return { ok: true, skipped: true, cutover: true };
+}
+
+async function stage7RpcAdjustStock(entry) {
+  const admin = stage7IsAdminRole();
+  const type = String((entry && entry.type) || "");
+  const qty = Number(entry && entry.qty) || 0;
+  const inbound = entry && entry.inbound_date ? String(entry.inbound_date).slice(0, 10) : null;
+  const note = entry && entry.note != null ? String(entry.note) : null;
+  if (admin && (type === "IN" || type === "ADJUST") && entry && entry.unit_cost != null && entry.unit_cost !== "") {
+    return stage7Rpc("backoffice_admin_adjust_stock", {
+      p_item_id: String(entry.item_id || ""),
+      p_qty_delta: qty,
+      p_operation_type: type,
+      p_unit_cost: Number(entry.unit_cost) || 0,
+      p_note: note,
+      p_inbound_date: inbound,
     });
-    if (!res.ok) {
-      const errText = await res.text();
-      const kind = vpRestClassifyHttp(res.status, errText);
-      if (kind === "not_authenticated") {
-        return { ok: false, notAuthenticated: true, error: "請先登入後台" };
-      }
-      if (kind === "forbidden") {
-        return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
-      }
-      console.warn("同步庫存＋記帳到 Supabase 失敗", errText);
-      return { ok: false, error: `HTTP ${res.status}：${(errText || "連線失敗").slice(0, 80)}` };
-    }
-    return { ok: true };
-  } catch (e) {
-    console.warn("同步庫存＋記帳到 Supabase 失敗", e);
-    return { ok: false, error: String(e?.message || e || "網路連線失敗") };
   }
+  return stage7Rpc("backoffice_adjust_stock", {
+    p_item_id: String(entry.item_id || ""),
+    p_qty_delta: qty,
+    p_operation_type: type,
+    p_note: note,
+    p_inbound_date: inbound,
+  });
+}
+
+function stage7ItemPayload(item) {
+  const src = item || {};
+  return {
+    id: src.id || undefined,
+    sku: src.sku || "",
+    category: src.category || "",
+    sub_type: src.sub_type || "",
+    brand: src.brand || "",
+    model: src.model || "",
+    name: src.name || "",
+    spec: src.spec || "",
+    vendor: src.vendor || "",
+    condition: src.condition || "",
+    status: src.status || "",
+    price_list: src.price_list == null || src.price_list === "" ? null : src.price_list,
+    price_floor: src.price_floor == null || src.price_floor === "" ? null : src.price_floor,
+    inbound_date: src.inbound_date ? String(src.inbound_date).slice(0, 10) : null,
+    reorder_point: src.reorder_point == null ? 0 : src.reorder_point,
+    location: src.location || "",
+    notes: src.notes || "",
+  };
+}
+
+function stage7OrderLinesPayload(lines) {
+  return (Array.isArray(lines) ? lines : []).map((l) => ({
+    item_id: l.item_id || l.id,
+    qty: Number(l.qty) || 0,
+    unit_price: Number(l.unit_price != null ? l.unit_price : l.unitPrice) || 0,
+  }));
+}
+
+async function stage7UpsertItem(item) {
+  const admin = stage7IsAdminRole();
+  const args = { p_item: stage7ItemPayload(item) };
+  if (admin && item && item.cost_unit != null && item.cost_unit !== "") {
+    args.p_unit_cost = Number(item.cost_unit) || 0;
+  }
+  return stage7Rpc("backoffice_upsert_item", args);
+}
+
+async function stage7DeleteItem(id) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
+  }
+  return stage7RestJson(`inventory_items?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+async function stage7CreateOrder(payload) {
+  return stage7Rpc("backoffice_create_order", {
+    p_order_no: payload.order_no,
+    p_customer_name: payload.customer_name || "",
+    p_sales_type: payload.salesType || payload.sales_type || "",
+    p_shipping_income: Number(payload.shipping_income) || 0,
+    p_discount: Number(payload.discount) || 0,
+    p_payment_method: payload.payment_method || "transfer",
+    p_status: payload.status || "pending",
+    p_lines: stage7OrderLinesPayload(payload.items || payload.lines || []),
+  });
+}
+
+async function stage7UpdateOrder(payload) {
+  return stage7Rpc("backoffice_update_order", {
+    p_order_id: payload.id,
+    p_order_no: payload.order_no,
+    p_customer_name: payload.customer_name || "",
+    p_sales_type: payload.salesType || payload.sales_type || "",
+    p_shipping_income: Number(payload.shipping_income) || 0,
+    p_discount: Number(payload.discount) || 0,
+    p_payment_method: payload.payment_method || "transfer",
+    p_status: payload.status || "pending",
+    p_lines: stage7OrderLinesPayload(payload.items || payload.lines || []),
+  });
+}
+
+async function stage7SaveExpense(row) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
+  }
+  const body = {
+    id: row.id,
+    date: row.date || null,
+    type: row.type || null,
+    category: row.category || null,
+    amount: Number(row.amount) || 0,
+    note: row.note || null,
+    ref_item_id: row.ref_item_id || null,
+  };
+  return stage7RestJson("expenses?on_conflict=id", {
+    method: "POST",
+    body: [body],
+    prefer: "resolution=merge-duplicates,return=minimal",
+  });
+}
+
+async function stage7DeleteExpense(id) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
+  }
+  return stage7RestJson(`expenses?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+async function stage7InsertAudit(row) {
+  if (!stage7IsAdminRole()) return { ok: true, skipped: true };
+  const body = {
+    id: row.id,
+    user_id: row.userId || "",
+    display_name: row.displayName || "",
+    action: row.action || "",
+    target_id: row.targetId || "",
+    created_at: row.timestamp || new Date().toISOString(),
+  };
+  return stage7RestJson("audit_logs", {
+    method: "POST",
+    body: [body],
+    prefer: "return=minimal",
+  });
+}
+
+if (typeof window !== "undefined") {
+  window.stage7RpcAdjustStock = stage7RpcAdjustStock;
+  window.stage7UpsertItem = stage7UpsertItem;
+  window.stage7DeleteItem = stage7DeleteItem;
+  window.stage7CreateOrder = stage7CreateOrder;
+  window.stage7UpdateOrder = stage7UpdateOrder;
+  window.stage7SaveExpense = stage7SaveExpense;
+  window.stage7DeleteExpense = stage7DeleteExpense;
+  window.stage7InsertAudit = stage7InsertAudit;
+  window.stage7IsAdminRole = stage7IsAdminRole;
 }
 
 function isSupabaseConfigured() {
@@ -2313,8 +2650,8 @@ function appendAuditLog(entry) {
     const list = loadAuditLogs();
     list.unshift(row);
     saveAuditLogs(list);
-    if (typeof window.__syncV2ToSupabase === "function" && !window._suppressV2Sync) {
-      window.__syncV2ToSupabase().catch(function () {});
+    if (typeof stage7InsertAudit === "function" && !window._suppressV2Sync) {
+      stage7InsertAudit(row).catch(function () {});
     }
     return row;
   } catch (_) {
@@ -2431,9 +2768,9 @@ function vpRequireVerifiedAdminCloudAccess() {
 }
 
 /**
- * Stage 5B：v2_data 過渡期。admin 或 staff（enabled）都可發 REST。
+ * Stage 7：admin 或 staff（enabled）都可發 REST / RPC。
  * 只讀 __dkCurrentAuthProfile，不讀 dk_admin_session_v1。
- * 真正安全邊界仍是 RLS。staff 技術上仍能取得整包 JSONB（含成本）。
+ * 真正安全邊界仍是 RLS + SECURITY DEFINER RPC。staff 不得讀成本表。
  */
 function requireVerifiedBackofficeCloudAccess() {
   if (!isAuthLoginModeSupabase()) {
@@ -3691,6 +4028,8 @@ window.DK = {
   saveAllStockDataToSupabase,
   fetchOrdersFromSupabase,
   saveOrdersToSupabase,
+  fetchV2DataFromSupabase,
+  saveV2DataToSupabase,
   DEFAULT_COMPUTERS,
   DEFAULT_GPUS,
   DEFAULT_MISC,
@@ -3830,15 +4169,9 @@ if (window.DK && window.DK.fetchInventoryFromSupabase && window.DK.saveInventory
     })
     .catch(function () {});
 }
-// 頁面載入時：僅在「本機沒有 v2 資料」時才從 Supabase 拉取，避免剛補貨／編輯後按 F5 被雲端舊資料蓋掉
-// Stage 5B：profile 尚未驗證時不發 REST（不寫空、不覆蓋、不當作成功）。登入／boot 完成後再拉。
+// Stage 7：正規表為 SoT。有後台 session 就拉雲端；不再用 v2_data blob，也不用本機舊快取擋住刷新。
 (function tryFetchV2Once() {
   if (typeof window.fetchV2DataFromSupabase !== "function") return;
-  try {
-    const itemsRaw = localStorage.getItem(V2_STORAGE_KEYS.items) || "";
-    const ledgerRaw = localStorage.getItem(V2_STORAGE_KEYS.ledger) || "";
-    if (itemsRaw.length > 2 || ledgerRaw.length > 2) return;
-  } catch (_) {}
   const gate = requireVerifiedBackofficeCloudAccess();
   if (!gate.ok) return;
   window.fetchV2DataFromSupabase().catch(function () {});

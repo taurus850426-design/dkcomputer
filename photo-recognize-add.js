@@ -231,7 +231,7 @@
   }
 
   // ---------- 儲存入庫：建立/更新 Item + Ledger IN ----------
-  function savePhotoRecInbound() {
+  async function savePhotoRecInbound() {
     var DK = window.DK;
     var category = el("recCategory").value || (getCategoryOptions()[0]) || "處理器";
     var subType = el("recSubType").value || "";
@@ -243,7 +243,8 @@
     var sku = existing ? baseSku : ensureUniqueSKU(baseSku);
     const name = brand ? brand + " " + model : model || "未命名";
     const qty = Math.max(1, parseInt(el("recQty").value, 10) || 1);
-    const unitCost = parseFloat(el("recCost").value) || 0;
+    const isAdmin = window.DK && typeof window.DK.getCurrentRole === "function" && window.DK.getCurrentRole() === "admin";
+    const unitCost = isAdmin ? (parseFloat(el("recCost").value) || 0) : undefined;
     const location = String(el("recLocation").value || "").trim();
     const notes = String(el("recNotes").value || "").trim();
     const condition = el("recCondition").value || "USED";
@@ -268,7 +269,7 @@
 
     if (existingItem) {
       const inQty = qty;
-      const result = DK.addLedgerEntry({
+      const result = await DK.addLedgerEntry({
         item_id: existingItem.id,
         type: "IN",
         qty: inQty,
@@ -282,8 +283,11 @@
         el("recFormMsg").hidden = false;
         return;
       }
-      const totalCost = inQty * unitCost;
-      showSummary("已入庫：品項 " + (existingItem.name || sku) + "，+" + inQty + " 件，成本小計 " + (totalCost ? "NT$ " + totalCost : "0") + "。現有數量 " + (existingItem.qty_on_hand + inQty) + "。");
+      const qtyNow = Number(DK.findItemById(existingItem.id)?.qty_on_hand) || (existingItem.qty_on_hand + inQty);
+      const summary = isAdmin
+        ? ("已入庫：品項 " + (existingItem.name || sku) + "，+" + inQty + " 件，成本小計 " + ((inQty * (unitCost || 0)) ? "NT$ " + (inQty * (unitCost || 0)) : "0") + "。現有數量 " + qtyNow + "。")
+        : ("已入庫：品項 " + (existingItem.name || sku) + "，+" + inQty + " 件。現有數量 " + qtyNow + "。");
+      showSummary(summary);
     } else {
       const newItem = {
         id: "i-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9),
@@ -297,7 +301,6 @@
         condition,
         status,
         qty_on_hand: 0,
-        cost_unit: unitCost,
         price_list: null,
         price_floor: null,
         inbound_date: inboundDate,
@@ -308,9 +311,15 @@
         created_at: now,
         updated_at: now,
       };
+      if (isAdmin) newItem.cost_unit = unitCost;
       items.unshift(newItem);
-      DK.saveItems(items);
-      const result = DK.addLedgerEntry({
+      const saved = await DK.saveItems(items);
+      if (!saved || !saved.ok) {
+        el("recFormMsg").textContent = (saved && saved.error) || "新增品項失敗";
+        el("recFormMsg").hidden = false;
+        return;
+      }
+      const result = await DK.addLedgerEntry({
         item_id: newItem.id,
         type: "IN",
         qty,
@@ -320,13 +329,14 @@
         note: "拍照辨識新增 " + (notes || ""),
       });
       if (!result.ok) {
-        DK.saveItems(items.filter(function (x) { return x.id !== newItem.id; }));
         el("recFormMsg").textContent = result.error || "寫入流水失敗";
         el("recFormMsg").hidden = false;
         return;
       }
-      const totalCost = qty * unitCost;
-      showSummary("已新增品項：" + name + "，數量 " + qty + "，成本小計 " + (totalCost ? "NT$ " + totalCost : "0") + "。");
+      const summaryNew = isAdmin
+        ? ("已新增品項：" + name + "，數量 " + qty + "，成本小計 " + ((qty * (unitCost || 0)) ? "NT$ " + (qty * (unitCost || 0)) : "0") + "。")
+        : ("已新增品項：" + name + "，數量 " + qty + "。");
+      showSummary(summaryNew);
     }
   }
 
@@ -405,6 +415,9 @@
   gate({ roles: ["admin", "staff"] }).then(function (ok) {
     if (!ok) return;
     if (window.DK.revealBackofficeToolRoot) window.DK.revealBackofficeToolRoot("photoRecRoot");
+    if (window.DK.getCurrentRole && window.DK.getCurrentRole() === "staff") {
+      document.body.classList.add("dk-role-staff");
+    }
     function start() {
       initPhotoRecognizeAddTool();
     }

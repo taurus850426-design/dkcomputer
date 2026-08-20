@@ -233,7 +233,7 @@
   }
 
   // ---------- 儲存入庫：建立/更新 Item + Ledger IN ----------
-  function saveScanInbound() {
+  async function saveScanInbound() {
     const sku = String(el("scanSku").value || "").trim().toUpperCase();
     const category = el("scanCategory").value || "PART";
     const subType = el("scanSubType").value || "";
@@ -242,7 +242,8 @@
     const spec = String(el("scanSpec").value || "").trim();
     const name = brand ? brand + " " + model : model || "未命名";
     const qty = Math.max(1, parseInt(el("scanQty").value, 10) || 1);
-    const unitCost = parseFloat(el("scanCost").value) || 0;
+    const isAdmin = window.DK && typeof window.DK.getCurrentRole === "function" && window.DK.getCurrentRole() === "admin";
+    const unitCost = isAdmin ? (parseFloat(el("scanCost").value) || 0) : undefined;
     const location = String(el("scanLocation").value || "").trim();
     const notes = String(el("scanNotes").value || "").trim();
     const condition = el("scanCondition").value || "USED";
@@ -274,7 +275,7 @@
 
     if (existing) {
       const inQty = qty;
-      const result = DK.addLedgerEntry({
+      const result = await DK.addLedgerEntry({
         item_id: existing.id,
         type: "IN",
         qty: inQty,
@@ -288,8 +289,11 @@
         el("scanFormMsg").hidden = false;
         return;
       }
-      const totalCost = inQty * unitCost;
-      showSummary("已入庫：SKU " + sku + "，+" + inQty + " 件，成本小計 " + (totalCost ? "NT$ " + totalCost : "0") + "。品項現有數量 " + (existing.qty_on_hand + inQty) + "。");
+      const qtyNow = Number(DK.findItemById(existing.id)?.qty_on_hand) || (existing.qty_on_hand + inQty);
+      const summary = isAdmin
+        ? ("已入庫：SKU " + sku + "，+" + inQty + " 件，成本小計 " + ((inQty * (unitCost || 0)) ? "NT$ " + (inQty * (unitCost || 0)) : "0") + "。品項現有數量 " + qtyNow + "。")
+        : ("已入庫：SKU " + sku + "，+" + inQty + " 件。品項現有數量 " + qtyNow + "。");
+      showSummary(summary);
     } else {
       const newItem = {
         id: "i-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9),
@@ -303,7 +307,6 @@
         condition,
         status,
         qty_on_hand: 0,
-        cost_unit: unitCost,
         price_list: null,
         price_floor: null,
         inbound_date: inboundDate,
@@ -314,9 +317,15 @@
         created_at: now,
         updated_at: now,
       };
+      if (isAdmin) newItem.cost_unit = unitCost;
       items.unshift(newItem);
-      DK.saveItems(items);
-      const result = DK.addLedgerEntry({
+      const saved = await DK.saveItems(items);
+      if (!saved || !saved.ok) {
+        el("scanFormMsg").textContent = (saved && saved.error) || "新增品項失敗";
+        el("scanFormMsg").hidden = false;
+        return;
+      }
+      const result = await DK.addLedgerEntry({
         item_id: newItem.id,
         type: "IN",
         qty,
@@ -326,13 +335,14 @@
         note: "掃碼新增 " + (notes || ""),
       });
       if (!result.ok) {
-        DK.saveItems(items.filter((x) => x.id !== newItem.id));
         el("scanFormMsg").textContent = result.error || "寫入流水失敗";
         el("scanFormMsg").hidden = false;
         return;
       }
-      const totalCost = qty * unitCost;
-      showSummary("已新增品項：SKU " + sku + "，" + name + "，數量 " + qty + "，成本小計 " + (totalCost ? "NT$ " + totalCost : "0") + "。");
+      const summaryNew = isAdmin
+        ? ("已新增品項：SKU " + sku + "，" + name + "，數量 " + qty + "，成本小計 " + ((qty * (unitCost || 0)) ? "NT$ " + (qty * (unitCost || 0)) : "0") + "。")
+        : ("已新增品項：SKU " + sku + "，" + name + "，數量 " + qty + "。");
+      showSummary(summaryNew);
     }
   }
 
@@ -379,6 +389,9 @@
   gate({ roles: ["admin", "staff"] }).then(function (ok) {
     if (!ok) return;
     if (window.DK.revealBackofficeToolRoot) window.DK.revealBackofficeToolRoot("scanAddRoot");
+    if (window.DK.getCurrentRole && window.DK.getCurrentRole() === "staff") {
+      document.body.classList.add("dk-role-staff");
+    }
     function start() {
       initScanAddTool();
     }

@@ -63,7 +63,7 @@
           <div class="field"><label for="scanCondition">成色</label><select id="scanCondition"><option value="NEW">全新</option><option value="USED" selected>二手</option><option value="REFURB">整新</option></select></div>
           <div class="field"><label for="scanStatusSel">狀態</label><select id="scanStatusSel"><option value="TESTING" selected>待測</option><option value="READY">可售</option><option value="PREP">待整理</option><option value="RESERVED">保留</option><option value="CLEARANCE">待出清</option><option value="SCRAP">報廢拆料</option></select></div>
           <div class="field"><label for="scanQty">數量</label><input id="scanQty" type="number" min="1" value="1" /></div>
-          <div class="field"><label for="scanCost">單位成本</label><input id="scanCost" type="number" min="0" step="1" value="0" /></div>
+          <div class="field" data-admin-only><label for="scanCost">單位成本</label><input id="scanCost" type="number" min="0" step="1" value="0" /></div>
           <div class="field"><label for="scanInboundDate">入庫日</label><input id="scanInboundDate" type="date" /></div>
           <div class="field"><label for="scanLocation">位置</label><input id="scanLocation" type="text" placeholder="櫃/架" /></div>
           <div class="field"><label for="scanReorderPoint">補貨警戒（耗材用）</label><input id="scanReorderPoint" type="number" min="0" value="0" /></div>
@@ -84,10 +84,10 @@
       </div>
     </div>
 
-    <script src="./shared.js?v=20260815s671"></script>
-    <script src="./inventory-ledger.js"></script>
+    <script src="./shared.js?v=20260820s7m5"></script>
+    <script src="./inventory-ledger.js?v=20260820s7m5"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./scan-add.js?v=20260815s671"></script>
+    <script src="./scan-add.js?v=20260820s7m5"></script>
   </body>
 </html>

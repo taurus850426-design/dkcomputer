@@ -4864,7 +4864,7 @@
       const editingItem = editingV2ItemId ? DK.findItemById(editingV2ItemId) : null;
       const sku = editingItem ? editingItem.sku : generateUniqueSKU();
       const costInput = parseFloat(getItemEditorField("itemCost")?.value) || 0;
-      const costUnit = canPerm("viewCost") ? costInput : (editingItem ? (Number(editingItem.cost_unit) || 0) : 0);
+      const costUnit = canPerm("viewCost") ? costInput : undefined;
       const payload = {
         sku,
         category: getItemEditorField("itemCategory")?.value,
@@ -4874,7 +4874,6 @@
         condition: getItemEditorField("itemCondition")?.value || "USED",
         status: getItemEditorField("itemStatus")?.value || "READY",
         qty_on_hand: Math.max(0, parseInt(getItemEditorField("itemQty")?.value, 10) || 0),
-        cost_unit: costUnit,
         price_list: parseFloat(getItemEditorField("itemPriceList")?.value) || null,
         price_floor: parseFloat(getItemEditorField("itemPriceFloor")?.value) || null,
         inbound_date: getItemEditorField("itemInboundDate")?.value || null,
@@ -4882,6 +4881,7 @@
         notes: getItemEditorField("itemNotes")?.value || "",
         updated_at: nowISO(),
       };
+      if (canPerm("viewCost")) payload.cost_unit = costUnit;
       if (editingV2ItemId) {
         const idx = items.findIndex((x) => x.id === editingV2ItemId);
         if (idx < 0) return v2Show(itemMsg, "找不到品項");
@@ -5007,14 +5007,14 @@
           </div>
           <div class="table-wrap" style="margin-top:8px">
             <table class="table">
-              <thead><tr><th>名稱</th><th>品類</th><th style="text-align:right">庫存</th><th style="text-align:right">成本</th><th style="text-align:right">操作</th></tr></thead>
+              <thead><tr><th>名稱</th><th>品類</th><th style="text-align:right">庫存</th><th style="text-align:right" data-admin-only>成本</th><th style="text-align:right">操作</th></tr></thead>
               <tbody>
                 ${rows.map(({ it, nameSpec }) => `
                   <tr>
                     <td>${v2Esc(String(nameSpec || ""))}</td>
                     <td>${v2Esc(String(it.category || ""))}</td>
                     <td style="text-align:right">${v2Esc(String(it.qty_on_hand ?? 0))}</td>
-                    <td style="text-align:right">${v2Esc(fmtNum(it.cost_unit))}</td>
+                    <td style="text-align:right" data-admin-only>${v2Esc(fmtNum(it.cost_unit))}</td>
                     <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-dup-item" data-id="${v2Esc(String(it.id))}">改編輯此品項</button></td>
                   </tr>
                 `).join("")}
@@ -5130,7 +5130,7 @@
       v2Hide(ledgerMsg);
     });
     document.getElementById("ledgerCancel")?.addEventListener("click", () => { if (ledgerForm) ledgerForm.hidden = true; v2Hide(ledgerMsg); });
-    document.getElementById("ledgerSubmit")?.addEventListener("click", () => {
+    document.getElementById("ledgerSubmit")?.addEventListener("click", async () => {
       if (!requirePerm("ledger")) return;
       const itemId = document.getElementById("ledgerItemId")?.value;
       const type = document.getElementById("ledgerType")?.value;
@@ -5142,10 +5142,10 @@
       if (!itemId) return v2Show(ledgerMsg, "請選擇品項");
       if (!Number.isFinite(qty) || (type === "IN" && qty <= 0) || (type === "OUT" && qty <= 0)) return v2Show(ledgerMsg, "數量需大於 0");
       if (type === "IN" && unitCost < 0) return v2Show(ledgerMsg, "入庫請填單位成本");
-      const result = DK.addLedgerEntry({ item_id: itemId, type, qty: type === "ADJUST" ? qty : Math.abs(qty), unit_cost: unitCost, ref_type: refType, ref_id: refId, note });
+      const result = await DK.addLedgerEntry({ item_id: itemId, type, qty: type === "ADJUST" ? qty : Math.abs(qty), unit_cost: unitCost, ref_type: refType, ref_id: refId, note });
       if (!result.ok) return v2Show(ledgerMsg, result.error || "失敗");
       v2Show(ledgerMsg, "已寫入流水並更新品項");
-      if (result.syncPromise) result.syncPromise.then((r) => showSyncToast(r, "流水帳"));
+      showSyncToast({ ok: true }, "流水帳");
       renderV2Ledger();
       renderV2Items();
       setTimeout(() => { if (ledgerForm) ledgerForm.hidden = true; v2Hide(ledgerMsg); }, 1000);
@@ -5478,7 +5478,7 @@
         ...l,
         item_id: l.item_id ?? l.id,
         unit_price: l.unit_price ?? l.unitPrice ?? 0,
-        cost_unit: l.cost_unit ?? l.costUnit ?? 0,
+        cost_unit: canPerm("viewCost") ? (l.cost_unit ?? l.costUnit ?? 0) : undefined,
       }));
       fillOrderLineItemSelect();
       const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
@@ -5549,151 +5549,94 @@
       if (!Number.isFinite(onHand) || onHand <= 0) return v2Show(orderMsg, "該品項目前沒有可用庫存，無法加入訂單");
       const alreadyInOrder = orderLineItems.filter((l) => l.item_id === itemId).reduce((s, l) => s + (Number(l.qty) || 0), 0);
       if (alreadyInOrder + qty > onHand) return v2Show(orderMsg, "庫存不足：" + item.sku + " 現有 " + onHand + "，明細已選 " + alreadyInOrder + "，再加 " + qty + " 會超過");
-      orderLineItems.push({ item_id: item.id, sku: item.sku, name: item.name, spec: item.spec || "", qty: qty, unit_price: unitPrice, cost_unit: Number(item.cost_unit) || 0 });
+      orderLineItems.push({ item_id: item.id, sku: item.sku, name: item.name, spec: item.spec || "", qty: qty, unit_price: unitPrice });
       renderOrderLineTbody();
       updateOrderTotalsFromLines();
       v2Hide(orderMsg);
     });
     document.getElementById("orderSave")?.addEventListener("click", async () => {
       if (!requirePerm("orders")) return;
-      const g = typeof window !== "undefined" ? window : typeof globalThis !== "undefined" ? globalThis : {};
-      g._suppressV2Sync = true;
       try {
         const orderNo = String(document.getElementById("orderNo")?.value || "").trim();
-        const totalSale = parseFloat(document.getElementById("orderTotalSale")?.value) || 0;
-        const cogsTotal = parseFloat(document.getElementById("orderCogs")?.value) || 0;
         if (!orderNo) { v2Show(orderMsg, "訂單編號必填"); return; }
+        if (!orderLineItems.length) { v2Show(orderMsg, "請至少加入一筆明細"); return; }
         const orders = DK.getOrders();
-      const existing = orders.find((x) => x.order_no === orderNo && x.id !== editingV2OrderId);
-      if (existing) return v2Show(orderMsg, "訂單編號重複");
-      const orderDate = document.getElementById("orderDate")?.value || todayStr();
-      const createdAt = orderDate.includes("T") ? orderDate : orderDate + "T12:00:00.000Z";
-      const salesType = String(document.getElementById("orderSalesType")?.value || "").trim();
-      const payload = { order_no: orderNo, customer_name: document.getElementById("orderCustomer")?.value || "", salesType, total_sale: totalSale, shipping_income: parseFloat(document.getElementById("orderShipping")?.value) || 0, discount: parseFloat(document.getElementById("orderDiscount")?.value) || 0, payment_method: document.getElementById("orderPayment")?.value || "transfer", status: document.getElementById("orderStatus")?.value || "pending", cogs_total: cogsTotal, created_at: createdAt, items: orderLineItems };
-      const salesTypeHint = salesType ? "" : "此訂單尚未設定銷售類型，報表會歸入未分類。";
+        const existing = orders.find((x) => x.order_no === orderNo && x.id !== editingV2OrderId);
+        if (existing) return v2Show(orderMsg, "訂單編號重複");
+        const salesType = String(document.getElementById("orderSalesType")?.value || "").trim();
+        const payload = {
+          order_no: orderNo,
+          customer_name: document.getElementById("orderCustomer")?.value || "",
+          salesType,
+          shipping_income: parseFloat(document.getElementById("orderShipping")?.value) || 0,
+          discount: parseFloat(document.getElementById("orderDiscount")?.value) || 0,
+          payment_method: document.getElementById("orderPayment")?.value || "transfer",
+          status: document.getElementById("orderStatus")?.value || "pending",
+          items: orderLineItems.map((l) => ({
+            item_id: l.item_id || l.id,
+            qty: Number(l.qty) || 0,
+            unit_price: Number(l.unit_price != null ? l.unit_price : l.unitPrice) || 0,
+          })),
+        };
+        const salesTypeHint = salesType ? "" : "此訂單尚未設定銷售類型，報表會歸入未分類。";
 
-      function tryMarkLinkedCustomerAsWon() {
-        let raw = null;
-        try { raw = sessionStorage.getItem(PENDING_CUSTOMER_ORDER_LINK_KEY); } catch (_) { raw = null; }
-        if (!raw) return;
-        const link = safeParse(raw, null);
-        const customerId = String(link?.customerId || "");
-        if (!customerId) return;
-        try {
-          const listRaw = safeParse(localStorage.getItem(CUSTOMER_RECORDS_KEY), null);
-          const list = Array.isArray(listRaw) ? listRaw.map(crNormalize) : [];
-          const idx = list.findIndex((x) => String(x.id) === customerId);
-          if (idx < 0) {
-            v2Show(orderMsg, "訂單已儲存，但找不到對應客戶紀錄（未更新狀態）。");
-            return;
-          }
-          list[idx] = { ...list[idx], status: "成交" };
-          localStorage.setItem(CUSTOMER_RECORDS_KEY, JSON.stringify(list));
-          try { sessionStorage.removeItem(PENDING_CUSTOMER_ORDER_LINK_KEY); } catch (_) {}
-          if (typeof renderCustomerRecordsPage === "function") renderCustomerRecordsPage();
-        } catch (e) {
-          // 不要中斷訂單流程；也不要清除 pending key，避免資料遺失
-          v2Show(orderMsg, "訂單已儲存，但更新客戶狀態失敗：" + String(e?.message || e || ""));
-        }
-      }
-      if (editingV2OrderId) {
-        const idx = orders.findIndex((x) => x.id === editingV2OrderId);
-        if (idx < 0) return v2Show(orderMsg, "找不到訂單");
-        const existingOrder = orders[idx];
-        const orderId = existingOrder.id;
-        const orderNoDisplay = existingOrder.order_no || orderNo;
-        const oldItems = existingOrder.items || [];
-        const oldItemQty = {};
-        for (const line of oldItems) {
-          const id = String(line.item_id ?? line.id ?? "").trim();
-          if (!id) continue;
-          oldItemQty[id] = (oldItemQty[id] || 0) + (Number(line.qty) || 0);
-        }
-        const newItemQty = {};
-        for (const line of orderLineItems) {
-          const id = String(line.item_id ?? line.id ?? "").trim();
-          if (!id) continue;
-          newItemQty[id] = (newItemQty[id] || 0) + (Number(line.qty) || 0);
-        }
-        /* 1. 先加回：被移除或數量減少的明細（庫存 +1 等） */
-        for (const [item_id, oldQty] of Object.entries(oldItemQty)) {
-          const newQty = newItemQty[item_id] || 0;
-          const returnQty = oldQty - newQty;
-          if (returnQty > 0) {
-            const res = DK.addLedgerEntry({ item_id, type: "IN", qty: returnQty, ref_type: "ORDER", ref_id: orderId, note: "訂單編輯移除明細 " + orderNoDisplay });
-            if (!res.ok) {
-              v2Show(orderMsg, "加回庫存失敗：" + (res.error || item_id));
+        function tryMarkLinkedCustomerAsWon() {
+          let raw = null;
+          try { raw = sessionStorage.getItem(PENDING_CUSTOMER_ORDER_LINK_KEY); } catch (_) { raw = null; }
+          if (!raw) return;
+          const link = safeParse(raw, null);
+          const customerId = String(link?.customerId || "");
+          if (!customerId) return;
+          try {
+            const listRaw = safeParse(localStorage.getItem(CUSTOMER_RECORDS_KEY), null);
+            const list = Array.isArray(listRaw) ? listRaw.map(crNormalize) : [];
+            const idx = list.findIndex((x) => String(x.id) === customerId);
+            if (idx < 0) {
+              v2Show(orderMsg, "訂單已儲存，但找不到對應客戶紀錄（未更新狀態）。");
               return;
             }
+            list[idx] = { ...list[idx], status: "成交" };
+            localStorage.setItem(CUSTOMER_RECORDS_KEY, JSON.stringify(list));
+            try { sessionStorage.removeItem(PENDING_CUSTOMER_ORDER_LINK_KEY); } catch (_) {}
+            if (typeof renderCustomerRecordsPage === "function") renderCustomerRecordsPage();
+          } catch (e) {
+            v2Show(orderMsg, "訂單已儲存，但更新客戶狀態失敗：" + String(e?.message || e || ""));
           }
         }
-        /* 2. 再扣庫存：新增或數量增加的明細 */
-        for (const [item_id, newQty] of Object.entries(newItemQty)) {
-          const oldQty = oldItemQty[item_id] || 0;
-          const deductQty = newQty - oldQty;
-          if (deductQty > 0) {
-            const item = DK.findItemById(item_id);
+
+        let res;
+        if (editingV2OrderId) {
+          if (typeof DK.updateOrder !== "function") return v2Show(orderMsg, "Stage 7 寫入未載入");
+          res = await DK.updateOrder({ ...payload, id: editingV2OrderId });
+        } else {
+          for (const line of payload.items) {
+            const item = DK.findItemById(line.item_id);
             const onHand = Number(item?.qty_on_hand) || 0;
-            if (deductQty > onHand) {
-              v2Show(orderMsg, "庫存不足：" + (item?.sku || item_id) + " 現有 " + onHand + "，需扣 " + deductQty);
-              return;
-            }
-            const res = DK.addLedgerEntry({ item_id, type: "OUT", qty: deductQty, ref_type: "ORDER", ref_id: orderId, note: "訂單編輯新增明細 " + orderNoDisplay });
-            if (!res.ok) {
-              v2Show(orderMsg, "扣庫存失敗：" + (res.error || item?.sku || item_id));
-              return;
-            }
+            const need = Number(line.qty) || 0;
+            if (onHand === 0) return v2Show(orderMsg, "品項「" + (item?.sku || line.item_id) + "」庫存為 0，無法成立訂單");
+            if (need > onHand) return v2Show(orderMsg, "品項「" + (item?.sku || line.item_id) + "」庫存不足（現有 " + onHand + "，需要 " + need + "）");
           }
+          if (typeof DK.createOrder !== "function") return v2Show(orderMsg, "Stage 7 寫入未載入");
+          res = await DK.createOrder(payload);
         }
-        orders[idx] = { ...existingOrder, ...payload, id: orderId, updated_at: nowISO() };
-        DK.saveOrders(orders);
-        auditAction("編輯訂單", orderId);
-        v2Show(orderMsg, salesTypeHint ? "已更新（庫存已同步）。" + salesTypeHint : "已更新（庫存已同步）");
-        // 只有訂單狀態為「已完成」才回寫客戶成交（避免未完成就把客戶改成成交）
+        if (!res || !res.ok) {
+          v2Show(orderMsg, (res && res.error) || "訂單寫入失敗");
+          return;
+        }
+        const savedId = (res.data && (res.data.id || (Array.isArray(res.data) ? res.data[0] && res.data[0].id : ""))) || editingV2OrderId || "";
+        auditAction(editingV2OrderId ? "編輯訂單" : "新增訂單", savedId);
+        v2Show(orderMsg, (editingV2OrderId ? "已更新（庫存已同步）。" : "已新增並已扣庫存。") + salesTypeHint);
         const statusNow = String(document.getElementById("orderStatus")?.value || payload.status || "").trim();
         if (statusNow === "completed" || statusNow === "已完成") {
           tryMarkLinkedCustomerAsWon();
         }
-      } else {
-        /* 新增訂單：庫存為 0 的品項不能成立訂單 */
-        for (const line of orderLineItems) {
-          const item = DK.findItemById(line.item_id);
-          const onHand = Number(item?.qty_on_hand) || 0;
-          const need = Number(line.qty) || 0;
-          if (onHand === 0) return v2Show(orderMsg, "品項「" + (line.sku || line.name) + "」庫存為 0，無法成立訂單");
-          if (need > onHand) return v2Show(orderMsg, "品項「" + (line.sku || line.name) + "」庫存不足（現有 " + onHand + "，需要 " + need + "）");
-        }
-        payload.id = "ord-" + Date.now();
-        /* 先扣庫存，全部成功後再存訂單，避免訂單已存但庫存未扣 */
-        for (let i = 0; i < orderLineItems.length; i++) {
-          const line = orderLineItems[i];
-          const res = DK.addLedgerEntry({ item_id: line.item_id, type: "OUT", qty: line.qty, ref_type: "ORDER", ref_id: payload.id, note: "訂單 " + orderNo });
-          if (!res.ok) {
-            v2Show(orderMsg, "扣庫存失敗：" + (res.error || line.sku));
-            return;
-          }
-        }
-        orders.unshift(payload);
-        DK.saveOrders(orders);
-        auditAction("新增訂單", payload.id);
-        v2Show(orderMsg, salesTypeHint ? "已新增並已扣庫存。" + salesTypeHint : "已新增並已扣庫存");
-        // 只有訂單狀態為「已完成」才回寫客戶成交（避免未完成就把客戶改成成交）
-        const statusNow = String(document.getElementById("orderStatus")?.value || payload.status || "").trim();
-        if (statusNow === "completed" || statusNow === "已完成") {
-          tryMarkLinkedCustomerAsWon();
-        }
-      }
-      renderV2Orders();
-      renderV2Items();
-      renderV2Reports();
-      setTimeout(() => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); }, 800);
-      } finally {
-        g._suppressV2Sync = false;
-        const syncP = typeof g.__syncV2ToSupabase === "function" ? g.__syncV2ToSupabase() : null;
-        if (syncP) {
-          const result = await syncP;
-          showSyncToast(result, "訂單");
-        }
+        showSyncToast({ ok: true }, "訂單");
+        renderV2Orders();
+        renderV2Items();
+        renderV2Reports();
+        setTimeout(() => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); }, 800);
+      } catch (e) {
+        v2Show(orderMsg, String(e && e.message ? e.message : e || "訂單寫入失敗"));
       }
     });
 
@@ -5727,24 +5670,21 @@
       if (restockForm) restockForm.hidden = false;
       v2Hide(restockMsg);
     });
-    document.getElementById("restockSubmit")?.addEventListener("click", () => {
+    document.getElementById("restockSubmit")?.addEventListener("click", async () => {
       if (!requirePerm("restock")) return;
       const itemId = document.getElementById("restockItemId")?.value;
       const qty = parseInt(document.getElementById("restockQty")?.value, 10);
       let unitCost = parseFloat(document.getElementById("restockUnitCost")?.value) || 0;
-      if (!canPerm("viewCost")) {
-        const item = DK.findItemById(itemId);
-        unitCost = Number(item?.cost_unit) || 0;
-      }
+      if (!canPerm("viewCost")) unitCost = undefined;
       const inboundDate = document.getElementById("restockInboundDate")?.value || "";
       if (!itemId) return v2Show(restockMsg, "請選擇品項");
       if (!Number.isFinite(qty) || qty <= 0) return v2Show(restockMsg, "數量需大於 0");
-      if (unitCost < 0) return v2Show(restockMsg, "請填單位成本");
-      const result = DK.addLedgerEntry({ item_id: itemId, type: "IN", qty, unit_cost: unitCost, ref_type: "PURCHASE", ref_id: "", note: "補貨", inbound_date: inboundDate || undefined });
+      if (canPerm("viewCost") && unitCost < 0) return v2Show(restockMsg, "請填單位成本");
+      const result = await DK.addLedgerEntry({ item_id: itemId, type: "IN", qty, unit_cost: unitCost, ref_type: "PURCHASE", ref_id: "", note: "補貨", inbound_date: inboundDate || undefined });
       if (!result.ok) return v2Show(restockMsg, result.error || "入庫失敗");
       auditAction("補貨", itemId);
       v2Show(restockMsg, "已入庫，入庫日已更新");
-      if (result.syncPromise) result.syncPromise.then((r) => showSyncToast(r, "補貨"));
+      showSyncToast({ ok: true }, "補貨");
       renderV2Items();
       renderV2Ledger();
       if (restockForm) restockForm.hidden = true;
