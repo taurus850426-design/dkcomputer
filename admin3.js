@@ -5245,16 +5245,28 @@
       });
     })();
 
+    function clearPendingCustomerOrderLink() {
+      try { sessionStorage.removeItem(PENDING_CUSTOMER_ORDER_LINK_KEY); } catch (_) {}
+    }
+
     function consumeCreateOrderFromCustomerIfAny() {
       let raw = null;
       try { raw = sessionStorage.getItem(CREATE_ORDER_FROM_CUSTOMER_KEY); } catch (_) { raw = null; }
-      if (!raw) return;
+      if (!raw) {
+        clearPendingCustomerOrderLink();
+        return;
+      }
       const data = safeParse(raw, null);
       try { sessionStorage.removeItem(CREATE_ORDER_FROM_CUSTOMER_KEY); } catch (_) {}
-      if (!data || typeof data !== "object") return;
+      if (!data || typeof data !== "object") {
+        clearPendingCustomerOrderLink();
+        return;
+      }
       const customerId = String(data.customerId || "");
       if (customerId) {
         try { sessionStorage.setItem(PENDING_CUSTOMER_ORDER_LINK_KEY, JSON.stringify({ customerId })); } catch (_) {}
+      } else {
+        clearPendingCustomerOrderLink();
       }
       const name = String(data.name || "");
       const amount = Number(data.amount) || 0;
@@ -5537,7 +5549,12 @@
       openV2OrderEditor(null);
       setTimeout(consumeCreateOrderFromCustomerIfAny, 0);
     });
-    document.getElementById("orderCancel")?.addEventListener("click", () => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); });
+    document.getElementById("orderCancel")?.addEventListener("click", () => {
+      if (orderForm) orderForm.hidden = true;
+      editingV2OrderId = null;
+      clearPendingCustomerOrderLink();
+      v2Hide(orderMsg);
+    });
     document.getElementById("orderLineAdd")?.addEventListener("click", () => {
       const itemId = orderLineItemSelect?.value;
       const qty = Math.max(1, parseInt(document.getElementById("orderLineQty")?.value, 10) || 1);
@@ -5583,6 +5600,7 @@
         function tryMarkLinkedCustomerAsWon() {
           let raw = null;
           try { raw = sessionStorage.getItem(PENDING_CUSTOMER_ORDER_LINK_KEY); } catch (_) { raw = null; }
+          clearPendingCustomerOrderLink();
           if (!raw) return;
           const link = safeParse(raw, null);
           const customerId = String(link?.customerId || "");
@@ -5597,7 +5615,6 @@
             }
             list[idx] = { ...list[idx], status: "成交" };
             localStorage.setItem(CUSTOMER_RECORDS_KEY, JSON.stringify(list));
-            try { sessionStorage.removeItem(PENDING_CUSTOMER_ORDER_LINK_KEY); } catch (_) {}
             if (typeof renderCustomerRecordsPage === "function") renderCustomerRecordsPage();
           } catch (e) {
             v2Show(orderMsg, "訂單已儲存，但更新客戶狀態失敗：" + String(e?.message || e || ""));
@@ -5626,10 +5643,8 @@
         const savedId = (res.data && (res.data.id || (Array.isArray(res.data) ? res.data[0] && res.data[0].id : ""))) || editingV2OrderId || "";
         auditAction(editingV2OrderId ? "編輯訂單" : "新增訂單", savedId);
         v2Show(orderMsg, (editingV2OrderId ? "已更新（庫存已同步）。" : "已新增並已扣庫存。") + salesTypeHint);
-        const statusNow = String(document.getElementById("orderStatus")?.value || payload.status || "").trim();
-        if (statusNow === "completed" || statusNow === "已完成") {
-          tryMarkLinkedCustomerAsWon();
-        }
+        if (!editingV2OrderId) tryMarkLinkedCustomerAsWon();
+        else clearPendingCustomerOrderLink();
         showSyncToast({ ok: true }, "訂單");
         renderV2Orders();
         renderV2Items();
