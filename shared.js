@@ -1344,12 +1344,24 @@ function stage7ItemPayload(item) {
   };
 }
 
-function stage7OrderLinesPayload(lines) {
-  return (Array.isArray(lines) ? lines : []).map((l) => ({
+function stage7OrderLinesPayload(lines, headerTotal) {
+  const mapped = (Array.isArray(lines) ? lines : []).map((l) => ({
     item_id: l.item_id || l.id,
     qty: Number(l.qty) || 0,
     unit_price: Number(l.unit_price != null ? l.unit_price : l.unitPrice) || 0,
   }));
+  if (!mapped.length) return mapped;
+  const lineSum = mapped.reduce((s, l) => s + (Number(l.unit_price) || 0) * (Number(l.qty) || 0), 0);
+  if (headerTotal == null || headerTotal === "") return mapped;
+  const total = Number(headerTotal);
+  if (!Number.isFinite(total)) return mapped;
+  if (Math.abs(lineSum - total) < 0.005) return mapped;
+  // 現有 RPC 沒有 p_total_sale，售價合計以 line unit_price 加總為準。
+  // 明細單價為 0、使用者只填整單售價時，把差額寫入第一筆以免 total_sale 被存成 0。
+  const rest = mapped.slice(1).reduce((s, l) => s + (Number(l.unit_price) || 0) * (Number(l.qty) || 0), 0);
+  const q0 = Number(mapped[0].qty) || 0;
+  if (q0 > 0) mapped[0].unit_price = (total - rest) / q0;
+  return mapped;
 }
 
 async function stage7UpsertItem(item) {
@@ -1377,7 +1389,7 @@ async function stage7CreateOrder(payload) {
     p_discount: Number(payload.discount) || 0,
     p_payment_method: payload.payment_method || "transfer",
     p_status: payload.status || "pending",
-    p_lines: stage7OrderLinesPayload(payload.items || payload.lines || []),
+    p_lines: stage7OrderLinesPayload(payload.items || payload.lines || [], payload.total_sale),
   });
 }
 
@@ -1391,7 +1403,7 @@ async function stage7UpdateOrder(payload) {
     p_discount: Number(payload.discount) || 0,
     p_payment_method: payload.payment_method || "transfer",
     p_status: payload.status || "pending",
-    p_lines: stage7OrderLinesPayload(payload.items || payload.lines || []),
+    p_lines: stage7OrderLinesPayload(payload.items || payload.lines || [], payload.total_sale),
   });
 }
 

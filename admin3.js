@@ -5478,20 +5478,38 @@
       const cogsSum = orderLineItems.reduce((s, l) => s + (Number(l.cost_unit) || 0) * (Number(l.qty) || 0), 0);
       const saleEl = document.getElementById("orderTotalSale");
       const cogsEl = document.getElementById("orderCogs");
-      if (saleEl) saleEl.value = saleSum;
-      if (cogsEl) cogsEl.value = cogsSum;
+      if (saleEl) {
+        const current = parseFloat(saleEl.value) || 0;
+        if (saleSum !== 0 || current === 0) saleEl.value = saleSum;
+      }
+      if (cogsEl && canPerm("viewCost")) cogsEl.value = cogsSum;
       updateV2OrderGrossDisplay();
     }
 
     function openV2OrderEditor(id) {
       editingV2OrderId = id || null;
       const o = id ? DK.getOrders().find((x) => x.id === id) : null;
-      orderLineItems = (Array.isArray(o?.items) ? o.items : []).map((l) => ({
-        ...l,
-        item_id: l.item_id ?? l.id,
-        unit_price: l.unit_price ?? l.unitPrice ?? 0,
-        cost_unit: canPerm("viewCost") ? (l.cost_unit ?? l.costUnit ?? 0) : undefined,
-      }));
+      orderLineItems = (Array.isArray(o?.items) ? o.items : []).map((l) => {
+        const itemId = l.item_id ?? l.id;
+        let costUnit;
+        if (canPerm("viewCost")) {
+          const snap = l.cost_unit ?? l.costUnit;
+          if (snap != null && snap !== "") {
+            costUnit = Number(snap) || 0;
+          } else {
+            const stock = DK.findItemById(itemId);
+            costUnit = (stock && stock.cost_unit != null && stock.cost_unit !== "")
+              ? (Number(stock.cost_unit) || 0)
+              : 0;
+          }
+        }
+        return {
+          ...l,
+          item_id: itemId,
+          unit_price: l.unit_price ?? l.unitPrice ?? 0,
+          cost_unit: costUnit,
+        };
+      });
       fillOrderLineItemSelect();
       const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
       set("orderNo", o ? o.order_no : DK.nextOrderNo());
@@ -5566,14 +5584,25 @@
       if (!Number.isFinite(onHand) || onHand <= 0) return v2Show(orderMsg, "該品項目前沒有可用庫存，無法加入訂單");
       const alreadyInOrder = orderLineItems.filter((l) => l.item_id === itemId).reduce((s, l) => s + (Number(l.qty) || 0), 0);
       if (alreadyInOrder + qty > onHand) return v2Show(orderMsg, "庫存不足：" + item.sku + " 現有 " + onHand + "，明細已選 " + alreadyInOrder + "，再加 " + qty + " 會超過");
-      orderLineItems.push({ item_id: item.id, sku: item.sku, name: item.name, spec: item.spec || "", qty: qty, unit_price: unitPrice });
+      const line = { item_id: item.id, sku: item.sku, name: item.name, spec: item.spec || "", qty: qty, unit_price: unitPrice };
+      if (canPerm("viewCost") && item.cost_unit != null && item.cost_unit !== "") {
+        line.cost_unit = Number(item.cost_unit) || 0;
+      }
+      orderLineItems.push(line);
       renderOrderLineTbody();
       updateOrderTotalsFromLines();
       v2Hide(orderMsg);
     });
     document.getElementById("orderSave")?.addEventListener("click", async () => {
       if (!requirePerm("orders")) return;
+      const saveBtn = document.getElementById("orderSave");
+      if (saveBtn && saveBtn.dataset.saving === "1") return;
+      let savedOk = false;
       try {
+        if (saveBtn) {
+          saveBtn.dataset.saving = "1";
+          saveBtn.disabled = true;
+        }
         const orderNo = String(document.getElementById("orderNo")?.value || "").trim();
         if (!orderNo) { v2Show(orderMsg, "訂單編號必填"); return; }
         if (!orderLineItems.length) { v2Show(orderMsg, "請至少加入一筆明細"); return; }
@@ -5585,6 +5614,7 @@
           order_no: orderNo,
           customer_name: document.getElementById("orderCustomer")?.value || "",
           salesType,
+          total_sale: parseFloat(document.getElementById("orderTotalSale")?.value) || 0,
           shipping_income: parseFloat(document.getElementById("orderShipping")?.value) || 0,
           discount: parseFloat(document.getElementById("orderDiscount")?.value) || 0,
           payment_method: document.getElementById("orderPayment")?.value || "transfer",
@@ -5642,6 +5672,11 @@
         }
         const savedId = (res.data && (res.data.id || (Array.isArray(res.data) ? res.data[0] && res.data[0].id : ""))) || editingV2OrderId || "";
         auditAction(editingV2OrderId ? "編輯訂單" : "新增訂單", savedId);
+        if (res.refreshFailed) {
+          if (!editingV2OrderId && savedId) editingV2OrderId = savedId;
+          v2Show(orderMsg, res.error || "訂單已寫入，但畫面重新載入失敗。請重新整理頁面，不要再按一次儲存。");
+          return;
+        }
         v2Show(orderMsg, (editingV2OrderId ? "已更新（庫存已同步）。" : "已新增並已扣庫存。") + salesTypeHint);
         if (!editingV2OrderId) tryMarkLinkedCustomerAsWon();
         else clearPendingCustomerOrderLink();
@@ -5649,9 +5684,23 @@
         renderV2Orders();
         renderV2Items();
         renderV2Reports();
-        setTimeout(() => { if (orderForm) orderForm.hidden = true; editingV2OrderId = null; v2Hide(orderMsg); }, 800);
+        savedOk = true;
+        setTimeout(() => {
+          if (orderForm) orderForm.hidden = true;
+          editingV2OrderId = null;
+          v2Hide(orderMsg);
+          if (saveBtn) {
+            saveBtn.dataset.saving = "";
+            saveBtn.disabled = false;
+          }
+        }, 800);
       } catch (e) {
         v2Show(orderMsg, String(e && e.message ? e.message : e || "訂單寫入失敗"));
+      } finally {
+        if (saveBtn && !savedOk) {
+          saveBtn.dataset.saving = "";
+          saveBtn.disabled = false;
+        }
       }
     });
 

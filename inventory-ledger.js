@@ -59,8 +59,9 @@
 
   async function refreshFromCloud() {
     if (typeof global.fetchV2DataFromSupabase === "function") {
-      await global.fetchV2DataFromSupabase();
+      return await global.fetchV2DataFromSupabase();
     }
+    return null;
   }
 
   function saveItems(items) {
@@ -624,14 +625,32 @@
     createOrder: function (payload) {
       if (typeof global.stage7CreateOrder !== "function") return Promise.resolve({ ok: false, error: "Stage 7 寫入未載入" });
       return global.stage7CreateOrder(payload).then(async function (res) {
-        if (res && res.ok) await refreshFromCloud();
+        if (!res || !res.ok) return { ok: false, error: rpcError(res), data: res && res.data };
+        const cloud = await refreshFromCloud();
+        if (!cloud) {
+          return {
+            ok: true,
+            refreshFailed: true,
+            data: rpcData(res) || res.data,
+            error: "訂單已寫入雲端，但畫面重新載入失敗。請重新整理頁面，不要再按一次儲存。",
+          };
+        }
         return res;
       });
     },
     updateOrder: function (payload) {
       if (typeof global.stage7UpdateOrder !== "function") return Promise.resolve({ ok: false, error: "Stage 7 寫入未載入" });
       return global.stage7UpdateOrder(payload).then(async function (res) {
-        if (res && res.ok) await refreshFromCloud();
+        if (!res || !res.ok) return { ok: false, error: rpcError(res), data: res && res.data };
+        const cloud = await refreshFromCloud();
+        if (!cloud) {
+          return {
+            ok: true,
+            refreshFailed: true,
+            data: rpcData(res) || res.data,
+            error: "訂單已更新，但畫面重新載入失敗。請重新整理頁面，不要再按一次儲存。",
+          };
+        }
         return res;
       });
     },
