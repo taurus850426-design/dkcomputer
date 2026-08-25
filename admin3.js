@@ -222,6 +222,7 @@
   const tabVendors = document.getElementById("tab-vendors");
   const tabPurchase = document.getElementById("tab-purchase");
   const tabCustomers = document.getElementById("tab-customers");
+  const tabAttendance = document.getElementById("tab-attendance");
   const tabAccounts = document.getElementById("tab-accounts");
 
   // publish
@@ -437,7 +438,7 @@
   }
 
   const ADMIN_TAB_KEY = "dk_admin_tab";
-  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "customers", "accounts"];
+  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "customers", "attendance", "accounts"];
   function switchTab(name) {
     if (!canPerm(name)) {
       requirePerm(name);
@@ -456,6 +457,7 @@
     if (tabVendors) tabVendors.hidden = name !== "vendors";
     if (tabPurchase) tabPurchase.hidden = name !== "purchase";
     if (tabCustomers) tabCustomers.hidden = name !== "customers";
+    if (tabAttendance) tabAttendance.hidden = name !== "attendance";
     if (tabAccounts) tabAccounts.hidden = name !== "accounts";
     if (name === "inv") {
       const doRefresh = () => {
@@ -487,6 +489,11 @@
     }
     if (name === "customers") {
       if (typeof renderCustomerRecordsPage === "function") renderCustomerRecordsPage();
+    }
+    if (name === "attendance") {
+      try {
+        if (typeof window.__dkAttendanceOnShow === "function") window.__dkAttendanceOnShow();
+      } catch (_) {}
     }
     if (name === "accounts") {
       if (typeof renderAccountsPage === "function") renderAccountsPage();
@@ -937,6 +944,7 @@
       (name === "vendors" && tabVendors) ||
       (name === "purchase" && tabPurchase) ||
       (name === "customers" && tabCustomers) ||
+      (name === "attendance" && tabAttendance) ||
       (name === "accounts" && tabAccounts);
     if (fromStorage && VALID_TABS.includes(fromStorage) && hasPanel(fromStorage) && canPerm(fromStorage)) {
       switchTab(fromStorage);
@@ -1089,15 +1097,15 @@
       title: "管理員",
       badge: "完整後台權限",
       intro: "管理員可使用所有後台功能，包括：",
-      allow: ["庫存管理", "流水帳", "訂單", "支出", "報表", "上架管理", "前台管理", "廠商管理", "採購／叫貨單", "客戶紀錄", "帳號管理", "成本／毛利資訊", "刪除操作"],
+      allow: ["庫存管理", "流水帳", "訂單", "支出", "報表", "上架管理", "前台管理", "廠商管理", "採購／叫貨單", "客戶紀錄", "員工打卡", "出勤管理", "出勤稽核", "帳號管理", "成本／毛利資訊", "刪除操作"],
       deny: [],
     },
     staff: {
       title: "員工",
       badge: "日常作業權限",
       intro: "日常作業可用，成本與管理功能不可用。",
-      allow: ["查看庫存", "新增庫存", "編輯庫存", "補貨", "新增訂單", "編輯訂單", "製作報價單", "客戶紀錄", "搜尋／篩選"],
-      deny: ["查看單位成本", "查看成本小計", "查看毛利／毛利率", "查看庫存總成本", "刪除庫存", "刪除訂單", "刪除客戶", "流水帳", "支出", "報表", "上架管理", "前台管理", "廠商管理", "採購／叫貨單", "帳號管理", "網站／同步設定"],
+      allow: ["查看庫存", "新增庫存", "編輯庫存", "補貨", "新增訂單", "編輯訂單", "製作報價單", "客戶紀錄", "員工打卡", "搜尋／篩選"],
+      deny: ["查看單位成本", "查看成本小計", "查看毛利／毛利率", "查看庫存總成本", "刪除庫存", "刪除訂單", "刪除客戶", "流水帳", "支出", "報表", "上架管理", "前台管理", "廠商管理", "採購／叫貨單", "出勤管理", "出勤稽核", "帳號管理", "網站／同步設定"],
     },
   };
   function rolePermChipsHtml(items, kind) {

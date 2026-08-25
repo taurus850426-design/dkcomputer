@@ -4535,3 +4535,41 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
     text-align: left;
   }
 }
+
+/* Stage 11 員工打卡 */
+.att-clock-card{ margin-top: 12px; }
+.att-clock-head{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.att-clock-date,
+.att-clock-user{ font-weight: 700; font-size: 16px; }
+.att-clock-now{ font-weight: 800; font-size: 22px; letter-spacing: 0.02em; }
+.att-stat-grid{
+  display:grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.att-stat{
+  border: 1px solid rgba(17,24,39,0.10);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.72);
+}
+.att-stat-value{ font-weight: 700; margin-top: 4px; }
+.att-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+@media (max-width: 900px){
+  .att-clock-head,
+  .att-stat-grid{ grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px){
+  .att-clock-head,
+  .att-stat-grid{ grid-template-columns: 1fr; }
+}

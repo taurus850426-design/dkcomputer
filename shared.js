@@ -2108,6 +2108,7 @@ const STAFF_ALLOWED_PERMS = {
   orders: true,
   customers: true,
   quoteImage: true,
+  attendance: true,
 };
 const ADMIN_ONLY_PERMS = {
   accounts: true,

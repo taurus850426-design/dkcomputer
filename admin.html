@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260814a3" />
+    <link rel="stylesheet" href="./styles.css?v=20260825att1" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -61,6 +61,7 @@
             <button class="tab" data-tab="vendors" type="button" data-admin-only>廠商管理</button>
             <button class="tab" data-tab="purchase" type="button" data-admin-only>採購／叫貨單</button>
             <button class="tab" data-tab="customers" type="button">客戶紀錄</button>
+            <button class="tab" data-tab="attendance" type="button">員工打卡</button>
             <button class="tab" data-tab="accounts" type="button" data-admin-only>帳號管理</button>
           </div>
 
@@ -1392,6 +1393,168 @@
             </div>
           </section>
 
+          <!-- Stage 11：員工打卡（admin / staff 皆可；出勤管理與稽核僅 admin） -->
+          <section id="tab-attendance" class="card" hidden>
+            <div class="section-head">
+              <div>
+                <h2 class="h2">員工打卡</h2>
+                <p class="muted">時間以 Asia/Taipei 顯示。打卡時刻由伺服器決定，前端不送時間。</p>
+              </div>
+            </div>
+
+            <div class="card att-clock-card">
+              <div class="att-clock-head">
+                <div>
+                  <div class="muted small">今日日期</div>
+                  <div id="attTodayDate" class="att-clock-date">—</div>
+                </div>
+                <div>
+                  <div class="muted small">現在時間</div>
+                  <div id="attNowTime" class="att-clock-now">—</div>
+                </div>
+                <div>
+                  <div class="muted small">登入者</div>
+                  <div id="attUserName" class="att-clock-user">—</div>
+                </div>
+              </div>
+              <div class="att-stat-grid">
+                <div class="att-stat">
+                  <div class="muted small">今日上班時間</div>
+                  <div id="attClockIn" class="att-stat-value">—</div>
+                </div>
+                <div class="att-stat">
+                  <div class="muted small">今日下班時間</div>
+                  <div id="attClockOut" class="att-stat-value">—</div>
+                </div>
+                <div class="att-stat">
+                  <div class="muted small">目前狀態</div>
+                  <div id="attStatus" class="att-stat-value">—</div>
+                </div>
+                <div class="att-stat">
+                  <div class="muted small">今日實際工作時間</div>
+                  <div id="attWorked" class="att-stat-value">—</div>
+                </div>
+              </div>
+              <h3 class="h3" style="margin-top:16px">今日休息紀錄</h3>
+              <div class="table-wrap" style="margin-top:8px">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>開始</th>
+                      <th>結束</th>
+                      <th>時長</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attBreakTbody">
+                    <tr><td colspan="3" class="muted">尚無休息紀錄</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="att-actions">
+                <button id="attBtnClockIn" class="btn btn-primary" type="button">上班打卡</button>
+                <button id="attBtnBreakStart" class="btn btn-ghost" type="button">開始休息</button>
+                <button id="attBtnBreakEnd" class="btn btn-ghost" type="button">結束休息</button>
+                <button id="attBtnClockOut" class="btn btn-ghost" type="button">下班打卡</button>
+              </div>
+              <div id="attMsg" class="muted" style="margin-top:10px" hidden></div>
+            </div>
+
+            <div id="attAdminManage" class="card" style="margin-top:16px" data-admin-only>
+              <div class="section-head">
+                <div>
+                  <h3 class="h3">出勤管理</h3>
+                  <p class="muted">查看所有員工出勤。更正必須填寫理由，並走伺服器校正 RPC。</p>
+                </div>
+              </div>
+              <div class="form-grid" style="margin-top:12px">
+                <div class="field">
+                  <label for="attAdminDate">日期</label>
+                  <input id="attAdminDate" type="date" />
+                </div>
+                <div class="field">
+                  <label for="attAdminEmployee">員工</label>
+                  <select id="attAdminEmployee">
+                    <option value="">全部員工</option>
+                  </select>
+                </div>
+                <div class="field" style="display:flex;align-items:flex-end">
+                  <button id="attAdminRefresh" class="btn btn-ghost" type="button">重新整理</button>
+                </div>
+              </div>
+              <div class="table-wrap" style="margin-top:12px">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>員工</th>
+                      <th>日期</th>
+                      <th>上班時間</th>
+                      <th>下班時間</th>
+                      <th>休息時間</th>
+                      <th>實際工時</th>
+                      <th>狀態</th>
+                      <th style="text-align:right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attAdminTbody">
+                    <tr><td colspan="8" class="muted">尚無資料</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="attCorrectCard" class="card" style="margin-top:14px" hidden>
+                <h3 class="h3">出勤更正</h3>
+                <p class="muted small">修改會寫入伺服器校正紀錄。理由必填。不可直接改出勤資料表。</p>
+                <input type="hidden" id="attCorrectShiftId" value="" />
+                <div class="form-grid" style="margin-top:12px">
+                  <div class="field"><label>員工</label><div id="attCorrectEmployeeLabel" class="muted">—</div></div>
+                  <div class="field"><label for="attCorrectClockIn">上班時間（台北）</label><input id="attCorrectClockIn" type="datetime-local" step="60" /></div>
+                  <div class="field"><label for="attCorrectClockOut">下班時間（台北）</label><input id="attCorrectClockOut" type="datetime-local" step="60" /></div>
+                  <div class="field">
+                    <label for="attCorrectBreakId">休息紀錄</label>
+                    <select id="attCorrectBreakId">
+                      <option value="">不更正休息</option>
+                    </select>
+                  </div>
+                  <div class="field"><label for="attCorrectBreakStart">休息開始（台北）</label><input id="attCorrectBreakStart" type="datetime-local" step="60" /></div>
+                  <div class="field"><label for="attCorrectBreakEnd">休息結束（台北）</label><input id="attCorrectBreakEnd" type="datetime-local" step="60" /></div>
+                  <div class="field full">
+                    <label for="attCorrectReason">修改理由（必填）</label>
+                    <input id="attCorrectReason" type="text" maxlength="200" placeholder="例如：忘記打卡、系統中斷" />
+                  </div>
+                  <div class="full actions">
+                    <button id="attCorrectSubmit" class="btn btn-primary" type="button">送出更正</button>
+                    <button id="attCorrectCancel" class="btn btn-ghost" type="button">取消</button>
+                  </div>
+                </div>
+                <div id="attCorrectMsg" class="muted" style="margin-top:8px" hidden></div>
+              </div>
+            </div>
+
+            <div id="attAdminAudit" class="card" style="margin-top:16px" data-admin-only>
+              <div class="section-head">
+                <div>
+                  <h3 class="h3">出勤稽核</h3>
+                  <p class="muted">attendance_audit_logs，僅管理員可讀。</p>
+                </div>
+              </div>
+              <div class="table-wrap" style="margin-top:10px">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>時間</th>
+                      <th>操作者</th>
+                      <th>員工</th>
+                      <th>action</th>
+                      <th>reason</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attAuditTbody">
+                    <tr><td colspan="5" class="muted">尚無稽核紀錄</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
           <!-- 帳號管理（僅管理員） -->
           <section id="tab-accounts" class="card" hidden data-admin-only>
             <div class="section-head" style="margin-bottom: 10px">
@@ -1510,14 +1673,15 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260825oh1"></script>
+    <script src="./shared.js?v=20260825att1"></script>
     <script src="./inventory-ledger.js?v=20260825oh1"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260825oh1"></script>
+    <script src="./admin3.js?v=20260825att1"></script>
     <script src="./purchase-orders.js?v=20260815s5a"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./attendance.js?v=20260825att1"></script>
   </body>
 </html>
 
