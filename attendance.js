@@ -373,25 +373,62 @@
   /**
    * Try COMPANY_NETWORK punch via Edge.
    * Returns { ok:true, data } on success.
-   * Returns { ok:false, soft:true } when network path unavailable → caller may GPS fallback.
+   * Returns { ok:false, soft:true, diag } when network path unavailable → caller may GPS fallback.
    * Throws only when network matched but RPC failed (should not silently GPS-duplicate).
    */
+  function formatNetworkDiag(net) {
+    if (!net) return "公司網路：無回應";
+    const parts = [];
+    if (net.status != null) parts.push("http=" + net.status);
+    if (net.code) parts.push("code=" + net.code);
+    if (net.network_ok === true) parts.push("network_ok=true");
+    if (net.network_ok === false) parts.push("network_ok=false");
+    if (net.server_seen_ip) parts.push("seen_ip=" + net.server_seen_ip);
+    if (net.allow_count != null) parts.push("allow_count=" + net.allow_count);
+    if (net.error) parts.push("err=" + String(net.error).slice(0, 120));
+    return parts.length ? parts.join("｜") : "公司網路：未知失敗";
+  }
+
   async function tryCompanyNetworkPunch(punchKind) {
     try {
       const res = await callAttendanceNetworkEdge({ action: "punch", punch: punchKind });
       const d = res.data || {};
+      const diag = {
+        status: res.status,
+        httpOk: res.httpOk,
+        code: d.code || (res.httpOk ? "" : "http_" + res.status),
+        network_ok: d.network_ok,
+        server_seen_ip: d.server_seen_ip || "",
+        allow_count: d.allow_count,
+        error: d.error || d.message || "",
+        raw_allowed_type: d.raw_allowed_type || "",
+      };
       if (d.ok === true && d.network_ok === true) {
-        return { ok: true, data: d };
+        return { ok: true, data: d, diag: diag };
       }
       if (d.network_ok === true && d.code === "rpc_failed") {
-        throw new Error(d.error || "公司網路打卡失敗");
+        const err = new Error(d.error || "公司網路打卡失敗");
+        err._attNetDiag = diag;
+        throw err;
       }
-      return { ok: false, soft: true, code: d.code || "network_unavailable", error: d.error || "" };
+      return {
+        ok: false,
+        soft: true,
+        code: diag.code || "network_unavailable",
+        error: diag.error || "",
+        diag: diag,
+      };
     } catch (e) {
-      // Edge not deployed / network error → soft fallback to GPS
+      if (e && e._attNetDiag) throw e;
       const msg = String((e && e.message) || e || "");
       if (/公司網路打卡失敗/.test(msg)) throw e;
-      return { ok: false, soft: true, code: "edge_unavailable", error: msg };
+      return {
+        ok: false,
+        soft: true,
+        code: "edge_unavailable",
+        error: msg,
+        diag: { status: null, code: "edge_unavailable", error: msg },
+      };
     }
   }
 
@@ -967,6 +1004,7 @@
     setButtons({ canClockIn: false, canBreakStart: false, canBreakEnd: false, canClockOut: false });
     showMsg($("attMsg"), "驗證公司網路中…", false);
     setLocStatus("驗證公司網路中…", "busy");
+    let networkDiagText = "";
     try {
       const punchKind = GPS_RPC_TO_PUNCH[fnName];
       if (punchKind) {
@@ -984,10 +1022,13 @@
         if (net && !net.soft && net.error) {
           throw new Error(net.error);
         }
+        networkDiagText = formatNetworkDiag(net && net.diag ? net.diag : net);
+        setLocStatus("公司網路未通過 → 改試 GPS。 " + networkDiagText, "busy");
+        showMsg($("attMsg"), "公司網路未通過，改試 GPS定位…（" + networkDiagText + "）", false);
       }
 
-      showMsg($("attMsg"), "定位中…", false);
-      setLocStatus("定位中…", "busy");
+      showMsg($("attMsg"), (networkDiagText ? "公司網路未通過（" + networkDiagText + "）。" : "") + "定位中…", false);
+      setLocStatus(networkDiagText ? "公司網路未通過 → 定位中… " + networkDiagText : "定位中…", "busy");
       const geo = await getCurrentPositionOnce();
       pendingGpsPreview = geo;
       let uxHint = "";
@@ -1024,7 +1065,12 @@
       showMsg($("attMsg"), okText, false);
       playSuccessFeedback();
     } catch (e) {
-      const msg = e && (e.code === 1 || e.code === 2 || e.code === 3) ? mapGeoError(e) : mapRpcError(e);
+      let msg = e && (e.code === 1 || e.code === 2 || e.code === 3) ? mapGeoError(e) : mapRpcError(e);
+      if (e && e._attNetDiag) {
+        msg = "公司網路 RPC 失敗：" + formatNetworkDiag(e._attNetDiag) + "。 " + msg;
+      } else if (networkDiagText) {
+        msg = "公司網路未通過（" + networkDiagText + "）。GPS：" + msg;
+      }
       showMsg($("attMsg"), msg, true);
       setLocStatus("打卡未完成", "err");
       renderClockFace();

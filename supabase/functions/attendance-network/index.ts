@@ -77,14 +77,34 @@ function extractClientPublicIp(req: Request): string | null {
 }
 
 function normalizeIpList(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
   const out: string[] = [];
-  for (const item of raw) {
-    const s = String(item ?? "").trim();
-    if (!s) continue;
+  const pushOne = (item: unknown) => {
+    let s = String(item ?? "").trim();
+    if (!s) return;
+    // Postgres array text: {a,b} or {"a","b"}
+    if (s.startsWith("{") && s.endsWith("}") && !s.includes(":")) {
+      const inner = s.slice(1, -1);
+      inner.split(",").forEach((part) => pushOne(part.replace(/^"|"$/g, "").trim()));
+      return;
+    }
+    s = s.replace(/^"|"$/g, "").trim();
     // inet may serialize as "x.x.x.x" or "x.x.x.x/32"
     const host = s.includes("/") ? s.split("/")[0] : s;
     if (isValidIp(host)) out.push(host);
+  };
+
+  if (raw == null) return out;
+  if (Array.isArray(raw)) {
+    raw.forEach(pushOne);
+    return out;
+  }
+  if (typeof raw === "string") {
+    pushOne(raw);
+    return out;
+  }
+  // Rare: { "0": "1.2.3.4" } style
+  if (typeof raw === "object") {
+    Object.values(raw as Record<string, unknown>).forEach(pushOne);
   }
   return out;
 }
@@ -92,6 +112,45 @@ function normalizeIpList(raw: unknown): string[] {
 function ipAllowed(clientIp: string, allow: string[]): boolean {
   const c = clientIp.toLowerCase();
   return allow.some((a) => a.toLowerCase() === c);
+}
+
+function firstEnv(names: string[]): string {
+  for (const name of names) {
+    const v = Deno.env.get(name);
+    if (v == null) continue;
+    const t = String(v).trim();
+    if (!t) continue;
+    if (t.startsWith("[")) {
+      try {
+        const arr = JSON.parse(t);
+        if (Array.isArray(arr)) {
+          for (const item of arr) {
+            if (typeof item === "string" && item.trim()) return item.trim();
+            if (item && typeof item === "object" && typeof (item as { key?: string }).key === "string") {
+              const k = String((item as { key: string }).key).trim();
+              if (k) return k;
+            }
+          }
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+    if (t.startsWith("{") && t.includes(":")) {
+      try {
+        const obj = JSON.parse(t);
+        if (obj && typeof obj === "object") {
+          for (const val of Object.values(obj)) {
+            if (typeof val === "string" && val.trim()) return val.trim();
+          }
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+    return t;
+  }
+  return "";
 }
 
 Deno.serve(async (req: Request) => {
@@ -102,18 +161,27 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "method not allowed" }, 405);
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const anonKey =
-    Deno.env.get("SUPABASE_ANON_KEY") ??
-    Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ??
-    "";
-  const serviceKey =
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-    Deno.env.get("SUPABASE_SECRET_KEY") ??
-    "";
+  const supabaseUrl = firstEnv(["SUPABASE_URL"]);
+  const anonKey = firstEnv([
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_PUBLISHABLE_KEY",
+    "SUPABASE_PUBLISHABLE_KEYS",
+  ]);
+  const serviceKey = firstEnv([
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_SECRET_KEY",
+    "SUPABASE_SECRET_KEYS",
+  ]);
 
   if (!supabaseUrl || !anonKey || !serviceKey) {
-    return json({ ok: false, error: "edge misconfigured" }, 500);
+    return json({
+      ok: false,
+      error: "edge misconfigured",
+      code: "edge_misconfigured",
+      has_url: !!supabaseUrl,
+      has_anon: !!anonKey,
+      has_service: !!serviceKey,
+    }, 500);
   }
 
   const authHeader = req.headers.get("Authorization") ?? "";
@@ -223,6 +291,7 @@ Deno.serve(async (req: Request) => {
         network_ok: false,
         code: "ip_unavailable",
         error: "unable to determine client ip",
+        server_seen_ip: null,
       });
     }
 
@@ -236,15 +305,18 @@ Deno.serve(async (req: Request) => {
         ok: false,
         network_ok: false,
         code: "settings_missing",
-        error: "settings missing",
+        error: setErr && setErr.message ? setErr.message : "settings missing",
+        server_seen_ip: seenIp,
       });
     }
-    if (settings.network_enabled !== true) {
+    if (settings.network_enabled !== true && settings.network_enabled !== "true") {
       return json({
         ok: false,
         network_ok: false,
         code: "network_disabled",
         error: "company network not enabled",
+        server_seen_ip: seenIp,
+        network_enabled: settings.network_enabled,
       });
     }
     const allow = normalizeIpList(settings.allowed_public_ips);
@@ -254,7 +326,15 @@ Deno.serve(async (req: Request) => {
         network_ok: false,
         code: "network_mismatch",
         error: "not on company network",
-        // Do not echo allowlist to non-admin clients.
+        server_seen_ip: seenIp,
+        allow_count: allow.length,
+        // Safe diagnostics only (IPs already known to admin settings).
+        allowed_public_ips: allow,
+        raw_allowed_type: settings.allowed_public_ips == null
+          ? "null"
+          : Array.isArray(settings.allowed_public_ips)
+          ? "array"
+          : typeof settings.allowed_public_ips,
       });
     }
 
@@ -268,6 +348,8 @@ Deno.serve(async (req: Request) => {
         network_ok: true,
         code: "rpc_failed",
         error: error.message || "company network punch failed",
+        server_seen_ip: seenIp,
+        rpc: rpcName,
       }, 400);
     }
     return json({
@@ -279,5 +361,5 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  return json({ ok: false, error: "unknown action" }, 400);
+  return json({ ok: false, error: "unknown action", code: "unknown_action" }, 400);
 });
