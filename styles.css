@@ -4565,6 +4565,55 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
   gap: 8px;
   margin-top: 14px;
 }
+.att-loc-status{ font-size: 13px; line-height: 1.5; }
+.att-loc-ok{ color: #166534; }
+.att-loc-err{ color: var(--danger, #c00); }
+.att-loc-busy{ color: #854d0e; }
+.att-print-root{
+  margin-top: 16px;
+  border: 1px dashed rgba(17,24,39,0.18);
+  padding: 12px;
+  background: #fff;
+}
+.att-print-doc h1{
+  margin: 0 0 4px;
+  font-size: 22px;
+  text-align: center;
+}
+.att-print-doc h2{
+  margin: 0 0 12px;
+  font-size: 16px;
+  text-align: center;
+  font-weight: 600;
+}
+.att-print-meta{
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.att-print-table{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.att-print-table th,
+.att-print-table td{
+  border: 1px solid #333;
+  padding: 4px 6px;
+  text-align: left;
+}
+.att-print-table th{ background: #f3f3f3; font-weight: 700; }
+.att-print-summary{
+  margin-top: 14px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.att-print-sign{
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  font-size: 13px;
+}
 @media (max-width: 900px){
   .att-clock-head,
   .att-stat-grid{ grid-template-columns: 1fr 1fr; }
@@ -4572,4 +4621,30 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
 @media (max-width: 560px){
   .att-clock-head,
   .att-stat-grid{ grid-template-columns: 1fr; }
+}
+
+@media print{
+  @page{ size: A4; margin: 12mm; }
+  body.att-printing *{ visibility: hidden !important; }
+  body.att-printing #attPrintRoot,
+  body.att-printing #attPrintRoot *{ visibility: visible !important; }
+  body.att-printing #attPrintRoot{
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: #fff;
+    display: block !important;
+  }
+  body.att-printing .att-print-root[hidden]{ display: block !important; }
+  body.att-printing .admin-shell .tabs,
+  body.att-printing .admin-head,
+  body.att-printing #loginCard,
+  body.att-printing #authBootCard,
+  body.att-printing .btn,
+  body.att-printing button{ display: none !important; }
+  body.att-printing .att-print-table th{ background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

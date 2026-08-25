@@ -10,6 +10,7 @@
 --
 -- 使用方式：只複製「一個」SECTION，刪除該區包圍的 /* 與 */ 後執行。
 -- 建議順序：PREFLIGHT → M0_SCHEMA → M1_RLS → M2_RPC → M3_VERIFY
+--            → M4_LOCATION → M4_LOCATION_VERIFY
 -- ROLLBACK 僅在需要撤 Stage 11 時使用。
 --
 -- 禁止：
@@ -1482,6 +1483,803 @@ ORDER BY 1;
 
 
 -- ============================================================
+-- SECTION M4_LOCATION
+-- Stage 11-4：公司地點 gate。不碰 site_config / Stage 7 / profiles schema。
+-- 取代無參數 clock/break RPC；執行後、前端尚未部署前，舊打卡呼叫會失敗（預期）。
+-- Admin correction 不要求 GPS。
+-- 請複製本 SECTION（從下一行到 M4_LOCATION END）單獨執行。
+-- ============================================================
+/*
+
+DO $$
+BEGIN
+  IF to_regclass('public.attendance_shifts') IS NULL
+     OR to_regclass('public.attendance_breaks') IS NULL
+     OR to_regclass('public.attendance_audit_logs') IS NULL
+  THEN
+    RAISE EXCEPTION 'M4_LOCATION blocked: Stage 11 tables missing. Run M0_SCHEMA first.';
+  END IF;
+  IF to_regprocedure('public.attendance_clock_in()') IS NULL
+     AND to_regprocedure('public.attendance_clock_in(double precision, double precision, double precision)') IS NULL
+  THEN
+    RAISE EXCEPTION 'M4_LOCATION blocked: attendance_clock_in missing. Run M2_RPC first.';
+  END IF;
+  IF to_regprocedure('public.is_admin()') IS NULL
+     OR to_regprocedure('public.dk_require_backoffice()') IS NULL
+  THEN
+    RAISE EXCEPTION 'M4_LOCATION blocked: is_admin / dk_require_backoffice missing.';
+  END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS public.attendance_settings (
+  id smallint PRIMARY KEY CHECK (id = 1),
+  location_enabled boolean NOT NULL DEFAULT true,
+  latitude double precision NULL,
+  longitude double precision NULL,
+  radius_meters numeric NOT NULL DEFAULT 150,
+  max_accuracy_meters numeric NOT NULL DEFAULT 80,
+  updated_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
+  updated_by uuid NULL REFERENCES public.profiles(id) ON DELETE SET NULL,
+  CONSTRAINT attendance_settings_lat_ck
+    CHECK (latitude IS NULL OR (latitude >= -90 AND latitude <= 90)),
+  CONSTRAINT attendance_settings_lng_ck
+    CHECK (longitude IS NULL OR (longitude >= -180 AND longitude <= 180)),
+  CONSTRAINT attendance_settings_radius_ck
+    CHECK (radius_meters > 0 AND radius_meters <= 50000),
+  CONSTRAINT attendance_settings_accuracy_ck
+    CHECK (max_accuracy_meters > 0 AND max_accuracy_meters <= 50000),
+  CONSTRAINT attendance_settings_coords_pair_ck
+    CHECK ((latitude IS NULL) = (longitude IS NULL))
+);
+
+COMMENT ON TABLE public.attendance_settings IS 'Stage 11-4 singleton company location gate; not site_config; GPS is client-provided and not cryptographically trusted';
+COMMENT ON COLUMN public.attendance_settings.location_enabled IS 'true=must pass server geo check; false=admin explicitly disables gate; true+null coords=reject punch';
+
+INSERT INTO public.attendance_settings (id, location_enabled, latitude, longitude, radius_meters, max_accuracy_meters)
+VALUES (1, true, NULL, NULL, 150, 80)
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE public.attendance_settings ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.attendance_settings FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON TABLE public.attendance_settings TO authenticated;
+
+DROP POLICY IF EXISTS attendance_settings_select_backoffice ON public.attendance_settings;
+CREATE POLICY attendance_settings_select_backoffice
+  ON public.attendance_settings
+  FOR SELECT
+  TO authenticated
+  USING (public.is_enabled_backoffice_user());
+
+ALTER TABLE public.attendance_audit_logs
+  ADD COLUMN IF NOT EXISTS location_verified boolean NULL,
+  ADD COLUMN IF NOT EXISTS distance_meters numeric NULL,
+  ADD COLUMN IF NOT EXISTS accuracy_meters numeric NULL;
+
+CREATE OR REPLACE FUNCTION public.dk_attendance_haversine_meters(
+  p_lat1 double precision,
+  p_lng1 double precision,
+  p_lat2 double precision,
+  p_lng2 double precision
+)
+RETURNS numeric
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+SET search_path = ''
+AS $$
+  SELECT (
+    6371000.0 * 2.0 * pg_catalog.asin(pg_catalog.sqrt(
+      pg_catalog.power(pg_catalog.sin(pg_catalog.radians(p_lat2 - p_lat1) / 2.0), 2)
+      + pg_catalog.cos(pg_catalog.radians(p_lat1))
+        * pg_catalog.cos(pg_catalog.radians(p_lat2))
+        * pg_catalog.power(pg_catalog.sin(pg_catalog.radians(p_lng2 - p_lng1) / 2.0), 2)
+    ))
+  )::numeric;
+$$;
+
+CREATE OR REPLACE FUNCTION public.dk_attendance_assert_location(
+  p_latitude double precision,
+  p_longitude double precision,
+  p_accuracy double precision
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_set public.attendance_settings%ROWTYPE;
+  v_dist numeric;
+BEGIN
+  SELECT * INTO v_set FROM public.attendance_settings s WHERE s.id = 1;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'location not configured';
+  END IF;
+
+  IF v_set.location_enabled IS NOT TRUE THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'location_verified', false,
+      'distance_meters', NULL,
+      'accuracy_meters', p_accuracy,
+      'gate', 'disabled'
+    );
+  END IF;
+
+  IF v_set.latitude IS NULL OR v_set.longitude IS NULL THEN
+    RAISE EXCEPTION 'location not configured';
+  END IF;
+
+  IF p_latitude IS NULL OR p_longitude IS NULL OR p_accuracy IS NULL THEN
+    RAISE EXCEPTION 'location required';
+  END IF;
+  IF p_latitude < -90 OR p_latitude > 90 OR p_longitude < -180 OR p_longitude > 180 THEN
+    RAISE EXCEPTION 'invalid location';
+  END IF;
+  IF p_accuracy < 0 THEN
+    RAISE EXCEPTION 'invalid location';
+  END IF;
+  IF p_accuracy > v_set.max_accuracy_meters THEN
+    RAISE EXCEPTION 'accuracy too poor';
+  END IF;
+
+  v_dist := public.dk_attendance_haversine_meters(
+    v_set.latitude, v_set.longitude, p_latitude, p_longitude
+  );
+  IF v_dist IS NULL OR v_dist > v_set.radius_meters THEN
+    RAISE EXCEPTION 'outside company range';
+  END IF;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'location_verified', true,
+    'distance_meters', pg_catalog.round(v_dist, 1),
+    'accuracy_meters', pg_catalog.round(p_accuracy::numeric, 1),
+    'gate', 'ok'
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.dk_attendance_haversine_meters(double precision, double precision, double precision, double precision) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.dk_attendance_assert_location(double precision, double precision, double precision) FROM PUBLIC, anon, authenticated;
+
+DROP FUNCTION IF EXISTS public.dk_attendance_write_audit(uuid, uuid, uuid, text, text, jsonb, jsonb);
+CREATE OR REPLACE FUNCTION public.dk_attendance_write_audit(
+  p_actor uuid,
+  p_employee uuid,
+  p_shift uuid,
+  p_action text,
+  p_reason text,
+  p_before jsonb,
+  p_after jsonb,
+  p_location_verified boolean DEFAULT NULL,
+  p_distance_meters numeric DEFAULT NULL,
+  p_accuracy_meters numeric DEFAULT NULL
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  INSERT INTO public.attendance_audit_logs (
+    actor_user_id, employee_id, shift_id, action, reason, before_snapshot, after_snapshot,
+    location_verified, distance_meters, accuracy_meters, created_at
+  ) VALUES (
+    p_actor, p_employee, p_shift, p_action, p_reason, p_before, p_after,
+    p_location_verified, p_distance_meters, p_accuracy_meters, pg_catalog.now()
+  );
+END;
+$$;
+REVOKE ALL ON FUNCTION public.dk_attendance_write_audit(uuid, uuid, uuid, text, text, jsonb, jsonb, boolean, numeric, numeric) FROM PUBLIC, anon, authenticated;
+
+DROP FUNCTION IF EXISTS public.attendance_clock_in();
+CREATE OR REPLACE FUNCTION public.attendance_clock_in(
+  p_latitude double precision,
+  p_longitude double precision,
+  p_accuracy double precision
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_role text;
+  v_uid uuid;
+  v_shift_id uuid;
+  v_now timestamptz;
+  v_after jsonb;
+  v_loc jsonb;
+BEGIN
+  v_role := public.dk_require_backoffice();
+  v_uid := (SELECT auth.uid());
+  v_now := pg_catalog.now();
+  v_loc := public.dk_attendance_assert_location(p_latitude, p_longitude, p_accuracy);
+
+  PERFORM 1 FROM public.profiles p WHERE p.id = v_uid FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'permission denied' USING ERRCODE = '42501';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.attendance_shifts s
+    WHERE s.employee_id = v_uid AND s.clock_out_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'open shift already exists';
+  END IF;
+
+  INSERT INTO public.attendance_shifts (
+    employee_id, clock_in_at, clock_out_at, status, source, created_by, updated_by
+  ) VALUES (
+    v_uid, v_now, NULL, 'open', 'staff_rpc', v_uid, v_uid
+  )
+  RETURNING id INTO v_shift_id;
+
+  v_after := public.dk_attendance_shift_snapshot(v_shift_id);
+  PERFORM public.dk_attendance_write_audit(
+    v_uid, v_uid, v_shift_id, 'CLOCK_IN', NULL, NULL, v_after,
+    (v_loc->>'location_verified')::boolean,
+    (v_loc->>'distance_meters')::numeric,
+    (v_loc->>'accuracy_meters')::numeric
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'ok', true,
+    'id', v_shift_id,
+    'status', 'open',
+    'clock_in_at', v_now,
+    'location_verified', v_loc->'location_verified',
+    'distance_meters', v_loc->'distance_meters',
+    'accuracy_meters', v_loc->'accuracy_meters'
+  );
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.attendance_clock_out();
+CREATE OR REPLACE FUNCTION public.attendance_clock_out(
+  p_latitude double precision,
+  p_longitude double precision,
+  p_accuracy double precision
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_role text;
+  v_uid uuid;
+  v_shift public.attendance_shifts%ROWTYPE;
+  v_now timestamptz;
+  v_before jsonb;
+  v_after jsonb;
+  v_loc jsonb;
+BEGIN
+  v_role := public.dk_require_backoffice();
+  v_uid := (SELECT auth.uid());
+  v_now := pg_catalog.now();
+  v_loc := public.dk_attendance_assert_location(p_latitude, p_longitude, p_accuracy);
+
+  SELECT * INTO v_shift
+  FROM public.attendance_shifts s
+  WHERE s.employee_id = v_uid AND s.clock_out_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'no open shift';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.attendance_breaks b
+    WHERE b.shift_id = v_shift.id AND b.break_end_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'open break exists';
+  END IF;
+
+  IF v_now < v_shift.clock_in_at THEN
+    RAISE EXCEPTION 'invalid clock range';
+  END IF;
+
+  v_before := public.dk_attendance_shift_snapshot(v_shift.id);
+
+  UPDATE public.attendance_shifts
+  SET clock_out_at = v_now,
+      status = 'closed',
+      updated_by = v_uid
+  WHERE id = v_shift.id;
+
+  v_after := public.dk_attendance_shift_snapshot(v_shift.id);
+  PERFORM public.dk_attendance_write_audit(
+    v_uid, v_uid, v_shift.id, 'CLOCK_OUT', NULL, v_before, v_after,
+    (v_loc->>'location_verified')::boolean,
+    (v_loc->>'distance_meters')::numeric,
+    (v_loc->>'accuracy_meters')::numeric
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'ok', true,
+    'id', v_shift.id,
+    'status', 'closed',
+    'clock_out_at', v_now,
+    'location_verified', v_loc->'location_verified',
+    'distance_meters', v_loc->'distance_meters',
+    'accuracy_meters', v_loc->'accuracy_meters'
+  );
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.attendance_break_start();
+CREATE OR REPLACE FUNCTION public.attendance_break_start(
+  p_latitude double precision,
+  p_longitude double precision,
+  p_accuracy double precision
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_role text;
+  v_uid uuid;
+  v_shift public.attendance_shifts%ROWTYPE;
+  v_break_id uuid;
+  v_now timestamptz;
+  v_before jsonb;
+  v_after jsonb;
+  v_loc jsonb;
+BEGIN
+  v_role := public.dk_require_backoffice();
+  v_uid := (SELECT auth.uid());
+  v_now := pg_catalog.now();
+  v_loc := public.dk_attendance_assert_location(p_latitude, p_longitude, p_accuracy);
+
+  SELECT * INTO v_shift
+  FROM public.attendance_shifts s
+  WHERE s.employee_id = v_uid AND s.clock_out_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'no open shift';
+  END IF;
+  IF v_shift.status IS DISTINCT FROM 'open' THEN
+    RAISE EXCEPTION 'shift closed';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.attendance_breaks b
+    WHERE b.shift_id = v_shift.id AND b.break_end_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'open break already exists';
+  END IF;
+
+  IF v_now < v_shift.clock_in_at THEN
+    RAISE EXCEPTION 'invalid break range';
+  END IF;
+
+  v_before := public.dk_attendance_shift_snapshot(v_shift.id);
+
+  INSERT INTO public.attendance_breaks (
+    shift_id, employee_id, break_start_at, break_end_at
+  ) VALUES (
+    v_shift.id, v_uid, v_now, NULL
+  )
+  RETURNING id INTO v_break_id;
+
+  v_after := public.dk_attendance_shift_snapshot(v_shift.id);
+  PERFORM public.dk_attendance_write_audit(
+    v_uid, v_uid, v_shift.id, 'BREAK_START', NULL, v_before, v_after,
+    (v_loc->>'location_verified')::boolean,
+    (v_loc->>'distance_meters')::numeric,
+    (v_loc->>'accuracy_meters')::numeric
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'ok', true,
+    'id', v_break_id,
+    'shift_id', v_shift.id,
+    'break_start_at', v_now,
+    'location_verified', v_loc->'location_verified',
+    'distance_meters', v_loc->'distance_meters',
+    'accuracy_meters', v_loc->'accuracy_meters'
+  );
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.attendance_break_end();
+CREATE OR REPLACE FUNCTION public.attendance_break_end(
+  p_latitude double precision,
+  p_longitude double precision,
+  p_accuracy double precision
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_role text;
+  v_uid uuid;
+  v_break public.attendance_breaks%ROWTYPE;
+  v_now timestamptz;
+  v_before jsonb;
+  v_after jsonb;
+  v_loc jsonb;
+BEGIN
+  v_role := public.dk_require_backoffice();
+  v_uid := (SELECT auth.uid());
+  v_now := pg_catalog.now();
+  v_loc := public.dk_attendance_assert_location(p_latitude, p_longitude, p_accuracy);
+
+  SELECT * INTO v_break
+  FROM public.attendance_breaks b
+  WHERE b.employee_id = v_uid AND b.break_end_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'no open break';
+  END IF;
+
+  PERFORM 1 FROM public.attendance_shifts s
+  WHERE s.id = v_break.shift_id AND s.employee_id = v_uid AND s.clock_out_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'no open shift';
+  END IF;
+
+  IF v_now < v_break.break_start_at THEN
+    RAISE EXCEPTION 'invalid break range';
+  END IF;
+
+  v_before := public.dk_attendance_shift_snapshot(v_break.shift_id);
+
+  UPDATE public.attendance_breaks
+  SET break_end_at = v_now
+  WHERE id = v_break.id;
+
+  v_after := public.dk_attendance_shift_snapshot(v_break.shift_id);
+  PERFORM public.dk_attendance_write_audit(
+    v_uid, v_uid, v_break.shift_id, 'BREAK_END', NULL, v_before, v_after,
+    (v_loc->>'location_verified')::boolean,
+    (v_loc->>'distance_meters')::numeric,
+    (v_loc->>'accuracy_meters')::numeric
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'ok', true,
+    'id', v_break.id,
+    'shift_id', v_break.shift_id,
+    'break_end_at', v_now,
+    'location_verified', v_loc->'location_verified',
+    'distance_meters', v_loc->'distance_meters',
+    'accuracy_meters', v_loc->'accuracy_meters'
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.attendance_admin_save_location(
+  p_enabled boolean,
+  p_latitude double precision,
+  p_longitude double precision,
+  p_radius_meters numeric,
+  p_max_accuracy_meters numeric
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_role text;
+  v_uid uuid;
+BEGIN
+  v_role := public.dk_require_backoffice();
+  IF v_role IS DISTINCT FROM 'admin' OR NOT public.is_admin() THEN
+    RAISE EXCEPTION 'admin only' USING ERRCODE = '42501';
+  END IF;
+  v_uid := (SELECT auth.uid());
+
+  IF p_enabled IS NULL THEN
+    RAISE EXCEPTION 'enabled required';
+  END IF;
+  IF p_radius_meters IS NULL OR p_radius_meters <= 0 THEN
+    RAISE EXCEPTION 'invalid radius';
+  END IF;
+  IF p_max_accuracy_meters IS NULL OR p_max_accuracy_meters <= 0 THEN
+    RAISE EXCEPTION 'invalid max accuracy';
+  END IF;
+  IF p_enabled IS TRUE THEN
+    IF p_latitude IS NULL OR p_longitude IS NULL THEN
+      RAISE EXCEPTION 'location not configured';
+    END IF;
+  END IF;
+  IF p_latitude IS NOT NULL AND (p_latitude < -90 OR p_latitude > 90) THEN
+    RAISE EXCEPTION 'invalid location';
+  END IF;
+  IF p_longitude IS NOT NULL AND (p_longitude < -180 OR p_longitude > 180) THEN
+    RAISE EXCEPTION 'invalid location';
+  END IF;
+  IF (p_latitude IS NULL) IS DISTINCT FROM (p_longitude IS NULL) THEN
+    RAISE EXCEPTION 'invalid location';
+  END IF;
+
+  INSERT INTO public.attendance_settings (
+    id, location_enabled, latitude, longitude, radius_meters, max_accuracy_meters, updated_at, updated_by
+  ) VALUES (
+    1, p_enabled, p_latitude, p_longitude, p_radius_meters, p_max_accuracy_meters, pg_catalog.now(), v_uid
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    location_enabled = EXCLUDED.location_enabled,
+    latitude = EXCLUDED.latitude,
+    longitude = EXCLUDED.longitude,
+    radius_meters = EXCLUDED.radius_meters,
+    max_accuracy_meters = EXCLUDED.max_accuracy_meters,
+    updated_at = pg_catalog.now(),
+    updated_by = v_uid;
+
+  RETURN pg_catalog.jsonb_build_object('ok', true, 'location_enabled', p_enabled);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.attendance_clock_in(double precision, double precision, double precision) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.attendance_clock_in(double precision, double precision, double precision) TO authenticated;
+REVOKE ALL ON FUNCTION public.attendance_clock_out(double precision, double precision, double precision) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.attendance_clock_out(double precision, double precision, double precision) TO authenticated;
+REVOKE ALL ON FUNCTION public.attendance_break_start(double precision, double precision, double precision) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.attendance_break_start(double precision, double precision, double precision) TO authenticated;
+REVOKE ALL ON FUNCTION public.attendance_break_end(double precision, double precision, double precision) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.attendance_break_end(double precision, double precision, double precision) TO authenticated;
+REVOKE ALL ON FUNCTION public.attendance_admin_save_location(boolean, double precision, double precision, numeric, numeric) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.attendance_admin_save_location(boolean, double precision, double precision, numeric, numeric) TO authenticated;
+
+*/
+
+-- M4_LOCATION END
+
+
+-- ============================================================
+-- SECTION M4_LOCATION_VERIFY
+-- 只讀。確認 location gate 在 server RPC，而非只靠 client。
+-- 請複製本 SECTION（從下一行到 M4_LOCATION_VERIFY END）單獨執行。
+-- ============================================================
+/*
+
+SELECT 1 AS seq, 'table.attendance_settings' AS check_name,
+       (to_regclass('public.attendance_settings') IS NOT NULL)::text AS actual, 'true' AS expected,
+       CASE WHEN to_regclass('public.attendance_settings') IS NOT NULL THEN 'PASS' ELSE 'FAIL' END AS verdict
+UNION ALL SELECT 2, 'rls.settings_enabled',
+       (
+         SELECT c.relrowsecurity::text FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = 'attendance_settings'
+       ), 'true',
+       CASE WHEN EXISTS (
+         SELECT 1 FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = 'attendance_settings' AND c.relrowsecurity
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 3, 'grant.settings_anon_or_public',
+       (
+         SELECT COUNT(*)::text FROM information_schema.role_table_grants
+         WHERE table_schema = 'public' AND table_name = 'attendance_settings'
+           AND grantee IN ('PUBLIC','anon')
+       ), '0',
+       CASE WHEN NOT EXISTS (
+         SELECT 1 FROM information_schema.role_table_grants
+         WHERE table_schema = 'public' AND table_name = 'attendance_settings'
+           AND grantee IN ('PUBLIC','anon')
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 4, 'grant.settings_authenticated_write',
+       (
+         SELECT COUNT(*)::text FROM information_schema.role_table_grants
+         WHERE table_schema = 'public' AND table_name = 'attendance_settings'
+           AND grantee = 'authenticated'
+           AND privilege_type IN ('INSERT','UPDATE','DELETE','TRUNCATE')
+       ), '0',
+       CASE WHEN NOT EXISTS (
+         SELECT 1 FROM information_schema.role_table_grants
+         WHERE table_schema = 'public' AND table_name = 'attendance_settings'
+           AND grantee = 'authenticated'
+           AND privilege_type IN ('INSERT','UPDATE','DELETE','TRUNCATE')
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 5, 'policy.settings_no_write',
+       (
+         SELECT COUNT(*)::text FROM pg_policies
+         WHERE schemaname = 'public' AND tablename = 'attendance_settings'
+           AND cmd IN ('INSERT','UPDATE','DELETE','ALL')
+       ), '0',
+       CASE WHEN NOT EXISTS (
+         SELECT 1 FROM pg_policies
+         WHERE schemaname = 'public' AND tablename = 'attendance_settings'
+           AND cmd IN ('INSERT','UPDATE','DELETE','ALL')
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 6, 'rpc.zero_arg_clock_gone',
+       (
+         SELECT COUNT(*)::text FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN ('attendance_clock_in','attendance_clock_out','attendance_break_start','attendance_break_end')
+           AND p.pronargs = 0
+       ), '0',
+       CASE WHEN NOT EXISTS (
+         SELECT 1 FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN ('attendance_clock_in','attendance_clock_out','attendance_break_start','attendance_break_end')
+           AND p.pronargs = 0
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 7, 'rpc.clock_has_location_args',
+       (
+         SELECT COUNT(*)::text FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN ('attendance_clock_in','attendance_clock_out','attendance_break_start','attendance_break_end')
+           AND p.pronargs = 3
+           AND p.proargnames IS NOT NULL
+           AND p.proargnames @> ARRAY['p_latitude','p_longitude','p_accuracy']
+       ), '4',
+       CASE WHEN (
+         SELECT COUNT(*) FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN ('attendance_clock_in','attendance_clock_out','attendance_break_start','attendance_break_end')
+           AND p.pronargs = 3
+           AND p.proargnames IS NOT NULL
+           AND p.proargnames @> ARRAY['p_latitude','p_longitude','p_accuracy']
+       ) = 4 THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 8, 'rpc.clock_security_definer',
+       (
+         SELECT COUNT(*)::text FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN ('attendance_clock_in','attendance_clock_out','attendance_break_start','attendance_break_end')
+           AND p.prosecdef AND p.pronargs = 3
+       ), '4',
+       CASE WHEN (
+         SELECT COUNT(*) FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN ('attendance_clock_in','attendance_clock_out','attendance_break_start','attendance_break_end')
+           AND p.prosecdef AND p.pronargs = 3
+       ) = 4 THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 9, 'rpc.clock_uses_auth_uid_and_now',
+       (
+         SELECT COUNT(*)::text FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN ('attendance_clock_in','attendance_clock_out','attendance_break_start','attendance_break_end')
+           AND p.pronargs = 3
+           AND pg_get_functiondef(p.oid) ILIKE '%auth.uid()%'
+           AND pg_get_functiondef(p.oid) ILIKE '%pg_catalog.now()%'
+           AND pg_get_functiondef(p.oid) ILIKE '%dk_attendance_assert_location%'
+       ), '4',
+       CASE WHEN (
+         SELECT COUNT(*) FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN ('attendance_clock_in','attendance_clock_out','attendance_break_start','attendance_break_end')
+           AND p.pronargs = 3
+           AND pg_get_functiondef(p.oid) ILIKE '%auth.uid()%'
+           AND pg_get_functiondef(p.oid) ILIKE '%pg_catalog.now()%'
+           AND pg_get_functiondef(p.oid) ILIKE '%dk_attendance_assert_location%'
+       ) = 4 THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 10, 'rpc.execute_public_or_anon',
+       (
+         SELECT COUNT(*)::text FROM information_schema.routine_privileges
+         WHERE routine_schema = 'public'
+           AND routine_name IN (
+             'attendance_clock_in','attendance_clock_out','attendance_break_start','attendance_break_end',
+             'attendance_admin_save_location','dk_attendance_assert_location','dk_attendance_haversine_meters'
+           )
+           AND grantee IN ('PUBLIC','anon') AND privilege_type = 'EXECUTE'
+       ), '0',
+       CASE WHEN NOT EXISTS (
+         SELECT 1 FROM information_schema.routine_privileges
+         WHERE routine_schema = 'public'
+           AND routine_name IN (
+             'attendance_clock_in','attendance_clock_out','attendance_break_start','attendance_break_end',
+             'attendance_admin_save_location','dk_attendance_assert_location','dk_attendance_haversine_meters'
+           )
+           AND grantee IN ('PUBLIC','anon') AND privilege_type = 'EXECUTE'
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 11, 'rpc.execute_authenticated_clocks',
+       (
+         SELECT COUNT(*)::text FROM information_schema.routine_privileges
+         WHERE routine_schema = 'public'
+           AND routine_name IN ('attendance_clock_in','attendance_clock_out','attendance_break_start','attendance_break_end')
+           AND grantee = 'authenticated' AND privilege_type = 'EXECUTE'
+       ), '4',
+       CASE WHEN (
+         SELECT COUNT(*) FROM information_schema.routine_privileges
+         WHERE routine_schema = 'public'
+           AND routine_name IN ('attendance_clock_in','attendance_clock_out','attendance_break_start','attendance_break_end')
+           AND grantee = 'authenticated' AND privilege_type = 'EXECUTE'
+       ) = 4 THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 12, 'rpc.admin_save_location_exists',
+       (to_regprocedure('public.attendance_admin_save_location(boolean,double precision,double precision,numeric,numeric)') IS NOT NULL)::text, 'true',
+       CASE WHEN to_regprocedure('public.attendance_admin_save_location(boolean,double precision,double precision,numeric,numeric)') IS NOT NULL THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 13, 'rpc.admin_save_location_admin_only',
+       CASE WHEN to_regprocedure('public.attendance_admin_save_location(boolean,double precision,double precision,numeric,numeric)') IS NOT NULL
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_save_location(boolean,double precision,double precision,numeric,numeric)')) ILIKE '%admin only%'
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_save_location(boolean,double precision,double precision,numeric,numeric)')) ILIKE '%is_admin()%'
+            THEN 'PASS' ELSE 'FAIL' END, 'PASS',
+       CASE WHEN to_regprocedure('public.attendance_admin_save_location(boolean,double precision,double precision,numeric,numeric)') IS NOT NULL
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_save_location(boolean,double precision,double precision,numeric,numeric)')) ILIKE '%admin only%'
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_save_location(boolean,double precision,double precision,numeric,numeric)')) ILIKE '%is_admin()%'
+            THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 14, 'rpc.helper_no_authenticated_execute',
+       (
+         SELECT COUNT(*)::text FROM information_schema.routine_privileges
+         WHERE routine_schema = 'public'
+           AND routine_name IN ('dk_attendance_assert_location','dk_attendance_haversine_meters')
+           AND grantee = 'authenticated' AND privilege_type = 'EXECUTE'
+       ), '0',
+       CASE WHEN NOT EXISTS (
+         SELECT 1 FROM information_schema.routine_privileges
+         WHERE routine_schema = 'public'
+           AND routine_name IN ('dk_attendance_assert_location','dk_attendance_haversine_meters')
+           AND grantee = 'authenticated' AND privilege_type = 'EXECUTE'
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 15, 'col.audit_location_fields',
+       (
+         SELECT COUNT(*)::text FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'attendance_audit_logs'
+           AND column_name IN ('location_verified','distance_meters','accuracy_meters')
+       ), '3',
+       CASE WHEN (
+         SELECT COUNT(*) FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'attendance_audit_logs'
+           AND column_name IN ('location_verified','distance_meters','accuracy_meters')
+       ) = 3 THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 16, 'col.no_worked_hours',
+       (
+         SELECT COUNT(*)::text FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name IN ('attendance_shifts','attendance_breaks','attendance_audit_logs','attendance_settings')
+           AND column_name IN ('worked_hours','workedHours','hours')
+       ), '0',
+       CASE WHEN NOT EXISTS (
+         SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name IN ('attendance_shifts','attendance_breaks','attendance_audit_logs','attendance_settings')
+           AND column_name IN ('worked_hours','workedHours','hours')
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 17, 'stage7.no_settings_fk_into_inventory_orders',
+       (
+         SELECT COUNT(*)::text FROM pg_constraint con
+         JOIN pg_class c ON c.oid = con.conrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         JOIN pg_class f ON f.oid = con.confrelid
+         JOIN pg_namespace fn ON fn.oid = f.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = 'attendance_settings'
+           AND con.contype = 'f' AND fn.nspname = 'public'
+           AND f.relname IN (
+             'inventory_items','inventory_costs','inventory_ledger','inventory_ledger_costs',
+             'orders','order_costs','order_items','order_item_costs','v2_data','site_config'
+           )
+       ), '0',
+       CASE WHEN NOT EXISTS (
+         SELECT 1 FROM pg_constraint con
+         JOIN pg_class c ON c.oid = con.conrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         JOIN pg_class f ON f.oid = con.confrelid
+         JOIN pg_namespace fn ON fn.oid = f.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = 'attendance_settings'
+           AND con.contype = 'f' AND fn.nspname = 'public'
+           AND f.relname IN (
+             'inventory_items','inventory_costs','inventory_ledger','inventory_ledger_costs',
+             'orders','order_costs','order_items','order_item_costs','v2_data','site_config'
+           )
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 18, 'rpc.admin_correct_unchanged',
+       (to_regprocedure('public.attendance_admin_correct(uuid,text,uuid,timestamptz,timestamptz,uuid,timestamptz,timestamptz)') IS NOT NULL)::text, 'true',
+       CASE WHEN to_regprocedure('public.attendance_admin_correct(uuid,text,uuid,timestamptz,timestamptz,uuid,timestamptz,timestamptz)') IS NOT NULL THEN 'PASS' ELSE 'FAIL' END
+ORDER BY 1;
+
+*/
+
+-- M4_LOCATION_VERIFY END
+
+
+-- ============================================================
 -- SECTION ROLLBACK
 -- 只撤 Stage 11 新物件。禁止碰 profiles / auth / inventory* / orders* /
 -- v2_data / site_config / Storage。
@@ -1489,11 +2287,19 @@ ORDER BY 1;
 -- ============================================================
 /*
 
+DROP FUNCTION IF EXISTS public.attendance_admin_save_location(boolean, double precision, double precision, numeric, numeric);
 DROP FUNCTION IF EXISTS public.attendance_admin_correct(uuid, text, uuid, timestamptz, timestamptz, uuid, timestamptz, timestamptz);
+DROP FUNCTION IF EXISTS public.attendance_break_end(double precision, double precision, double precision);
+DROP FUNCTION IF EXISTS public.attendance_break_start(double precision, double precision, double precision);
+DROP FUNCTION IF EXISTS public.attendance_clock_out(double precision, double precision, double precision);
+DROP FUNCTION IF EXISTS public.attendance_clock_in(double precision, double precision, double precision);
 DROP FUNCTION IF EXISTS public.attendance_break_end();
 DROP FUNCTION IF EXISTS public.attendance_break_start();
 DROP FUNCTION IF EXISTS public.attendance_clock_out();
 DROP FUNCTION IF EXISTS public.attendance_clock_in();
+DROP FUNCTION IF EXISTS public.dk_attendance_assert_location(double precision, double precision, double precision);
+DROP FUNCTION IF EXISTS public.dk_attendance_haversine_meters(double precision, double precision, double precision, double precision);
+DROP FUNCTION IF EXISTS public.dk_attendance_write_audit(uuid, uuid, uuid, text, text, jsonb, jsonb, boolean, numeric, numeric);
 DROP FUNCTION IF EXISTS public.dk_attendance_write_audit(uuid, uuid, uuid, text, text, jsonb, jsonb);
 DROP FUNCTION IF EXISTS public.dk_attendance_shift_snapshot(uuid);
 
@@ -1506,6 +2312,7 @@ DROP FUNCTION IF EXISTS public.dk_attendance_audit_immutable();
 DROP FUNCTION IF EXISTS public.dk_attendance_breaks_integrity();
 DROP FUNCTION IF EXISTS public.dk_attendance_set_updated_at();
 
+DROP TABLE IF EXISTS public.attendance_settings;
 DROP TABLE IF EXISTS public.attendance_audit_logs;
 DROP TABLE IF EXISTS public.attendance_breaks;
 DROP TABLE IF EXISTS public.attendance_shifts;

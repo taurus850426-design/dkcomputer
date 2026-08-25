@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260825att1" />
+    <link rel="stylesheet" href="./styles.css?v=20260825att2" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -1398,7 +1398,7 @@
             <div class="section-head">
               <div>
                 <h2 class="h2">員工打卡</h2>
-                <p class="muted">時間以 Asia/Taipei 顯示。打卡時刻由伺服器決定，前端不送時間。</p>
+                <p class="muted">時間以 Asia/Taipei 顯示。打卡時刻由伺服器決定；正常打卡需通過公司地點驗證。</p>
               </div>
             </div>
 
@@ -1456,7 +1456,48 @@
                 <button id="attBtnBreakEnd" class="btn btn-ghost" type="button">結束休息</button>
                 <button id="attBtnClockOut" class="btn btn-ghost" type="button">下班打卡</button>
               </div>
+              <div id="attLocStatus" class="att-loc-status muted" style="margin-top:10px">按下打卡按鈕時才會請求定位。</div>
               <div id="attMsg" class="muted" style="margin-top:10px" hidden></div>
+            </div>
+
+            <div id="attLocationSettings" class="card" style="margin-top:16px" data-admin-only>
+              <div class="section-head">
+                <div>
+                  <h3 class="h3">打卡地點設定</h3>
+                  <p class="muted">公司允許範圍由伺服器驗證。瀏覽器 GPS 為實用門檻，非密碼學可信。</p>
+                </div>
+              </div>
+              <div class="form-grid" style="margin-top:12px">
+                <div class="field">
+                  <label for="attLocEnabled">啟用地點限制</label>
+                  <select id="attLocEnabled">
+                    <option value="1">啟用</option>
+                    <option value="0">關閉</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="attLocLat">公司緯度</label>
+                  <input id="attLocLat" type="number" step="any" placeholder="尚未設定" />
+                </div>
+                <div class="field">
+                  <label for="attLocLng">公司經度</label>
+                  <input id="attLocLng" type="number" step="any" placeholder="尚未設定" />
+                </div>
+                <div class="field">
+                  <label for="attLocRadius">允許半徑（公尺）</label>
+                  <input id="attLocRadius" type="number" min="1" step="1" value="150" />
+                </div>
+                <div class="field">
+                  <label for="attLocMaxAcc">最大定位誤差（公尺）</label>
+                  <input id="attLocMaxAcc" type="number" min="1" step="1" value="80" />
+                </div>
+                <div class="field full actions" style="display:flex;flex-wrap:wrap;gap:8px">
+                  <button id="attLocUseCurrent" class="btn btn-ghost" type="button">使用目前位置設定公司位置</button>
+                  <button id="attLocSave" class="btn btn-primary" type="button">儲存地點設定</button>
+                </div>
+              </div>
+              <div id="attLocPreview" class="muted small" style="margin-top:8px">尚未讀取伺服器設定。</div>
+              <div id="attLocMsg" class="muted" style="margin-top:8px" hidden></div>
             </div>
 
             <div id="attAdminManage" class="card" style="margin-top:16px" data-admin-only>
@@ -1480,6 +1521,44 @@
                 <div class="field" style="display:flex;align-items:flex-end">
                   <button id="attAdminRefresh" class="btn btn-ghost" type="button">重新整理</button>
                 </div>
+              </div>
+              <div class="card" style="margin-top:14px">
+                <h3 class="h3">月出勤報表</h3>
+                <p class="muted small">A4 友善列印，供薪資袋夾附。不含薪資／時薪／加班費。</p>
+                <div class="form-grid" style="margin-top:12px">
+                  <div class="field">
+                    <label for="attReportYear">年份</label>
+                    <input id="attReportYear" type="number" min="2020" max="2100" step="1" />
+                  </div>
+                  <div class="field">
+                    <label for="attReportMonth">月份</label>
+                    <select id="attReportMonth">
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                      <option value="5">5</option>
+                      <option value="6">6</option>
+                      <option value="7">7</option>
+                      <option value="8">8</option>
+                      <option value="9">9</option>
+                      <option value="10">10</option>
+                      <option value="11">11</option>
+                      <option value="12">12</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="attReportEmployee">員工</label>
+                    <select id="attReportEmployee">
+                      <option value="">請選擇員工</option>
+                    </select>
+                  </div>
+                  <div class="field full actions" style="display:flex;flex-wrap:wrap;gap:8px">
+                    <button id="attReportGenerate" class="btn btn-primary" type="button">產生出勤表</button>
+                    <button id="attReportPrint" class="btn btn-ghost" type="button">列印出勤表</button>
+                  </div>
+                </div>
+                <div id="attReportMsg" class="muted" style="margin-top:8px" hidden></div>
               </div>
               <div class="table-wrap" style="margin-top:12px">
                 <table class="table">
@@ -1552,6 +1631,10 @@
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            <div id="attPrintRoot" class="att-print-root" hidden aria-hidden="true">
+              <div id="attPrintSheet" class="att-print-sheet"></div>
             </div>
           </section>
 
@@ -1673,15 +1756,15 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260825att1"></script>
+    <script src="./shared.js?v=20260825att2"></script>
     <script src="./inventory-ledger.js?v=20260825oh1"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260825att1"></script>
+    <script src="./admin3.js?v=20260825att2"></script>
     <script src="./purchase-orders.js?v=20260815s5a"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./attendance.js?v=20260825att1"></script>
+    <script src="./attendance.js?v=20260825att2"></script>
   </body>
 </html>
 

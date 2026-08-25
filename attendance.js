@@ -1,14 +1,17 @@
 /**
- * Stage 11 員工打卡。
- * 讀 attendance_shifts / attendance_breaks / attendance_audit_logs（RLS）。
- * 寫入只走 RPC：clock_in/out、break_start/end、admin_correct。
- * 不直接 INSERT / UPDATE / DELETE attendance 表。不送 client timestamp。
+ * Stage 11 / 11-4 員工打卡。
+ * 讀 attendance_shifts / attendance_breaks / attendance_audit_logs / attendance_settings（RLS）。
+ * 寫入只走 RPC：clock_in/out、break_start/end、admin_correct、admin_save_location。
+ * 正常打卡傳 p_latitude / p_longitude / p_accuracy；時間與身份仍由 server 決定。
+ * 不直接 INSERT / UPDATE / DELETE attendance 表。不背景追蹤 GPS。
  */
 (function (global) {
   const TZ = "Asia/Taipei";
   const SHIFT_SELECT = "id,employee_id,clock_in_at,clock_out_at,status,source,created_at,updated_at";
   const BREAK_SELECT = "id,shift_id,employee_id,break_start_at,break_end_at,created_at";
   const AUDIT_SELECT = "id,actor_user_id,employee_id,shift_id,action,reason,created_at";
+  const SETTINGS_SELECT = "id,location_enabled,latitude,longitude,radius_meters,max_accuracy_meters,updated_at";
+  const WEEKDAY_ZH = ["日", "一", "二", "三", "四", "五", "六"];
 
   const ACTION_LABEL = {
     CLOCK_IN: "上班打卡",
@@ -24,8 +27,12 @@
   let myBreaks = [];
   let adminShifts = [];
   let adminBreaks = [];
+  let adminAuditRows = [];
   let profileMap = {};
+  let locationSettings = null;
   let lastFetchError = "";
+  let lastReportHtml = "";
+  let pendingGpsPreview = null;
 
   function $(id) {
     return document.getElementById(id);
@@ -54,6 +61,16 @@
     el.style.color = isError ? "var(--danger, #c00)" : "";
   }
 
+  function setLocStatus(text, kind) {
+    const el = $("attLocStatus");
+    if (!el) return;
+    el.textContent = text || "";
+    el.className = "att-loc-status muted";
+    if (kind === "ok") el.className = "att-loc-status att-loc-ok";
+    if (kind === "err") el.className = "att-loc-status att-loc-err";
+    if (kind === "busy") el.className = "att-loc-status att-loc-busy";
+  }
+
   function taipeiParts(date) {
     const d = date instanceof Date ? date : new Date(date);
     const parts = new Intl.DateTimeFormat("en-US", {
@@ -65,6 +82,7 @@
       minute: "2-digit",
       second: "2-digit",
       hour12: false,
+      weekday: "short",
     }).formatToParts(d);
     const get = (type) => {
       const p = parts.find((x) => x.type === type);
@@ -84,8 +102,7 @@
   }
 
   function formatTaipeiDate(date) {
-    const p = taipeiParts(date || new Date());
-    return p.ymd.replace(/-/g, "/");
+    return taipeiParts(date || new Date()).ymd.replace(/-/g, "/");
   }
 
   function formatTaipeiTime(date) {
@@ -136,6 +153,11 @@
     return taipeiYmd(d);
   }
 
+  function weekdayZh(ymd) {
+    const d = new Date(ymd + "T12:00:00+08:00");
+    return WEEKDAY_ZH[d.getUTCDay()] || "";
+  }
+
   function formatDuration(ms) {
     if (!Number.isFinite(ms) || ms < 0) ms = 0;
     const totalSec = Math.floor(ms / 1000);
@@ -145,6 +167,11 @@
     if (h > 0) return h + " 小時 " + m + " 分";
     if (m > 0) return m + " 分 " + s + " 秒";
     return s + " 秒";
+  }
+
+  function formatDurationHours(ms) {
+    if (!Number.isFinite(ms) || ms < 0) ms = 0;
+    return (ms / 3600000).toFixed(2) + " 小時";
   }
 
   function shiftOverlapsDay(shift, ymd) {
@@ -158,7 +185,7 @@
     return cin < dayEnd && cout >= dayStart;
   }
 
-  function completedBreakMs(breaks, nowMs) {
+  function completedBreakMs(breaks, nowMs, onlyCompleted) {
     let ms = 0;
     (breaks || []).forEach(function (b) {
       if (!b || !b.break_start_at) return;
@@ -168,18 +195,19 @@
         if (end > start) ms += end - start;
         return;
       }
+      if (onlyCompleted) return;
       const now = nowMs != null ? nowMs : Date.now();
       if (now > start) ms += now - start;
     });
     return ms;
   }
 
-  function workedMsForShift(shift, breaks, nowMs) {
+  function workedMsForShift(shift, breaks, nowMs, onlyCompletedBreaks) {
     if (!shift || !shift.clock_in_at) return 0;
     const start = new Date(shift.clock_in_at).getTime();
     const end = shift.clock_out_at ? new Date(shift.clock_out_at).getTime() : (nowMs != null ? nowMs : Date.now());
     const raw = end - start;
-    const br = completedBreakMs(breaks || [], nowMs);
+    const br = completedBreakMs(breaks || [], nowMs, !!onlyCompletedBreaks);
     return Math.max(0, raw - br);
   }
 
@@ -213,6 +241,18 @@
     return "已下班";
   }
 
+  function haversineMeters(lat1, lng1, lat2, lng2) {
+    const toRad = function (d) { return (d * Math.PI) / 180; };
+    const R = 6371000;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return R * 2 * Math.asin(Math.sqrt(a));
+  }
+
   function mapRpcError(err) {
     const raw = String(
       (err && (err.message || err.error || err.details || err.hint)) || err || ""
@@ -224,7 +264,7 @@
     if (/open break exists/.test(m)) return "請先結束休息，才能下班打卡。";
     if (/no open break/.test(m)) return "目前沒有進行中的休息。";
     if (/reason required/.test(m)) return "修改理由必填。";
-    if (/admin only/.test(m)) return "只有管理員可以更正出勤。";
+    if (/admin only/.test(m)) return "只有管理員可以執行此操作。";
     if (/permission denied/.test(m) || /42501/.test(m)) return "沒有權限執行此操作。";
     if (/employee mismatch/.test(m)) return "不能更改班次所屬員工。";
     if (/nothing to correct/.test(m)) return "沒有可更正的內容。";
@@ -232,8 +272,24 @@
     if (/invalid break range/.test(m)) return "休息結束時間不可早於開始時間。";
     if (/shift not found/.test(m)) return "找不到該班次。";
     if (/break not found/.test(m)) return "找不到該休息紀錄。";
+    if (/location not configured/.test(m)) return "公司尚未設定打卡位置，請先請管理員設定。";
+    if (/location required/.test(m)) return "打卡需要提供定位資訊。";
+    if (/accuracy too poor/.test(m)) return "定位精度不足，請到室外或訊號較佳處重試。";
+    if (/outside company range/.test(m)) return "超出公司允許範圍，無法打卡。";
+    if (/invalid location/.test(m)) return "定位資料無效。";
+    if (/invalid radius|invalid max accuracy|enabled required/.test(m)) return "地點設定參數無效。";
     if (/not authenticated|請先登入/.test(m)) return "請先登入後台。";
+    if (/could not find the function|pgrst202|404/.test(m)) return "打卡功能尚未就緒，請稍後再試或通知管理員。";
     return raw.slice(0, 180) || "操作失敗";
+  }
+
+  function mapGeoError(err) {
+    if (!err) return "無法取得位置。";
+    const code = err.code;
+    if (code === 1) return "未允許定位權限，無法打卡。";
+    if (code === 2) return "無法取得位置，請確認 GPS／定位服務已開啟。";
+    if (code === 3) return "定位逾時，請到訊號較佳處重試。";
+    return mapRpcError(err.message || err) || "無法取得位置。";
   }
 
   async function getClient() {
@@ -274,6 +330,62 @@
     const res = await q;
     if (res && res.error) throw res.error;
     return Array.isArray(res.data) ? res.data : [];
+  }
+
+  function getCurrentPositionOnce() {
+    return new Promise(function (resolve, reject) {
+      if (!navigator.geolocation || typeof navigator.geolocation.getCurrentPosition !== "function") {
+        reject({ code: 2, message: "此瀏覽器不支援定位" });
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          const c = pos && pos.coords;
+          if (!c || c.latitude == null || c.longitude == null || c.accuracy == null) {
+            reject({ code: 2, message: "定位資料不完整" });
+            return;
+          }
+          resolve({
+            latitude: Number(c.latitude),
+            longitude: Number(c.longitude),
+            accuracy: Number(c.accuracy),
+          });
+        },
+        function (err) { reject(err || { code: 2, message: "無法取得位置" }); },
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+      );
+    });
+  }
+
+  function playSuccessVoice() {
+    try {
+      if (typeof AudioContext !== "undefined" || typeof webkitAudioContext !== "undefined") {
+        const Ctx = global.AudioContext || global.webkitAudioContext;
+        const ctx = new Ctx();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = "sine";
+        o.frequency.value = 880;
+        g.gain.value = 0.05;
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start();
+        setTimeout(function () {
+          try { o.frequency.value = 1175; } catch (_) {}
+        }, 120);
+        setTimeout(function () {
+          try { o.stop(); ctx.close(); } catch (_) {}
+        }, 280);
+      }
+    } catch (_) {}
+    try {
+      if (!global.speechSynthesis || typeof global.SpeechSynthesisUtterance !== "function") return;
+      const u = new SpeechSynthesisUtterance("叮咚～打卡成功，位置正確");
+      u.lang = "zh-TW";
+      u.rate = 1;
+      global.speechSynthesis.cancel();
+      global.speechSynthesis.speak(u);
+    } catch (_) {}
   }
 
   async function loadProfilesIfAdmin() {
@@ -322,11 +434,53 @@
     } catch (_) {}
   }
 
+  async function fetchLocationSettings() {
+    if (!isAdmin()) {
+      locationSettings = null;
+      return null;
+    }
+    const rows = await fetchRows("attendance_settings", {
+      select: SETTINGS_SELECT,
+      apply: function (q) {
+        return q.eq("id", 1).limit(1);
+      },
+    });
+    locationSettings = rows[0] || null;
+    return locationSettings;
+  }
+
+  function fillLocationForm() {
+    if (!isAdmin()) return;
+    const s = locationSettings;
+    if ($("attLocEnabled")) $("attLocEnabled").value = s && s.location_enabled === false ? "0" : "1";
+    if ($("attLocLat")) $("attLocLat").value = s && s.latitude != null ? s.latitude : "";
+    if ($("attLocLng")) $("attLocLng").value = s && s.longitude != null ? s.longitude : "";
+    if ($("attLocRadius")) $("attLocRadius").value = s && s.radius_meters != null ? s.radius_meters : 150;
+    if ($("attLocMaxAcc")) $("attLocMaxAcc").value = s && s.max_accuracy_meters != null ? s.max_accuracy_meters : 80;
+    const preview = $("attLocPreview");
+    if (!preview) return;
+    if (!s) {
+      preview.textContent = "伺服器尚無地點設定列。";
+      return;
+    }
+    if (s.location_enabled !== true) {
+      preview.textContent = "地點限制：關閉（打卡不強制 GPS 範圍）。";
+      return;
+    }
+    if (s.latitude == null || s.longitude == null) {
+      preview.textContent = "地點限制：啟用，但公司座標尚未設定（員工將無法打卡）。";
+      return;
+    }
+    preview.textContent =
+      "已設定：lat " + Number(s.latitude).toFixed(6) +
+      " / lng " + Number(s.longitude).toFixed(6) +
+      "，半徑 " + s.radius_meters + " m，最大誤差 " + s.max_accuracy_meters + " m。";
+  }
+
   async function fetchMyAttendance() {
     const me = currentUser();
     if (!me || !me.userId) throw new Error("請先登入後台");
     const myId = String(me.userId);
-    const today = taipeiYmd(new Date());
     const fromIso = taipeiDayStartIso(taipeiYmd(new Date(Date.now() - 36 * 3600 * 1000)));
     const rows = await fetchRows("attendance_shifts", {
       select: SHIFT_SELECT,
@@ -356,7 +510,6 @@
         return q.eq("employee_id", myId).in("shift_id", ids).order("break_start_at", { ascending: true }).limit(200);
       },
     });
-    void today;
   }
 
   async function fetchAdminAttendance() {
@@ -414,7 +567,7 @@
     return fetchRows("attendance_audit_logs", {
       select: AUDIT_SELECT,
       apply: function (q) {
-        return q.order("created_at", { ascending: false }).limit(80);
+        return q.order("created_at", { ascending: false }).limit(120);
       },
     });
   }
@@ -458,22 +611,21 @@
     if ($("attUserName")) $("attUserName").textContent = me ? (me.displayName || me.username || "—") : "—";
 
     const shift = primaryTodayShift();
-    const shiftBreaks = shift ? breaksForShift(shift.id, myBreaks) : [];
     const open = openShiftOf(myShifts);
     const openBr = openBreakOf(open ? breaksForShift(open.id, myBreaks) : myBreaks);
     const nowMs = Date.now();
 
     if ($("attClockIn")) $("attClockIn").textContent = shift ? formatTaipeiClock(shift.clock_in_at) : "—";
     if ($("attClockOut")) $("attClockOut").textContent = shift && shift.clock_out_at ? formatTaipeiClock(shift.clock_out_at) : (open ? "尚未下班" : "—");
-    if ($("attStatus")) $("attStatus").textContent = statusLabel(open || shift, open ? breaksForShift(open.id, myBreaks) : shiftBreaks);
+    if ($("attStatus")) $("attStatus").textContent = statusLabel(open || shift, open ? breaksForShift(open.id, myBreaks) : (shift ? breaksForShift(shift.id, myBreaks) : []));
 
     const ymd = taipeiYmd(new Date());
     let workMs = 0;
     todayShifts().forEach(function (s) {
-      workMs += workedMsForShift(s, breaksForShift(s.id, myBreaks), nowMs);
+      workMs += workedMsForShift(s, breaksForShift(s.id, myBreaks), nowMs, false);
     });
     if (open && !shiftOverlapsDay(open, ymd)) {
-      workMs += workedMsForShift(open, breaksForShift(open.id, myBreaks), nowMs);
+      workMs += workedMsForShift(open, breaksForShift(open.id, myBreaks), nowMs, false);
     }
     if ($("attWorked")) $("attWorked").textContent = (open || shift) ? formatDuration(workMs) : "—";
 
@@ -498,7 +650,7 @@
       } else {
         tbody.innerHTML = uniq.map(function (b) {
           const end = b.break_end_at ? formatTaipeiClock(b.break_end_at) : "進行中";
-          const dur = formatDuration(completedBreakMs([b], nowMs));
+          const dur = formatDuration(completedBreakMs([b], nowMs, false));
           return "<tr><td>" + esc(formatTaipeiClock(b.break_start_at)) + "</td><td>" + esc(end) + "</td><td>" + esc(dur) + "</td></tr>";
         }).join("");
       }
@@ -513,19 +665,22 @@
   }
 
   function fillEmployeeSelect() {
-    const sel = $("attAdminEmployee");
-    if (!sel || !isAdmin()) return;
-    const keep = sel.value;
-    const opts = ['<option value="">全部員工</option>'];
-    Object.keys(profileMap).sort(function (a, b) {
-      return String(personName(a)).localeCompare(String(personName(b)), "zh-Hant");
-    }).forEach(function (id) {
-      const p = profileMap[id];
-      if (p && p.enabled === false) return;
-      opts.push('<option value="' + esc(id) + '">' + esc(personName(id)) + "</option>");
+    const sels = [$("attAdminEmployee"), $("attReportEmployee")];
+    sels.forEach(function (sel) {
+      if (!sel || !isAdmin()) return;
+      const keep = sel.value;
+      const isReport = sel.id === "attReportEmployee";
+      const opts = [isReport ? '<option value="">請選擇員工</option>' : '<option value="">全部員工</option>'];
+      Object.keys(profileMap).sort(function (a, b) {
+        return String(personName(a)).localeCompare(String(personName(b)), "zh-Hant");
+      }).forEach(function (id) {
+        const p = profileMap[id];
+        if (p && p.enabled === false) return;
+        opts.push('<option value="' + esc(id) + '">' + esc(personName(id)) + "</option>");
+      });
+      sel.innerHTML = opts.join("");
+      if (keep && profileMap[keep]) sel.value = keep;
     });
-    sel.innerHTML = opts.join("");
-    if (keep && profileMap[keep]) sel.value = keep;
   }
 
   function renderAdminTable() {
@@ -537,8 +692,8 @@
     }
     tbody.innerHTML = adminShifts.map(function (s) {
       const br = breaksForShift(s.id, adminBreaks);
-      const work = formatDuration(workedMsForShift(s, br, Date.now()));
-      const rest = formatDuration(completedBreakMs(br, Date.now()));
+      const work = formatDuration(workedMsForShift(s, br, Date.now(), true));
+      const rest = formatDuration(completedBreakMs(br, Date.now(), true));
       const st = statusLabel(s, br);
       return (
         "<tr>" +
@@ -622,15 +777,20 @@
       fillEmployeeSelect();
       await fetchMyAttendance();
       if (isAdmin()) {
+        await fetchLocationSettings();
+        fillLocationForm();
         await fetchAdminAttendance();
-        const audit = await fetchAdminAudit();
+        adminAuditRows = await fetchAdminAudit();
         renderAdminTable();
-        renderAudit(audit);
+        renderAudit(adminAuditRows);
       } else {
+        locationSettings = null;
         adminShifts = [];
         adminBreaks = [];
+        adminAuditRows = [];
         if ($("attAdminManage")) $("attAdminManage").hidden = true;
         if ($("attAdminAudit")) $("attAdminAudit").hidden = true;
+        if ($("attLocationSettings")) $("attLocationSettings").hidden = true;
       }
       renderClockFace();
       if (!silent) showMsg($("attMsg"), "", false);
@@ -645,17 +805,113 @@
     if (busy) return;
     busy = true;
     setButtons({ canClockIn: false, canBreakStart: false, canBreakEnd: false, canClockOut: false });
-    showMsg($("attMsg"), "處理中…", false);
+    showMsg($("attMsg"), "定位中…", false);
+    setLocStatus("定位中…", "busy");
     try {
-      await rpcCall(fnName);
+      const geo = await getCurrentPositionOnce();
+      pendingGpsPreview = geo;
+      let uxHint = "";
+      if (locationSettings && locationSettings.location_enabled === true && locationSettings.latitude != null && locationSettings.longitude != null) {
+        const dist = haversineMeters(locationSettings.latitude, locationSettings.longitude, geo.latitude, geo.longitude);
+        uxHint = "距離公司約 " + Math.round(dist) + " 公尺，定位精度 " + Math.round(geo.accuracy) + " 公尺。伺服器驗證中…";
+        setLocStatus(uxHint, "busy");
+      } else {
+        setLocStatus("已取得定位（精度 " + Math.round(geo.accuracy) + " 公尺），伺服器驗證中…", "busy");
+      }
+      showMsg($("attMsg"), "伺服器驗證位置中…", false);
+      const data = await rpcCall(fnName, {
+        p_latitude: geo.latitude,
+        p_longitude: geo.longitude,
+        p_accuracy: geo.accuracy,
+      });
       await refreshAll({ silent: true });
-      showMsg($("attMsg"), successText, false);
+      const distServer = data && data.distance_meters != null ? Number(data.distance_meters) : null;
+      const accServer = data && data.accuracy_meters != null ? Number(data.accuracy_meters) : geo.accuracy;
+      const verified = data && (data.location_verified === true || data.location_verified === "true");
+      let okText = successText;
+      if (distServer != null && !Number.isNaN(distServer)) {
+        okText += " 距離公司 " + Math.round(distServer) + " 公尺，定位精度 " + Math.round(accServer) + " 公尺。";
+        setLocStatus(
+          (verified ? "位置正確。距離公司 " : "打卡成功。距離公司 ") +
+            Math.round(distServer) + " 公尺，定位精度 " + Math.round(accServer) + " 公尺。",
+          "ok"
+        );
+      } else {
+        setLocStatus("打卡成功（地點限制未啟用或無需驗證距離）。", "ok");
+      }
+      showMsg($("attMsg"), okText, false);
+      playSuccessVoice();
     } catch (e) {
-      showMsg($("attMsg"), mapRpcError(e), true);
+      const msg = e && (e.code === 1 || e.code === 2 || e.code === 3) ? mapGeoError(e) : mapRpcError(e);
+      showMsg($("attMsg"), msg, true);
+      setLocStatus(msg, "err");
       renderClockFace();
     } finally {
       busy = false;
       renderClockFace();
+    }
+  }
+
+  async function useCurrentAsCompanyLocation() {
+    if (!isAdmin() || busy) return;
+    busy = true;
+    showMsg($("attLocMsg"), "定位中…", false);
+    try {
+      const geo = await getCurrentPositionOnce();
+      if ($("attLocLat")) $("attLocLat").value = String(geo.latitude);
+      if ($("attLocLng")) $("attLocLng").value = String(geo.longitude);
+      if ($("attLocEnabled")) $("attLocEnabled").value = "1";
+      showMsg(
+        $("attLocMsg"),
+        "已帶入目前位置：lat " + geo.latitude.toFixed(6) + " / lng " + geo.longitude.toFixed(6) +
+          "（精度 " + Math.round(geo.accuracy) + " m）。請確認後按「儲存地點設定」。",
+        false
+      );
+    } catch (e) {
+      showMsg($("attLocMsg"), mapGeoError(e), true);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function saveLocationSettings() {
+    if (!isAdmin() || busy) return;
+    const enabled = $("attLocEnabled") && $("attLocEnabled").value === "1";
+    const latRaw = $("attLocLat") && String($("attLocLat").value).trim();
+    const lngRaw = $("attLocLng") && String($("attLocLng").value).trim();
+    const radius = Number($("attLocRadius") && $("attLocRadius").value);
+    const maxAcc = Number($("attLocMaxAcc") && $("attLocMaxAcc").value);
+    const lat = latRaw === "" ? null : Number(latRaw);
+    const lng = lngRaw === "" ? null : Number(lngRaw);
+    if (!Number.isFinite(radius) || radius <= 0) {
+      showMsg($("attLocMsg"), "允許半徑必須大於 0。", true);
+      return;
+    }
+    if (!Number.isFinite(maxAcc) || maxAcc <= 0) {
+      showMsg($("attLocMsg"), "最大定位誤差必須大於 0。", true);
+      return;
+    }
+    if (enabled && (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng))) {
+      showMsg($("attLocMsg"), "啟用地點限制時，必須填寫公司緯度與經度。", true);
+      return;
+    }
+    busy = true;
+    showMsg($("attLocMsg"), "儲存中…", false);
+    try {
+      await rpcCall("attendance_admin_save_location", {
+        p_enabled: enabled,
+        p_latitude: lat,
+        p_longitude: lng,
+        p_radius_meters: radius,
+        p_max_accuracy_meters: maxAcc,
+      });
+      await fetchLocationSettings();
+      fillLocationForm();
+      showMsg($("attLocMsg"), "地點設定已儲存。", false);
+    } catch (e) {
+      showMsg($("attLocMsg"), mapRpcError(e), true);
+    } finally {
+      busy = false;
     }
   }
 
@@ -707,6 +963,203 @@
     }
   }
 
+  function daysInMonth(year, month) {
+    return new Date(Date.UTC(year, month, 0)).getUTCDate();
+  }
+
+  function monthRangeYmd(year, month) {
+    const mm = String(month).padStart(2, "0");
+    const start = year + "-" + mm + "-01";
+    const endDay = String(daysInMonth(year, month)).padStart(2, "0");
+    const end = year + "-" + mm + "-" + endDay;
+    return { start: start, end: end, nextStart: nextTaipeiDay(end) };
+  }
+
+  async function generateMonthlyReport() {
+    if (!isAdmin()) {
+      showMsg($("attReportMsg"), "只有管理員可以產生出勤表。", true);
+      return;
+    }
+    const year = Number($("attReportYear") && $("attReportYear").value);
+    const month = Number($("attReportMonth") && $("attReportMonth").value);
+    const empId = String(($("attReportEmployee") && $("attReportEmployee").value) || "").trim();
+    if (!Number.isFinite(year) || year < 2020 || !Number.isFinite(month) || month < 1 || month > 12) {
+      showMsg($("attReportMsg"), "請選擇有效的年份與月份。", true);
+      return;
+    }
+    if (!empId) {
+      showMsg($("attReportMsg"), "請選擇員工。", true);
+      return;
+    }
+    busy = true;
+    showMsg($("attReportMsg"), "產生中…", false);
+    try {
+      const range = monthRangeYmd(year, month);
+      const startIso = taipeiDayStartIso(range.start);
+      const endIso = taipeiDayStartIso(range.nextStart);
+      const shifts = await fetchRows("attendance_shifts", {
+        select: SHIFT_SELECT,
+        apply: function (q) {
+          return q.eq("employee_id", empId).gte("clock_in_at", startIso).lt("clock_in_at", endIso).order("clock_in_at", { ascending: true }).limit(500);
+        },
+      });
+      const ids = shifts.map(function (s) { return s.id; });
+      let breaks = [];
+      if (ids.length) {
+        breaks = await fetchRows("attendance_breaks", {
+          select: BREAK_SELECT,
+          apply: function (q) {
+            return q.eq("employee_id", empId).in("shift_id", ids).order("break_start_at", { ascending: true }).limit(1000);
+          },
+        });
+      }
+      const audits = await fetchRows("attendance_audit_logs", {
+        select: AUDIT_SELECT,
+        apply: function (q) {
+          return q.eq("employee_id", empId).eq("action", "ADMIN_CORRECTION").gte("created_at", startIso).lt("created_at", endIso).limit(500);
+        },
+      });
+      const correctedDays = {};
+      audits.forEach(function (a) {
+        if (a && a.created_at) correctedDays[taipeiYmd(a.created_at)] = true;
+      });
+      const byDay = {};
+      shifts.forEach(function (s) {
+        const ymd = taipeiYmd(s.clock_in_at);
+        if (!byDay[ymd]) byDay[ymd] = [];
+        byDay[ymd].push(s);
+      });
+
+      let workDays = 0;
+      let totalWorkMs = 0;
+      let totalBreakMs = 0;
+      let incomplete = 0;
+      const dayCount = daysInMonth(year, month);
+      const rowsHtml = [];
+      for (let d = 1; d <= dayCount; d++) {
+        const ymd = year + "-" + String(month).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+        const dayShifts = byDay[ymd] || [];
+        if (!dayShifts.length) {
+          rowsHtml.push(
+            "<tr><td>" + esc(ymd.replace(/-/g, "/")) + "</td><td>" + esc(weekdayZh(ymd)) +
+            "</td><td>—</td><td>—</td><td>—</td><td>—</td><td>未出勤</td></tr>"
+          );
+          continue;
+        }
+        workDays += 1;
+        let cinText = [];
+        let coutText = [];
+        let dayBreakMs = 0;
+        let dayWorkMs = 0;
+        let statuses = [];
+        let hasOpen = false;
+        dayShifts.forEach(function (s) {
+          const br = breaksForShift(s.id, breaks);
+          cinText.push(formatTaipeiClock(s.clock_in_at));
+          if (s.clock_out_at) {
+            coutText.push(formatTaipeiClock(s.clock_out_at));
+            dayWorkMs += workedMsForShift(s, br, null, true);
+            dayBreakMs += completedBreakMs(br, null, true);
+            statuses.push("正常");
+          } else {
+            coutText.push("未完成");
+            hasOpen = true;
+            incomplete += 1;
+            statuses.push("未完成");
+          }
+        });
+        totalWorkMs += dayWorkMs;
+        totalBreakMs += dayBreakMs;
+        let status = hasOpen ? "未完成" : "正常";
+        if (correctedDays[ymd]) status = status === "未完成" ? "未完成／已修正" : "已修正";
+        rowsHtml.push(
+          "<tr>" +
+          "<td>" + esc(ymd.replace(/-/g, "/")) + "</td>" +
+          "<td>" + esc(weekdayZh(ymd)) + "</td>" +
+          "<td>" + esc(cinText.join(" / ")) + "</td>" +
+          "<td>" + esc(coutText.join(" / ")) + "</td>" +
+          "<td>" + esc(formatDuration(dayBreakMs)) + "</td>" +
+          "<td>" + esc(hasOpen ? "—" : formatDuration(dayWorkMs)) + "</td>" +
+          "<td>" + esc(status) + "</td>" +
+          "</tr>"
+        );
+      }
+
+      const empName = personName(empId);
+      const printDate = formatTaipeiDate(new Date());
+      const html =
+        '<div class="att-print-doc">' +
+        "<h1>DK Computer</h1>" +
+        "<h2>員工出勤紀錄</h2>" +
+        '<div class="att-print-meta">員工：' + esc(empName) +
+        "　　出勤月份：" + esc(String(year)) + " / " + esc(String(month)) + "</div>" +
+        '<table class="att-print-table"><thead><tr>' +
+        "<th>日期</th><th>星期</th><th>上班時間</th><th>下班時間</th><th>休息總時間</th><th>實際工時</th><th>狀態</th>" +
+        "</tr></thead><tbody>" + rowsHtml.join("") + "</tbody></table>" +
+        '<div class="att-print-summary">' +
+        "<div>出勤天數：" + workDays + "</div>" +
+        "<div>總實際工時：" + esc(formatDurationHours(totalWorkMs)) + "（" + esc(formatDuration(totalWorkMs)) + "）</div>" +
+        "<div>總休息時間：" + esc(formatDurationHours(totalBreakMs)) + "（" + esc(formatDuration(totalBreakMs)) + "）</div>" +
+        "<div>未完成班次數：" + incomplete + "</div>" +
+        "<div>管理員更正次數：" + audits.length + "</div>" +
+        "</div>" +
+        '<div class="att-print-sign">' +
+        "<div>員工簽名：________________</div>" +
+        "<div>主管簽名：________________</div>" +
+        "<div>列印日期：" + esc(printDate) + "</div>" +
+        "</div></div>";
+
+      lastReportHtml = html;
+      const sheet = $("attPrintSheet");
+      const root = $("attPrintRoot");
+      if (sheet) sheet.innerHTML = html;
+      if (root) {
+        root.hidden = false;
+        root.setAttribute("aria-hidden", "false");
+      }
+      showMsg($("attReportMsg"), "已產生 " + empName + " " + year + "/" + month + " 出勤表，可按「列印出勤表」。", false);
+    } catch (e) {
+      showMsg($("attReportMsg"), mapRpcError(e), true);
+    } finally {
+      busy = false;
+    }
+  }
+
+  function printMonthlyReport() {
+    if (!isAdmin()) {
+      showMsg($("attReportMsg"), "只有管理員可以列印出勤表。", true);
+      return;
+    }
+    if (!lastReportHtml) {
+      showMsg($("attReportMsg"), "請先產生出勤表。", true);
+      return;
+    }
+    const root = $("attPrintRoot");
+    const sheet = $("attPrintSheet");
+    if (sheet) sheet.innerHTML = lastReportHtml;
+    if (root) {
+      root.hidden = false;
+      root.setAttribute("aria-hidden", "false");
+    }
+    document.body.classList.add("att-printing");
+    const cleanup = function () {
+      document.body.classList.remove("att-printing");
+      global.removeEventListener("afterprint", cleanup);
+    };
+    global.addEventListener("afterprint", cleanup);
+    setTimeout(function () {
+      try { global.print(); } catch (_) { cleanup(); }
+    }, 50);
+  }
+
+  function initReportDefaults() {
+    const now = taipeiParts(new Date());
+    const y = Number(now.ymd.slice(0, 4));
+    const m = Number(now.ymd.slice(5, 7));
+    if ($("attReportYear") && !$("attReportYear").value) $("attReportYear").value = String(y);
+    if ($("attReportMonth")) $("attReportMonth").value = String(m);
+  }
+
   function bind() {
     const cin = $("attBtnClockIn");
     const bs = $("attBtnBreakStart");
@@ -716,6 +1169,7 @@
     if (bs) bs.addEventListener("click", function () { runAction("attendance_break_start", "已開始休息。"); });
     if (be) be.addEventListener("click", function () { runAction("attendance_break_end", "已結束休息。"); });
     if (cout) cout.addEventListener("click", function () { runAction("attendance_clock_out", "下班打卡成功。"); });
+
     const refresh = $("attAdminRefresh");
     if (refresh) refresh.addEventListener("click", function () { refreshAll(); });
     const dateEl = $("attAdminDate");
@@ -742,6 +1196,16 @@
         showMsg($("attCorrectMsg"), "", false);
       });
     }
+
+    const useCur = $("attLocUseCurrent");
+    if (useCur) useCur.addEventListener("click", function () { useCurrentAsCompanyLocation(); });
+    const saveLoc = $("attLocSave");
+    if (saveLoc) saveLoc.addEventListener("click", function () { saveLocationSettings(); });
+
+    const gen = $("attReportGenerate");
+    if (gen) gen.addEventListener("click", function () { generateMonthlyReport(); });
+    const printBtn = $("attReportPrint");
+    if (printBtn) printBtn.addEventListener("click", function () { printMonthlyReport(); });
   }
 
   function startClock() {
@@ -754,11 +1218,14 @@
 
   async function onShow() {
     if ($("attAdminDate") && !$("attAdminDate").value) $("attAdminDate").value = taipeiYmd(new Date());
+    initReportDefaults();
     const admin = isAdmin();
     if ($("attAdminManage")) $("attAdminManage").hidden = !admin;
     if ($("attAdminAudit")) $("attAdminAudit").hidden = !admin;
+    if ($("attLocationSettings")) $("attLocationSettings").hidden = !admin;
     startClock();
     renderClockFace();
+    setLocStatus("按下打卡按鈕時才會請求定位。", null);
     await refreshAll();
   }
 
