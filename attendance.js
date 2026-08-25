@@ -357,35 +357,83 @@
     });
   }
 
-  function playSuccessVoice() {
+  // Mobile Safari/Chrome：async geolocation/RPC 後會失去 user activation。
+  // 必須在原始 click 同步區 unlock AudioContext；RPC 成功後才播成功音。
+  let attendanceAudioCtx = null;
+  let attendanceAudioUnlocked = false;
+
+  function getAttendanceAudioCtx() {
+    const Ctx = global.AudioContext || global.webkitAudioContext;
+    if (!Ctx) return null;
+    if (!attendanceAudioCtx) {
+      try { attendanceAudioCtx = new Ctx(); } catch (_) { return null; }
+    }
+    return attendanceAudioCtx;
+  }
+
+  function unlockAttendanceAudio() {
     try {
-      if (typeof AudioContext !== "undefined" || typeof webkitAudioContext !== "undefined") {
-        const Ctx = global.AudioContext || global.webkitAudioContext;
-        const ctx = new Ctx();
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = "sine";
-        o.frequency.value = 880;
-        g.gain.value = 0.05;
-        o.connect(g);
-        g.connect(ctx.destination);
-        o.start();
-        setTimeout(function () {
-          try { o.frequency.value = 1175; } catch (_) {}
-        }, 120);
-        setTimeout(function () {
-          try { o.stop(); ctx.close(); } catch (_) {}
-        }, 280);
+      const ctx = getAttendanceAudioCtx();
+      if (!ctx) return;
+      if (typeof ctx.resume === "function") {
+        try { ctx.resume(); } catch (_) {}
       }
+      // iOS：gesture 內播極短靜音，避免之後 suspended 無法發聲
+      const now = ctx.currentTime || 0;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.00001, now);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.02);
+      attendanceAudioUnlocked = true;
+    } catch (_) {
+      attendanceAudioUnlocked = false;
+    }
+  }
+
+  function playDingDong() {
+    try {
+      const ctx = getAttendanceAudioCtx();
+      if (!ctx) return;
+      if (typeof ctx.resume === "function") {
+        try { ctx.resume(); } catch (_) {}
+      }
+      const t0 = ctx.currentTime || 0;
+      function tone(freq, start, dur, peak) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, t0 + start);
+        gain.gain.setValueAtTime(0.0001, t0 + start);
+        gain.gain.exponentialRampToValueAtTime(peak, t0 + start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + start + dur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t0 + start);
+        osc.stop(t0 + start + dur + 0.02);
+      }
+      tone(880, 0, 0.14, 0.08);
+      tone(1175, 0.13, 0.18, 0.07);
     } catch (_) {}
+  }
+
+  function playSuccessSpeech() {
     try {
       if (!global.speechSynthesis || typeof global.SpeechSynthesisUtterance !== "function") return;
-      const u = new SpeechSynthesisUtterance("叮咚～打卡成功，位置正確");
+      const u = new SpeechSynthesisUtterance("打卡成功，位置正確");
       u.lang = "zh-TW";
       u.rate = 1;
-      global.speechSynthesis.cancel();
+      try { global.speechSynthesis.cancel(); } catch (_) {}
       global.speechSynthesis.speak(u);
     } catch (_) {}
+  }
+
+  function playSuccessFeedback() {
+    // 僅在 RPC 成功後呼叫。音訊失敗不得影響打卡結果。
+    try { playDingDong(); } catch (_) {}
+    try { playSuccessSpeech(); } catch (_) {}
   }
 
   async function loadProfilesIfAdmin() {
@@ -803,6 +851,8 @@
 
   async function runAction(fnName, successText) {
     if (busy) return;
+    // unlock 必須在 click 同步區（本函式第一個 await 之前）完成
+    unlockAttendanceAudio();
     busy = true;
     setButtons({ canClockIn: false, canBreakStart: false, canBreakEnd: false, canClockOut: false });
     showMsg($("attMsg"), "定位中…", false);
@@ -828,9 +878,10 @@
       const distServer = data && data.distance_meters != null ? Number(data.distance_meters) : null;
       const accServer = data && data.accuracy_meters != null ? Number(data.accuracy_meters) : geo.accuracy;
       const verified = data && (data.location_verified === true || data.location_verified === "true");
-      let okText = successText;
+      let okText = "打卡成功，位置正確";
+      if (successText) okText = successText.replace(/。?$/, "") + "。打卡成功，位置正確";
       if (distServer != null && !Number.isNaN(distServer)) {
-        okText += " 距離公司 " + Math.round(distServer) + " 公尺，定位精度 " + Math.round(accServer) + " 公尺。";
+        okText += "。距離公司 " + Math.round(distServer) + " 公尺，定位精度 " + Math.round(accServer) + " 公尺。";
         setLocStatus(
           (verified ? "位置正確。距離公司 " : "打卡成功。距離公司 ") +
             Math.round(distServer) + " 公尺，定位精度 " + Math.round(accServer) + " 公尺。",
@@ -838,13 +889,15 @@
         );
       } else {
         setLocStatus("打卡成功（地點限制未啟用或無需驗證距離）。", "ok");
+        okText += "。";
       }
       showMsg($("attMsg"), okText, false);
-      playSuccessVoice();
+      playSuccessFeedback();
     } catch (e) {
       const msg = e && (e.code === 1 || e.code === 2 || e.code === 3) ? mapGeoError(e) : mapRpcError(e);
+      // 同一錯誤只顯示一次（避免 attMsg + attLocStatus 重複）
       showMsg($("attMsg"), msg, true);
-      setLocStatus(msg, "err");
+      setLocStatus("打卡未完成", "err");
       renderClockFace();
     } finally {
       busy = false;
@@ -1165,10 +1218,30 @@
     const bs = $("attBtnBreakStart");
     const be = $("attBtnBreakEnd");
     const cout = $("attBtnClockOut");
-    if (cin) cin.addEventListener("click", function () { runAction("attendance_clock_in", "上班打卡成功。"); });
-    if (bs) bs.addEventListener("click", function () { runAction("attendance_break_start", "已開始休息。"); });
-    if (be) be.addEventListener("click", function () { runAction("attendance_break_end", "已結束休息。"); });
-    if (cout) cout.addEventListener("click", function () { runAction("attendance_clock_out", "下班打卡成功。"); });
+    if (cin) {
+      cin.addEventListener("click", function () {
+        unlockAttendanceAudio();
+        runAction("attendance_clock_in", "上班打卡成功。");
+      });
+    }
+    if (bs) {
+      bs.addEventListener("click", function () {
+        unlockAttendanceAudio();
+        runAction("attendance_break_start", "已開始休息。");
+      });
+    }
+    if (be) {
+      be.addEventListener("click", function () {
+        unlockAttendanceAudio();
+        runAction("attendance_break_end", "已結束休息。");
+      });
+    }
+    if (cout) {
+      cout.addEventListener("click", function () {
+        unlockAttendanceAudio();
+        runAction("attendance_clock_out", "下班打卡成功。");
+      });
+    }
 
     const refresh = $("attAdminRefresh");
     if (refresh) refresh.addEventListener("click", function () { refreshAll(); });
