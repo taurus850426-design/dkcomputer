@@ -11,7 +11,11 @@
 -- 使用方式：只複製「一個」SECTION，刪除該區包圍的 /* 與 */ 後執行。
 -- 建議順序：PREFLIGHT → M0_SCHEMA → M1_RLS → M2_RPC → M3_VERIFY
 --            → M4_LOCATION → M4_LOCATION_VERIFY
+--            → M5_NETWORK_AND_ADMIN_DELETE → M5_VERIFY
 -- ROLLBACK 僅在需要撤 Stage 11 時使用。
+--
+-- Stage 11-5：COMPANY_NETWORK punch RPC 僅 service_role（Edge）；
+-- client 不可傳可信 IP；Admin 硬刪前須解除 audit.shift_id FK。
 --
 -- 禁止：
 --   改 profiles / auth schema
@@ -2280,6 +2284,909 @@ ORDER BY 1;
 
 
 -- ============================================================
+-- SECTION M5_NETWORK_AND_ADMIN_DELETE
+-- Stage 11-5：公司網路打卡（service_role only）＋ Admin 刪除出勤留痕。
+-- - 解除 audit.shift_id → shifts FK（硬刪後 audit 永久保留 uuid + snapshot）
+-- - attendance_settings 擴充 network_enabled / allowed_public_ips
+-- - settings SELECT 改 admin-only（Staff 不可讀公司 IP allowlist）
+-- - 網路打卡 RPC：REVOKE authenticated；僅 Edge service_role
+-- - 不在本 section 信任 client IP / XFF；IP 判定屬 Edge 職責
+-- 請複製本 SECTION（從下一行到 M5_NETWORK_AND_ADMIN_DELETE END）單獨執行。
+-- ============================================================
+/*
+
+DO $$
+BEGIN
+  IF to_regclass('public.attendance_shifts') IS NULL
+     OR to_regclass('public.attendance_breaks') IS NULL
+     OR to_regclass('public.attendance_audit_logs') IS NULL
+     OR to_regclass('public.attendance_settings') IS NULL
+  THEN
+    RAISE EXCEPTION 'M5 blocked: Stage 11 tables missing. Run M0–M4 first.';
+  END IF;
+  IF to_regprocedure('public.is_admin()') IS NULL
+     OR to_regprocedure('public.dk_require_backoffice()') IS NULL
+     OR to_regprocedure('public.dk_attendance_shift_snapshot(uuid)') IS NULL
+     OR to_regprocedure('public.dk_attendance_write_audit(uuid,uuid,uuid,text,text,jsonb,jsonb,boolean,numeric,numeric)') IS NULL
+  THEN
+    RAISE EXCEPTION 'M5 blocked: required helpers / M4 write_audit missing.';
+  END IF;
+END
+$$;
+
+-- ---------- audit FK unlock + action / reason / nullable shift_id ----------
+DO $$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT con.conname
+    FROM pg_constraint con
+    JOIN pg_class c ON c.oid = con.conrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname = 'attendance_audit_logs'
+      AND con.contype = 'f'
+      AND pg_get_constraintdef(con.oid) ILIKE '%attendance_shifts%'
+  LOOP
+    EXECUTE format('ALTER TABLE public.attendance_audit_logs DROP CONSTRAINT %I', r.conname);
+  END LOOP;
+END
+$$;
+
+ALTER TABLE public.attendance_audit_logs
+  ALTER COLUMN shift_id DROP NOT NULL;
+
+ALTER TABLE public.attendance_audit_logs
+  DROP CONSTRAINT IF EXISTS attendance_audit_action_ck;
+
+ALTER TABLE public.attendance_audit_logs
+  ADD CONSTRAINT attendance_audit_action_ck
+  CHECK (action IN (
+    'CLOCK_IN', 'CLOCK_OUT', 'BREAK_START', 'BREAK_END',
+    'ADMIN_CORRECTION', 'ADMIN_DELETE', 'ADMIN_NETWORK_SETTINGS'
+  ));
+
+ALTER TABLE public.attendance_audit_logs
+  DROP CONSTRAINT IF EXISTS attendance_audit_correction_reason_ck;
+
+ALTER TABLE public.attendance_audit_logs
+  ADD CONSTRAINT attendance_audit_reason_required_ck
+  CHECK (
+    action NOT IN ('ADMIN_CORRECTION', 'ADMIN_DELETE')
+    OR (reason IS NOT NULL AND pg_catalog.length(pg_catalog.btrim(reason)) > 0)
+  );
+
+COMMENT ON COLUMN public.attendance_audit_logs.shift_id IS
+  'Historical shift uuid; FK removed in M5 so ADMIN_DELETE can remove operational rows while audit remains';
+
+-- ---------- shifts.source allow company_network ----------
+ALTER TABLE public.attendance_shifts
+  DROP CONSTRAINT IF EXISTS attendance_shifts_source_ck;
+
+ALTER TABLE public.attendance_shifts
+  ADD CONSTRAINT attendance_shifts_source_ck
+  CHECK (source IS NULL OR source IN ('staff_rpc', 'admin_correction', 'company_network'));
+
+-- ---------- network settings columns ----------
+ALTER TABLE public.attendance_settings
+  ADD COLUMN IF NOT EXISTS network_enabled boolean NOT NULL DEFAULT false;
+
+ALTER TABLE public.attendance_settings
+  ADD COLUMN IF NOT EXISTS allowed_public_ips inet[] NOT NULL DEFAULT '{}'::inet[];
+
+COMMENT ON COLUMN public.attendance_settings.network_enabled IS
+  'Stage 11-5: when true, Edge may allow COMPANY_NETWORK punch after server-side IP match';
+COMMENT ON COLUMN public.attendance_settings.allowed_public_ips IS
+  'Company egress public IPs; never Cloudflare proxy IPs; updated by admin RPC / Edge-assisted capture';
+
+-- Staff must not read company IP allowlist (GPS coords also admin-only hereafter)
+DROP POLICY IF EXISTS attendance_settings_select_backoffice ON public.attendance_settings;
+DROP POLICY IF EXISTS attendance_settings_select_admin ON public.attendance_settings;
+CREATE POLICY attendance_settings_select_admin
+  ON public.attendance_settings
+  FOR SELECT
+  TO authenticated
+  USING (public.is_admin());
+
+-- ---------- service_role helpers ----------
+CREATE OR REPLACE FUNCTION public.dk_attendance_require_service_role()
+RETURNS void
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF COALESCE((SELECT auth.role()), '') IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION 'service_role only' USING ERRCODE = '42501';
+  END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.dk_attendance_lock_enabled_employee(p_employee_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_role text;
+  v_enabled boolean;
+BEGIN
+  IF p_employee_id IS NULL THEN
+    RAISE EXCEPTION 'employee_id required';
+  END IF;
+  SELECT p.role, p.enabled
+    INTO v_role, v_enabled
+  FROM public.profiles p
+  WHERE p.id = p_employee_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'permission denied' USING ERRCODE = '42501';
+  END IF;
+  IF v_enabled IS NOT TRUE OR v_role IS NULL OR v_role NOT IN ('admin', 'staff') THEN
+    RAISE EXCEPTION 'permission denied' USING ERRCODE = '42501';
+  END IF;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.dk_attendance_require_service_role() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.dk_attendance_lock_enabled_employee(uuid) FROM PUBLIC, anon, authenticated;
+
+-- ---------- COMPANY_NETWORK punch RPCs (service_role only; Edge supplies JWT-derived employee) ----------
+CREATE OR REPLACE FUNCTION public.attendance_clock_in_company_network(p_employee_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_uid uuid;
+  v_shift_id uuid;
+  v_now timestamptz;
+  v_after jsonb;
+  v_set public.attendance_settings%ROWTYPE;
+BEGIN
+  PERFORM public.dk_attendance_require_service_role();
+  PERFORM public.dk_attendance_lock_enabled_employee(p_employee_id);
+  v_uid := p_employee_id;
+  v_now := pg_catalog.now();
+
+  SELECT * INTO v_set FROM public.attendance_settings s WHERE s.id = 1;
+  IF NOT FOUND OR v_set.network_enabled IS NOT TRUE THEN
+    RAISE EXCEPTION 'company network not enabled';
+  END IF;
+  IF v_set.allowed_public_ips IS NULL OR pg_catalog.cardinality(v_set.allowed_public_ips) = 0 THEN
+    RAISE EXCEPTION 'company network not configured';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.attendance_shifts s
+    WHERE s.employee_id = v_uid AND s.clock_out_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'open shift already exists';
+  END IF;
+
+  INSERT INTO public.attendance_shifts (
+    employee_id, clock_in_at, clock_out_at, status, source, created_by, updated_by
+  ) VALUES (
+    v_uid, v_now, NULL, 'open', 'company_network', v_uid, v_uid
+  )
+  RETURNING id INTO v_shift_id;
+
+  v_after := public.dk_attendance_shift_snapshot(v_shift_id)
+    || pg_catalog.jsonb_build_object('verification_mode', 'COMPANY_NETWORK');
+  PERFORM public.dk_attendance_write_audit(
+    v_uid, v_uid, v_shift_id, 'CLOCK_IN', 'COMPANY_NETWORK', NULL, v_after,
+    false, NULL, NULL
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'ok', true,
+    'id', v_shift_id,
+    'status', 'open',
+    'clock_in_at', v_now,
+    'verification_mode', 'COMPANY_NETWORK',
+    'location_verified', false
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.attendance_clock_out_company_network(p_employee_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_uid uuid;
+  v_shift public.attendance_shifts%ROWTYPE;
+  v_now timestamptz;
+  v_before jsonb;
+  v_after jsonb;
+  v_set public.attendance_settings%ROWTYPE;
+BEGIN
+  PERFORM public.dk_attendance_require_service_role();
+  PERFORM public.dk_attendance_lock_enabled_employee(p_employee_id);
+  v_uid := p_employee_id;
+  v_now := pg_catalog.now();
+
+  SELECT * INTO v_set FROM public.attendance_settings s WHERE s.id = 1;
+  IF NOT FOUND OR v_set.network_enabled IS NOT TRUE THEN
+    RAISE EXCEPTION 'company network not enabled';
+  END IF;
+  IF v_set.allowed_public_ips IS NULL OR pg_catalog.cardinality(v_set.allowed_public_ips) = 0 THEN
+    RAISE EXCEPTION 'company network not configured';
+  END IF;
+
+  SELECT * INTO v_shift
+  FROM public.attendance_shifts s
+  WHERE s.employee_id = v_uid AND s.clock_out_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'no open shift';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.attendance_breaks b
+    WHERE b.shift_id = v_shift.id AND b.break_end_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'open break exists';
+  END IF;
+  IF v_now < v_shift.clock_in_at THEN
+    RAISE EXCEPTION 'invalid clock range';
+  END IF;
+
+  v_before := public.dk_attendance_shift_snapshot(v_shift.id);
+  UPDATE public.attendance_shifts
+  SET clock_out_at = v_now, status = 'closed', updated_by = v_uid
+  WHERE id = v_shift.id;
+  v_after := public.dk_attendance_shift_snapshot(v_shift.id)
+    || pg_catalog.jsonb_build_object('verification_mode', 'COMPANY_NETWORK');
+  PERFORM public.dk_attendance_write_audit(
+    v_uid, v_uid, v_shift.id, 'CLOCK_OUT', 'COMPANY_NETWORK', v_before, v_after,
+    false, NULL, NULL
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'ok', true,
+    'id', v_shift.id,
+    'status', 'closed',
+    'clock_out_at', v_now,
+    'verification_mode', 'COMPANY_NETWORK',
+    'location_verified', false
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.attendance_break_start_company_network(p_employee_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_uid uuid;
+  v_shift public.attendance_shifts%ROWTYPE;
+  v_break_id uuid;
+  v_now timestamptz;
+  v_after jsonb;
+  v_set public.attendance_settings%ROWTYPE;
+BEGIN
+  PERFORM public.dk_attendance_require_service_role();
+  PERFORM public.dk_attendance_lock_enabled_employee(p_employee_id);
+  v_uid := p_employee_id;
+  v_now := pg_catalog.now();
+
+  SELECT * INTO v_set FROM public.attendance_settings s WHERE s.id = 1;
+  IF NOT FOUND OR v_set.network_enabled IS NOT TRUE THEN
+    RAISE EXCEPTION 'company network not enabled';
+  END IF;
+  IF v_set.allowed_public_ips IS NULL OR pg_catalog.cardinality(v_set.allowed_public_ips) = 0 THEN
+    RAISE EXCEPTION 'company network not configured';
+  END IF;
+
+  SELECT * INTO v_shift
+  FROM public.attendance_shifts s
+  WHERE s.employee_id = v_uid AND s.clock_out_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'no open shift';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.attendance_breaks b
+    WHERE b.employee_id = v_uid AND b.break_end_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'open break already exists';
+  END IF;
+
+  INSERT INTO public.attendance_breaks (
+    shift_id, employee_id, break_start_at, break_end_at
+  ) VALUES (
+    v_shift.id, v_uid, v_now, NULL
+  )
+  RETURNING id INTO v_break_id;
+
+  v_after := public.dk_attendance_shift_snapshot(v_shift.id)
+    || pg_catalog.jsonb_build_object('verification_mode', 'COMPANY_NETWORK', 'break_id', v_break_id);
+  PERFORM public.dk_attendance_write_audit(
+    v_uid, v_uid, v_shift.id, 'BREAK_START', 'COMPANY_NETWORK', NULL, v_after,
+    false, NULL, NULL
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'ok', true,
+    'break_id', v_break_id,
+    'shift_id', v_shift.id,
+    'break_start_at', v_now,
+    'verification_mode', 'COMPANY_NETWORK',
+    'location_verified', false
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.attendance_break_end_company_network(p_employee_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_uid uuid;
+  v_break public.attendance_breaks%ROWTYPE;
+  v_now timestamptz;
+  v_before jsonb;
+  v_after jsonb;
+  v_set public.attendance_settings%ROWTYPE;
+BEGIN
+  PERFORM public.dk_attendance_require_service_role();
+  PERFORM public.dk_attendance_lock_enabled_employee(p_employee_id);
+  v_uid := p_employee_id;
+  v_now := pg_catalog.now();
+
+  SELECT * INTO v_set FROM public.attendance_settings s WHERE s.id = 1;
+  IF NOT FOUND OR v_set.network_enabled IS NOT TRUE THEN
+    RAISE EXCEPTION 'company network not enabled';
+  END IF;
+  IF v_set.allowed_public_ips IS NULL OR pg_catalog.cardinality(v_set.allowed_public_ips) = 0 THEN
+    RAISE EXCEPTION 'company network not configured';
+  END IF;
+
+  SELECT * INTO v_break
+  FROM public.attendance_breaks b
+  WHERE b.employee_id = v_uid AND b.break_end_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'no open break';
+  END IF;
+  IF v_now < v_break.break_start_at THEN
+    RAISE EXCEPTION 'invalid break range';
+  END IF;
+
+  v_before := public.dk_attendance_shift_snapshot(v_break.shift_id);
+  UPDATE public.attendance_breaks
+  SET break_end_at = v_now
+  WHERE id = v_break.id;
+  v_after := public.dk_attendance_shift_snapshot(v_break.shift_id)
+    || pg_catalog.jsonb_build_object('verification_mode', 'COMPANY_NETWORK', 'break_id', v_break.id);
+  PERFORM public.dk_attendance_write_audit(
+    v_uid, v_uid, v_break.shift_id, 'BREAK_END', 'COMPANY_NETWORK', v_before, v_after,
+    false, NULL, NULL
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'ok', true,
+    'break_id', v_break.id,
+    'shift_id', v_break.shift_id,
+    'break_end_at', v_now,
+    'verification_mode', 'COMPANY_NETWORK',
+    'location_verified', false
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.attendance_clock_in_company_network(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.attendance_clock_out_company_network(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.attendance_break_start_company_network(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.attendance_break_end_company_network(uuid) FROM PUBLIC, anon, authenticated;
+-- service_role bypasses GRANT in Supabase; explicit REVOKE keeps PostgREST authenticated path closed.
+
+-- ---------- Admin network settings ----------
+CREATE OR REPLACE FUNCTION public.attendance_admin_save_network(
+  p_enabled boolean,
+  p_allowed_public_ips text[],
+  p_reason text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_role text;
+  v_uid uuid;
+  v_before jsonb;
+  v_after jsonb;
+  v_ips inet[] := '{}'::inet[];
+  v_ip text;
+  v_parsed inet;
+  v_old public.attendance_settings%ROWTYPE;
+BEGIN
+  v_role := public.dk_require_backoffice();
+  IF v_role IS DISTINCT FROM 'admin' OR NOT public.is_admin() THEN
+    RAISE EXCEPTION 'admin only' USING ERRCODE = '42501';
+  END IF;
+  v_uid := (SELECT auth.uid());
+
+  IF p_enabled IS NULL THEN
+    RAISE EXCEPTION 'enabled required';
+  END IF;
+
+  IF p_allowed_public_ips IS NOT NULL THEN
+    FOREACH v_ip IN ARRAY p_allowed_public_ips LOOP
+      IF v_ip IS NULL OR pg_catalog.length(pg_catalog.btrim(v_ip)) = 0 THEN
+        CONTINUE;
+      END IF;
+      BEGIN
+        v_parsed := pg_catalog.btrim(v_ip)::inet;
+      EXCEPTION WHEN OTHERS THEN
+        RAISE EXCEPTION 'invalid public ip';
+      END;
+      -- reject obvious non-public / placeholder ranges used as mistakes (loopback)
+      IF v_parsed << '127.0.0.0/8'::inet OR host(v_parsed) = '::1' THEN
+        RAISE EXCEPTION 'invalid public ip';
+      END IF;
+      v_ips := array_append(v_ips, v_parsed);
+    END LOOP;
+  END IF;
+
+  IF p_enabled IS TRUE AND pg_catalog.cardinality(v_ips) = 0 THEN
+    RAISE EXCEPTION 'company network not configured';
+  END IF;
+
+  SELECT * INTO v_old FROM public.attendance_settings s WHERE s.id = 1 FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'location not configured';
+  END IF;
+
+  v_before := pg_catalog.jsonb_build_object(
+    'network_enabled', v_old.network_enabled,
+    'allowed_public_ips', COALESCE((
+      SELECT pg_catalog.jsonb_agg(pg_catalog.host(ip)::text ORDER BY pg_catalog.host(ip))
+      FROM pg_catalog.unnest(v_old.allowed_public_ips) AS ip
+    ), '[]'::jsonb)
+  );
+
+  UPDATE public.attendance_settings
+  SET network_enabled = p_enabled,
+      allowed_public_ips = v_ips,
+      updated_at = pg_catalog.now(),
+      updated_by = v_uid
+  WHERE id = 1;
+
+  v_after := pg_catalog.jsonb_build_object(
+    'network_enabled', p_enabled,
+    'allowed_public_ips', COALESCE((
+      SELECT pg_catalog.jsonb_agg(pg_catalog.host(ip)::text ORDER BY pg_catalog.host(ip))
+      FROM pg_catalog.unnest(v_ips) AS ip
+    ), '[]'::jsonb)
+  );
+
+  INSERT INTO public.attendance_audit_logs (
+    actor_user_id, employee_id, shift_id, action, reason, before_snapshot, after_snapshot, created_at
+  ) VALUES (
+    v_uid, v_uid, NULL, 'ADMIN_NETWORK_SETTINGS',
+    NULLIF(pg_catalog.btrim(COALESCE(p_reason, '')), ''),
+    v_before, v_after, pg_catalog.now()
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'ok', true,
+    'network_enabled', p_enabled,
+    'allowed_public_ips', COALESCE((
+      SELECT pg_catalog.jsonb_agg(pg_catalog.host(ip)::text ORDER BY pg_catalog.host(ip))
+      FROM pg_catalog.unnest(v_ips) AS ip
+    ), '[]'::jsonb)
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.attendance_admin_save_network(boolean, text[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.attendance_admin_save_network(boolean, text[], text) TO authenticated;
+
+-- ---------- Admin delete shift (audit first, same transaction) ----------
+CREATE OR REPLACE FUNCTION public.attendance_admin_delete_shift(
+  p_shift_id uuid,
+  p_reason text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_role text;
+  v_uid uuid;
+  v_shift public.attendance_shifts%ROWTYPE;
+  v_before jsonb;
+BEGIN
+  v_role := public.dk_require_backoffice();
+  IF v_role IS DISTINCT FROM 'admin' OR NOT public.is_admin() THEN
+    RAISE EXCEPTION 'admin only' USING ERRCODE = '42501';
+  END IF;
+  v_uid := (SELECT auth.uid());
+
+  IF p_shift_id IS NULL THEN
+    RAISE EXCEPTION 'shift_id required';
+  END IF;
+  IF p_reason IS NULL OR pg_catalog.length(pg_catalog.btrim(p_reason)) = 0 THEN
+    RAISE EXCEPTION 'reason required';
+  END IF;
+
+  SELECT * INTO v_shift
+  FROM public.attendance_shifts s
+  WHERE s.id = p_shift_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'shift not found';
+  END IF;
+
+  -- Lock breaks belonging to this shift
+  PERFORM 1 FROM public.attendance_breaks b WHERE b.shift_id = v_shift.id FOR UPDATE;
+
+  v_before := public.dk_attendance_shift_snapshot(v_shift.id);
+  IF v_before IS NULL OR v_before->'shift' IS NULL THEN
+    RAISE EXCEPTION 'shift not found';
+  END IF;
+
+  -- Permanent audit BEFORE operational delete (same transaction)
+  INSERT INTO public.attendance_audit_logs (
+    actor_user_id, employee_id, shift_id, action, reason, before_snapshot, after_snapshot, created_at
+  ) VALUES (
+    v_uid,
+    v_shift.employee_id,
+    v_shift.id,
+    'ADMIN_DELETE',
+    pg_catalog.btrim(p_reason),
+    v_before,
+    pg_catalog.jsonb_build_object(
+      'deleted', true,
+      'deleted_at', pg_catalog.now(),
+      'shift_id', v_shift.id,
+      'employee_id', v_shift.employee_id
+    ),
+    pg_catalog.now()
+  );
+
+  DELETE FROM public.attendance_breaks WHERE shift_id = v_shift.id;
+  DELETE FROM public.attendance_shifts WHERE id = v_shift.id;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'ok', true,
+    'deleted_shift_id', v_shift.id,
+    'employee_id', v_shift.employee_id
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.attendance_admin_delete_shift(uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.attendance_admin_delete_shift(uuid, text) TO authenticated;
+
+*/
+
+-- M5_NETWORK_AND_ADMIN_DELETE END
+
+
+-- ============================================================
+-- SECTION M5_VERIFY
+-- 只讀。確認網路打卡 RPC 不對 authenticated 開放；Admin 刪除與 audit 永久保存。
+-- 請複製本 SECTION（從下一行到 M5_VERIFY END）單獨執行。
+-- ============================================================
+/*
+
+SELECT 1 AS seq, 'col.settings.network_enabled' AS check_name,
+       (
+         SELECT COUNT(*)::text FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'attendance_settings' AND column_name = 'network_enabled'
+       ), '1',
+       CASE WHEN EXISTS (
+         SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'attendance_settings' AND column_name = 'network_enabled'
+       ) THEN 'PASS' ELSE 'FAIL' END AS verdict
+UNION ALL SELECT 2, 'col.settings.allowed_public_ips',
+       (
+         SELECT COUNT(*)::text FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'attendance_settings' AND column_name = 'allowed_public_ips'
+       ), '1',
+       CASE WHEN EXISTS (
+         SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'attendance_settings' AND column_name = 'allowed_public_ips'
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 3, 'audit.shift_id.nullable',
+       (
+         SELECT is_nullable FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'attendance_audit_logs' AND column_name = 'shift_id'
+       ), 'YES',
+       CASE WHEN EXISTS (
+         SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'attendance_audit_logs' AND column_name = 'shift_id'
+           AND is_nullable = 'YES'
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 4, 'audit.no_fk_to_shifts',
+       (
+         SELECT COUNT(*)::text FROM pg_constraint con
+         JOIN pg_class c ON c.oid = con.conrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = 'attendance_audit_logs'
+           AND con.contype = 'f' AND pg_get_constraintdef(con.oid) ILIKE '%attendance_shifts%'
+       ), '0',
+       CASE WHEN NOT EXISTS (
+         SELECT 1 FROM pg_constraint con
+         JOIN pg_class c ON c.oid = con.conrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = 'attendance_audit_logs'
+           AND con.contype = 'f' AND pg_get_constraintdef(con.oid) ILIKE '%attendance_shifts%'
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 5, 'audit.action_allows_ADMIN_DELETE',
+       CASE WHEN EXISTS (
+         SELECT 1 FROM pg_constraint con
+         JOIN pg_class c ON c.oid = con.conrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = 'attendance_audit_logs'
+           AND con.conname = 'attendance_audit_action_ck'
+           AND pg_get_constraintdef(con.oid) ILIKE '%ADMIN_DELETE%'
+           AND pg_get_constraintdef(con.oid) ILIKE '%ADMIN_NETWORK_SETTINGS%'
+       ) THEN 'true' ELSE 'false' END, 'true',
+       CASE WHEN EXISTS (
+         SELECT 1 FROM pg_constraint con
+         JOIN pg_class c ON c.oid = con.conrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = 'attendance_audit_logs'
+           AND con.conname = 'attendance_audit_action_ck'
+           AND pg_get_constraintdef(con.oid) ILIKE '%ADMIN_DELETE%'
+           AND pg_get_constraintdef(con.oid) ILIKE '%ADMIN_NETWORK_SETTINGS%'
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 6, 'trigger.audit_immutable',
+       (
+         SELECT COUNT(*)::text FROM pg_trigger t
+         JOIN pg_class c ON c.oid = t.tgrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = 'attendance_audit_logs'
+           AND t.tgname = 'trg_attendance_audit_logs_immutable' AND NOT t.tgisinternal
+       ), '1',
+       CASE WHEN EXISTS (
+         SELECT 1 FROM pg_trigger t
+         JOIN pg_class c ON c.oid = t.tgrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = 'attendance_audit_logs'
+           AND t.tgname = 'trg_attendance_audit_logs_immutable' AND NOT t.tgisinternal
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 7, 'rpc.exists.clock_in_company_network',
+       (to_regprocedure('public.attendance_clock_in_company_network(uuid)') IS NOT NULL)::text, 'true',
+       CASE WHEN to_regprocedure('public.attendance_clock_in_company_network(uuid)') IS NOT NULL THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 8, 'rpc.exists.clock_out_company_network',
+       (to_regprocedure('public.attendance_clock_out_company_network(uuid)') IS NOT NULL)::text, 'true',
+       CASE WHEN to_regprocedure('public.attendance_clock_out_company_network(uuid)') IS NOT NULL THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 9, 'rpc.exists.break_start_company_network',
+       (to_regprocedure('public.attendance_break_start_company_network(uuid)') IS NOT NULL)::text, 'true',
+       CASE WHEN to_regprocedure('public.attendance_break_start_company_network(uuid)') IS NOT NULL THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 10, 'rpc.exists.break_end_company_network',
+       (to_regprocedure('public.attendance_break_end_company_network(uuid)') IS NOT NULL)::text, 'true',
+       CASE WHEN to_regprocedure('public.attendance_break_end_company_network(uuid)') IS NOT NULL THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 11, 'rpc.exists.admin_save_network',
+       (to_regprocedure('public.attendance_admin_save_network(boolean,text[],text)') IS NOT NULL)::text, 'true',
+       CASE WHEN to_regprocedure('public.attendance_admin_save_network(boolean,text[],text)') IS NOT NULL THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 12, 'rpc.exists.admin_delete_shift',
+       (to_regprocedure('public.attendance_admin_delete_shift(uuid,text)') IS NOT NULL)::text, 'true',
+       CASE WHEN to_regprocedure('public.attendance_admin_delete_shift(uuid,text)') IS NOT NULL THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 13, 'rpc.network_punch.security_definer',
+       (
+         SELECT COUNT(*)::text FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN (
+             'attendance_clock_in_company_network','attendance_clock_out_company_network',
+             'attendance_break_start_company_network','attendance_break_end_company_network',
+             'attendance_admin_save_network','attendance_admin_delete_shift'
+           )
+           AND p.prosecdef
+       ), '6',
+       CASE WHEN (
+         SELECT COUNT(*) FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN (
+             'attendance_clock_in_company_network','attendance_clock_out_company_network',
+             'attendance_break_start_company_network','attendance_break_end_company_network',
+             'attendance_admin_save_network','attendance_admin_delete_shift'
+           )
+           AND p.prosecdef
+       ) = 6 THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 14, 'rpc.network_punch.search_path_empty',
+       (
+         SELECT COUNT(*)::text FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN (
+             'attendance_clock_in_company_network','attendance_clock_out_company_network',
+             'attendance_break_start_company_network','attendance_break_end_company_network',
+             'attendance_admin_save_network','attendance_admin_delete_shift'
+           )
+           AND p.proconfig IS NOT NULL
+           AND EXISTS (
+             SELECT 1 FROM unnest(p.proconfig) cfg
+             WHERE lower(cfg) LIKE 'search_path=%'
+               AND replace(replace(btrim(substr(cfg, position('=' in cfg) + 1)), '"', ''), '''', '') = ''
+           )
+       ), '6',
+       CASE WHEN (
+         SELECT COUNT(*) FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN (
+             'attendance_clock_in_company_network','attendance_clock_out_company_network',
+             'attendance_break_start_company_network','attendance_break_end_company_network',
+             'attendance_admin_save_network','attendance_admin_delete_shift'
+           )
+           AND p.proconfig IS NOT NULL
+           AND EXISTS (
+             SELECT 1 FROM unnest(p.proconfig) cfg
+             WHERE lower(cfg) LIKE 'search_path=%'
+               AND replace(replace(btrim(substr(cfg, position('=' in cfg) + 1)), '"', ''), '''', '') = ''
+           )
+       ) = 6 THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 15, 'grant.network_punch.authenticated_execute',
+       (
+         SELECT COUNT(*)::text FROM information_schema.routine_privileges
+         WHERE routine_schema = 'public'
+           AND routine_name IN (
+             'attendance_clock_in_company_network','attendance_clock_out_company_network',
+             'attendance_break_start_company_network','attendance_break_end_company_network'
+           )
+           AND grantee IN ('PUBLIC','anon','authenticated')
+           AND privilege_type = 'EXECUTE'
+       ), '0',
+       CASE WHEN NOT EXISTS (
+         SELECT 1 FROM information_schema.routine_privileges
+         WHERE routine_schema = 'public'
+           AND routine_name IN (
+             'attendance_clock_in_company_network','attendance_clock_out_company_network',
+             'attendance_break_start_company_network','attendance_break_end_company_network'
+           )
+           AND grantee IN ('PUBLIC','anon','authenticated')
+           AND privilege_type = 'EXECUTE'
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 16, 'grant.admin_delete.authenticated_execute',
+       (
+         SELECT COUNT(*)::text FROM information_schema.routine_privileges
+         WHERE routine_schema = 'public'
+           AND routine_name = 'attendance_admin_delete_shift'
+           AND grantee = 'authenticated' AND privilege_type = 'EXECUTE'
+       ), '1',
+       CASE WHEN EXISTS (
+         SELECT 1 FROM information_schema.routine_privileges
+         WHERE routine_schema = 'public'
+           AND routine_name = 'attendance_admin_delete_shift'
+           AND grantee = 'authenticated' AND privilege_type = 'EXECUTE'
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 17, 'grant.admin_delete.anon_or_public',
+       (
+         SELECT COUNT(*)::text FROM information_schema.routine_privileges
+         WHERE routine_schema = 'public'
+           AND routine_name = 'attendance_admin_delete_shift'
+           AND grantee IN ('PUBLIC','anon') AND privilege_type = 'EXECUTE'
+       ), '0',
+       CASE WHEN NOT EXISTS (
+         SELECT 1 FROM information_schema.routine_privileges
+         WHERE routine_schema = 'public'
+           AND routine_name = 'attendance_admin_delete_shift'
+           AND grantee IN ('PUBLIC','anon') AND privilege_type = 'EXECUTE'
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 18, 'rpc.admin_delete.admin_only_guard',
+       CASE WHEN to_regprocedure('public.attendance_admin_delete_shift(uuid,text)') IS NOT NULL
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_delete_shift(uuid,text)')) ILIKE '%admin only%'
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_delete_shift(uuid,text)')) ILIKE '%is_admin()%'
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_delete_shift(uuid,text)')) ILIKE '%ADMIN_DELETE%'
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_delete_shift(uuid,text)')) ILIKE '%DELETE FROM public.attendance_breaks%'
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_delete_shift(uuid,text)')) ILIKE '%DELETE FROM public.attendance_shifts%'
+         THEN 'true' ELSE 'false' END, 'true',
+       CASE WHEN to_regprocedure('public.attendance_admin_delete_shift(uuid,text)') IS NOT NULL
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_delete_shift(uuid,text)')) ILIKE '%admin only%'
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_delete_shift(uuid,text)')) ILIKE '%is_admin()%'
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_delete_shift(uuid,text)')) ILIKE '%ADMIN_DELETE%'
+         THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 19, 'rpc.network_punch.service_role_guard',
+       (
+         SELECT COUNT(*)::text FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN (
+             'attendance_clock_in_company_network','attendance_clock_out_company_network',
+             'attendance_break_start_company_network','attendance_break_end_company_network'
+           )
+           AND pg_get_functiondef(p.oid) ILIKE '%dk_attendance_require_service_role%'
+       ), '4',
+       CASE WHEN (
+         SELECT COUNT(*) FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN (
+             'attendance_clock_in_company_network','attendance_clock_out_company_network',
+             'attendance_break_start_company_network','attendance_break_end_company_network'
+           )
+           AND pg_get_functiondef(p.oid) ILIKE '%dk_attendance_require_service_role%'
+       ) = 4 THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 20, 'table.write_grants.attendance_shifts',
+       (
+         SELECT COUNT(*)::text FROM information_schema.role_table_grants
+         WHERE table_schema = 'public' AND table_name = 'attendance_shifts'
+           AND grantee IN ('PUBLIC','anon','authenticated')
+           AND privilege_type IN ('INSERT','UPDATE','DELETE')
+       ), '0',
+       CASE WHEN NOT EXISTS (
+         SELECT 1 FROM information_schema.role_table_grants
+         WHERE table_schema = 'public' AND table_name = 'attendance_shifts'
+           AND grantee IN ('PUBLIC','anon','authenticated')
+           AND privilege_type IN ('INSERT','UPDATE','DELETE')
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 21, 'table.write_grants.attendance_audit_logs',
+       (
+         SELECT COUNT(*)::text FROM information_schema.role_table_grants
+         WHERE table_schema = 'public' AND table_name = 'attendance_audit_logs'
+           AND grantee IN ('PUBLIC','anon','authenticated')
+           AND privilege_type IN ('INSERT','UPDATE','DELETE')
+       ), '0',
+       CASE WHEN NOT EXISTS (
+         SELECT 1 FROM information_schema.role_table_grants
+         WHERE table_schema = 'public' AND table_name = 'attendance_audit_logs'
+           AND grantee IN ('PUBLIC','anon','authenticated')
+           AND privilege_type IN ('INSERT','UPDATE','DELETE')
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 22, 'policy.settings_admin_only',
+       (
+         SELECT COUNT(*)::text FROM pg_policies
+         WHERE schemaname = 'public' AND tablename = 'attendance_settings'
+           AND policyname = 'attendance_settings_select_admin' AND cmd = 'SELECT'
+       ), '1',
+       CASE WHEN EXISTS (
+         SELECT 1 FROM pg_policies
+         WHERE schemaname = 'public' AND tablename = 'attendance_settings'
+           AND policyname = 'attendance_settings_select_admin' AND cmd = 'SELECT'
+       ) AND NOT EXISTS (
+         SELECT 1 FROM pg_policies
+         WHERE schemaname = 'public' AND tablename = 'attendance_settings'
+           AND policyname = 'attendance_settings_select_backoffice'
+       ) THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 23, 'stage7.inventory_table',
+       (to_regclass('public.inventory') IS NOT NULL)::text, 'true',
+       CASE WHEN to_regclass('public.inventory') IS NOT NULL THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 24, 'stage7.orders_or_orders_data',
+       (
+         (to_regclass('public.orders') IS NOT NULL OR to_regclass('public.orders_data') IS NOT NULL)::text
+       ), 'true',
+       CASE WHEN to_regclass('public.orders') IS NOT NULL OR to_regclass('public.orders_data') IS NOT NULL
+         THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 25, 'gps.rpc.still_exists',
+       (to_regprocedure('public.attendance_clock_in(double precision,double precision,double precision)') IS NOT NULL)::text, 'true',
+       CASE WHEN to_regprocedure('public.attendance_clock_in(double precision,double precision,double precision)') IS NOT NULL
+              AND to_regprocedure('public.attendance_admin_correct(uuid,text,uuid,timestamptz,timestamptz,uuid,timestamptz,timestamptz)') IS NOT NULL
+         THEN 'PASS' ELSE 'FAIL' END
+UNION ALL SELECT 26, 'rpc.admin_save_network.admin_only',
+       CASE WHEN to_regprocedure('public.attendance_admin_save_network(boolean,text[],text)') IS NOT NULL
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_save_network(boolean,text[],text)')) ILIKE '%admin only%'
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_save_network(boolean,text[],text)')) ILIKE '%ADMIN_NETWORK_SETTINGS%'
+         THEN 'true' ELSE 'false' END, 'true',
+       CASE WHEN to_regprocedure('public.attendance_admin_save_network(boolean,text[],text)') IS NOT NULL
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_save_network(boolean,text[],text)')) ILIKE '%admin only%'
+              AND pg_get_functiondef(to_regprocedure('public.attendance_admin_save_network(boolean,text[],text)')) ILIKE '%ADMIN_NETWORK_SETTINGS%'
+         THEN 'PASS' ELSE 'FAIL' END;
+
+*/
+
+-- M5_VERIFY END
+
+
+-- ============================================================
 -- SECTION ROLLBACK
 -- 只撤 Stage 11 新物件。禁止碰 profiles / auth / inventory* / orders* /
 -- v2_data / site_config / Storage。
@@ -2287,6 +3194,14 @@ ORDER BY 1;
 -- ============================================================
 /*
 
+DROP FUNCTION IF EXISTS public.attendance_admin_delete_shift(uuid, text);
+DROP FUNCTION IF EXISTS public.attendance_admin_save_network(boolean, text[], text);
+DROP FUNCTION IF EXISTS public.attendance_break_end_company_network(uuid);
+DROP FUNCTION IF EXISTS public.attendance_break_start_company_network(uuid);
+DROP FUNCTION IF EXISTS public.attendance_clock_out_company_network(uuid);
+DROP FUNCTION IF EXISTS public.attendance_clock_in_company_network(uuid);
+DROP FUNCTION IF EXISTS public.dk_attendance_lock_enabled_employee(uuid);
+DROP FUNCTION IF EXISTS public.dk_attendance_require_service_role();
 DROP FUNCTION IF EXISTS public.attendance_admin_save_location(boolean, double precision, double precision, numeric, numeric);
 DROP FUNCTION IF EXISTS public.attendance_admin_correct(uuid, text, uuid, timestamptz, timestamptz, uuid, timestamptz, timestamptz);
 DROP FUNCTION IF EXISTS public.attendance_break_end(double precision, double precision, double precision);

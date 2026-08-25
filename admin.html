@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260825att2" />
+    <link rel="stylesheet" href="./styles.css?v=20260825att4" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -1500,6 +1500,39 @@
               <div id="attLocMsg" class="muted" style="margin-top:8px" hidden></div>
             </div>
 
+            <div id="attNetworkSettings" class="card" style="margin-top:16px" data-admin-only>
+              <div class="section-head">
+                <div>
+                  <h3 class="h3">公司網路打卡</h3>
+                  <p class="muted">以伺服器看到的公司出網 Public IP 驗證（Edge）。請勿填入 Cloudflare／網域 proxy IP。</p>
+                </div>
+              </div>
+              <div class="form-grid" style="margin-top:12px">
+                <div class="field">
+                  <label for="attNetEnabled">啟用公司網路驗證</label>
+                  <select id="attNetEnabled">
+                    <option value="0">關閉</option>
+                    <option value="1">啟用</option>
+                  </select>
+                </div>
+                <div class="field full">
+                  <label for="attNetIps">允許的 Public IP（每行一個）</label>
+                  <textarea id="attNetIps" rows="4" placeholder="每行一個 Public IP（請用偵測結果，勿填 Cloudflare／網域 DNS）"></textarea>
+                </div>
+                <div class="field full">
+                  <label for="attNetReason">變更理由（選填）</label>
+                  <input id="attNetReason" type="text" maxlength="200" placeholder="例如：更換固網 IP" />
+                </div>
+                <div class="field full actions" style="display:flex;flex-wrap:wrap;gap:8px">
+                  <button id="attNetDetect" class="btn btn-ghost" type="button">偵測目前伺服器可見 IP</button>
+                  <button id="attNetSaveCurrent" class="btn btn-ghost" type="button">將目前公司網路設為允許</button>
+                  <button id="attNetSave" class="btn btn-primary" type="button">儲存網路設定</button>
+                </div>
+              </div>
+              <div id="attNetPreview" class="muted small" style="margin-top:8px">尚未讀取伺服器設定。</div>
+              <div id="attNetMsg" class="muted" style="margin-top:8px" hidden></div>
+            </div>
+
             <div id="attAdminManage" class="card" style="margin-top:16px" data-admin-only>
               <div class="section-head">
                 <div>
@@ -1606,13 +1639,31 @@
                 </div>
                 <div id="attCorrectMsg" class="muted" style="margin-top:8px" hidden></div>
               </div>
+              <div id="attDeleteCard" class="card" style="margin-top:14px" hidden>
+                <h3 class="h3">刪除出勤紀錄</h3>
+                <p class="muted small">刪除前會寫入永久 ADMIN_DELETE 稽核。理由必填。刪除後無法從出勤表還原，稽核不可刪。</p>
+                <input type="hidden" id="attDeleteShiftId" value="" />
+                <div class="form-grid" style="margin-top:12px">
+                  <div class="field"><label>員工</label><div id="attDeleteEmployeeLabel" class="muted">—</div></div>
+                  <div class="field"><label>班次摘要</label><div id="attDeleteShiftLabel" class="muted">—</div></div>
+                  <div class="field full">
+                    <label for="attDeleteReason">刪除理由（必填）</label>
+                    <input id="attDeleteReason" type="text" maxlength="200" placeholder="例如：重複打卡、測試資料" />
+                  </div>
+                  <div class="full actions">
+                    <button id="attDeleteSubmit" class="btn btn-primary" type="button">確認刪除</button>
+                    <button id="attDeleteCancel" class="btn btn-ghost" type="button">取消</button>
+                  </div>
+                </div>
+                <div id="attDeleteMsg" class="muted" style="margin-top:8px" hidden></div>
+              </div>
             </div>
 
             <div id="attAdminAudit" class="card" style="margin-top:16px" data-admin-only>
               <div class="section-head">
                 <div>
                   <h3 class="h3">出勤稽核</h3>
-                  <p class="muted">attendance_audit_logs，僅管理員可讀。</p>
+                  <p class="muted">attendance_audit_logs，僅管理員可讀。含 ADMIN_DELETE／網路設定變更；稽核紀錄不可刪除。</p>
                 </div>
               </div>
               <div class="table-wrap" style="margin-top:10px">
@@ -1756,15 +1807,15 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260825att2"></script>
+    <script src="./shared.js?v=20260825att4"></script>
     <script src="./inventory-ledger.js?v=20260825oh1"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260825att2"></script>
+    <script src="./admin3.js?v=20260825att4"></script>
     <script src="./purchase-orders.js?v=20260815s5a"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./attendance.js?v=20260825att3"></script>
+    <script src="./attendance.js?v=20260825att4"></script>
   </body>
 </html>
 

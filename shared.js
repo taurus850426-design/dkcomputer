@@ -1467,6 +1467,14 @@ function isSupabaseConfigured() {
   return !!(SUPABASE_URL && SUPABASE_ANON_KEY);
 }
 
+function getSupabaseProjectUrl() {
+  return SUPABASE_URL || "";
+}
+
+function getSupabaseAnonKey() {
+  return SUPABASE_ANON_KEY || "";
+}
+
 if (typeof window !== "undefined") {
   window.__syncV2ToSupabase = function () {
     return saveV2DataToSupabase().catch(function (e) {
@@ -4105,6 +4113,8 @@ window.DK = {
   loadAuditLogs,
   ADMIN_ROLE_LABEL,
   isSupabaseConfigured,
+  getSupabaseProjectUrl,
+  getSupabaseAnonKey,
   getSupabaseAuthClient,
   getSupabaseAuthSession,
   getSupabaseAuthUser,

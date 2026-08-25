@@ -1,16 +1,17 @@
 /**
- * Stage 11 / 11-4 員工打卡。
+ * Stage 11 / 11-5 員工打卡。
  * 讀 attendance_shifts / attendance_breaks / attendance_audit_logs / attendance_settings（RLS）。
- * 寫入只走 RPC：clock_in/out、break_start/end、admin_correct、admin_save_location。
- * 正常打卡傳 p_latitude / p_longitude / p_accuracy；時間與身份仍由 server 決定。
- * 不直接 INSERT / UPDATE / DELETE attendance 表。不背景追蹤 GPS。
+ * GPS：authenticated RPC（p_latitude/p_longitude/p_accuracy）。
+ * 公司網路：Edge 取 server-side Public IP，再以 service_role 呼叫 *_company_network。
+ * 不直接 INSERT/UPDATE/DELETE attendance 表；不送 client IP／timestamp；不背景追蹤 GPS。
  */
 (function (global) {
   const TZ = "Asia/Taipei";
   const SHIFT_SELECT = "id,employee_id,clock_in_at,clock_out_at,status,source,created_at,updated_at";
   const BREAK_SELECT = "id,shift_id,employee_id,break_start_at,break_end_at,created_at";
   const AUDIT_SELECT = "id,actor_user_id,employee_id,shift_id,action,reason,created_at";
-  const SETTINGS_SELECT = "id,location_enabled,latitude,longitude,radius_meters,max_accuracy_meters,updated_at";
+  const SETTINGS_SELECT =
+    "id,location_enabled,latitude,longitude,radius_meters,max_accuracy_meters,network_enabled,allowed_public_ips,updated_at";
   const WEEKDAY_ZH = ["日", "一", "二", "三", "四", "五", "六"];
 
   const ACTION_LABEL = {
@@ -19,6 +20,15 @@
     BREAK_START: "開始休息",
     BREAK_END: "結束休息",
     ADMIN_CORRECTION: "管理員更正",
+    ADMIN_DELETE: "管理員刪除",
+    ADMIN_NETWORK_SETTINGS: "網路設定變更",
+  };
+
+  const GPS_RPC_TO_PUNCH = {
+    attendance_clock_in: "clock_in",
+    attendance_clock_out: "clock_out",
+    attendance_break_start: "break_start",
+    attendance_break_end: "break_end",
   };
 
   let busy = false;
@@ -323,6 +333,68 @@
     return res ? res.data : null;
   }
 
+  async function callAttendanceNetworkEdge(payload) {
+    gateBackoffice();
+    const base =
+      global.DK && typeof global.DK.getSupabaseProjectUrl === "function"
+        ? global.DK.getSupabaseProjectUrl()
+        : "";
+    const anon =
+      global.DK && typeof global.DK.getSupabaseAnonKey === "function"
+        ? global.DK.getSupabaseAnonKey()
+        : "";
+    if (!base || !anon) throw new Error("Supabase 未設定");
+    const hdr =
+      global.DK && typeof global.DK.getSupabaseRestAuthHeaders === "function"
+        ? await global.DK.getSupabaseRestAuthHeaders({ requireUser: true })
+        : null;
+    if (!hdr || !hdr.ok || !hdr.headers) {
+      throw new Error((hdr && hdr.error) || "請先登入後台");
+    }
+    const url = String(base).replace(/\/$/, "") + "/functions/v1/attendance-network";
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: anon,
+        Authorization: hdr.headers.Authorization,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload || {}),
+    });
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (_) {
+      data = null;
+    }
+    return { httpOk: res.ok, status: res.status, data: data };
+  }
+
+  /**
+   * Try COMPANY_NETWORK punch via Edge.
+   * Returns { ok:true, data } on success.
+   * Returns { ok:false, soft:true } when network path unavailable → caller may GPS fallback.
+   * Throws only when network matched but RPC failed (should not silently GPS-duplicate).
+   */
+  async function tryCompanyNetworkPunch(punchKind) {
+    try {
+      const res = await callAttendanceNetworkEdge({ action: "punch", punch: punchKind });
+      const d = res.data || {};
+      if (d.ok === true && d.network_ok === true) {
+        return { ok: true, data: d };
+      }
+      if (d.network_ok === true && d.code === "rpc_failed") {
+        throw new Error(d.error || "公司網路打卡失敗");
+      }
+      return { ok: false, soft: true, code: d.code || "network_unavailable", error: d.error || "" };
+    } catch (e) {
+      // Edge not deployed / network error → soft fallback to GPS
+      const msg = String((e && e.message) || e || "");
+      if (/公司網路打卡失敗/.test(msg)) throw e;
+      return { ok: false, soft: true, code: "edge_unavailable", error: msg };
+    }
+  }
+
   async function fetchRows(table, build) {
     const client = await getClient();
     let q = client.from(table).select(build.select);
@@ -523,6 +595,39 @@
       "已設定：lat " + Number(s.latitude).toFixed(6) +
       " / lng " + Number(s.longitude).toFixed(6) +
       "，半徑 " + s.radius_meters + " m，最大誤差 " + s.max_accuracy_meters + " m。";
+  }
+
+  function normalizeIpLines(text) {
+    return String(text || "")
+      .split(/[\n,;]+/)
+      .map(function (s) { return s.trim(); })
+      .filter(Boolean);
+  }
+
+  function fillNetworkForm() {
+    if (!isAdmin()) return;
+    const s = locationSettings;
+    if ($("attNetEnabled")) $("attNetEnabled").value = s && s.network_enabled === true ? "1" : "0";
+    const ips = s && Array.isArray(s.allowed_public_ips) ? s.allowed_public_ips : [];
+    if ($("attNetIps")) {
+      $("attNetIps").value = ips
+        .map(function (ip) {
+          const t = String(ip || "");
+          return t.indexOf("/") >= 0 ? t.split("/")[0] : t;
+        })
+        .join("\n");
+    }
+    const preview = $("attNetPreview");
+    if (!preview) return;
+    if (!s) {
+      preview.textContent = "尚未讀取伺服器設定。";
+      return;
+    }
+    preview.textContent =
+      (s.network_enabled === true ? "公司網路驗證：啟用" : "公司網路驗證：關閉") +
+      "｜允許 IP 數 " +
+      ips.length +
+      "。請使用公司出網 Public IP，勿填 Cloudflare proxy。";
   }
 
   async function fetchMyAttendance() {
@@ -752,7 +857,10 @@
         "<td>" + esc(rest) + "</td>" +
         "<td>" + esc(work) + "</td>" +
         "<td>" + esc(st) + "</td>" +
-        "<td style=\"text-align:right\"><button type=\"button\" class=\"btn btn-ghost btn-sm att-correct-btn\" data-shift=\"" + esc(s.id) + "\">更正</button></td>" +
+        "<td style=\"text-align:right;white-space:nowrap\">" +
+        "<button type=\"button\" class=\"btn btn-ghost btn-sm att-correct-btn\" data-shift=\"" + esc(s.id) + "\">更正</button> " +
+        "<button type=\"button\" class=\"btn btn-ghost btn-sm att-delete-btn\" data-shift=\"" + esc(s.id) + "\">刪除</button>" +
+        "</td>" +
         "</tr>"
       );
     }).join("");
@@ -785,6 +893,7 @@
       showMsg($("attCorrectMsg"), "找不到該班次。", true);
       return;
     }
+    if ($("attDeleteCard")) $("attDeleteCard").hidden = true;
     const card = $("attCorrectCard");
     if (card) card.hidden = false;
     $("attCorrectShiftId").value = shift.id;
@@ -827,6 +936,7 @@
       if (isAdmin()) {
         await fetchLocationSettings();
         fillLocationForm();
+        fillNetworkForm();
         await fetchAdminAttendance();
         adminAuditRows = await fetchAdminAudit();
         renderAdminTable();
@@ -839,6 +949,7 @@
         if ($("attAdminManage")) $("attAdminManage").hidden = true;
         if ($("attAdminAudit")) $("attAdminAudit").hidden = true;
         if ($("attLocationSettings")) $("attLocationSettings").hidden = true;
+        if ($("attNetworkSettings")) $("attNetworkSettings").hidden = true;
       }
       renderClockFace();
       if (!silent) showMsg($("attMsg"), "", false);
@@ -851,13 +962,32 @@
 
   async function runAction(fnName, successText) {
     if (busy) return;
-    // unlock 必須在 click 同步區（本函式第一個 await 之前）完成
     unlockAttendanceAudio();
     busy = true;
     setButtons({ canClockIn: false, canBreakStart: false, canBreakEnd: false, canClockOut: false });
-    showMsg($("attMsg"), "定位中…", false);
-    setLocStatus("定位中…", "busy");
+    showMsg($("attMsg"), "驗證公司網路中…", false);
+    setLocStatus("驗證公司網路中…", "busy");
     try {
+      const punchKind = GPS_RPC_TO_PUNCH[fnName];
+      if (punchKind) {
+        const net = await tryCompanyNetworkPunch(punchKind);
+        if (net && net.ok) {
+          await refreshAll({ silent: true });
+          setLocStatus("公司網路驗證成功", "ok");
+          const okText =
+            (successText ? successText.replace(/。?$/, "") + "。" : "") +
+            "打卡成功，位置正確（公司網路）";
+          showMsg($("attMsg"), okText, false);
+          playSuccessFeedback();
+          return;
+        }
+        if (net && !net.soft && net.error) {
+          throw new Error(net.error);
+        }
+      }
+
+      showMsg($("attMsg"), "定位中…", false);
+      setLocStatus("定位中…", "busy");
       const geo = await getCurrentPositionOnce();
       pendingGpsPreview = geo;
       let uxHint = "";
@@ -895,7 +1025,6 @@
       playSuccessFeedback();
     } catch (e) {
       const msg = e && (e.code === 1 || e.code === 2 || e.code === 3) ? mapGeoError(e) : mapRpcError(e);
-      // 同一錯誤只顯示一次（避免 attMsg + attLocStatus 重複）
       showMsg($("attMsg"), msg, true);
       setLocStatus("打卡未完成", "err");
       renderClockFace();
@@ -963,6 +1092,135 @@
       showMsg($("attLocMsg"), "地點設定已儲存。", false);
     } catch (e) {
       showMsg($("attLocMsg"), mapRpcError(e), true);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function detectServerSeenIp() {
+    if (!isAdmin() || busy) return;
+    busy = true;
+    showMsg($("attNetMsg"), "偵測中…", false);
+    try {
+      const res = await callAttendanceNetworkEdge({ action: "detect_ip" });
+      const d = res.data || {};
+      if (!d.ok || !d.server_seen_ip) {
+        throw new Error(d.error || "無法取得伺服器可見 IP（請確認 Edge 已部署）");
+      }
+      showMsg(
+        $("attNetMsg"),
+        "伺服器目前看到的 Public IP：" + d.server_seen_ip + "（非 client 自報）。確認後可按「將目前公司網路設為允許」。",
+        false
+      );
+    } catch (e) {
+      showMsg($("attNetMsg"), mapRpcError(e), true);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function saveCurrentCompanyNetwork() {
+    if (!isAdmin() || busy) return;
+    busy = true;
+    showMsg($("attNetMsg"), "由伺服器擷取目前網路並儲存…", false);
+    try {
+      const reason = $("attNetReason") && String($("attNetReason").value || "").trim();
+      const res = await callAttendanceNetworkEdge({
+        action: "save_current_network",
+        reason: reason || undefined,
+      });
+      const d = res.data || {};
+      if (!d.ok) {
+        throw new Error(d.error || "儲存目前公司網路失敗");
+      }
+      await fetchLocationSettings();
+      fillNetworkForm();
+      showMsg(
+        $("attNetMsg"),
+        "已將伺服器可見 IP " + (d.server_seen_ip || "") + " 加入允許清單並啟用公司網路驗證。",
+        false
+      );
+    } catch (e) {
+      showMsg($("attNetMsg"), mapRpcError(e), true);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function saveNetworkSettings() {
+    if (!isAdmin() || busy) return;
+    const enabled = $("attNetEnabled") && $("attNetEnabled").value === "1";
+    const ips = normalizeIpLines($("attNetIps") && $("attNetIps").value);
+    const reason = $("attNetReason") && String($("attNetReason").value || "").trim();
+    if (enabled && !ips.length) {
+      showMsg($("attNetMsg"), "啟用公司網路時，至少需要一個 Public IP。", true);
+      return;
+    }
+    busy = true;
+    showMsg($("attNetMsg"), "儲存中…", false);
+    try {
+      await rpcCall("attendance_admin_save_network", {
+        p_enabled: enabled,
+        p_allowed_public_ips: ips,
+        p_reason: reason || null,
+      });
+      await fetchLocationSettings();
+      fillNetworkForm();
+      showMsg($("attNetMsg"), "公司網路設定已儲存。", false);
+    } catch (e) {
+      showMsg($("attNetMsg"), mapRpcError(e), true);
+    } finally {
+      busy = false;
+    }
+  }
+
+  function openDeleteForm(shiftId) {
+    if (!isAdmin()) return;
+    const shift = adminShifts.concat(myShifts).find(function (s) { return s && s.id === shiftId; });
+    if (!shift) {
+      showMsg($("attDeleteMsg"), "找不到該班次。", true);
+      return;
+    }
+    if ($("attCorrectCard")) $("attCorrectCard").hidden = true;
+    const card = $("attDeleteCard");
+    if (card) card.hidden = false;
+    if ($("attDeleteShiftId")) $("attDeleteShiftId").value = shift.id;
+    if ($("attDeleteEmployeeLabel")) $("attDeleteEmployeeLabel").textContent = personName(shift.employee_id);
+    if ($("attDeleteShiftLabel")) {
+      $("attDeleteShiftLabel").textContent =
+        formatTaipeiDateTime(shift.clock_in_at) +
+        " → " +
+        (shift.clock_out_at ? formatTaipeiDateTime(shift.clock_out_at) : "尚未下班");
+    }
+    if ($("attDeleteReason")) $("attDeleteReason").value = "";
+    showMsg($("attDeleteMsg"), "", false);
+  }
+
+  async function submitDeleteShift() {
+    if (!isAdmin() || busy) return;
+    const shiftId = $("attDeleteShiftId") && $("attDeleteShiftId").value;
+    const reason = $("attDeleteReason") && String($("attDeleteReason").value || "").trim();
+    if (!shiftId) {
+      showMsg($("attDeleteMsg"), "缺少班次。", true);
+      return;
+    }
+    if (!reason) {
+      showMsg($("attDeleteMsg"), "刪除理由必填。", true);
+      return;
+    }
+    busy = true;
+    showMsg($("attDeleteMsg"), "刪除中…", false);
+    try {
+      await rpcCall("attendance_admin_delete_shift", {
+        p_shift_id: shiftId,
+        p_reason: reason,
+      });
+      if ($("attDeleteCard")) $("attDeleteCard").hidden = true;
+      await refreshAll({ silent: true });
+      showMsg($("attDeleteMsg"), "已刪除出勤；ADMIN_DELETE 稽核已永久保留。", false);
+      showMsg($("attMsg"), "已刪除出勤紀錄（稽核已留存）。", false);
+    } catch (e) {
+      showMsg($("attDeleteMsg"), mapRpcError(e), true);
     } finally {
       busy = false;
     }
@@ -1069,12 +1327,20 @@
       const audits = await fetchRows("attendance_audit_logs", {
         select: AUDIT_SELECT,
         apply: function (q) {
-          return q.eq("employee_id", empId).eq("action", "ADMIN_CORRECTION").gte("created_at", startIso).lt("created_at", endIso).limit(500);
+          return q
+            .eq("employee_id", empId)
+            .in("action", ["ADMIN_CORRECTION", "ADMIN_DELETE"])
+            .gte("created_at", startIso)
+            .lt("created_at", endIso)
+            .limit(500);
         },
       });
       const correctedDays = {};
+      let deletedAuditCount = 0;
       audits.forEach(function (a) {
-        if (a && a.created_at) correctedDays[taipeiYmd(a.created_at)] = true;
+        if (!a) return;
+        if (a.action === "ADMIN_DELETE") deletedAuditCount += 1;
+        if (a.action === "ADMIN_CORRECTION" && a.created_at) correctedDays[taipeiYmd(a.created_at)] = true;
       });
       const byDay = {};
       shifts.forEach(function (s) {
@@ -1140,12 +1406,16 @@
 
       const empName = personName(empId);
       const printDate = formatTaipeiDate(new Date());
+      const correctionCount = audits.filter(function (a) { return a && a.action === "ADMIN_CORRECTION"; }).length;
       const html =
         '<div class="att-print-doc">' +
         "<h1>DK Computer</h1>" +
         "<h2>員工出勤紀錄</h2>" +
         '<div class="att-print-meta">員工：' + esc(empName) +
         "　　出勤月份：" + esc(String(year)) + " / " + esc(String(month)) + "</div>" +
+        (deletedAuditCount > 0
+          ? '<div class="att-print-meta">本期間存在已刪除出勤紀錄（' + deletedAuditCount + " 筆 ADMIN_DELETE；不計入工時）。</div>"
+          : "") +
         '<table class="att-print-table"><thead><tr>' +
         "<th>日期</th><th>星期</th><th>上班時間</th><th>下班時間</th><th>休息總時間</th><th>實際工時</th><th>狀態</th>" +
         "</tr></thead><tbody>" + rowsHtml.join("") + "</tbody></table>" +
@@ -1154,7 +1424,7 @@
         "<div>總實際工時：" + esc(formatDurationHours(totalWorkMs)) + "（" + esc(formatDuration(totalWorkMs)) + "）</div>" +
         "<div>總休息時間：" + esc(formatDurationHours(totalBreakMs)) + "（" + esc(formatDuration(totalBreakMs)) + "）</div>" +
         "<div>未完成班次數：" + incomplete + "</div>" +
-        "<div>管理員更正次數：" + audits.length + "</div>" +
+        "<div>管理員更正次數：" + correctionCount + "</div>" +
         "</div>" +
         '<div class="att-print-sign">' +
         "<div>員工簽名：________________</div>" +
@@ -1252,6 +1522,11 @@
     const adminTable = $("attAdminTbody");
     if (adminTable) {
       adminTable.addEventListener("click", function (ev) {
+        const del = ev.target && ev.target.closest ? ev.target.closest(".att-delete-btn") : null;
+        if (del) {
+          openDeleteForm(del.getAttribute("data-shift"));
+          return;
+        }
         const btn = ev.target && ev.target.closest ? ev.target.closest(".att-correct-btn") : null;
         if (!btn) return;
         openCorrectForm(btn.getAttribute("data-shift"));
@@ -1269,11 +1544,27 @@
         showMsg($("attCorrectMsg"), "", false);
       });
     }
+    const delSub = $("attDeleteSubmit");
+    if (delSub) delSub.addEventListener("click", function () { submitDeleteShift(); });
+    const delCancel = $("attDeleteCancel");
+    if (delCancel) {
+      delCancel.addEventListener("click", function () {
+        if ($("attDeleteCard")) $("attDeleteCard").hidden = true;
+        showMsg($("attDeleteMsg"), "", false);
+      });
+    }
 
     const useCur = $("attLocUseCurrent");
     if (useCur) useCur.addEventListener("click", function () { useCurrentAsCompanyLocation(); });
     const saveLoc = $("attLocSave");
     if (saveLoc) saveLoc.addEventListener("click", function () { saveLocationSettings(); });
+
+    const netDetect = $("attNetDetect");
+    if (netDetect) netDetect.addEventListener("click", function () { detectServerSeenIp(); });
+    const netSaveCur = $("attNetSaveCurrent");
+    if (netSaveCur) netSaveCur.addEventListener("click", function () { saveCurrentCompanyNetwork(); });
+    const netSave = $("attNetSave");
+    if (netSave) netSave.addEventListener("click", function () { saveNetworkSettings(); });
 
     const gen = $("attReportGenerate");
     if (gen) gen.addEventListener("click", function () { generateMonthlyReport(); });
@@ -1296,9 +1587,10 @@
     if ($("attAdminManage")) $("attAdminManage").hidden = !admin;
     if ($("attAdminAudit")) $("attAdminAudit").hidden = !admin;
     if ($("attLocationSettings")) $("attLocationSettings").hidden = !admin;
+    if ($("attNetworkSettings")) $("attNetworkSettings").hidden = !admin;
     startClock();
     renderClockFace();
-    setLocStatus("按下打卡按鈕時才會請求定位。", null);
+    setLocStatus("按下打卡：先驗證公司網路，必要時再請求 GPS。", null);
     await refreshAll();
   }
 

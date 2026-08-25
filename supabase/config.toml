@@ -1,0 +1,5 @@
+# Supabase local / CLI config for Edge Functions.
+# Production deploy: supabase functions deploy attendance-network
+
+[functions.attendance-network]
+verify_jwt = true
