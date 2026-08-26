@@ -4285,7 +4285,10 @@
         const el = document.getElementById("v2-" + p);
         if (el) el.hidden = p !== name;
       });
-      if (name === "items") renderV2Items();
+      if (name === "items") {
+        renderV2Items();
+        refreshReplenishmentUI();
+      }
       if (name === "ledger") renderV2Ledger();
       if (name === "orders") renderV2Orders();
       if (name === "expenses") renderV2Expenses();
@@ -4302,6 +4305,181 @@
     const itemEditor = document.getElementById("itemEditor");
     const itemMsg = getItemEditorField("itemMsg");
     let editingV2ItemId = null;
+    /** Stage 12：補貨群組快取（不自動建立正式群組） */
+    let replenishmentGroupsCache = [];
+    let replenishmentAlertsCache = [];
+
+    function groupAvailableFromItems(groupId) {
+      const gid = String(groupId || "").trim();
+      if (!gid) return 0;
+      return (DK.getItems() || []).reduce(function (sum, it) {
+        if (!it || String(it.replenishment_group_id || "") !== gid) return sum;
+        const q = Number(it.qty_on_hand);
+        return sum + (Number.isFinite(q) ? Math.max(0, q) : 0);
+      }, 0);
+    }
+
+    function fillItemReplenishmentGroupSelect(selectedId) {
+      const sel = getItemEditorField("itemReplenishmentGroup") || document.getElementById("itemReplenishmentGroup");
+      if (!sel) return;
+      const keep = selectedId == null ? "" : String(selectedId);
+      const opts = ['<option value="">不納入補貨</option>'];
+      (replenishmentGroupsCache || []).forEach(function (g) {
+        if (!g || !g.id) return;
+        if (g.enabled === false) return;
+        opts.push('<option value="' + v2Esc(g.id) + '">' + v2Esc(g.name || g.id) + "</option>");
+      });
+      sel.innerHTML = opts.join("");
+      if (keep && Array.from(sel.options).some(function (o) { return o.value === keep; })) {
+        sel.value = keep;
+      } else {
+        sel.value = "";
+      }
+    }
+
+    function renderReplenishmentAlerts() {
+      const box = document.getElementById("replenishmentAlertsList");
+      if (!box) return;
+      const list = Array.isArray(replenishmentAlertsCache) ? replenishmentAlertsCache : [];
+      if (!list.length) {
+        box.className = "muted";
+        box.innerHTML = "目前無待補貨品項";
+        return;
+      }
+      box.className = "";
+      box.innerHTML = list.map(function (a) {
+        const name = a && a.name != null ? a.name : "—";
+        const avail = a && a.available != null ? a.available : 0;
+        const suggest = a && a.suggest_qty != null ? a.suggest_qty : 0;
+        return (
+          '<div style="padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.06)">' +
+          "<strong>" + v2Esc(name) + "</strong>" +
+          '<div class="muted small" style="margin-top:2px">剩餘 ' + v2Esc(String(avail)) +
+          "｜建議補貨 " + v2Esc(String(suggest)) + "</div></div>"
+        );
+      }).join("");
+    }
+
+    function renderReplenishmentGroupsTable() {
+      const tbody = document.getElementById("replenishmentGroupsTbody");
+      if (!tbody) return;
+      const rows = Array.isArray(replenishmentGroupsCache) ? replenishmentGroupsCache : [];
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="muted">尚無補貨群組</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(function (g) {
+        const avail = groupAvailableFromItems(g.id);
+        const enabled = g.enabled !== false;
+        return (
+          "<tr>" +
+          "<td>" + v2Esc(g.name || "") + "</td>" +
+          "<td>" + v2Esc(String(g.threshold_qty ?? 0)) + "</td>" +
+          "<td>" + v2Esc(String(g.target_qty ?? 0)) + "</td>" +
+          "<td>" + v2Esc(String(avail)) + "</td>" +
+          "<td>" + (enabled ? "啟用" : "停用") + "</td>" +
+          '<td style="text-align:right;white-space:nowrap">' +
+          '<button type="button" class="btn btn-ghost btn-sm rg-edit-btn" data-id="' + v2Esc(g.id) + '">編輯</button> ' +
+          '<button type="button" class="btn btn-ghost btn-sm rg-toggle-btn" data-id="' + v2Esc(g.id) + '">' +
+          (enabled ? "停用" : "啟用") + "</button>" +
+          "</td></tr>"
+        );
+      }).join("");
+      tbody.querySelectorAll(".rg-edit-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          openReplenishmentGroupForm(btn.getAttribute("data-id"));
+        });
+      });
+      tbody.querySelectorAll(".rg-toggle-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          toggleReplenishmentGroupEnabled(btn.getAttribute("data-id"));
+        });
+      });
+    }
+
+    async function refreshReplenishmentUI() {
+      const alertsRes = typeof window.stage7ListReplenishmentAlerts === "function"
+        ? await window.stage7ListReplenishmentAlerts()
+        : { ok: false, data: [] };
+      if (alertsRes && alertsRes.ok) {
+        replenishmentAlertsCache = Array.isArray(alertsRes.data) ? alertsRes.data : [];
+      } else {
+        replenishmentAlertsCache = [];
+      }
+      renderReplenishmentAlerts();
+
+      const groupsRes = typeof window.stage7FetchReplenishmentGroups === "function"
+        ? await window.stage7FetchReplenishmentGroups()
+        : { ok: false, data: [] };
+      if (groupsRes && groupsRes.ok) {
+        replenishmentGroupsCache = Array.isArray(groupsRes.data) ? groupsRes.data : [];
+      } else {
+        replenishmentGroupsCache = [];
+      }
+      renderReplenishmentGroupsTable();
+      const sel = document.getElementById("itemReplenishmentGroup");
+      if (sel && itemEditorModal && !itemEditorModal.hidden) {
+        fillItemReplenishmentGroupSelect(sel.value);
+      }
+    }
+
+    function openReplenishmentGroupForm(id) {
+      if (!(window.stage7IsAdminRole && window.stage7IsAdminRole())) return;
+      const form = document.getElementById("replenishmentGroupForm");
+      const msg = document.getElementById("replenishmentGroupMsg");
+      const g = id ? (replenishmentGroupsCache || []).find(function (x) { return x && String(x.id) === String(id); }) : null;
+      document.getElementById("rgEditId").value = g ? g.id : "";
+      document.getElementById("rgEditName").value = g ? (g.name || "") : "";
+      document.getElementById("rgEditThreshold").value = g ? (g.threshold_qty ?? 0) : 0;
+      document.getElementById("rgEditTarget").value = g ? (g.target_qty ?? 0) : 0;
+      document.getElementById("rgEditEnabled").value = !g || g.enabled !== false ? "1" : "0";
+      if (form) form.hidden = false;
+      v2Hide(msg);
+    }
+
+    async function saveReplenishmentGroupFromForm() {
+      if (!(window.stage7IsAdminRole && window.stage7IsAdminRole())) {
+        return v2Show(document.getElementById("replenishmentGroupMsg"), "只有管理員可以管理補貨群組");
+      }
+      const name = String(document.getElementById("rgEditName")?.value || "").trim();
+      const threshold = Math.max(0, parseFloat(document.getElementById("rgEditThreshold")?.value) || 0);
+      const target = Math.max(0, parseFloat(document.getElementById("rgEditTarget")?.value) || 0);
+      const enabled = document.getElementById("rgEditEnabled")?.value !== "0";
+      const id = String(document.getElementById("rgEditId")?.value || "").trim();
+      const msg = document.getElementById("replenishmentGroupMsg");
+      if (!name) return v2Show(msg, "請填群組名稱");
+      if (target < threshold) return v2Show(msg, "目標庫存必須 ≥ 警戒庫存");
+      if (typeof window.stage7UpsertReplenishmentGroup !== "function") {
+        return v2Show(msg, "補貨群組寫入未載入");
+      }
+      const payload = { name, threshold_qty: threshold, target_qty: target, enabled };
+      if (id) payload.id = id;
+      const res = await window.stage7UpsertReplenishmentGroup(payload);
+      if (!res || !res.ok) return v2Show(msg, (res && res.error) || "儲存失敗");
+      v2Show(msg, id ? "群組已更新" : "群組已新增");
+      const form = document.getElementById("replenishmentGroupForm");
+      if (form) form.hidden = true;
+      await refreshReplenishmentUI();
+    }
+
+    async function toggleReplenishmentGroupEnabled(id) {
+      if (!(window.stage7IsAdminRole && window.stage7IsAdminRole())) return;
+      const g = (replenishmentGroupsCache || []).find(function (x) { return x && String(x.id) === String(id); });
+      if (!g) return;
+      const res = await window.stage7UpsertReplenishmentGroup({
+        id: g.id,
+        name: g.name,
+        threshold_qty: g.threshold_qty,
+        target_qty: g.target_qty,
+        enabled: g.enabled === false,
+        notes: g.notes,
+      });
+      if (!res || !res.ok) {
+        return v2Show(document.getElementById("replenishmentGroupMsg"), (res && res.error) || "更新失敗");
+      }
+      await refreshReplenishmentUI();
+    }
+
     /** 庫存品項表排序：key 為欄位名，dir 為 1 升序、-1 降序 */
     let v2ItemsSortKey = null;
     let v2ItemsSortDir = 1;
@@ -4552,6 +4730,13 @@
       set("itemPriceList", item ? item.price_list ?? "" : "");
       set("itemPriceFloor", item ? item.price_floor ?? "" : "");
       set("itemInboundDate", item && item.inbound_date ? item.inbound_date.slice(0, 10) : todayStr());
+      const boundGid = item ? (item.replenishment_group_id || "") : "";
+      fillItemReplenishmentGroupSelect(boundGid);
+      if (!(replenishmentGroupsCache || []).length) {
+        refreshReplenishmentUI().then(function () {
+          fillItemReplenishmentGroupSelect(boundGid);
+        });
+      }
       set("itemReorderPoint", item ? (item.reorder_point ?? 0) : 0);
       set("itemNotes", item ? item.notes ?? "" : (preset.notes != null ? String(preset.notes) : ""));
       const itemDeleteBtn = getItemEditorField("itemDelete") || document.getElementById("itemDelete");
@@ -4886,6 +5071,10 @@
         price_floor: parseFloat(getItemEditorField("itemPriceFloor")?.value) || null,
         inbound_date: getItemEditorField("itemInboundDate")?.value || null,
         reorder_point: Math.max(0, parseInt(getItemEditorField("itemReorderPoint")?.value, 10) || 0),
+        replenishment_group_id: (function () {
+          const v = String((getItemEditorField("itemReplenishmentGroup") || document.getElementById("itemReplenishmentGroup"))?.value || "").trim();
+          return v || null;
+        })(),
         notes: getItemEditorField("itemNotes")?.value || "",
         updated_at: nowISO(),
       };
@@ -4899,7 +5088,7 @@
         const syncP = DK.saveItems(items);
         v2Show(itemMsg, "已更新");
         auditAction("編輯庫存", editingV2ItemId);
-        if (syncP) syncP.then((r) => showSyncToast(r, "品項"));
+        if (syncP) syncP.then((r) => { showSyncToast(r, "品項"); refreshReplenishmentUI(); });
       } else {
         payload.id = "i-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9);
         payload.last_moved_at = payload.inbound_date ? payload.inbound_date + "T12:00:00Z" : null;
@@ -4919,7 +5108,7 @@
           v2Show(itemMsg, "已新增");
         }
         auditAction("新增庫存", payload.id);
-        if (syncP) syncP.then((r) => showSyncToast(r, "品項"));
+        if (syncP) syncP.then((r) => { showSyncToast(r, "品項"); refreshReplenishmentUI(); });
       }
       renderV2Items();
       setTimeout(closeV2ItemEditor, 800);
@@ -5759,12 +5948,25 @@
       showSyncToast({ ok: true }, "補貨");
       renderV2Items();
       renderV2Ledger();
+      refreshReplenishmentUI();
       if (restockForm) restockForm.hidden = true;
       setTimeout(() => { v2Hide(restockMsg); }, 1500);
     });
     document.getElementById("restockGoNew")?.addEventListener("click", () => {
       if (restockForm) restockForm.hidden = true;
       openV2ItemEditor(null);
+    });
+
+    document.getElementById("btnNewReplenishmentGroup")?.addEventListener("click", () => {
+      openReplenishmentGroupForm(null);
+    });
+    document.getElementById("rgEditSave")?.addEventListener("click", () => {
+      saveReplenishmentGroupFromForm();
+    });
+    document.getElementById("rgEditCancel")?.addEventListener("click", () => {
+      const form = document.getElementById("replenishmentGroupForm");
+      if (form) form.hidden = true;
+      v2Hide(document.getElementById("replenishmentGroupMsg"));
     });
 
     // ---------- 報價單圖片（目前訂單／表單內容輸出，不另存資料）----------

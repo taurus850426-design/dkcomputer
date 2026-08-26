@@ -1113,6 +1113,9 @@ function stage7MapItemRow(row, costMap, admin) {
     inbound_date: row.inbound_date,
     last_moved_at: row.last_moved_at,
     reorder_point: row.reorder_point,
+    replenishment_group_id: row.replenishment_group_id == null || row.replenishment_group_id === ""
+      ? null
+      : String(row.replenishment_group_id),
     location: row.location,
     notes: row.notes,
     is_archived: row.is_archived,
@@ -1339,6 +1342,10 @@ function stage7ItemPayload(item) {
     price_floor: src.price_floor == null || src.price_floor === "" ? null : src.price_floor,
     inbound_date: src.inbound_date ? String(src.inbound_date).slice(0, 10) : null,
     reorder_point: src.reorder_point == null ? 0 : src.reorder_point,
+    replenishment_group_id:
+      src.replenishment_group_id == null || String(src.replenishment_group_id).trim() === ""
+        ? null
+        : String(src.replenishment_group_id).trim(),
     location: src.location || "",
     notes: src.notes || "",
   };
@@ -1371,6 +1378,45 @@ async function stage7UpsertItem(item) {
     args.p_unit_cost = Number(item.cost_unit) || 0;
   }
   return stage7Rpc("backoffice_upsert_item", args);
+}
+
+async function stage7FetchReplenishmentGroups() {
+  const res = await stage7GetTable(
+    "replenishment_groups",
+    "id,name,threshold_qty,target_qty,enabled,notes,created_at,updated_at"
+  );
+  if (!res || !res.ok) return res || { ok: false, error: "讀取補貨群組失敗", data: [] };
+  const rows = Array.isArray(res.data) ? res.data : [];
+  rows.sort(function (a, b) {
+    return String((a && a.name) || "").localeCompare(String((b && b.name) || ""), "zh-Hant");
+  });
+  return { ok: true, data: rows };
+}
+
+async function stage7UpsertReplenishmentGroup(group) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以管理補貨群組" };
+  }
+  const src = group || {};
+  const payload = {
+    name: String(src.name || "").trim(),
+    threshold_qty: Number(src.threshold_qty) || 0,
+    target_qty: Number(src.target_qty) || 0,
+    enabled: src.enabled !== false,
+  };
+  if (src.id) payload.id = String(src.id);
+  if (Object.prototype.hasOwnProperty.call(src, "notes")) {
+    payload.notes = src.notes == null ? "" : String(src.notes);
+  }
+  return stage7Rpc("backoffice_upsert_replenishment_group", { p_group: payload });
+}
+
+async function stage7ListReplenishmentAlerts() {
+  const res = await stage7Rpc("backoffice_list_replenishment_alerts", {});
+  if (!res || !res.ok) return res || { ok: false, error: "讀取待補貨失敗", data: null };
+  const body = res.data && typeof res.data === "object" && !Array.isArray(res.data) ? res.data : {};
+  const alerts = Array.isArray(body.alerts) ? body.alerts : [];
+  return { ok: true, data: alerts, raw: body };
 }
 
 async function stage7DeleteItem(id) {
@@ -1461,6 +1507,9 @@ if (typeof window !== "undefined") {
   window.stage7DeleteExpense = stage7DeleteExpense;
   window.stage7InsertAudit = stage7InsertAudit;
   window.stage7IsAdminRole = stage7IsAdminRole;
+  window.stage7FetchReplenishmentGroups = stage7FetchReplenishmentGroups;
+  window.stage7UpsertReplenishmentGroup = stage7UpsertReplenishmentGroup;
+  window.stage7ListReplenishmentAlerts = stage7ListReplenishmentAlerts;
 }
 
 function isSupabaseConfigured() {

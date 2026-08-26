@@ -93,6 +93,9 @@
         name: it.name, spec: it.spec, vendor: it.vendor, condition: it.condition, status: it.status,
         price_list: it.price_list, price_floor: it.price_floor, inbound_date: it.inbound_date,
         reorder_point: it.reorder_point, location: it.location, notes: it.notes,
+        replenishment_group_id: it.replenishment_group_id == null || it.replenishment_group_id === ""
+          ? null
+          : String(it.replenishment_group_id),
         cost_unit: it.cost_unit, qty_on_hand: it.qty_on_hand,
       });
     }
@@ -236,8 +239,11 @@
     const idle = itemIdleDays(item);
     const qty = Number(item.qty_on_hand) || 0;
     const reorder = Number(item.reorder_point) || 0;
+    const boundGroup = item && item.replenishment_group_id != null && String(item.replenishment_group_id).trim() !== "";
 
     if (cat === "耗材") {
+      // 已綁補貨群組：舊單品 REORDER 不再顯示，避免與群組待補貨重複。
+      if (boundGroup) return null;
       if (reorder > 0 && qty < reorder) return { type: "REORDER", message: "低於警戒，需補貨" };
       return null;
     }
