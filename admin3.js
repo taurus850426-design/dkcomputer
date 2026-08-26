@@ -4400,23 +4400,32 @@
 
     function renderReplenishmentAlerts() {
       const box = document.getElementById("replenishmentAlertsList");
+      const countEl = document.getElementById("replenishmentAlertsCount");
       if (!box) return;
       const list = Array.isArray(replenishmentAlertsCache) ? replenishmentAlertsCache : [];
+      if (countEl) {
+        countEl.textContent = list.length + " 項";
+        countEl.className = list.length
+          ? "status-badge status-warning"
+          : "status-badge status-muted";
+      }
       if (!list.length) {
-        box.className = "muted";
-        box.innerHTML = "目前無待補貨品項";
+        box.className = "inv-alert-list inv-alert-empty text-muted";
+        box.innerHTML = "目前庫存充足";
         return;
       }
-      box.className = "";
+      box.className = "inv-alert-list";
       box.innerHTML = list.map(function (a) {
         const name = a && a.name != null ? a.name : "—";
         const avail = a && a.available != null ? a.available : 0;
         const suggest = a && a.suggest_qty != null ? a.suggest_qty : 0;
         return (
-          '<div style="padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.06)">' +
-          "<strong>" + v2Esc(name) + "</strong>" +
-          '<div class="muted small" style="margin-top:2px">剩餘 ' + v2Esc(String(avail)) +
-          "｜建議補貨 " + v2Esc(String(suggest)) + "</div></div>"
+          '<div class="inv-alert-row">' +
+          '<div class="table-primary">' + v2Esc(name) + "</div>" +
+          '<div class="inv-alert-meta">' +
+          '<span class="warning-number">剩餘 ' + v2Esc(String(avail)) + "</span>" +
+          '<span class="text-strong">建議補 ' + v2Esc(String(suggest)) + "</span>" +
+          "</div></div>"
         );
       }).join("");
     }
@@ -4424,8 +4433,14 @@
     function renderUngroupedItems() {
       const countEl = document.getElementById("replenishmentUngroupedCount");
       const listEl = document.getElementById("replenishmentUngroupedList");
+      const badge = document.getElementById("replenishmentUngroupedCountBadge");
       const rows = listUngroupedRequiredItems();
       if (countEl) countEl.textContent = String(rows.length);
+      if (badge) {
+        badge.className = rows.length
+          ? "status-badge status-warning"
+          : "status-badge status-muted";
+      }
       if (!listEl) return;
       if (!ungroupedExpanded) {
         listEl.hidden = true;
@@ -4433,17 +4448,17 @@
       }
       listEl.hidden = false;
       if (!rows.length) {
-        listEl.innerHTML = '<p class="muted" style="margin:0">目前沒有未設定補貨群組的必填品類品項。</p>';
+        listEl.innerHTML = '<p class="form-hint" style="margin:0">目前沒有未設定補貨群組的品項。</p>';
         return;
       }
       listEl.innerHTML = rows.map(function (it) {
         const qty = it.qty_on_hand != null ? it.qty_on_hand : 0;
         return (
-          '<div style="padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.06);display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between">' +
-          "<div><strong>" + v2Esc(it.name || "—") + "</strong>" +
-          '<div class="muted small">規格：' + v2Esc(it.spec || "—") +
-          "｜現貨 " + v2Esc(String(qty)) + "</div></div>" +
-          '<button type="button" class="btn btn-ghost btn-sm ungrouped-assign-btn" data-id="' + v2Esc(it.id) + '">指定群組</button>' +
+          '<div class="inv-ungrouped-row">' +
+          "<div><div class=\"table-primary\">" + v2Esc(it.name || "—") + "</div>" +
+          '<div class="table-secondary">規格：' + v2Esc(it.spec || "—") +
+          "｜現貨 <span class=\"neutral-number\">" + v2Esc(String(qty)) + "</span></div></div>" +
+          '<button type="button" class="btn btn-ghost btn-sm secondary-action ungrouped-assign-btn" data-id="' + v2Esc(it.id) + '">指定群組</button>' +
           "</div>"
         );
       }).join("");
@@ -4483,22 +4498,24 @@
         const avail = groupAvailableFromItems(g.id);
         const enabled = g.enabled !== false;
         let ops =
-          '<button type="button" class="btn btn-ghost btn-sm rg-edit-btn" data-id="' + v2Esc(g.id) + '">編輯</button> ' +
-          '<button type="button" class="btn btn-ghost btn-sm rg-toggle-btn" data-id="' + v2Esc(g.id) + '">' +
+          '<button type="button" class="btn btn-ghost btn-sm tertiary-action rg-edit-btn" data-id="' + v2Esc(g.id) + '">編輯</button> ' +
+          '<button type="button" class="btn btn-ghost btn-sm tertiary-action rg-toggle-btn" data-id="' + v2Esc(g.id) + '">' +
           (enabled ? "停用" : "啟用") + "</button>";
         if (isAdmin) {
           ops +=
-            ' <button type="button" class="btn btn-ghost btn-sm rg-delete-btn" data-id="' + v2Esc(g.id) +
-            '" style="color:var(--danger,#c00)">刪除</button>';
+            ' <button type="button" class="btn btn-ghost btn-sm danger-action rg-delete-btn" data-id="' + v2Esc(g.id) +
+            '">刪除</button>';
         }
         return (
           "<tr>" +
-          "<td>" + v2Esc(g.name || "") + "</td>" +
-          "<td>" + v2Esc(String(g.threshold_qty ?? 0)) + "</td>" +
-          "<td>" + v2Esc(String(g.target_qty ?? 0)) + "</td>" +
-          "<td>" + v2Esc(String(avail)) + "</td>" +
-          "<td>" + (enabled ? "啟用" : "停用") + "</td>" +
-          '<td style="text-align:right;white-space:nowrap">' + ops + "</td></tr>"
+          '<td class="table-primary">' + v2Esc(g.name || "") + "</td>" +
+          '<td class="table-number neutral-number">' + v2Esc(String(g.threshold_qty ?? 0)) + "</td>" +
+          '<td class="table-number neutral-number">' + v2Esc(String(g.target_qty ?? 0)) + "</td>" +
+          '<td class="table-number neutral-number">' + v2Esc(String(avail)) + "</td>" +
+          "<td>" + (enabled
+            ? '<span class="status-badge status-success">啟用</span>'
+            : '<span class="status-badge status-muted">停用</span>') + "</td>" +
+          '<td class="table-actions">' + ops + "</td></tr>"
         );
       }).join("");
       tbody.querySelectorAll(".rg-edit-btn").forEach(function (btn) {
@@ -4795,6 +4812,28 @@
       });
     })();
 
+    function invAlertBadgeHtml(alert) {
+      if (!alert || !alert.type) return "";
+      const msg = alert.message || alert.type;
+      if (alert.type === "REORDER") {
+        return '<span class="status-badge status-warning">' + v2Esc(msg) + "</span>";
+      }
+      if (alert.type === "FORCE_CLEAR" || alert.type === "CLEARANCE") {
+        return '<span class="status-badge status-danger">' + v2Esc(msg) + "</span>";
+      }
+      if (alert.type === "PART_OLD") {
+        return '<span class="status-badge status-muted">' + v2Esc(msg) + "</span>";
+      }
+      return '<span class="status-badge status-muted">' + v2Esc(msg) + "</span>";
+    }
+
+    function invQtyClass(qty, alert) {
+      const n = Number(qty);
+      if (!Number.isFinite(n) || n <= 0) return "table-number negative-number";
+      if (alert && alert.type === "REORDER") return "table-number warning-number";
+      return "table-number neutral-number";
+    }
+
     function renderV2Items() {
       if (!itemsTbody) return;
       const list = getV2ItemsVisibleList();
@@ -4802,26 +4841,31 @@
       itemsPage = pageInfo.page;
       itemsTbody.innerHTML = pageInfo.pageItems.map((x) => {
         const alert = DK.getItemAlert(x);
-        const alertText = alert ? alert.message : "-";
         const rowClass = (x.qty_on_hand ?? 0) === 0 ? " qty-zero-row" : "";
         const archived = itemIsArchived(x);
-        const nameSpec = (x.name === x.spec || !String(x.spec || "").trim()) ? (x.name || x.spec || "") : [x.name, x.spec].filter(Boolean).join(" ").trim();
+        const name = x.name || "";
+        const spec = x.spec || "";
+        const sameNameSpec = !String(spec).trim() || name === spec;
+        const nameHtml = sameNameSpec
+          ? ('<div class="table-primary">' + v2Esc(name || spec || "") + "</div>")
+          : ('<div class="table-primary">' + v2Esc(name) + '</div><div class="table-secondary">' + v2Esc(spec) + "</div>");
         const archivedBadge = archived ? '<span class="item-archived-badge">已封存</span>' : "";
+        const qtyClass = invQtyClass(x.qty_on_hand, alert);
         return `<tr class="${rowClass}">
           <td><input type="checkbox" class="item-row-cb" data-id="${v2Esc(x.id)}" /></td>
-          <td>${v2Esc(nameSpec)}${archivedBadge}</td>
-          <td>${v2Esc(x.category || "")}</td>
-          <td>${v2Esc(STATUS_LABEL[x.status] || x.status)}</td>
-          <td>${x.qty_on_hand}</td>
-          <td data-admin-only>${v2FmtNum(x.cost_unit)}</td>
-          <td>${v2FmtNum(x.price_list)}</td>
-          <td>${v2FmtNum(x.price_floor)}</td>
-          <td>${v2Esc((x.inbound_date || "").toString().slice(0, 10))}</td>
-          <td>${x.age_days != null ? x.age_days : "-"}</td>
-          <td>${x.idle_days != null ? x.idle_days : "-"}</td>
-          <td data-admin-only>${v2FmtNum(x.inventory_value)}</td>
-          <td class="muted small">${v2Esc(alertText)}</td>
-          <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-item" data-id="${v2Esc(x.id)}">編輯</button></td>
+          <td>${nameHtml}${archivedBadge}</td>
+          <td class="table-secondary">${v2Esc(x.category || "")}</td>
+          <td class="table-secondary">${v2Esc(STATUS_LABEL[x.status] || x.status)}</td>
+          <td class="${qtyClass}">${x.qty_on_hand}</td>
+          <td class="table-number neutral-number" data-admin-only>${v2FmtNum(x.cost_unit)}</td>
+          <td class="table-number neutral-number">${v2FmtNum(x.price_list)}</td>
+          <td class="table-number neutral-number">${v2FmtNum(x.price_floor)}</td>
+          <td class="table-secondary">${v2Esc((x.inbound_date || "").toString().slice(0, 10))}</td>
+          <td class="table-number table-secondary">${x.age_days != null ? x.age_days : "-"}</td>
+          <td class="table-number table-secondary">${x.idle_days != null ? x.idle_days : "-"}</td>
+          <td class="table-number neutral-number" data-admin-only>${v2FmtNum(x.inventory_value)}</td>
+          <td>${invAlertBadgeHtml(alert)}</td>
+          <td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action btn-edit-item" data-id="${v2Esc(x.id)}">編輯</button></td>
         </tr>`;
       }).join("");
       itemsTbody.querySelectorAll(".btn-edit-item").forEach((btn) => {

@@ -4948,3 +4948,97 @@ body.admin-page .admin-subtabs-gap{
     padding: 8px 8px;
   }
 }
+
+/* Stage 13-3A｜Inventory Items UI (presentation only) */
+body.admin-page .inv-items-head .section-actions{
+  gap: 8px;
+}
+body.admin-page .inv-section-head{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+body.admin-page .inv-attention{
+  border-left: 3px solid var(--dk-warning);
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(17, 24, 39, 0.05);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+body.admin-page .inv-alert-list{
+  margin-top: 8px;
+}
+body.admin-page .inv-alert-empty{
+  font-size: 13px;
+}
+body.admin-page .inv-alert-row{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(17, 24, 39, 0.06);
+}
+body.admin-page .inv-alert-row:last-child{
+  border-bottom: none;
+  padding-bottom: 0;
+}
+body.admin-page .inv-alert-meta{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 13px;
+}
+body.admin-page .inv-ungrouped-toggle{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+body.admin-page .inv-ungrouped-row{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(17, 24, 39, 0.06);
+}
+body.admin-page .inv-ungrouped-row:last-child{
+  border-bottom: none;
+}
+body.admin-page .inv-items-table-wrap{
+  margin-top: 8px;
+}
+body.admin-page .inv-items-table thead th{
+  font-size: 12px;
+  color: var(--dk-muted);
+  font-weight: 700;
+}
+body.admin-page .inv-items-table tbody tr:hover td{
+  background: rgba(17, 24, 39, 0.028);
+}
+body.admin-page #v2-items .section-card-soft{
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+body.admin-page #v2-items .search{
+  margin-top: 4px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+}
+@media (max-width: 640px){
+  body.admin-page .inv-attention,
+  body.admin-page #v2-items .section-card-soft{
+    padding: 10px 12px;
+  }
+  body.admin-page .inv-alert-meta{
+    width: 100%;
+  }
+  body.admin-page .inv-items-table-wrap{
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

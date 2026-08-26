@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260826ds1" />
+    <link rel="stylesheet" href="./styles.css?v=20260826ds2" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -77,77 +77,37 @@
             <div class="v2-panels-wrap">
             <!-- 庫存 Items -->
             <div id="v2-items" class="v2-panel">
-            <div class="section-head">
+            <div class="section-head inv-items-head">
               <div>
-                <h2 class="h2">庫存品項</h2>
-                <p class="muted">品類／編號／入庫日／放多久／庫存價值；可篩選、排序</p>
+                <h2 class="h2 section-title">庫存 Items</h2>
               </div>
               <div class="section-actions">
-                <a href="./photo-recognize-add.html" class="btn btn-primary" target="_blank" rel="noopener">📷 拍照辨識新增</a>
-                <button id="btnRestock" class="btn btn-primary" type="button">補貨</button>
-                <button id="btnNewItem" class="btn btn-primary" type="button">新增品項</button>
-                <button id="btnExportItemsExcel" class="btn btn-ghost" type="button">匯出 Excel</button>
+                <button id="btnNewItem" class="btn btn-primary primary-action" type="button">新增品項</button>
+                <button id="btnRestock" class="btn btn-ghost secondary-action" type="button">補貨</button>
+                <a href="./photo-recognize-add.html" class="btn btn-ghost tertiary-action" target="_blank" rel="noopener">拍照辨識新增</a>
+                <button id="btnExportItemsExcel" class="btn btn-ghost tertiary-action" type="button">匯出 Excel</button>
                 <button id="btnDeleteSelectedItems" class="btn btn-ghost danger-action" type="button" data-admin-only>刪除所選</button>
               </div>
             </div>
-            <div id="replenishmentAlertsCard" class="card section-card admin-stack-gap">
-              <h3 class="h3 section-title">待補貨</h3>
-              <p class="muted small section-meta">依補貨規格群組加總現貨；品牌不影響判斷。</p>
-              <div id="replenishmentAlertsList" class="muted admin-msg-gap">目前無待補貨品項</div>
+
+            <div id="replenishmentAlertsCard" class="section-card inv-attention admin-stack-gap">
+              <div class="inv-section-head">
+                <h3 class="h3 section-title">待補貨</h3>
+                <span id="replenishmentAlertsCount" class="status-badge status-warning">0 項</span>
+              </div>
+              <div id="replenishmentAlertsList" class="inv-alert-list admin-msg-gap">目前庫存充足</div>
             </div>
-            <div id="replenishmentUngroupedCard" class="card section-card-soft admin-stack-gap">
-              <button id="btnToggleUngrouped" class="btn btn-ghost btn-sm tertiary-action" type="button">
-                未設定補貨群組：<span id="replenishmentUngroupedCount">0</span> 筆
+
+            <div id="replenishmentUngroupedCard" class="section-card-soft admin-stack-gap">
+              <button id="btnToggleUngrouped" class="btn btn-ghost btn-sm tertiary-action inv-ungrouped-toggle" type="button">
+                未設定補貨群組
+                <span id="replenishmentUngroupedCountBadge" class="status-badge status-warning"><span id="replenishmentUngroupedCount">0</span> 項</span>
               </button>
-              <p class="muted small section-meta">僅列出記憶體／硬碟／電源供應器、尚未綁定補貨群組且現貨 &gt; 0 的品項（資料品質提醒，非缺貨）。</p>
               <div id="replenishmentUngroupedList" hidden class="admin-msg-gap"></div>
             </div>
-            <div id="replenishmentGroupsCard" class="card section-card-soft admin-stack-gap" data-admin-only>
-              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between">
-                <h3 class="h3 section-title">補貨群組管理</h3>
-                <button id="btnNewReplenishmentGroup" class="btn btn-ghost btn-sm secondary-action" type="button">新增群組</button>
-              </div>
-              <div class="table-wrap admin-msg-gap">
-                <table class="table">
-                  <thead>
-                    <tr>
-                      <th>名稱</th>
-                      <th>警戒庫存</th>
-                      <th>目標庫存</th>
-                      <th>目前總庫存</th>
-                      <th>啟用</th>
-                      <th style="text-align:right">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody id="replenishmentGroupsTbody">
-                    <tr><td colspan="6" class="muted">尚無補貨群組</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <div id="replenishmentGroupsPager" hidden style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center">
-                <button id="replenishmentGroupsPrev" class="btn btn-ghost btn-sm" type="button">上一頁</button>
-                <span id="replenishmentGroupsPageLabel" class="muted small">第 1 / 1 頁</span>
-                <button id="replenishmentGroupsNext" class="btn btn-ghost btn-sm" type="button">下一頁</button>
-              </div>
-              <div id="replenishmentGroupForm" class="form-grid" style="margin-top:12px;grid-template-columns:1.4fr 0.8fr 0.8fr auto auto;" hidden>
-                <input id="rgEditId" type="hidden" />
-                <div class="field"><label for="rgEditName">群組名稱</label><input id="rgEditName" type="text" placeholder="例：M.2 512GB" /></div>
-                <div class="field"><label for="rgEditThreshold">警戒庫存</label><input id="rgEditThreshold" type="number" min="0" step="1" value="0" /></div>
-                <div class="field"><label for="rgEditTarget">目標庫存</label><input id="rgEditTarget" type="number" min="0" step="1" value="0" /></div>
-                <div class="field"><label for="rgEditEnabled">啟用</label><select id="rgEditEnabled"><option value="1">啟用</option><option value="0">停用</option></select></div>
-                <div class="field" style="display:flex;align-items:flex-end;gap:8px">
-                  <button id="rgEditSave" class="btn btn-primary" type="button">儲存群組</button>
-                  <button id="rgEditCancel" class="btn btn-ghost" type="button">取消</button>
-                </div>
-              </div>
-              <div id="replenishmentGroupMsg" class="muted form-hint admin-msg-gap" hidden></div>
-            </div>
-            <label class="search">
-              <span class="search-label">搜尋</span>
-              <input id="itemsSearch" type="search" placeholder="編號／名稱／規格" autocomplete="off" />
-            </label>
-            <div id="restockForm" class="card section-card admin-stack-gap" hidden>
-              <h3 class="h3">補貨（搜尋既有品項入庫，或新增品項）</h3>
+
+            <div id="restockForm" class="section-card admin-stack-gap" hidden>
+              <h3 class="h3 section-title">補貨</h3>
               <div class="form-grid" style="grid-template-columns: 1fr auto auto auto auto;">
                 <div class="searchable-select-wrap">
                   <select id="restockItemId" aria-hidden="true" tabindex="-1"></select>
@@ -157,11 +117,16 @@
                 <input id="restockQty" type="number" min="1" value="1" placeholder="數量" style="width:80px" />
                 <input id="restockUnitCost" type="number" min="0" step="1" placeholder="單位成本" style="width:100px" data-admin-only />
                 <input id="restockInboundDate" type="date" placeholder="入庫日" style="width:140px" />
-                <button id="restockSubmit" class="btn btn-primary" type="button">入庫</button>
+                <button id="restockSubmit" class="btn btn-primary primary-action" type="button">入庫</button>
               </div>
-              <p class="muted" style="margin-top:8px; font-size:12px">找不到品項？<button type="button" id="restockGoNew" class="btn btn-ghost btn-sm">＋ 新增品項</button></p>
+              <p class="form-hint">找不到品項？<button type="button" id="restockGoNew" class="btn btn-ghost btn-sm tertiary-action">新增品項</button></p>
               <div id="restockMsg" class="muted" hidden></div>
             </div>
+
+            <label class="search">
+              <span class="search-label">搜尋</span>
+              <input id="itemsSearch" type="search" placeholder="編號／名稱／規格" autocomplete="off" />
+            </label>
             <div id="itemsCategoryQuickWrap" class="filters" style="flex-wrap: wrap; gap: 8px; margin-bottom: 8px">
               <span class="search-label" style="width: 100%">品類快速篩選</span>
               <div id="itemsCategoryQuick" style="display: flex; flex-wrap: wrap; gap: 6px"></div>
@@ -180,30 +145,71 @@
                 <option value="SCRAP">報廢拆料</option>
               </select>
             </div>
-            <div class="table-wrap">
-              <table class="table">
+            <div class="table-wrap inv-items-table-wrap">
+              <table class="table table-compact inv-items-table">
                 <thead>
                   <tr>
                     <th style="width:2.5em"><input type="checkbox" id="itemsSelectAll" title="全選/取消全選" /></th>
                     <th class="sortable" data-sort="name" title="點擊排序">名稱／規格</th>
                     <th class="sortable" data-sort="category" title="點擊排序">品類</th>
                     <th class="sortable" data-sort="status" title="點擊排序">狀態</th>
-                    <th class="sortable" data-sort="qty_on_hand" title="點擊排序">數量</th>
-                    <th class="sortable" data-sort="cost_unit" title="點擊排序" data-admin-only>成本</th>
-                    <th class="sortable" data-sort="price_list" title="點擊排序">建議價</th>
-                    <th class="sortable" data-sort="price_floor" title="點擊排序">最低價</th>
+                    <th class="sortable table-number" data-sort="qty_on_hand" title="點擊排序">數量</th>
+                    <th class="sortable table-number" data-sort="cost_unit" title="點擊排序" data-admin-only>成本</th>
+                    <th class="sortable table-number" data-sort="price_list" title="點擊排序">建議價</th>
+                    <th class="sortable table-number" data-sort="price_floor" title="點擊排序">最低價</th>
                     <th class="sortable" data-sort="inbound_date" title="點擊排序">入庫日</th>
-                    <th class="sortable" data-sort="age_days" title="點擊排序">庫齡(天)</th>
-                    <th class="sortable" data-sort="idle_days" title="點擊排序">滯留(天)</th>
-                    <th class="sortable" data-sort="inventory_value" title="點擊排序" data-admin-only>庫存價值</th>
+                    <th class="sortable table-number" data-sort="age_days" title="點擊排序">庫齡</th>
+                    <th class="sortable table-number" data-sort="idle_days" title="點擊排序">滯留</th>
+                    <th class="sortable table-number" data-sort="inventory_value" title="點擊排序" data-admin-only>庫存價值</th>
                     <th>提醒</th>
-                    <th style="text-align:right">操作</th>
+                    <th class="table-actions">操作</th>
                   </tr>
                 </thead>
                 <tbody id="itemsTbody"></tbody>
               </table>
             </div>
             <div id="itemsPagination" class="pagination"></div>
+
+            <div id="replenishmentGroupsCard" class="section-card-soft admin-stack-gap" data-admin-only>
+              <div class="inv-section-head">
+                <h3 class="h3 section-title">補貨群組管理</h3>
+                <button id="btnNewReplenishmentGroup" class="btn btn-ghost btn-sm secondary-action" type="button">新增群組</button>
+              </div>
+              <div class="table-wrap admin-msg-gap">
+                <table class="table table-compact">
+                  <thead>
+                    <tr>
+                      <th>名稱</th>
+                      <th class="table-number">警戒庫存</th>
+                      <th class="table-number">目標庫存</th>
+                      <th class="table-number">目前總庫存</th>
+                      <th>啟用</th>
+                      <th class="table-actions">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="replenishmentGroupsTbody">
+                    <tr><td colspan="6" class="muted">尚無補貨群組</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="replenishmentGroupsPager" hidden style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center">
+                <button id="replenishmentGroupsPrev" class="btn btn-ghost btn-sm tertiary-action" type="button">上一頁</button>
+                <span id="replenishmentGroupsPageLabel" class="muted small">第 1 / 1 頁</span>
+                <button id="replenishmentGroupsNext" class="btn btn-ghost btn-sm tertiary-action" type="button">下一頁</button>
+              </div>
+              <div id="replenishmentGroupForm" class="form-grid" style="margin-top:12px;grid-template-columns:1.4fr 0.8fr 0.8fr auto auto;" hidden>
+                <input id="rgEditId" type="hidden" />
+                <div class="field"><label for="rgEditName">群組名稱</label><input id="rgEditName" type="text" placeholder="例：M.2 512GB" /></div>
+                <div class="field"><label for="rgEditThreshold">警戒庫存</label><input id="rgEditThreshold" type="number" min="0" step="1" value="0" /></div>
+                <div class="field"><label for="rgEditTarget">目標庫存</label><input id="rgEditTarget" type="number" min="0" step="1" value="0" /></div>
+                <div class="field"><label for="rgEditEnabled">啟用</label><select id="rgEditEnabled"><option value="1">啟用</option><option value="0">停用</option></select></div>
+                <div class="field" style="display:flex;align-items:flex-end;gap:8px">
+                  <button id="rgEditSave" class="btn btn-primary primary-action" type="button">儲存群組</button>
+                  <button id="rgEditCancel" class="btn btn-ghost tertiary-action" type="button">取消</button>
+                </div>
+              </div>
+              <div id="replenishmentGroupMsg" class="muted form-hint admin-msg-gap" hidden></div>
+            </div>
             </div>
 
             <!-- 流水帳 -->
@@ -1845,7 +1851,7 @@
             <button id="itemReplenishmentForceSave" class="btn btn-primary btn-sm" type="button" hidden data-admin-only>仍然儲存</button>
           </div>
         </div>
-        <div class="field"><label for="itemReorderPoint">舊：補貨警戒（耗材）</label><input id="itemReorderPoint" type="number" min="0" value="0" /><p class="muted small" style="margin-top:4px">已綁群組時以群組待補貨為準；此欄保留相容，不再作為主提醒。</p></div>
+        <div class="field"><label for="itemReorderPoint">舊：補貨警戒（耗材）</label><input id="itemReorderPoint" type="number" min="0" value="0" /><p class="form-hint">相容欄位；已綁群組時以群組待補貨為準。</p></div>
         <div class="field full"><label for="itemNotes">備註</label><input id="itemNotes" type="text" /></div>
         <div class="full actions"><button id="itemSave" class="btn btn-primary" type="button">儲存</button><button id="itemCancel" class="btn btn-ghost" type="button">取消</button><button id="itemDelete" class="btn btn-ghost danger-action" type="button" style="margin-left:auto" data-admin-only>刪除品項</button></div>
       </div>
@@ -1872,7 +1878,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260826rg3"></script>
+    <script src="./admin3.js?v=20260826ds2"></script>
     <script src="./purchase-orders.js?v=20260815s5a"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260826att6"></script>
