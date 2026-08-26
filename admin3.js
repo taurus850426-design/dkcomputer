@@ -4438,7 +4438,7 @@
       if (countEl) countEl.textContent = String(rows.length);
       if (badge) {
         badge.className = rows.length
-          ? "status-badge status-warning"
+          ? "status-badge status-info"
           : "status-badge status-muted";
       }
       if (!listEl) return;
