@@ -75,10 +75,10 @@
     const el = $("attLocStatus");
     if (!el) return;
     el.textContent = text || "";
-    el.className = "att-loc-status muted";
-    if (kind === "ok") el.className = "att-loc-status att-loc-ok";
-    if (kind === "err") el.className = "att-loc-status att-loc-err";
-    if (kind === "busy") el.className = "att-loc-status att-loc-busy";
+    el.className = "att-loc-status muted form-hint status-badge status-muted";
+    if (kind === "ok") el.className = "att-loc-status att-loc-ok status-badge status-success";
+    if (kind === "err") el.className = "att-loc-status att-loc-err status-badge status-danger";
+    if (kind === "busy") el.className = "att-loc-status att-loc-busy status-badge status-warning";
   }
 
   function taipeiParts(date) {

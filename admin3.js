@@ -1111,21 +1111,23 @@
   function rolePermChipsHtml(items, kind) {
     const mark = kind === "allow" ? "✓" : "✕";
     const cls = kind === "allow" ? "is-allow" : "is-deny";
-    return (items || []).map((t) => `<span class="role-perm-chip ${cls}">${mark} ${v2Esc(t)}</span>`).join("");
+    return (items || []).map((t) => `<tr><td>${v2Esc(t)}</td><td class="${cls}">${mark}</td></tr>`).join("");
   }
   function rolePermCardHtml(role, opts) {
     const g = ROLE_PERM_GUIDE[role === "admin" ? "admin" : "staff"];
     const compact = !!(opts && opts.compact);
+    const badgeCls = role === "admin" ? "status-badge role-badge-admin" : "status-badge role-badge-staff";
     let body = "";
     if (role === "admin") {
-      body = `<p class="role-perm-intro">${v2Esc(g.intro)}</p><div class="role-perm-chips">${rolePermChipsHtml(g.allow, "allow")}</div>`;
+      body = `<p class="role-perm-intro">${v2Esc(g.intro)}</p>
+        <table class="role-perm-table"><thead><tr><th>權限</th><th>狀態</th></tr></thead><tbody>${rolePermChipsHtml(g.allow, "allow")}</tbody></table>`;
     } else {
       body = (compact ? "" : `<p class="role-perm-intro">${v2Esc(g.intro)}</p>`) +
-        `<div class="role-perm-sub">可以使用</div><div class="role-perm-chips">${rolePermChipsHtml(g.allow, "allow")}</div>` +
-        `<div class="role-perm-sub">無權限</div><div class="role-perm-chips">${rolePermChipsHtml(g.deny, "deny")}</div>`;
+        `<div class="role-perm-sub">可以使用</div><table class="role-perm-table"><thead><tr><th>權限</th><th>狀態</th></tr></thead><tbody>${rolePermChipsHtml(g.allow, "allow")}</tbody></table>` +
+        `<div class="role-perm-sub">無權限</div><table class="role-perm-table"><thead><tr><th>權限</th><th>狀態</th></tr></thead><tbody>${rolePermChipsHtml(g.deny, "deny")}</tbody></table>`;
     }
     return `<div class="role-perm-card"${compact ? "" : ` id="rolePermCard-${role === "admin" ? "admin" : "staff"}"`}>
-      <div class="role-perm-card-head"><h3 class="h3">${v2Esc(g.title)}</h3><span class="role-perm-badge">${v2Esc(g.badge)}</span></div>
+      <div class="role-perm-card-head"><h3 class="h3">${v2Esc(g.title)}</h3><span class="${badgeCls}">${v2Esc(g.badge)}</span></div>
       ${body}
     </div>`;
   }
@@ -1217,12 +1219,14 @@
     tbody.innerHTML = users.length
       ? users.map((u) => {
           const created = u.createdAt ? String(u.createdAt).slice(0, 10) : "—";
+          const roleCls = u.role === "admin" ? "status-badge role-badge-admin" : "status-badge role-badge-staff";
+          const enabledCls = u.enabled ? "status-badge status-success" : "status-badge status-muted";
           return `<tr>
-            <td>${v2Esc(u.displayName)}</td>
-            <td>${v2Esc(u.username)}</td>
-            <td class="nowrap">${v2Esc(roleText(u.role))}<button type="button" class="btn btn-ghost btn-sm btn-account-perm" data-role="${v2Esc(u.role === "admin" ? "admin" : "staff")}">權限</button></td>
-            <td>${u.enabled ? "啟用" : "停用"}</td>
-            <td class="nowrap">${v2Esc(created)}</td>
+            <td class="table-primary">${v2Esc(u.displayName)}</td>
+            <td class="table-secondary">${v2Esc(u.username)}</td>
+            <td class="nowrap"><span class="${roleCls}">${v2Esc(roleText(u.role))}</span> <button type="button" class="btn btn-ghost btn-sm btn-account-perm" data-role="${v2Esc(u.role === "admin" ? "admin" : "staff")}">權限</button></td>
+            <td><span class="${enabledCls}">${u.enabled ? "啟用" : "停用"}</span></td>
+            <td class="nowrap table-secondary">${v2Esc(created)}</td>
             <td style="text-align:right;white-space:nowrap">
               <button type="button" class="btn btn-ghost btn-sm btn-account-edit" data-id="${v2Esc(u.id)}">編輯</button>
               <button type="button" class="btn btn-ghost btn-sm btn-account-toggle" data-id="${v2Esc(u.id)}">${u.enabled ? "停用" : "啟用"}</button>
@@ -1719,23 +1723,63 @@
 
   function renderVendorOptions() {
     const tbody = document.getElementById("vendorOptionsTbody");
-    if (!tbody) return;
+    const cards = document.getElementById("vendorOptionsCards");
     const list = getVendorOptionsFromConfig();
+    const fmt = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toLocaleString("zh-TW"));
+    const statsFor = (name) => {
+      const quotes = (typeof loadVendorQuotes === "function" ? loadVendorQuotes() : []).filter((q) => String(q?.vendor || "").trim() === name);
+      const prices = quotes.map((q) => Number(q.price)).filter((n) => Number.isFinite(n));
+      const avg = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : null;
+      const min = prices.length ? Math.min.apply(null, prices) : null;
+      const last = quotes
+        .map((q) => String(q.date || "").slice(0, 10))
+        .filter(Boolean)
+        .sort()
+        .reverse()[0] || "—";
+      return { avg, min, last, count: quotes.length };
+    };
     if (list.length === 0) {
-      tbody.innerHTML = `<tr><td class="muted" colspan="2">尚無廠商</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td class="muted" colspan="5">尚無廠商</td></tr>`;
+      if (cards) cards.innerHTML = `<div class="muted">尚無廠商</div>`;
       return;
     }
-    tbody.innerHTML = list
-      .map(
-        (v) =>
-          `<tr><td>${v2Esc(v)}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-remove-vendor" data-name="${v2Esc(
-            v,
-          )}">移除</button></td></tr>`,
-      )
-      .join("");
-    tbody.querySelectorAll(".btn-remove-vendor").forEach((btn) => {
-      btn.addEventListener("click", () => removeVendorOption(btn.getAttribute("data-name")));
-    });
+    if (cards) {
+      cards.innerHTML = list
+        .map((v) => {
+          const s = statsFor(v);
+          return `<div class="vendor-card">
+            <div class="vendor-card-title">${v2Esc(v)}</div>
+            <div class="vendor-card-meta">
+              <div>平均成本：<span class="table-number cost-muted-num">${v2Esc(fmt(s.avg))}</span></div>
+              <div>最低成本：<span class="table-number cost-muted-num">${v2Esc(fmt(s.min))}</span></div>
+              <div>最近更新：${v2Esc(s.last)}</div>
+              <div class="form-hint">${v2Esc(String(s.count))} 筆報價</div>
+            </div>
+            <div class="table-actions"><button type="button" class="btn btn-ghost btn-sm danger-action btn-remove-vendor" data-name="${v2Esc(v)}">移除</button></div>
+          </div>`;
+        })
+        .join("");
+      cards.querySelectorAll(".btn-remove-vendor").forEach((btn) => {
+        btn.addEventListener("click", () => removeVendorOption(btn.getAttribute("data-name")));
+      });
+    }
+    if (tbody) {
+      tbody.innerHTML = list
+        .map((v) => {
+          const s = statsFor(v);
+          return `<tr>
+            <td class="table-primary">${v2Esc(v)}</td>
+            <td class="table-number cost-muted-num">${v2Esc(fmt(s.avg))}</td>
+            <td class="table-number cost-muted-num">${v2Esc(fmt(s.min))}</td>
+            <td class="table-secondary">${v2Esc(s.last)}</td>
+            <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-remove-vendor" data-name="${v2Esc(v)}">移除</button></td>
+          </tr>`;
+        })
+        .join("");
+      tbody.querySelectorAll(".btn-remove-vendor").forEach((btn) => {
+        btn.addEventListener("click", () => removeVendorOption(btn.getAttribute("data-name")));
+      });
+    }
   }
 
   function showVendorManageMsg(text) {
@@ -3387,15 +3431,15 @@
       return v > 0 ? "positive-number" : "negative-number";
     };
     const profitSurface = Number(sumProfit) > 0 ? "surface-success" : (Number(sumProfit) < 0 ? "surface-danger" : "surface-neutral");
-    const kpi = (title, value, valueClass, surface) =>
-      `<div class="kpi-card ${surface || "surface-neutral"}"><div class="kpi-label">${crEsc(title)}</div><div class="kpi-value ${valueClass || "neutral-number"}">${crEsc(value)}</div></div>`;
+    const kpi = (title, value, valueClass, surface, icon) =>
+      `<div class="kpi-card ${surface || "surface-neutral"}"><span class="kpi-icon" aria-hidden="true">${icon || "•"}</span><div class="kpi-label">${crEsc(title)}</div><div class="kpi-value ${valueClass || "neutral-number"}">${crEsc(value)}</div></div>`;
 
     cardsEl.innerHTML = [
-      kpi("本週詢問數", String(inquiries), "neutral-number", "surface-info"),
-      kpi("本週成交數", String(wins), "neutral-number", "surface-neutral"),
-      kpi("本週成交率", pct(rate), "neutral-number", "surface-neutral"),
-      kpi("本週預估成交金額", "NT$ " + fmt(sumDeal), "neutral-number", "surface-info"),
-      kpi("本週預估毛利", "NT$ " + fmt(sumProfit), profitCls(sumProfit), profitSurface),
+      kpi("本週詢問數", String(inquiries), "neutral-number", "surface-info", "👥"),
+      kpi("本週成交數", String(wins), "neutral-number", "surface-success", "✅"),
+      kpi("本週成交率", pct(rate), "neutral-number", "surface-neutral", "📊"),
+      kpi("本週預估成交金額", "NT$ " + fmt(sumDeal), "neutral-number", "surface-info", "💵"),
+      kpi("本週預估毛利", "NT$ " + fmt(sumProfit), profitCls(sumProfit), profitSurface, "💜"),
     ].join("");
 
     const bySource = new Map();
@@ -3450,14 +3494,20 @@
       .slice()
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
       .map((r) => {
+        const initial = String(r.name || "?").trim().charAt(0) || "?";
+        const profitBadgeCls = profitCls(r.grossProfit);
+        const profitBadge =
+          profitBadgeCls === "positive-number" ? "status-badge status-success" :
+          profitBadgeCls === "negative-number" ? "status-badge status-danger" :
+          "status-badge status-muted";
         return `<tr data-id="${crEsc(r.id)}">
           <td class="nowrap table-secondary">${crEsc((r.date || "").slice(0, 10))}</td>
-          <td class="table-primary">${crEsc(r.name)}</td>
-          <td class="table-secondary">${crEsc(r.source)}</td>
+          <td class="table-primary"><div class="customer-name-cell"><span class="avatar-circle" aria-hidden="true">${crEsc(initial)}</span><span>${crEsc(r.name)}</span></div></td>
+          <td><span class="status-badge status-info">${crEsc(r.source)}</span></td>
           <td class="table-secondary">${crEsc(r.type)}</td>
           <td><span class="${statusBadgeClass(r.status)}">${crEsc(r.status)}</span></td>
           <td class="table-number nowrap neutral-number">${crEsc(fmt(r.dealAmount))}</td>
-          <td class="table-number nowrap ${profitCls(r.grossProfit)}" data-admin-only>${crEsc(fmt(r.grossProfit))}</td>
+          <td class="table-number nowrap" data-admin-only><span class="${profitBadge}">${crEsc(fmt(r.grossProfit) || "0")}</span></td>
           <td class="table-secondary">${crEsc(r.use)}</td>
           <td class="table-secondary">${crEscNl(r.questions)}</td>
           <td class="table-secondary">${crEsc(r.lostReason)}</td>
@@ -4060,6 +4110,17 @@
     e.preventDefault();
 
     const nextOpen = !wrap.classList.contains("is-open");
+    if (nextOpen) {
+      const root = document.getElementById("tab-frontend");
+      if (root) {
+        root.querySelectorAll(".admin-collapsible.is-open").forEach((other) => {
+          if (other === wrap) return;
+          other.classList.remove("is-open");
+          const ob = other.querySelector(".admin-collapsible-toggle");
+          if (ob) ob.setAttribute("aria-expanded", "false");
+        });
+      }
+    }
     wrap.classList.toggle("is-open", nextOpen);
     btn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
   });
@@ -4435,15 +4496,39 @@
         const name = a && a.name != null ? a.name : "—";
         const avail = a && a.available != null ? a.available : 0;
         const suggest = a && a.suggest_qty != null ? a.suggest_qty : 0;
+        const gid = a && a.id != null ? a.id : "";
         return (
           '<div class="inv-alert-row">' +
+          "<div>" +
           '<div class="table-primary">' + v2Esc(name) + "</div>" +
           '<div class="inv-alert-meta">' +
-          '<span class="warning-number">剩餘 ' + v2Esc(String(avail)) + "</span>" +
-          '<span class="text-strong">建議補 ' + v2Esc(String(suggest)) + "</span>" +
-          "</div></div>"
+          '<span class="status-badge status-warning qty-badge">剩餘 ' + v2Esc(String(avail)) + "</span>" +
+          '<span class="status-badge status-orange qty-badge">建議補 ' + v2Esc(String(suggest)) + "</span>" +
+          "</div></div>" +
+          '<button type="button" class="btn btn-ghost btn-sm secondary-action replenishment-alert-view-btn" data-id="' + v2Esc(String(gid)) + '" data-name="' + v2Esc(name) + '">查看商品</button>' +
+          "</div>"
         );
       }).join("");
+      box.querySelectorAll(".replenishment-alert-view-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          const gid = btn.getAttribute("data-id");
+          const gname = btn.getAttribute("data-name") || "";
+          const items = (DK.getItems && DK.getItems()) || [];
+          const hit = items.find(function (it) { return String(it.replenishment_group_id || "") === String(gid); });
+          if (hit) {
+            openV2ItemEditor(hit.id);
+            return;
+          }
+          if (itemsSearch) {
+            itemsSearch.value = gname;
+            itemsPage = 1;
+            renderV2Items();
+          }
+          try {
+            document.getElementById("v2-items")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          } catch (_) {}
+        });
+      });
     }
 
     function renderUngroupedItems() {
@@ -4849,6 +4934,13 @@
       if (alert && alert.type === "REORDER") return "table-number warning-number";
       return "table-number neutral-number";
     }
+    function invQtyBadgeClass(qty) {
+      const n = Number(qty);
+      if (!Number.isFinite(n) || n <= 0) return "status-badge status-danger qty-badge";
+      if (n <= 2) return "status-badge status-warning qty-badge";
+      if (n <= 5) return "status-badge status-orange qty-badge";
+      return "status-badge status-success qty-badge";
+    }
 
     function renderV2Items() {
       if (!itemsTbody) return;
@@ -4863,18 +4955,20 @@
         const spec = x.spec || "";
         const sameNameSpec = !String(spec).trim() || name === spec;
         const nameHtml = sameNameSpec
-          ? ('<div class="table-primary">' + v2Esc(name || spec || "") + "</div>")
-          : ('<div class="table-primary">' + v2Esc(name) + '</div><div class="table-secondary">' + v2Esc(spec) + "</div>");
+          ? ('<div class="item-name-stack"><div class="table-primary">' + v2Esc(name || spec || "") + "</div></div>")
+          : ('<div class="item-name-stack"><div class="table-primary">' + v2Esc(name) + '</div><div class="table-secondary">' + v2Esc(spec) + "</div></div>");
         const archivedBadge = archived ? '<span class="item-archived-badge">已封存</span>' : "";
-        const qtyClass = invQtyClass(x.qty_on_hand, alert);
+        const brand = x.vendor || x.brand || "";
+        const brandBadge = brand ? ('<div style="margin-top:4px"><span class="status-badge status-info">' + v2Esc(brand) + "</span></div>") : "";
+        const qtyBadge = '<span class="' + invQtyBadgeClass(x.qty_on_hand) + '">' + v2Esc(String(x.qty_on_hand ?? 0)) + "</span>";
         return `<tr class="${rowClass}">
           <td><input type="checkbox" class="item-row-cb" data-id="${v2Esc(x.id)}" /></td>
-          <td>${nameHtml}${archivedBadge}</td>
+          <td>${nameHtml}${brandBadge}${archivedBadge}</td>
           <td class="table-secondary">${v2Esc(x.category || "")}</td>
-          <td class="table-secondary">${v2Esc(STATUS_LABEL[x.status] || x.status)}</td>
-          <td class="${qtyClass}">${x.qty_on_hand}</td>
-          <td class="table-number neutral-number" data-admin-only>${v2FmtNum(x.cost_unit)}</td>
-          <td class="table-number neutral-number">${v2FmtNum(x.price_list)}</td>
+          <td><span class="status-badge status-muted">${v2Esc(STATUS_LABEL[x.status] || x.status)}</span></td>
+          <td class="table-number">${qtyBadge}</td>
+          <td class="table-number cost-muted-num" data-admin-only>${v2FmtNum(x.cost_unit)}</td>
+          <td class="table-number price-list-num">${v2FmtNum(x.price_list)}</td>
           <td class="table-number neutral-number">${v2FmtNum(x.price_floor)}</td>
           <td class="table-secondary">${v2Esc((x.inbound_date || "").toString().slice(0, 10))}</td>
           <td class="table-number table-secondary">${x.age_days != null ? x.age_days : "-"}</td>
@@ -5899,21 +5993,41 @@
       const list = getFilteredOrders();
       const pageInfo = paginateV2(list, ordersPage, V2_PAGE_SIZE);
       ordersPage = pageInfo.page;
+      const todayStr = (DK.todayStr && DK.todayStr()) || new Date().toISOString().slice(0, 10);
+      const allOrders = (DK.getOrders && DK.getOrders().map(DK.enrichOrder)) || [];
+      const todayOrders = allOrders.filter((o) => getOrderDateStr(o) === todayStr);
+      const todayRevenue = todayOrders.reduce((s, o) => s + (Number(o.total_sale) || 0), 0);
+      const todayProfit = todayOrders.reduce((s, o) => s + (Number(o.gross_profit) || 0), 0);
+      const pendingShip = allOrders.filter((o) => o.status === "paid" || o.status === "pending").length;
+      const kpiEl = document.getElementById("orderTodayKpi");
+      if (kpiEl) {
+        const pCls = profitNumberClass(todayProfit);
+        const pSurf = Number(todayProfit) > 0 ? "surface-success" : (Number(todayProfit) < 0 ? "surface-danger" : "surface-neutral");
+        kpiEl.innerHTML =
+          '<div class="kpi-card surface-info"><span class="kpi-icon" aria-hidden="true">🧾</span><div class="kpi-label">今日訂單數</div><div class="kpi-value neutral-number">' + todayOrders.length + "</div></div>" +
+          '<div class="kpi-card surface-success"><span class="kpi-icon" aria-hidden="true">💰</span><div class="kpi-label">今日營收</div><div class="kpi-value neutral-number">NT$ ' + v2FmtNum(todayRevenue) + "</div></div>" +
+          '<div class="kpi-card ' + pSurf + '" data-admin-only><span class="kpi-icon" aria-hidden="true">📈</span><div class="kpi-label">今日毛利</div><div class="kpi-value ' + pCls + '">NT$ ' + v2FmtNum(todayProfit) + "</div></div>" +
+          '<div class="kpi-card surface-warning"><span class="kpi-icon" aria-hidden="true">🚚</span><div class="kpi-label">待出貨／待處理</div><div class="kpi-value neutral-number">' + pendingShip + "</div></div>";
+      }
       ordersTbody.innerHTML = pageInfo.pageItems.map((o) => {
         const margin = o.gross_margin != null ? (o.gross_margin * 100).toFixed(1) + "%" : "-";
         const statusKey = (o.status && ORDER_STATUS_LABEL[o.status]) ? o.status : "pending";
-        const statusClass = orderStatusBadgeClass(statusKey);
+        const statusClass = orderStatusBadgeClass(statusKey) + " status-pill";
         const profitCls = profitNumberClass(o.gross_profit);
-        const marginCls = profitNumberClass(o.gross_profit);
         return `<tr>
           <td class="nowrap table-primary">${v2Esc(o.order_no)}</td>
           <td class="table-primary">${v2Esc(o.customer_name)}</td>
           <td class="table-number neutral-number">${v2FmtNum(o.total_sale)}</td>
           <td class="table-number neutral-number">${v2FmtNum(o.shipping_income)}</td>
           <td class="table-number neutral-number">${v2FmtNum(o.discount)}</td>
-          <td class="table-number neutral-number" data-admin-only>${v2FmtNum(o.cogs_total)}</td>
-          <td class="table-number ${profitCls}" data-admin-only>${v2FmtNum(o.gross_profit)}</td>
-          <td class="table-number ${marginCls}" data-admin-only>${margin}</td>
+          <td class="table-number cost-muted-num" data-admin-only>${v2FmtNum(o.cogs_total)}</td>
+          <td class="table-number ${profitCls}" data-admin-only>
+            <div class="order-profit-stack">
+              <span>NT$ ${v2FmtNum(o.gross_profit)}</span>
+              <span class="order-margin-pct">${v2Esc(margin)}</span>
+            </div>
+          </td>
+          <td class="table-number ${profitCls}" data-admin-only>${v2Esc(margin)}</td>
           <td><span class="${statusClass}">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</span></td>
           <td class="nowrap table-secondary">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td>
           <td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td>
@@ -6822,24 +6936,24 @@
       const elKpi = document.getElementById("reportKpiGrid");
       if (elKpi) {
         elKpi.innerHTML =
-          '<div class="kpi-card surface-info">' +
+          '<div class="kpi-card surface-info"><span class="kpi-icon" aria-hidden="true">💵</span>' +
             '<div class="kpi-label">營業額</div>' +
             '<div class="kpi-value neutral-number">NT$ ' + v2FmtNum(revenueTotal) + "</div>" +
             '<div class="kpi-meta">' + v2Esc(params.label) + " " + v2Esc(summary.fromStr) + " ~ " + v2Esc(summary.toStr) + "</div>" +
           "</div>" +
-          '<div class="kpi-card ' + profitSurface + '">' +
+          '<div class="kpi-card ' + profitSurface + '"><span class="kpi-icon" aria-hidden="true">📈</span>' +
             '<div class="kpi-label">訂單毛利</div>' +
             '<div class="kpi-value ' + profitCls + '">NT$ ' + v2FmtNum(summary.ordersProfit) + "</div>" +
             '<div class="kpi-meta">' + v2Esc(String(summary.ordersCount)) + " 筆訂單</div>" +
           "</div>" +
-          '<div class="kpi-card surface-neutral">' +
+          '<div class="kpi-card surface-neutral"><span class="kpi-icon" aria-hidden="true">🧾</span>' +
             '<div class="kpi-label">訂單數</div>' +
             '<div class="kpi-value neutral-number">' + v2Esc(String(summary.ordersCount)) + "</div>" +
             '<div class="kpi-meta">整機 ' + v2Esc(String(salesStats.pcCount || 0)) +
               "｜零組件 " + v2Esc(String(salesStats.partsCount || 0)) +
               "｜維修 " + v2Esc(String(salesStats.serviceCount || 0)) + "</div>" +
           "</div>" +
-          '<div class="kpi-card surface-neutral">' +
+          '<div class="kpi-card surface-warning"><span class="kpi-icon" aria-hidden="true">📤</span>' +
             '<div class="kpi-label">支出</div>' +
             '<div class="kpi-value neutral-number">NT$ ' + v2FmtNum(summary.expensesTotal) + "</div>" +
             '<div class="kpi-meta">' + v2Esc(String(summary.expensesCount)) + " 筆｜庫存成本 NT$ " + v2FmtNum(summary.inventoryValue) + "</div>" +

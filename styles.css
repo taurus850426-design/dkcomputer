@@ -5553,3 +5553,412 @@ body.admin-page .att-admin-table-wrap{
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================================
+   Stage 13-5 | DK Admin Ultimate UI Polish (CSS-first)
+   ============================================================ */
+body.admin-page{
+  --dk-surface-primary: #ffffff;
+  --dk-surface-secondary: #f3f5f8;
+  --dk-surface-warning: #fff8e8;
+  --dk-surface-success: #eefbf4;
+  --dk-blue: #1d4ed8;
+  --dk-blue-soft: rgba(29, 78, 216, 0.10);
+  --dk-orange: #c2410c;
+  --dk-orange-soft: rgba(234, 88, 12, 0.14);
+  --dk-purple: #6d28d9;
+  --dk-purple-soft: rgba(109, 40, 217, 0.12);
+  --dk-shadow-soft: 0 4px 18px rgba(17, 24, 39, 0.06);
+  --dk-shadow-lift: 0 10px 28px rgba(17, 24, 39, 0.10);
+  background:
+    radial-gradient(900px 420px at 12% -8%, rgba(93, 214, 255, 0.10), transparent 55%),
+    radial-gradient(700px 360px at 88% 0%, rgba(46, 229, 157, 0.08), transparent 50%),
+    var(--dk-surface-secondary);
+}
+body.admin-page .admin-shell,
+body.admin-page .admin-main,
+body.admin-page main.admin-main{
+  background: transparent;
+}
+body.admin-page .card{
+  background: var(--dk-surface-primary);
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  box-shadow: var(--dk-shadow-soft);
+  border-radius: 16px;
+}
+body.admin-page .surface-primary{ background: var(--dk-surface-primary) !important; }
+body.admin-page .surface-secondary,
+body.admin-page .surface-neutral{ background: var(--dk-surface-secondary) !important; }
+body.admin-page .surface-warning{ background: var(--dk-surface-warning) !important; }
+body.admin-page .surface-success{ background: var(--dk-surface-success) !important; }
+body.admin-page .surface-info{ background: var(--dk-info-soft) !important; }
+body.admin-page .surface-orange{ background: var(--dk-orange-soft) !important; }
+body.admin-page .surface-purple{ background: var(--dk-purple-soft) !important; }
+
+body.admin-page .section-card,
+body.admin-page .section-card-soft,
+body.admin-page .inv-table-panel,
+body.admin-page .admin-stack-gap{
+  margin-bottom: 20px;
+}
+body.admin-page .section-card,
+body.admin-page .kpi-card,
+body.admin-page .card{
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  box-shadow: var(--dk-shadow-soft);
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+body.admin-page .section-card-soft{
+  border: 1px solid rgba(17, 24, 39, 0.06);
+  box-shadow: none;
+}
+
+/* Buttons final */
+body.admin-page .btn{
+  border-radius: 12px;
+  padding: 10px 16px;
+  min-height: 40px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 120ms ease, box-shadow 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+body.admin-page .btn-primary,
+body.admin-page .btn.primary-action,
+body.admin-page .primary-action{
+  background: var(--dk-blue);
+  border-color: var(--dk-blue);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(29, 78, 216, 0.22);
+}
+body.admin-page .btn-primary:hover,
+body.admin-page .btn.primary-action:hover:not(:disabled){
+  filter: brightness(1.06);
+  box-shadow: 0 8px 20px rgba(29, 78, 216, 0.28);
+}
+body.admin-page .btn.secondary-action,
+body.admin-page .secondary-action{
+  background: #fff;
+  border-color: rgba(29, 78, 216, 0.45);
+  color: var(--dk-blue);
+}
+body.admin-page .btn.danger-action,
+body.admin-page .danger-action{
+  background: var(--dk-danger-soft);
+  border-color: rgba(255, 92, 122, 0.35);
+  color: #9b1238;
+}
+body.admin-page .btn-ghost,
+body.admin-page .tertiary-action{
+  background: transparent;
+  border-color: transparent;
+}
+body.admin-page .btn::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), rgba(255,255,255,0.35), transparent 55%);
+  opacity: 0;
+  transition: opacity 280ms ease;
+  pointer-events: none;
+}
+body.admin-page .btn:active::after{ opacity: 1; }
+
+/* KPI with icon */
+body.admin-page .kpi-card{
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px 12px;
+  align-items: start;
+  background: var(--dk-surface-primary);
+}
+body.admin-page .kpi-card .kpi-icon{
+  grid-row: 1 / span 3;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  background: rgba(17, 24, 39, 0.05);
+}
+body.admin-page .kpi-card .kpi-label{ margin: 0; order: 1; }
+body.admin-page .kpi-card .kpi-value{ margin: 0; order: 2; font-size: 24px; }
+body.admin-page .kpi-card .kpi-meta{ margin: 0; order: 3; }
+body.admin-page .kpi-card.surface-info .kpi-icon{ background: var(--dk-info-soft); }
+body.admin-page .kpi-card.surface-warning .kpi-icon,
+body.admin-page .kpi-card.surface-orange .kpi-icon{ background: var(--dk-orange-soft); }
+body.admin-page .kpi-card.surface-success .kpi-icon{ background: var(--dk-success-soft); }
+body.admin-page .kpi-card.surface-purple .kpi-icon{ background: var(--dk-purple-soft); }
+body.admin-page .kpi-card.surface-danger .kpi-icon{ background: var(--dk-danger-soft); }
+
+.status-orange{
+  background: var(--dk-orange-soft);
+  border-color: rgba(234, 88, 12, 0.28);
+  color: var(--dk-orange);
+}
+.status-pill,
+body.admin-page .status-badge{
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+/* Inventory alerts */
+body.admin-page .inv-alert-list{
+  display: grid;
+  gap: 10px;
+}
+body.admin-page .inv-alert-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 248, 232, 0.95);
+  border: 1px solid rgba(234, 179, 8, 0.28);
+}
+body.admin-page .inv-alert-meta{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+body.admin-page .inv-ungrouped-toggle{
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.45;
+  padding: 12px 14px;
+  background: var(--dk-info-soft);
+  border-radius: 12px;
+}
+body.admin-page .qty-badge{ font-variant-numeric: tabular-nums; }
+body.admin-page .price-list-num{ color: var(--dk-blue); font-weight: 700; }
+body.admin-page .cost-muted-num{ color: var(--dk-muted); font-weight: 500; }
+body.admin-page .item-name-stack{ display: grid; gap: 2px; }
+body.admin-page .avatar-circle{
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  background: var(--dk-blue-soft);
+  color: var(--dk-blue);
+  flex: 0 0 auto;
+}
+body.admin-page .customer-name-cell{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+body.admin-page .order-profit-stack{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  line-height: 1.2;
+}
+body.admin-page .order-profit-stack .order-margin-pct{
+  font-size: 12px;
+  color: var(--dk-muted);
+  font-weight: 600;
+}
+body.admin-page .vendor-card-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+body.admin-page .vendor-card{
+  background: var(--dk-surface-primary);
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: var(--dk-shadow-soft);
+  display: grid;
+  gap: 8px;
+}
+body.admin-page .vendor-card-title{ font-weight: 800; }
+body.admin-page .vendor-card-meta{
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--dk-muted);
+}
+body.admin-page .role-badge-admin{
+  background: var(--dk-purple-soft);
+  border-color: rgba(109, 40, 217, 0.28);
+  color: var(--dk-purple);
+}
+body.admin-page .role-badge-staff{
+  background: var(--dk-info-soft);
+  border-color: rgba(93, 214, 255, 0.35);
+  color: #0b6e8a;
+}
+body.admin-page .role-perm-table{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+body.admin-page .role-perm-table th,
+body.admin-page .role-perm-table td{
+  border-bottom: 1px solid rgba(17, 24, 39, 0.08);
+  padding: 8px 10px;
+  text-align: left;
+}
+body.admin-page .role-perm-table .is-allow{ color: #0f7a4c; font-weight: 700; }
+body.admin-page .role-perm-table .is-deny{ color: #9b1238; font-weight: 600; }
+
+/* Attendance punch */
+body.admin-page .att-punch{
+  min-height: 52px !important;
+  font-size: 15px;
+  font-weight: 800;
+  border-radius: 14px !important;
+}
+body.admin-page .att-punch-in{
+  background: #059669 !important;
+  border-color: #059669 !important;
+  color: #fff !important;
+}
+body.admin-page .att-punch-break{
+  background: #f59e0b !important;
+  border-color: #f59e0b !important;
+  color: #111827 !important;
+}
+body.admin-page .att-punch-out{
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #fff !important;
+}
+body.admin-page .att-punch:disabled{
+  opacity: 0.45;
+  filter: grayscale(0.2);
+}
+body.admin-page .att-work-kpi{
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--dk-surface-secondary);
+  border: 1px solid rgba(17, 24, 39, 0.06);
+}
+body.admin-page .att-loc-status.status-badge{
+  display: inline-flex;
+  max-width: 100%;
+  white-space: normal;
+}
+
+/* Purchase badges polish (CSS only; JS untouched) */
+body.admin-page #tab-purchase .badge{
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-weight: 700;
+}
+body.admin-page #tab-purchase .badge.ok{ background: var(--dk-success-soft); color: #0f7a4c; }
+body.admin-page #tab-purchase .badge.warn{ background: var(--dk-warning-soft); color: #8a5a00; }
+body.admin-page #tab-purchase .badge.danger{ background: var(--dk-danger-soft); color: #9b1238; }
+body.admin-page #tab-purchase .badge.tag{ background: rgba(17,24,39,0.06); color: var(--dk-muted); }
+body.admin-page #tab-purchase .badge.info{ background: var(--dk-info-soft); color: #0b6e8a; }
+body.admin-page #poListTable td[style*="text-align:right"]{
+  font-variant-numeric: tabular-nums;
+}
+
+/* Frontend accordion smooth (display toggle kept for existing .is-open behavior) */
+body.admin-page #tab-frontend .admin-collapsible.is-open .admin-collapsible-body{
+  animation: dk-fade-up 200ms ease both;
+}
+
+@keyframes dk-fade-up{
+  from{ opacity: 0; transform: translateY(6px); }
+  to{ opacity: 1; transform: translateY(0); }
+}
+.fade-up{ animation: dk-fade-up 220ms ease both; }
+
+body.admin-page .btn:focus-visible,
+body.admin-page .tab:focus-visible,
+body.admin-page input:focus-visible,
+body.admin-page select:focus-visible,
+body.admin-page textarea:focus-visible{
+  outline: 2px solid rgba(29, 78, 216, 0.45);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.12);
+}
+
+@media (hover: hover) and (pointer: fine){
+  body.admin-page .section-card:hover,
+  body.admin-page .card:hover,
+  body.admin-page .vendor-card:hover{
+    transform: translateY(-2px);
+    box-shadow: var(--dk-shadow-lift);
+  }
+  body.admin-page .kpi-card:hover{
+    transform: scale(1.015);
+    box-shadow: var(--dk-shadow-lift);
+  }
+}
+@media (hover: none){
+  body.admin-page .kpi-card:active{
+    background: rgba(255,255,255,0.98);
+    filter: brightness(1.03);
+  }
+}
+
+@media (max-width: 900px){
+  body.admin-page .tabs{
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+  }
+  body.admin-page .kpi-grid{ grid-template-columns: 1fr; }
+}
+@media (max-width: 640px){
+  body.admin-page .section-actions .btn,
+  body.admin-page .actions .btn,
+  body.admin-page .mobile-full-btn{
+    width: 100%;
+  }
+  body.admin-page .mobile-sticky-actions{
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, rgba(243,245,248,0), var(--dk-surface-secondary) 28%);
+  }
+  body.admin-page .modal,
+  body.admin-page .item-editor-modal,
+  body.admin-page #itemEditorModal,
+  body.admin-page #orderForm,
+  body.admin-page .dialog-card{
+    width: min(95vw, 100%);
+    max-width: 95vw;
+  }
+  body.admin-page .inv-alert-row{
+    flex-direction: column;
+    align-items: stretch;
+  }
+  body.admin-page .att-clock-card .att-actions .btn{
+    min-height: 52px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce){
+  body.admin-page .section-card,
+  body.admin-page .kpi-card,
+  body.admin-page .card,
+  body.admin-page .btn,
+  body.admin-page .fade-up,
+  body.admin-page #tab-frontend .admin-collapsible.is-open .admin-collapsible-body{
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
+  }
+}
