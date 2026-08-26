@@ -4311,6 +4311,8 @@
     let ungroupedExpanded = false;
     let adminForceSaveWithoutGroup = false;
     let pendingItemSavePayload = null;
+    const REPLENISHMENT_GROUPS_PAGE_SIZE = 10;
+    let replenishmentGroupsPage = 1;
 
     function isRequiredReplenishmentCategory(category) {
       if (DK && typeof DK.isReplenishmentRequiredCategory === "function") {
@@ -4342,7 +4344,9 @@
         if (!it) return false;
         if (!isRequiredReplenishmentCategory(it.category)) return false;
         const gid = it.replenishment_group_id;
-        return gid == null || String(gid).trim() === "";
+        if (!(gid == null || String(gid).trim() === "")) return false;
+        const qty = Number(it.qty_on_hand);
+        return Number.isFinite(qty) && qty > 0;
       });
     }
 
@@ -4454,14 +4458,28 @@
 
     function renderReplenishmentGroupsTable() {
       const tbody = document.getElementById("replenishmentGroupsTbody");
+      const pager = document.getElementById("replenishmentGroupsPager");
+      const pageLabel = document.getElementById("replenishmentGroupsPageLabel");
+      const prevBtn = document.getElementById("replenishmentGroupsPrev");
+      const nextBtn = document.getElementById("replenishmentGroupsNext");
       if (!tbody) return;
       const rows = Array.isArray(replenishmentGroupsCache) ? replenishmentGroupsCache : [];
       const isAdmin = !!(window.stage7IsAdminRole && window.stage7IsAdminRole());
+      const total = rows.length;
+      const totalPages = total === 0 ? 1 : Math.ceil(total / REPLENISHMENT_GROUPS_PAGE_SIZE);
+      if (replenishmentGroupsPage > totalPages) replenishmentGroupsPage = totalPages;
+      if (replenishmentGroupsPage < 1) replenishmentGroupsPage = 1;
+      if (pager) pager.hidden = total <= REPLENISHMENT_GROUPS_PAGE_SIZE;
+      if (pageLabel) pageLabel.textContent = "第 " + replenishmentGroupsPage + " / " + totalPages + " 頁";
+      if (prevBtn) prevBtn.disabled = replenishmentGroupsPage <= 1;
+      if (nextBtn) nextBtn.disabled = replenishmentGroupsPage >= totalPages;
       if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="6" class="muted">尚無補貨群組</td></tr>';
         return;
       }
-      tbody.innerHTML = rows.map(function (g) {
+      const start = (replenishmentGroupsPage - 1) * REPLENISHMENT_GROUPS_PAGE_SIZE;
+      const pageRows = rows.slice(start, start + REPLENISHMENT_GROUPS_PAGE_SIZE);
+      tbody.innerHTML = pageRows.map(function (g) {
         const avail = groupAvailableFromItems(g.id);
         const enabled = g.enabled !== false;
         let ops =
@@ -6153,6 +6171,18 @@
 
     document.getElementById("btnNewReplenishmentGroup")?.addEventListener("click", () => {
       openReplenishmentGroupForm(null);
+    });
+    document.getElementById("replenishmentGroupsPrev")?.addEventListener("click", () => {
+      if (replenishmentGroupsPage <= 1) return;
+      replenishmentGroupsPage -= 1;
+      renderReplenishmentGroupsTable();
+    });
+    document.getElementById("replenishmentGroupsNext")?.addEventListener("click", () => {
+      const total = (replenishmentGroupsCache || []).length;
+      const totalPages = total === 0 ? 1 : Math.ceil(total / REPLENISHMENT_GROUPS_PAGE_SIZE);
+      if (replenishmentGroupsPage >= totalPages) return;
+      replenishmentGroupsPage += 1;
+      renderReplenishmentGroupsTable();
     });
     document.getElementById("rgEditSave")?.addEventListener("click", () => {
       saveReplenishmentGroupFromForm();

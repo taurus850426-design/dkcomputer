@@ -99,7 +99,7 @@
               <button id="btnToggleUngrouped" class="btn btn-ghost btn-sm" type="button" style="padding-left:0">
                 未設定補貨群組：<span id="replenishmentUngroupedCount">0</span> 筆
               </button>
-              <p class="muted small" style="margin-top:4px">僅列出記憶體／硬碟／電源供應器且尚未綁定補貨群組的品項（資料品質提醒，非缺貨）。</p>
+              <p class="muted small" style="margin-top:4px">僅列出記憶體／硬碟／電源供應器、尚未綁定補貨群組且現貨 &gt; 0 的品項（資料品質提醒，非缺貨）。</p>
               <div id="replenishmentUngroupedList" hidden style="margin-top:10px"></div>
             </div>
             <div id="replenishmentGroupsCard" class="card" style="margin-bottom:16px" data-admin-only>
@@ -123,6 +123,11 @@
                     <tr><td colspan="6" class="muted">尚無補貨群組</td></tr>
                   </tbody>
                 </table>
+              </div>
+              <div id="replenishmentGroupsPager" hidden style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center">
+                <button id="replenishmentGroupsPrev" class="btn btn-ghost btn-sm" type="button">上一頁</button>
+                <span id="replenishmentGroupsPageLabel" class="muted small">第 1 / 1 頁</span>
+                <button id="replenishmentGroupsNext" class="btn btn-ghost btn-sm" type="button">下一頁</button>
               </div>
               <div id="replenishmentGroupForm" class="form-grid" style="margin-top:12px;grid-template-columns:1.4fr 0.8fr 0.8fr auto auto;" hidden>
                 <input id="rgEditId" type="hidden" />
@@ -1862,12 +1867,12 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260826rg2"></script>
-    <script src="./inventory-ledger.js?v=20260826rg2"></script>
+    <script src="./shared.js?v=20260826rg3"></script>
+    <script src="./inventory-ledger.js?v=20260826rg3"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260826rg2"></script>
+    <script src="./admin3.js?v=20260826rg3"></script>
     <script src="./purchase-orders.js?v=20260815s5a"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260826att6"></script>
