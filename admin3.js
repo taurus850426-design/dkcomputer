@@ -5864,6 +5864,20 @@
       });
     }
 
+    function profitNumberClass(n) {
+      const v = Number(n);
+      if (!Number.isFinite(v) || v === 0) return "neutral-number";
+      return v > 0 ? "positive-number" : "negative-number";
+    }
+    function orderStatusBadgeClass(status) {
+      const s = String(status || "").trim();
+      if (s === "completed") return "status-badge status-success";
+      if (s === "pending") return "status-badge status-warning";
+      if (s === "refunded") return "status-badge status-danger";
+      if (s === "paid" || s === "shipped") return "status-badge status-info";
+      return "status-badge status-muted";
+    }
+
     function renderV2Orders() {
       if (!ordersTbody) return;
       const list = getFilteredOrders();
@@ -5872,8 +5886,22 @@
       ordersTbody.innerHTML = pageInfo.pageItems.map((o) => {
         const margin = o.gross_margin != null ? (o.gross_margin * 100).toFixed(1) + "%" : "-";
         const statusKey = (o.status && ORDER_STATUS_LABEL[o.status]) ? o.status : "pending";
-        const statusClass = "order-status-badge order-status-" + statusKey;
-        return `<tr><td class="nowrap">${v2Esc(o.order_no)}</td><td>${v2Esc(o.customer_name)}</td><td>${v2FmtNum(o.total_sale)}</td><td>${v2FmtNum(o.shipping_income)}</td><td>${v2FmtNum(o.discount)}</td><td data-admin-only>${v2FmtNum(o.cogs_total)}</td><td data-admin-only>${v2FmtNum(o.gross_profit)}</td><td data-admin-only>${margin}</td><td><span class="${statusClass}">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</span></td><td class="nowrap">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td><td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td></tr>`;
+        const statusClass = orderStatusBadgeClass(statusKey);
+        const profitCls = profitNumberClass(o.gross_profit);
+        const marginCls = profitNumberClass(o.gross_profit);
+        return `<tr>
+          <td class="nowrap table-primary">${v2Esc(o.order_no)}</td>
+          <td class="table-primary">${v2Esc(o.customer_name)}</td>
+          <td class="table-number neutral-number">${v2FmtNum(o.total_sale)}</td>
+          <td class="table-number neutral-number">${v2FmtNum(o.shipping_income)}</td>
+          <td class="table-number neutral-number">${v2FmtNum(o.discount)}</td>
+          <td class="table-number neutral-number" data-admin-only>${v2FmtNum(o.cogs_total)}</td>
+          <td class="table-number ${profitCls}" data-admin-only>${v2FmtNum(o.gross_profit)}</td>
+          <td class="table-number ${marginCls}" data-admin-only>${margin}</td>
+          <td><span class="${statusClass}">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</span></td>
+          <td class="nowrap table-secondary">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td>
+          <td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td>
+        </tr>`;
       }).join("");
       ordersTbody.querySelectorAll(".btn-edit-order").forEach((btn) => btn.addEventListener("click", () => openV2OrderEditor(btn.getAttribute("data-id"))));
 
@@ -5916,7 +5944,7 @@
         const costUnit = Number(line.cost_unit) || 0;
         const cogsSub = costUnit * (Number(line.qty) || 0);
         const spec = line.spec != null ? line.spec : (DK.findItemById(line.item_id)?.spec ?? "");
-        return `<tr><td>${v2Esc(line.name || "")}</td><td class="muted small">${v2Esc(spec)}</td><td>${line.qty}</td><td>${v2FmtNum(line.unit_price)}</td><td data-admin-only>${v2FmtNum(costUnit)}</td><td data-admin-only>${v2FmtNum(cogsSub)}</td><td><button type="button" class="btn btn-ghost btn-sm order-line-remove" data-i="${i}">移除</button></td></tr>`;
+        return `<tr><td class="table-primary">${v2Esc(line.name || "")}</td><td class="table-secondary">${v2Esc(spec)}</td><td class="table-number neutral-number">${line.qty}</td><td class="table-number neutral-number">${v2FmtNum(line.unit_price)}</td><td class="table-number neutral-number" data-admin-only>${v2FmtNum(costUnit)}</td><td class="table-number neutral-number" data-admin-only>${v2FmtNum(cogsSub)}</td><td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action order-line-remove" data-i="${i}">移除</button></td></tr>`;
       }).join("");
       orderLineTbody.querySelectorAll(".order-line-remove").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -6003,7 +6031,13 @@
       const rev = sale + ship - disc;
       const margin = rev > 0 ? ((profit / rev) * 100).toFixed(1) + "%" : "-";
       const el = document.getElementById("orderGrossProfitDisplay");
-      if (el) el.textContent = "毛利 " + v2FmtNum(profit) + " / 毛利率 " + margin;
+      if (el) {
+        const pClass = profitNumberClass(profit);
+        el.className = "order-gross-preview";
+        el.innerHTML =
+          '毛利 <span class="' + pClass + '">' + v2FmtNum(profit) + "</span>" +
+          ' / 毛利率 <span class="' + pClass + '">' + margin + "</span>";
+      }
     }
     function applyOrderStatusSelectClass() {
       const statusKeys = ["pending", "paid", "shipped", "completed", "refunded"];
@@ -6763,14 +6797,51 @@
       const params = getReportQueryParams();
       const summary = DK.reportSummaryByDateRange(params.fromStr, params.toStr);
       const salesStats = (DK.reportSalesTypeStats && DK.reportSalesTypeStats(params.fromStr, params.toStr)) || { rows: [], pcCount: 0, partsCount: 0, serviceCount: 0 };
+      const salesRows = Array.isArray(salesStats.rows) ? salesStats.rows : [];
+      const revenueTotal = salesRows.reduce(function (s, r) { return s + (Number(r.revenue) || 0); }, 0);
+      const profitCls = profitNumberClass(summary.ordersProfit);
+      const profitSurface = Number(summary.ordersProfit) > 0
+        ? "surface-success"
+        : (Number(summary.ordersProfit) < 0 ? "surface-danger" : "surface-neutral");
+      const elKpi = document.getElementById("reportKpiGrid");
+      if (elKpi) {
+        elKpi.innerHTML =
+          '<div class="kpi-card surface-info">' +
+            '<div class="kpi-label">營業額</div>' +
+            '<div class="kpi-value neutral-number">NT$ ' + v2FmtNum(revenueTotal) + "</div>" +
+            '<div class="kpi-meta">' + v2Esc(params.label) + " " + v2Esc(summary.fromStr) + " ~ " + v2Esc(summary.toStr) + "</div>" +
+          "</div>" +
+          '<div class="kpi-card ' + profitSurface + '">' +
+            '<div class="kpi-label">訂單毛利</div>' +
+            '<div class="kpi-value ' + profitCls + '">NT$ ' + v2FmtNum(summary.ordersProfit) + "</div>" +
+            '<div class="kpi-meta">' + v2Esc(String(summary.ordersCount)) + " 筆訂單</div>" +
+          "</div>" +
+          '<div class="kpi-card surface-neutral">' +
+            '<div class="kpi-label">訂單數</div>' +
+            '<div class="kpi-value neutral-number">' + v2Esc(String(summary.ordersCount)) + "</div>" +
+            '<div class="kpi-meta">整機 ' + v2Esc(String(salesStats.pcCount || 0)) +
+              "｜零組件 " + v2Esc(String(salesStats.partsCount || 0)) +
+              "｜維修 " + v2Esc(String(salesStats.serviceCount || 0)) + "</div>" +
+          "</div>" +
+          '<div class="kpi-card surface-neutral">' +
+            '<div class="kpi-label">支出</div>' +
+            '<div class="kpi-value neutral-number">NT$ ' + v2FmtNum(summary.expensesTotal) + "</div>" +
+            '<div class="kpi-meta">' + v2Esc(String(summary.expensesCount)) + " 筆｜庫存成本 NT$ " + v2FmtNum(summary.inventoryValue) + "</div>" +
+          "</div>";
+      }
       const elResult = document.getElementById("reportQueryResult");
-      if (elResult) elResult.innerHTML = `<div><strong>${params.label} ${summary.fromStr} ~ ${summary.toStr}</strong></div><div>訂單毛利合計：NT$ ${v2FmtNum(summary.ordersProfit)}（${summary.ordersCount} 筆）</div><div>支出合計：NT$ ${v2FmtNum(summary.expensesTotal)}（${summary.expensesCount} 筆）</div><div>庫存總成本：NT$ ${v2FmtNum(summary.inventoryValue)}</div><div>整機售出：${salesStats.pcCount} 台</div><div>零組件訂單：${salesStats.partsCount} 筆</div><div>維修／服務：${salesStats.serviceCount} 筆</div>`;
+      if (elResult) {
+        elResult.hidden = true;
+        elResult.innerHTML = "";
+      }
       const elSalesKpi = document.getElementById("reportSalesTypeKpi");
-      if (elSalesKpi) elSalesKpi.innerHTML = `<div>整機售出：${salesStats.pcCount} 台</div><div>零組件訂單：${salesStats.partsCount} 筆</div><div>維修／服務：${salesStats.serviceCount} 筆</div>`;
+      if (elSalesKpi) elSalesKpi.innerHTML = "整機 " + (salesStats.pcCount || 0) + "｜零組件 " + (salesStats.partsCount || 0) + "｜維修／服務 " + (salesStats.serviceCount || 0);
       const elSalesTable = document.getElementById("reportSalesTypeTable");
       if (elSalesTable) {
-        const rows = Array.isArray(salesStats.rows) ? salesStats.rows : [];
-        elSalesTable.innerHTML = `<table class="table"><thead><tr><th>銷售類型</th><th>訂單數</th><th>營業額</th><th>毛利</th><th>平均客單</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${v2Esc(r.salesType)}</td><td>${Number(r.count) || 0}</td><td>NT$ ${v2FmtNum(Number(r.revenue) || 0)}</td><td>NT$ ${v2FmtNum(Number(r.profit) || 0)}</td><td>NT$ ${v2FmtNum(Number(r.avg) || 0)}</td></tr>`).join("")}</tbody></table>`;
+        elSalesTable.innerHTML = `<table class="table table-compact"><thead><tr><th>銷售類型</th><th class="table-number">訂單數</th><th class="table-number">營業額</th><th class="table-number">毛利</th><th class="table-number">平均客單</th></tr></thead><tbody>${salesRows.map((r) => {
+          const pCls = profitNumberClass(r.profit);
+          return `<tr><td class="table-primary">${v2Esc(r.salesType)}</td><td class="table-number neutral-number">${Number(r.count) || 0}</td><td class="table-number neutral-number">NT$ ${v2FmtNum(Number(r.revenue) || 0)}</td><td class="table-number ${pCls}">NT$ ${v2FmtNum(Number(r.profit) || 0)}</td><td class="table-number neutral-number">NT$ ${v2FmtNum(Number(r.avg) || 0)}</td></tr>`;
+        }).join("")}</tbody></table>`;
       }
       // 庫齡排行前 20（滯留天數最多）：只顯示目前仍有庫存（qty_on_hand > 0）
       // ⚠ 只改此排行榜的顯示用資料，不動 DK 的其他報表/排序邏輯
@@ -6780,13 +6851,13 @@
         .sort((a, b) => (b.idle_days ?? 0) - (a.idle_days ?? 0))
         .slice(0, 20);
       const elTop20 = document.getElementById("reportTop20");
-      if (elTop20) elTop20.innerHTML = top20.length ? `<table class="table"><thead><tr><th>名稱</th><th>品類</th><th>滯留天</th><th>庫存價值</th></tr></thead><tbody>${top20.map((x) => { const nameSpec = (x.name === x.spec || !String(x.spec || "").trim()) ? (x.name || x.spec || "") : [x.name, x.spec].filter(Boolean).join(" ").trim(); return `<tr><td>${v2Esc(nameSpec)}</td><td>${v2Esc(x.category)}</td><td>${x.idle_days}</td><td>${v2FmtNum(x.inventory_value)}</td></tr>`; }).join("")}</tbody></table>` : "<p class=\"muted\">無資料</p>";
+      if (elTop20) elTop20.innerHTML = top20.length ? `<table class="table table-compact"><thead><tr><th>名稱</th><th>品類</th><th class="table-number">滯留天</th><th class="table-number">庫存價值</th></tr></thead><tbody>${top20.map((x) => { const nameSpec = (x.name === x.spec || !String(x.spec || "").trim()) ? (x.name || x.spec || "") : [x.name, x.spec].filter(Boolean).join(" ").trim(); return `<tr><td class="table-primary">${v2Esc(nameSpec)}</td><td class="table-secondary">${v2Esc(x.category)}</td><td class="table-number neutral-number">${x.idle_days}</td><td class="table-number neutral-number">${v2FmtNum(x.inventory_value)}</td></tr>`; }).join("")}</tbody></table>` : "<p class=\"muted\">無資料</p>";
       const testingPrep = DK.reportTestingPrep();
       const elTesting = document.getElementById("reportTestingPrep");
-      if (elTesting) elTesting.innerHTML = testingPrep.length ? `<table class="table"><thead><tr><th>名稱</th><th>狀態</th><th>數量</th></tr></thead><tbody>${testingPrep.map((x) => `<tr><td>${v2Esc(x.name)}</td><td>${v2Esc(STATUS_LABEL[x.status] || x.status)}</td><td>${x.qty_on_hand}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無</p>";
+      if (elTesting) elTesting.innerHTML = testingPrep.length ? `<table class="table table-compact"><thead><tr><th>名稱</th><th>狀態</th><th class="table-number">數量</th></tr></thead><tbody>${testingPrep.map((x) => `<tr><td class="table-primary">${v2Esc(x.name)}</td><td class="table-secondary">${v2Esc(STATUS_LABEL[x.status] || x.status)}</td><td class="table-number neutral-number">${x.qty_on_hand}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無</p>";
       const clearance = DK.reportClearance();
       const elClear = document.getElementById("reportClearance");
-      if (elClear) elClear.innerHTML = clearance.length ? `<table class="table"><thead><tr><th>名稱</th><th>品類</th><th>滯留天</th><th>庫存價值</th></tr></thead><tbody>${clearance.map((x) => `<tr><td>${v2Esc(x.name)}</td><td>${v2Esc(x.category)}</td><td>${x.idle_days}</td><td>${v2FmtNum(x.inventory_value)}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無</p>";
+      if (elClear) elClear.innerHTML = clearance.length ? `<table class="table table-compact"><thead><tr><th>名稱</th><th>品類</th><th class="table-number">滯留天</th><th class="table-number">庫存價值</th></tr></thead><tbody>${clearance.map((x) => `<tr><td class="table-primary">${v2Esc(x.name)}</td><td class="table-secondary">${v2Esc(x.category)}</td><td class="table-number neutral-number">${x.idle_days}</td><td class="table-number neutral-number">${v2FmtNum(x.inventory_value)}</td></tr>`).join("")}</tbody></table>` : "<p class=\"muted\">無</p>";
     }
     reportPeriodBtns.forEach((btn) => {
       btn.addEventListener("click", () => {

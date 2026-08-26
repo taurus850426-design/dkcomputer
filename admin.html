@@ -250,66 +250,15 @@
 
             <!-- 訂單 -->
             <div id="v2-orders" class="v2-panel" hidden>
-              <div class="section-head">
-                <div><h2 class="h2">訂單（收入＆毛利）</h2><p class="muted">整單成本；毛利與毛利率自動計算</p></div>
-                <button id="btnNewOrder" class="btn btn-primary" type="button">新增訂單</button>
-              </div>
-              <div id="orderForm" class="card" style="margin-top:12px; margin-bottom:16px" hidden>
-                <h3 class="h3">新增 / 編輯訂單</h3>
-                <div class="form-grid">
-                  <div class="field"><label for="orderNo">訂單編號</label><input id="orderNo" type="text" placeholder="自動產生" /></div>
-                  <div class="field"><label for="orderDate">訂單日期</label><input id="orderDate" type="date" /></div>
-                  <div class="field full"><label for="orderCustomer">客戶</label><input id="orderCustomer" type="text" /></div>
-                  <div class="field full"><label for="orderSalesType">銷售類型</label>
-                    <select id="orderSalesType">
-                      <option value="">請選擇</option>
-                      <option value="整機">整機</option>
-                      <option value="零組件">零組件</option>
-                      <option value="維修／服務">維修／服務</option>
-                      <option value="周邊">周邊</option>
-                      <option value="其他">其他</option>
-                    </select>
-                    <div class="muted small" style="margin-top:4px">整張訂單的主要類型，不是單一商品品類。未選則報表歸入未分類。</div>
-                  </div>
-                  <div class="field full">
-                    <label>訂單明細（出庫品項，儲存後自動扣庫存）</label>
-                    <div class="form-grid order-detail-row" style="grid-template-columns: 1fr auto auto auto;">
-                      <div class="searchable-select-wrap">
-                        <select id="orderLineItem" aria-hidden="true" tabindex="-1">
-                          <option value="">— 選擇品項 —</option>
-                        </select>
-                        <input id="orderLineItemSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋品項…" autocomplete="off" />
-                        <div id="orderLineItemDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
-                      </div>
-                      <input id="orderLineQty" type="number" min="1" value="1" placeholder="數量" style="width:80px" />
-                      <input id="orderLinePrice" type="number" min="0" step="1" placeholder="單價" style="width:90px" />
-                      <button id="orderLineAdd" class="btn btn-ghost" type="button">加入明細</button>
-                    </div>
-                    <div class="table-wrap" style="margin-top:8px">
-                      <table class="table">
-                        <thead><tr><th>名稱</th><th>規格</th><th>數量</th><th>單價</th><th data-admin-only>單位成本</th><th data-admin-only>成本小計</th><th style="width:60px"></th></tr></thead>
-                        <tbody id="orderLineTbody"></tbody>
-                      </table>
-                    </div>
-                  </div>
-                  <div class="field"><label for="orderTotalSale">售價合計</label><input id="orderTotalSale" type="number" min="0" value="0" /></div>
-                  <div class="field"><label for="orderShipping">運費收入</label><input id="orderShipping" type="number" min="0" value="0" /></div>
-                  <div class="field"><label for="orderDiscount">折扣</label><input id="orderDiscount" type="number" min="0" value="0" /></div>
-                  <div class="field" data-admin-only><label for="orderCogs">整單成本</label><input id="orderCogs" type="number" min="0" value="0" /></div>
-                  <div class="field"><label for="orderPayment">付款方式</label><select id="orderPayment"><option value="cash">現金</option><option value="transfer">轉帳</option><option value="card">刷卡</option></select></div>
-                  <div class="field"><label for="orderStatus">狀態</label><select id="orderStatus"><option value="pending">待處理</option><option value="paid">已付款</option><option value="shipped">已出貨</option><option value="completed">已完成</option><option value="refunded">已退貨</option></select></div>
-                  <div class="field full" data-admin-only><label>毛利（自動）</label><div id="orderGrossProfitDisplay" class="muted">-</div></div>
-                  <div class="field full"><label for="orderQuoteNote">報價備註（僅出現在報價單，不寫入訂單）</label><input id="orderQuoteNote" type="text" placeholder="例如：價格有效 3 天、含組裝…" autocomplete="off" /></div>
-                  <div class="field full actions" style="flex-wrap:wrap;gap:8px">
-                    <button id="orderSave" class="btn btn-primary" type="button">儲存</button>
-                    <button id="orderCancel" class="btn btn-ghost" type="button">取消</button>
-                    <button id="orderQuotePreview" class="btn btn-ghost" type="button">預覽報價單</button>
-                    <button id="orderQuoteDownload" class="btn btn-ghost" type="button">下載報價單圖片</button>
-                  </div>
+              <div class="section-head inv-items-head">
+                <div>
+                  <h2 class="h2 section-title">訂單</h2>
                 </div>
-                <div id="orderMsg" class="muted" hidden></div>
+                <div class="section-actions">
+                  <button id="btnNewOrder" class="btn btn-primary primary-action" type="button">新增訂單</button>
+                </div>
               </div>
-              <div class="toolbar" style="margin-bottom:12px; flex-wrap: wrap; gap: 8px">
+              <div class="toolbar orders-toolbar admin-stack-gap" style="flex-wrap: wrap; gap: 8px">
                 <label class="search">
                   <span class="search-label">搜尋</span>
                   <input id="orderSearch" type="search" placeholder="訂單編號／客戶名稱" autocomplete="off" />
@@ -332,15 +281,82 @@
                   </select>
                 </div>
               </div>
-              <div class="table-wrap">
-                <table class="table">
+              <div class="table-wrap inv-table-panel orders-table-wrap">
+                <table class="table table-compact orders-table">
                   <thead>
-                    <tr><th>訂單編號</th><th>客戶</th><th>售價</th><th>運費</th><th>折扣</th><th data-admin-only>成本</th><th data-admin-only>毛利</th><th data-admin-only>毛利率</th><th>狀態</th><th>日期</th><th style="text-align:right">操作</th></tr>
+                    <tr>
+                      <th>訂單編號</th>
+                      <th>客戶</th>
+                      <th class="table-number">售價</th>
+                      <th class="table-number">運費</th>
+                      <th class="table-number">折扣</th>
+                      <th class="table-number" data-admin-only>成本</th>
+                      <th class="table-number" data-admin-only>毛利</th>
+                      <th class="table-number" data-admin-only>毛利率</th>
+                      <th>狀態</th>
+                      <th>日期</th>
+                      <th class="table-actions">操作</th>
+                    </tr>
                   </thead>
                   <tbody id="ordersTbody"></tbody>
                 </table>
               </div>
-            <div id="ordersPagination" class="pagination"></div>
+              <div id="ordersPagination" class="pagination"></div>
+              <div id="orderForm" class="section-card-soft surface-neutral admin-stack-gap" style="margin-top:12px" hidden>
+                <h3 class="h3 section-title form-section-title">新增 / 編輯訂單</h3>
+                <div class="form-grid">
+                  <div class="field"><label for="orderNo">訂單編號</label><input id="orderNo" type="text" placeholder="自動產生" /></div>
+                  <div class="field"><label for="orderDate">訂單日期</label><input id="orderDate" type="date" /></div>
+                  <div class="field full"><label for="orderCustomer">客戶</label><input id="orderCustomer" type="text" /></div>
+                  <div class="field full"><label for="orderSalesType">銷售類型</label>
+                    <select id="orderSalesType">
+                      <option value="">請選擇</option>
+                      <option value="整機">整機</option>
+                      <option value="零組件">零組件</option>
+                      <option value="維修／服務">維修／服務</option>
+                      <option value="周邊">周邊</option>
+                      <option value="其他">其他</option>
+                    </select>
+                    <div class="form-hint">整張訂單主類型；未選則報表歸入未分類。</div>
+                  </div>
+                  <div class="field full">
+                    <label>訂單明細</label>
+                    <div class="form-grid order-detail-row" style="grid-template-columns: 1fr auto auto auto;">
+                      <div class="searchable-select-wrap">
+                        <select id="orderLineItem" aria-hidden="true" tabindex="-1">
+                          <option value="">— 選擇品項 —</option>
+                        </select>
+                        <input id="orderLineItemSearch" type="text" class="searchable-select-input" placeholder="輸入關鍵字搜尋品項…" autocomplete="off" />
+                        <div id="orderLineItemDropdown" class="searchable-select-dropdown" role="listbox" hidden></div>
+                      </div>
+                      <input id="orderLineQty" type="number" min="1" value="1" placeholder="數量" style="width:80px" />
+                      <input id="orderLinePrice" type="number" min="0" step="1" placeholder="單價" style="width:90px" />
+                      <button id="orderLineAdd" class="btn btn-ghost secondary-action" type="button">加入明細</button>
+                    </div>
+                    <div class="table-wrap" style="margin-top:8px">
+                      <table class="table table-compact">
+                        <thead><tr><th>名稱</th><th>規格</th><th class="table-number">數量</th><th class="table-number">單價</th><th class="table-number" data-admin-only>單位成本</th><th class="table-number" data-admin-only>成本小計</th><th class="table-actions" style="width:60px"></th></tr></thead>
+                        <tbody id="orderLineTbody"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div class="field"><label for="orderTotalSale">售價合計</label><input id="orderTotalSale" type="number" min="0" value="0" /></div>
+                  <div class="field"><label for="orderShipping">運費收入</label><input id="orderShipping" type="number" min="0" value="0" /></div>
+                  <div class="field"><label for="orderDiscount">折扣</label><input id="orderDiscount" type="number" min="0" value="0" /></div>
+                  <div class="field" data-admin-only><label for="orderCogs">整單成本</label><input id="orderCogs" type="number" min="0" value="0" /></div>
+                  <div class="field"><label for="orderPayment">付款方式</label><select id="orderPayment"><option value="cash">現金</option><option value="transfer">轉帳</option><option value="card">刷卡</option></select></div>
+                  <div class="field"><label for="orderStatus">狀態</label><select id="orderStatus"><option value="pending">待處理</option><option value="paid">已付款</option><option value="shipped">已出貨</option><option value="completed">已完成</option><option value="refunded">已退貨</option></select></div>
+                  <div class="field full" data-admin-only><label>毛利（自動）</label><div id="orderGrossProfitDisplay" class="order-gross-preview">-</div></div>
+                  <div class="field full"><label for="orderQuoteNote">報價備註</label><input id="orderQuoteNote" type="text" placeholder="例如：價格有效 3 天、含組裝…" autocomplete="off" /><div class="form-hint">僅出現在報價單，不寫入訂單。</div></div>
+                  <div class="field full actions" style="flex-wrap:wrap;gap:8px">
+                    <button id="orderSave" class="btn btn-primary primary-action" type="button">儲存</button>
+                    <button id="orderCancel" class="btn btn-ghost tertiary-action" type="button">取消</button>
+                    <button id="orderQuotePreview" class="btn btn-ghost secondary-action" type="button">預覽報價單</button>
+                    <button id="orderQuoteDownload" class="btn btn-ghost tertiary-action" type="button">下載報價單圖片</button>
+                  </div>
+                </div>
+                <div id="orderMsg" class="muted" hidden></div>
+              </div>
             </div>
 
             <!-- 支出 -->
@@ -374,11 +390,15 @@
 
             <!-- 報表 -->
             <div id="v2-reports" class="v2-panel" hidden>
-              <div class="section-head">
-                <div><h2 class="h2">報表</h2><p class="muted">庫齡排行、待整理/待測、待出清、區間查詢（本週／本月／指定月份／指定年度）</p></div>
-                <button id="btnExportReport" class="btn btn-primary" type="button">匯出報表 (CSV)</button>
+              <div class="section-head inv-items-head">
+                <div>
+                  <h2 class="h2 section-title">報表</h2>
+                </div>
+                <div class="section-actions">
+                  <button id="btnExportReport" class="btn btn-ghost secondary-action" type="button">匯出 CSV</button>
+                </div>
               </div>
-              <div class="toolbar card" style="margin-bottom:12px; flex-wrap: wrap; align-items: center; gap: 12px">
+              <div class="toolbar section-card-soft surface-neutral ui-enter-soft admin-stack-gap reports-period-bar" style="flex-wrap: wrap; align-items: center; gap: 12px">
                 <span class="search-label">查詢區間</span>
                 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
                   <button type="button" class="btn btn-ghost btn-sm report-period-btn active" data-period="week">本週</button>
@@ -397,27 +417,25 @@
                   <select id="reportYearYear"></select>
                 </div>
               </div>
-              <div class="card" style="margin-bottom:12px">
-                <h3 class="h3">毛利摘要（查詢結果）</h3>
-                <div id="reportQueryResult" class="two-col"></div>
+              <div id="reportKpiGrid" class="kpi-grid ui-enter admin-stack-gap"></div>
+              <div id="reportQueryResult" hidden></div>
+              <div class="section-card-soft surface-neutral admin-stack-gap">
+                <h3 class="h3 section-title">銷售類型統計</h3>
+                <div id="reportSalesTypeKpi" class="two-col form-hint" style="margin-bottom:10px"></div>
+                <div id="reportSalesTypeTable" class="table-wrap reports-table-wrap"></div>
               </div>
-              <div class="card" style="margin-bottom:12px">
-                <h3 class="h3">銷售類型統計</h3>
-                <div id="reportSalesTypeKpi" class="two-col" style="margin-bottom:10px"></div>
-                <div id="reportSalesTypeTable" class="table-wrap"></div>
+              <div class="section-card-soft surface-neutral admin-stack-gap">
+                <h3 class="h3 section-title">庫齡排行前 20</h3>
+                <div id="reportTop20" class="table-wrap reports-table-wrap"></div>
               </div>
-
-              <div class="card" style="margin-bottom:12px">
-                <h3 class="h3">庫齡排行前 20（滯留天數最多）</h3>
-                <div id="reportTop20" class="table-wrap"></div>
+              <div class="section-card-soft surface-info admin-stack-gap">
+                <h3 class="h3 section-title">待整理／待測</h3>
+                <div id="reportTestingPrep" class="table-wrap reports-table-wrap"></div>
               </div>
-              <div class="card" style="margin-bottom:12px">
-                <h3 class="h3">待整理／待測</h3>
-                <div id="reportTestingPrep" class="table-wrap"></div>
-              </div>
-              <div class="card" style="margin-bottom:12px">
-                <h3 class="h3">待出清（電腦／顯卡滯留超過 30 天）</h3>
-                <div id="reportClearance" class="table-wrap"></div>
+              <div class="section-card-soft surface-warning admin-stack-gap">
+                <h3 class="h3 section-title">待出清</h3>
+                <p class="form-hint">電腦／顯卡滯留超過 30 天</p>
+                <div id="reportClearance" class="table-wrap reports-table-wrap"></div>
               </div>
             </div>
             </div>

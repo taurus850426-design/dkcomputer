@@ -5418,3 +5418,58 @@ body.admin-page .inv-ungrouped-toggle:active{
     transform: none !important;
   }
 }
+
+/* Stage 13-4A | Orders + Reports + Profit UI (DS4 apply) */
+body.admin-page .orders-table{
+  min-width: 920px;
+}
+body.admin-page .orders-table thead th,
+body.admin-page #v2-reports .table thead th{
+  background: rgba(247, 248, 252, 0.95);
+}
+body.admin-page .order-gross-preview{
+  font-size: 15px;
+  font-weight: 600;
+}
+body.admin-page #v2-orders .orders-toolbar .search{
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+body.admin-page #reportKpiGrid .kpi-card{
+  min-height: 96px;
+}
+@media (hover: hover) and (pointer: fine){
+  body.admin-page .orders-table tbody tr:hover td,
+  body.admin-page #v2-reports .table tbody tr:hover td{
+    background: rgba(93, 214, 255, 0.06);
+  }
+}
+@media (max-width: 900px){
+  body.admin-page .orders-table-wrap,
+  body.admin-page .reports-table-wrap{
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  body.admin-page #v2-orders .orders-toolbar,
+  body.admin-page .reports-period-bar{
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 640px){
+  body.admin-page #v2-orders .section-actions .btn,
+  body.admin-page #v2-reports .section-actions .btn{
+    min-height: 44px;
+  }
+  body.admin-page #v2-orders .orders-toolbar select,
+  body.admin-page .reports-period-bar select,
+  body.admin-page .reports-period-bar .btn{
+    min-height: 40px;
+  }
+  body.admin-page .orders-table .table-number,
+  body.admin-page #v2-reports .table-number{
+    white-space: nowrap;
+  }
+  body.admin-page #orderForm .actions .btn{
+    min-height: 44px;
+  }
+}
