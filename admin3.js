@@ -3381,16 +3381,21 @@
 
     const fmt = (n) => Number(n || 0).toLocaleString("zh-TW");
     const pct = (n) => (Number.isFinite(n) ? (n * 100).toFixed(1) : "0.0") + "%";
-
-    const card = (title, value) =>
-      `<div class="card" style="padding:10px"><div class="muted small">${crEsc(title)}</div><div style="font-size:22px;font-weight:800">${crEsc(value)}</div></div>`;
+    const profitCls = (n) => {
+      const v = Number(n);
+      if (!Number.isFinite(v) || v === 0) return "neutral-number";
+      return v > 0 ? "positive-number" : "negative-number";
+    };
+    const profitSurface = Number(sumProfit) > 0 ? "surface-success" : (Number(sumProfit) < 0 ? "surface-danger" : "surface-neutral");
+    const kpi = (title, value, valueClass, surface) =>
+      `<div class="kpi-card ${surface || "surface-neutral"}"><div class="kpi-label">${crEsc(title)}</div><div class="kpi-value ${valueClass || "neutral-number"}">${crEsc(value)}</div></div>`;
 
     cardsEl.innerHTML = [
-      card("本週詢問數", String(inquiries)),
-      card("本週成交數", String(wins)),
-      card("本週成交率", pct(rate)),
-      card("本週預估成交金額", "NT$ " + fmt(sumDeal)),
-      card("本週預估毛利", "NT$ " + fmt(sumProfit)),
+      kpi("本週詢問數", String(inquiries), "neutral-number", "surface-info"),
+      kpi("本週成交數", String(wins), "neutral-number", "surface-neutral"),
+      kpi("本週成交率", pct(rate), "neutral-number", "surface-neutral"),
+      kpi("本週預估成交金額", "NT$ " + fmt(sumDeal), "neutral-number", "surface-info"),
+      kpi("本週預估毛利", "NT$ " + fmt(sumProfit), profitCls(sumProfit), profitSurface),
     ].join("");
 
     const bySource = new Map();
@@ -3429,11 +3434,16 @@
     }
     const statusBadgeClass = (s) => {
       const v = String(s || "").trim();
-      if (v === "成交") return "badge ok";
-      if (v === "流失") return "badge danger";
-      if (v === "已報價") return "badge warn";
-      if (v === "洽談中") return "badge info";
-      return "badge"; // 未回覆/其他
+      if (v === "成交") return "status-badge status-success";
+      if (v === "流失") return "status-badge status-danger";
+      if (v === "已報價" || v === "洽談中") return "status-badge status-info";
+      if (v === "未回覆") return "status-badge status-warning";
+      return "status-badge status-muted";
+    };
+    const profitCls = (n) => {
+      const v = Number(n);
+      if (n == null || n === "" || !Number.isFinite(v) || v === 0) return "neutral-number";
+      return v > 0 ? "positive-number" : "negative-number";
     };
     const fmt = (n) => (n == null || n === "" ? "" : Number(n).toLocaleString("zh-TW"));
     const rows = records
@@ -3441,20 +3451,20 @@
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
       .map((r) => {
         return `<tr data-id="${crEsc(r.id)}">
-          <td class="nowrap">${crEsc((r.date || "").slice(0, 10))}</td>
-          <td>${crEsc(r.name)}</td>
-          <td>${crEsc(r.source)}</td>
-          <td>${crEsc(r.type)}</td>
+          <td class="nowrap table-secondary">${crEsc((r.date || "").slice(0, 10))}</td>
+          <td class="table-primary">${crEsc(r.name)}</td>
+          <td class="table-secondary">${crEsc(r.source)}</td>
+          <td class="table-secondary">${crEsc(r.type)}</td>
           <td><span class="${statusBadgeClass(r.status)}">${crEsc(r.status)}</span></td>
-          <td style="text-align:right">${crEsc(fmt(r.dealAmount))}</td>
-          <td style="text-align:right" data-admin-only>${crEsc(fmt(r.grossProfit))}</td>
-          <td>${crEsc(r.use)}</td>
-          <td class="muted small">${crEscNl(r.questions)}</td>
-          <td class="muted small">${crEsc(r.lostReason)}</td>
-          <td class="muted small">${crEscNl(r.note)}</td>
-          <td style="text-align:right; white-space:nowrap">
-            <button type="button" class="btn btn-ghost btn-sm btn-cr-create-order" data-id="${crEsc(r.id)}">建立訂單</button>
-            <button type="button" class="btn btn-ghost btn-sm btn-cr-del" data-id="${crEsc(r.id)}" data-admin-only>刪除</button>
+          <td class="table-number nowrap neutral-number">${crEsc(fmt(r.dealAmount))}</td>
+          <td class="table-number nowrap ${profitCls(r.grossProfit)}" data-admin-only>${crEsc(fmt(r.grossProfit))}</td>
+          <td class="table-secondary">${crEsc(r.use)}</td>
+          <td class="table-secondary">${crEscNl(r.questions)}</td>
+          <td class="table-secondary">${crEsc(r.lostReason)}</td>
+          <td class="table-secondary">${crEscNl(r.note)}</td>
+          <td class="table-actions">
+            <button type="button" class="btn btn-ghost btn-sm secondary-action btn-cr-create-order" data-id="${crEsc(r.id)}">建立訂單</button>
+            <button type="button" class="btn btn-ghost btn-sm danger-action btn-cr-del" data-id="${crEsc(r.id)}" data-admin-only>刪除</button>
           </td>
         </tr>`;
       });
@@ -3464,15 +3474,16 @@
   function renderCustomerTodayTodo(records) {
     const tbody = document.getElementById("customerTodayTodoTbody");
     const emptyEl = document.getElementById("customerTodayTodoEmpty");
+    const countEl = document.getElementById("customerTodayTodoCount");
     if (!tbody || !emptyEl) return;
 
     const allowed = new Set(["未回覆", "洽談中", "已報價"]);
     const statusOrder = { "已報價": 0, "洽談中": 1, "未回覆": 2 };
     const statusBadgeClass = (s) => {
       const v = String(s || "").trim();
-      if (v === "已報價") return "badge warn";
-      if (v === "洽談中") return "badge info";
-      return "badge";
+      if (v === "已報價" || v === "洽談中") return "status-badge status-info";
+      if (v === "未回覆") return "status-badge status-warning";
+      return "status-badge status-muted";
     };
     const fmt = (n) => (n == null || n === "" ? "" : Number(n).toLocaleString("zh-TW"));
 
@@ -3486,6 +3497,11 @@
         return String(b.date || "").localeCompare(String(a.date || ""));
       });
 
+    if (countEl) {
+      countEl.textContent = list.length + " 項";
+      countEl.className = list.length ? "status-badge status-warning" : "status-badge status-muted";
+    }
+
     if (list.length === 0) {
       tbody.innerHTML = "";
       emptyEl.hidden = false;
@@ -3495,15 +3511,15 @@
     tbody.innerHTML = list
       .map((r) => {
         return `<tr>
-          <td>${crEsc(r.name)}</td>
-          <td>${crEsc(r.source)}</td>
-          <td>${crEsc(r.type)}</td>
-          <td style="text-align:right">${crEsc(fmt(r.dealAmount))}</td>
-          <td>${crEsc(r.use)}</td>
-          <td class="muted small">${crEscNl(r.questions)}</td>
+          <td class="table-primary">${crEsc(r.name)}</td>
+          <td class="table-secondary">${crEsc(r.source)}</td>
+          <td class="table-secondary">${crEsc(r.type)}</td>
+          <td class="table-number nowrap neutral-number">${crEsc(fmt(r.dealAmount))}</td>
+          <td class="table-secondary">${crEsc(r.use)}</td>
+          <td class="table-secondary">${crEscNl(r.questions)}</td>
           <td><span class="${statusBadgeClass(r.status)}">${crEsc(r.status)}</span></td>
-          <td style="text-align:right; white-space:nowrap">
-            <button type="button" class="btn btn-ghost btn-sm btn-cr-create-order" data-id="${crEsc(r.id)}">建立訂單</button>
+          <td class="table-actions">
+            <button type="button" class="btn btn-ghost btn-sm secondary-action btn-cr-create-order" data-id="${crEsc(r.id)}">建立訂單</button>
           </td>
         </tr>`;
       })

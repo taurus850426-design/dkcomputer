@@ -835,6 +835,11 @@
     if (brStart) brStart.disabled = disableAll || !state.canBreakStart;
     if (brEnd) brEnd.disabled = disableAll || !state.canBreakEnd;
     if (clockOut) clockOut.disabled = disableAll || !state.canClockOut;
+    if (clockOut) {
+      const outOn = clockOut && !clockOut.disabled;
+      clockOut.classList.toggle("primary-action", !!outOn);
+      clockOut.classList.toggle("secondary-action", !outOn);
+    }
   }
 
   function renderClockFace() {
@@ -850,7 +855,16 @@
 
     if ($("attClockIn")) $("attClockIn").textContent = shift ? formatTaipeiClock(shift.clock_in_at) : "—";
     if ($("attClockOut")) $("attClockOut").textContent = shift && shift.clock_out_at ? formatTaipeiClock(shift.clock_out_at) : (open ? "尚未下班" : "—");
-    if ($("attStatus")) $("attStatus").textContent = statusLabel(open || shift, open ? breaksForShift(open.id, myBreaks) : (shift ? breaksForShift(shift.id, myBreaks) : []));
+    const stEl = $("attStatus");
+    if (stEl) {
+      const label = statusLabel(open || shift, open ? breaksForShift(open.id, myBreaks) : (shift ? breaksForShift(shift.id, myBreaks) : []));
+      stEl.textContent = label;
+      let stClass = "status-muted";
+      if (label === "上班中") stClass = "status-success";
+      else if (label === "休息中") stClass = "status-warning";
+      else if (label === "已下班") stClass = "status-info";
+      stEl.className = "att-stat-value status-badge " + stClass;
+    }
 
     const ymd = taipeiYmd(new Date());
     let workMs = 0;
@@ -933,18 +947,22 @@
       const work = formatDuration(workedMsForShift(s, br, Date.now(), true));
       const rest = formatDuration(completedBreakMs(br, Date.now(), true));
       const st = statusLabel(s, br);
+      let stClass = "status-muted";
+      if (st === "上班中") stClass = "status-success";
+      else if (st === "休息中") stClass = "status-warning";
+      else if (st === "已下班") stClass = "status-info";
       return (
         "<tr>" +
-        "<td>" + esc(personName(s.employee_id)) + "</td>" +
-        "<td class=\"nowrap\">" + esc(taipeiYmd(s.clock_in_at).replace(/-/g, "/")) + "</td>" +
-        "<td class=\"nowrap\">" + esc(formatTaipeiDateTime(s.clock_in_at)) + "</td>" +
-        "<td class=\"nowrap\">" + esc(s.clock_out_at ? formatTaipeiDateTime(s.clock_out_at) : "尚未下班") + "</td>" +
-        "<td>" + esc(rest) + "</td>" +
-        "<td>" + esc(work) + "</td>" +
-        "<td>" + esc(st) + "</td>" +
-        "<td style=\"text-align:right;white-space:nowrap\">" +
-        "<button type=\"button\" class=\"btn btn-ghost btn-sm att-correct-btn\" data-shift=\"" + esc(s.id) + "\">更正</button> " +
-        "<button type=\"button\" class=\"btn btn-ghost btn-sm att-delete-btn\" data-shift=\"" + esc(s.id) + "\">刪除</button>" +
+        "<td class=\"table-primary\">" + esc(personName(s.employee_id)) + "</td>" +
+        "<td class=\"nowrap table-secondary\">" + esc(taipeiYmd(s.clock_in_at).replace(/-/g, "/")) + "</td>" +
+        "<td class=\"nowrap table-number\">" + esc(formatTaipeiDateTime(s.clock_in_at)) + "</td>" +
+        "<td class=\"nowrap table-number\">" + esc(s.clock_out_at ? formatTaipeiDateTime(s.clock_out_at) : "尚未下班") + "</td>" +
+        "<td class=\"table-number\">" + esc(rest) + "</td>" +
+        "<td class=\"table-number text-strong\">" + esc(work) + "</td>" +
+        "<td><span class=\"status-badge " + stClass + "\">" + esc(st) + "</span></td>" +
+        "<td class=\"table-actions\">" +
+        "<button type=\"button\" class=\"btn btn-ghost btn-sm tertiary-action att-correct-btn\" data-shift=\"" + esc(s.id) + "\">更正</button> " +
+        "<button type=\"button\" class=\"btn btn-ghost btn-sm danger-action att-delete-btn\" data-shift=\"" + esc(s.id) + "\">刪除</button>" +
         "</td>" +
         "</tr>"
       );
@@ -959,13 +977,18 @@
       return;
     }
     tbody.innerHTML = rows.map(function (r) {
+      const act = r.action || "";
+      let actClass = "status-muted";
+      if (act === "ADMIN_DELETE") actClass = "status-danger";
+      else if (act === "ADMIN_CORRECTION" || act === "ADMIN_NETWORK_SETTINGS") actClass = "status-info";
+      else if (act === "CLOCK_IN" || act === "CLOCK_OUT") actClass = "status-success";
       return (
         "<tr>" +
-        "<td class=\"nowrap\">" + esc(formatTaipeiDateTime(r.created_at)) + "</td>" +
+        "<td class=\"nowrap table-secondary\">" + esc(formatTaipeiDateTime(r.created_at)) + "</td>" +
         "<td>" + esc(personName(r.actor_user_id)) + "</td>" +
         "<td>" + esc(personName(r.employee_id)) + "</td>" +
-        "<td>" + esc(ACTION_LABEL[r.action] || r.action || "") + "</td>" +
-        "<td>" + esc(r.reason || "—") + "</td>" +
+        "<td><span class=\"status-badge " + actClass + "\">" + esc(ACTION_LABEL[r.action] || r.action || "") + "</span></td>" +
+        "<td class=\"table-secondary\">" + esc(r.reason || "—") + "</td>" +
         "</tr>"
       );
     }).join("");

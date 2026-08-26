@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260826ds5" />
+    <link rel="stylesheet" href="./styles.css?v=20260826ds6" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -1316,32 +1316,34 @@
           <!-- ⑧ 客戶紀錄（localStorage：dk_customer_records_v1） -->
           <section id="tab-customers" class="card" hidden>
             <div id="customer-section">
-              <h2 class="h2">客戶紀錄</h2>
+              <div class="section-head inv-items-head">
+                <div>
+                  <h2 class="h2 section-title">客戶紀錄</h2>
+                </div>
+                <div class="section-actions">
+                  <button id="customerFormToggleBtn" class="btn btn-primary primary-action" type="button">新增客戶紀錄</button>
+                </div>
+              </div>
 
-              <!-- 儀表板 -->
-              <div id="customerDashboard" class="card" style="margin:12px 0">
-                <div class="section-head" style="margin-bottom:10px">
-                  <div>
-                    <h3 class="h3">回看儀表板（本週）</h3>
-                    <p class="muted">只做數字卡＋排行榜（不做圖表）。</p>
-                  </div>
+              <div id="customerDashboard" class="admin-stack-gap">
+                <div class="inv-section-head">
+                  <h3 class="h3 section-title">本週摘要</h3>
                 </div>
-                <div class="badges" style="justify-content:flex-start; margin-bottom:8px">
-                  <span class="badge tag">狀態</span>
-                  <span class="badge">未回覆</span>
-                  <span class="badge info">洽談中</span>
-                  <span class="badge warn">已報價</span>
-                  <span class="badge ok">成交</span>
-                  <span class="badge danger">流失</span>
+                <div class="badges customer-status-legend" style="justify-content:flex-start; margin-bottom:8px">
+                  <span class="status-badge status-muted">未回覆</span>
+                  <span class="status-badge status-info">洽談中</span>
+                  <span class="status-badge status-info">已報價</span>
+                  <span class="status-badge status-success">成交</span>
+                  <span class="status-badge status-danger">流失</span>
                 </div>
-                <div id="customerStatsCards" class="form-grid" style="grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px"></div>
-                <div class="form-grid" style="margin-top:10px">
+                <div id="customerStatsCards" class="kpi-grid ui-enter"></div>
+                <div class="form-grid customer-rank-grid" style="margin-top:10px">
                   <div class="field">
-                    <label class="muted">來源排行榜（依詢問數）</label>
+                    <label class="muted">來源排行</label>
                     <div id="customerSourceRank" class="muted small"></div>
                   </div>
                   <div class="field">
-                    <label class="muted">成交來源排行榜（狀態=成交）</label>
+                    <label class="muted">成交來源</label>
                     <div id="customerWinSourceRank" class="muted small"></div>
                   </div>
                   <div class="field">
@@ -1355,40 +1357,58 @@
                 </div>
               </div>
 
-              <!-- 今日待處理客戶 -->
-              <div id="customerTodayTodoCard" class="card" style="margin:12px 0">
-                <div class="section-head" style="margin-bottom:10px">
-                  <div>
-                    <h3 class="h3">今日待處理客戶</h3>
-                    <p class="muted">只顯示：未回覆／洽談中／已報價（今日）。</p>
-                  </div>
+              <div id="customerTodayTodoCard" class="section-card surface-warning ui-enter-soft admin-stack-gap">
+                <div class="inv-section-head">
+                  <h3 class="h3 section-title">今日待處理</h3>
+                  <span id="customerTodayTodoCount" class="status-badge status-warning">0 項</span>
                 </div>
-                <div class="table-wrap">
-                  <table class="table">
+                <div class="table-wrap customer-table-wrap">
+                  <table class="table table-compact">
                     <thead>
                       <tr>
                         <th>客戶</th>
                         <th>來源</th>
                         <th>類型</th>
-                        <th style="text-align:right">預估金額</th>
+                        <th class="table-number">預估金額</th>
                         <th>用途</th>
                         <th>客戶問題</th>
                         <th>狀態</th>
-                        <th style="text-align:right; width:160px">操作</th>
+                        <th class="table-actions">操作</th>
                       </tr>
                     </thead>
                     <tbody id="customerTodayTodoTbody"></tbody>
                   </table>
                 </div>
-                <div id="customerTodayTodoEmpty" class="muted" style="margin-top:8px" hidden>目前沒有待處理客戶</div>
+                <div id="customerTodayTodoEmpty" class="form-hint" hidden>目前沒有待處理客戶</div>
               </div>
 
-              <!-- 新增表單 -->
-              <div class="actions" style="margin:12px 0">
-                <button id="customerFormToggleBtn" class="btn btn-primary" type="button">新增客戶紀錄</button>
+              <div id="customerListCard" class="inv-table-panel admin-stack-gap">
+                <h3 class="h3 section-title">紀錄列表</h3>
+                <div class="table-wrap customer-table-wrap" style="margin-top:10px">
+                  <table class="table table-compact customers-table">
+                    <thead>
+                      <tr>
+                        <th>日期</th>
+                        <th>客戶</th>
+                        <th>來源</th>
+                        <th>類型</th>
+                        <th>狀態</th>
+                        <th class="table-number">預估金額</th>
+                        <th class="table-number" data-admin-only>預估毛利</th>
+                        <th>用途</th>
+                        <th>客人問題</th>
+                        <th>流失原因</th>
+                        <th>備註</th>
+                        <th class="table-actions">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="customerRecordsTbody"></tbody>
+                  </table>
+                </div>
               </div>
-              <div id="customerFormCard" class="card" style="margin:12px 0" hidden>
-                <h3 class="h3">新增客戶紀錄</h3>
+
+              <div id="customerFormCard" class="section-card-soft surface-neutral admin-stack-gap" hidden>
+                <h3 class="h3 section-title form-section-title">新增客戶紀錄</h3>
                 <div class="form-grid" style="margin-top:12px">
                   <div class="field"><label for="crDate">日期</label><input id="crDate" type="date" /></div>
                   <div class="field"><label for="crName">客戶名稱 / 暱稱</label><input id="crName" type="text" autocomplete="off" /></div>
@@ -1433,51 +1453,25 @@
                   <div class="field full"><label for="crLostReason">流失原因</label><input id="crLostReason" type="text" /></div>
                   <div class="field full"><label for="crNote">備註</label><textarea id="crNote" rows="3"></textarea></div>
                   <div class="full actions">
-                    <button id="crAddBtn" class="btn btn-primary" type="button">新增紀錄</button>
-                    <button id="crCancelBtn" class="btn btn-ghost" type="button">取消</button>
+                    <button id="crAddBtn" class="btn btn-primary primary-action" type="button">新增紀錄</button>
+                    <button id="crCancelBtn" class="btn btn-ghost tertiary-action" type="button">取消</button>
                   </div>
                 </div>
-                <div id="customerMsg" class="muted small" style="margin-top:8px" hidden></div>
-              </div>
-
-              <!-- 列表 -->
-              <div id="customerListCard" class="card" style="margin:12px 0">
-                <h3 class="h3">紀錄列表</h3>
-                <div class="table-wrap" style="margin-top:10px">
-                  <table class="table">
-                    <thead>
-                      <tr>
-                        <th>日期</th>
-                        <th>客戶</th>
-                        <th>來源</th>
-                        <th>類型</th>
-                        <th>狀態</th>
-                        <th style="text-align:right">預估金額</th>
-                        <th style="text-align:right" data-admin-only>預估毛利</th>
-                        <th>用途</th>
-                        <th>客人問題</th>
-                        <th>流失原因</th>
-                        <th>備註</th>
-                        <th style="text-align:right; width:80px">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody id="customerRecordsTbody"></tbody>
-                  </table>
-                </div>
+                <div id="customerMsg" class="muted small form-hint" hidden></div>
               </div>
             </div>
           </section>
 
           <!-- Stage 11：員工打卡（admin / staff 皆可；出勤管理與稽核僅 admin） -->
           <section id="tab-attendance" class="card" hidden>
-            <div class="section-head">
+            <div class="section-head inv-items-head">
               <div>
-                <h2 class="h2">員工打卡</h2>
-                <p class="muted">時間以 Asia/Taipei 顯示。打卡時刻由伺服器決定；正常打卡需通過公司地點驗證。</p>
+                <h2 class="h2 section-title">員工打卡</h2>
+                <p class="form-hint">時間以 Asia/Taipei 顯示。打卡時刻由伺服器決定。</p>
               </div>
             </div>
 
-            <div class="card att-clock-card">
+            <div class="section-card att-clock-card ui-enter">
               <div class="att-clock-head">
                 <div>
                   <div class="muted small">今日日期</div>
@@ -1492,6 +1486,14 @@
                   <div id="attUserName" class="att-clock-user">—</div>
                 </div>
               </div>
+              <div class="att-actions">
+                <button id="attBtnClockIn" class="btn btn-primary primary-action" type="button">上班打卡</button>
+                <button id="attBtnBreakStart" class="btn btn-ghost secondary-action" type="button">開始休息</button>
+                <button id="attBtnBreakEnd" class="btn btn-ghost secondary-action" type="button">結束休息</button>
+                <button id="attBtnClockOut" class="btn btn-ghost secondary-action" type="button">下班打卡</button>
+              </div>
+              <div id="attLocStatus" class="att-loc-status muted form-hint">按下打卡按鈕時才會請求定位。</div>
+              <div id="attMsg" class="muted form-hint" hidden></div>
               <div class="att-stat-grid">
                 <div class="att-stat">
                   <div class="muted small">今日上班時間</div>
@@ -1507,17 +1509,17 @@
                 </div>
                 <div class="att-stat">
                   <div class="muted small">今日實際工作時間</div>
-                  <div id="attWorked" class="att-stat-value">—</div>
+                  <div id="attWorked" class="att-stat-value text-strong">—</div>
                 </div>
               </div>
-              <h3 class="h3" style="margin-top:16px">今日休息紀錄</h3>
+              <h3 class="h3 section-title" style="margin-top:16px">今日休息紀錄</h3>
               <div class="table-wrap" style="margin-top:8px">
-                <table class="table">
+                <table class="table table-compact">
                   <thead>
                     <tr>
                       <th>開始</th>
                       <th>結束</th>
-                      <th>時長</th>
+                      <th class="table-number">時長</th>
                     </tr>
                   </thead>
                   <tbody id="attBreakTbody">
@@ -1525,21 +1527,13 @@
                   </tbody>
                 </table>
               </div>
-              <div class="att-actions">
-                <button id="attBtnClockIn" class="btn btn-primary" type="button">上班打卡</button>
-                <button id="attBtnBreakStart" class="btn btn-ghost" type="button">開始休息</button>
-                <button id="attBtnBreakEnd" class="btn btn-ghost" type="button">結束休息</button>
-                <button id="attBtnClockOut" class="btn btn-ghost" type="button">下班打卡</button>
-              </div>
-              <div id="attLocStatus" class="att-loc-status muted" style="margin-top:10px">按下打卡按鈕時才會請求定位。</div>
-              <div id="attMsg" class="muted" style="margin-top:10px" hidden></div>
             </div>
 
-            <div id="attLocationSettings" class="card" style="margin-top:16px" data-admin-only>
+            <div id="attLocationSettings" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
-                  <h3 class="h3">打卡地點設定</h3>
-                  <p class="muted">公司允許範圍由伺服器驗證。瀏覽器 GPS 為實用門檻，非密碼學可信。</p>
+                  <h3 class="h3 section-title">打卡地點設定</h3>
+                  <p class="form-hint">允許範圍由伺服器驗證。瀏覽器 GPS 為實用門檻，非密碼學可信。</p>
                 </div>
               </div>
               <div class="form-grid" style="margin-top:12px">
@@ -1567,19 +1561,19 @@
                   <input id="attLocMaxAcc" type="number" min="1" step="1" value="80" />
                 </div>
                 <div class="field full actions" style="display:flex;flex-wrap:wrap;gap:8px">
-                  <button id="attLocUseCurrent" class="btn btn-ghost" type="button">使用目前位置設定公司位置</button>
-                  <button id="attLocSave" class="btn btn-primary" type="button">儲存地點設定</button>
+                    <button id="attLocUseCurrent" class="btn btn-ghost secondary-action" type="button">使用目前位置設定公司位置</button>
+                  <button id="attLocSave" class="btn btn-primary primary-action" type="button">儲存地點設定</button>
                 </div>
               </div>
               <div id="attLocPreview" class="muted small" style="margin-top:8px">尚未讀取伺服器設定。</div>
               <div id="attLocMsg" class="muted" style="margin-top:8px" hidden></div>
             </div>
 
-            <div id="attNetworkSettings" class="card" style="margin-top:16px" data-admin-only>
+            <div id="attNetworkSettings" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
-                  <h3 class="h3">公司網路打卡</h3>
-                  <p class="muted">以伺服器看到的公司出網 Public IP 驗證（Edge）。請勿填入 Cloudflare／網域 proxy IP。</p>
+                  <h3 class="h3 section-title">公司網路打卡</h3>
+                  <p class="form-hint">以伺服器看到的公司出網 Public IP 驗證。請勿填入 Cloudflare／網域 proxy IP。</p>
                 </div>
               </div>
               <div class="form-grid" style="margin-top:12px">
@@ -1608,11 +1602,11 @@
               <div id="attNetMsg" class="muted" style="margin-top:8px" hidden></div>
             </div>
 
-            <div id="attAdminManage" class="card" style="margin-top:16px" data-admin-only>
+            <div id="attAdminManage" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
-                  <h3 class="h3">出勤管理</h3>
-                  <p class="muted">查看所有員工出勤。更正必須填寫理由，並走伺服器校正 RPC。</p>
+                  <h3 class="h3 section-title">出勤管理</h3>
+                  <p class="form-hint">更正必須填寫理由，並走伺服器校正 RPC。</p>
                 </div>
               </div>
               <div class="form-grid" style="margin-top:12px">
@@ -1668,18 +1662,18 @@
                 </div>
                 <div id="attReportMsg" class="muted" style="margin-top:8px" hidden></div>
               </div>
-              <div class="table-wrap" style="margin-top:12px">
-                <table class="table">
+              <div class="table-wrap att-admin-table-wrap" style="margin-top:12px">
+                <table class="table table-compact">
                   <thead>
                     <tr>
                       <th>員工</th>
                       <th>日期</th>
                       <th>上班時間</th>
                       <th>下班時間</th>
-                      <th>休息時間</th>
-                      <th>實際工時</th>
+                      <th class="table-number">休息時間</th>
+                      <th class="table-number">實際工時</th>
                       <th>狀態</th>
-                      <th style="text-align:right">操作</th>
+                      <th class="table-actions">操作</th>
                     </tr>
                   </thead>
                   <tbody id="attAdminTbody">
@@ -1726,23 +1720,23 @@
                     <input id="attDeleteReason" type="text" maxlength="200" placeholder="例如：重複打卡、測試資料" />
                   </div>
                   <div class="full actions">
-                    <button id="attDeleteSubmit" class="btn btn-primary" type="button">確認刪除</button>
-                    <button id="attDeleteCancel" class="btn btn-ghost" type="button">取消</button>
+                    <button id="attDeleteSubmit" class="btn btn-primary danger-action" type="button">確認刪除</button>
+                    <button id="attDeleteCancel" class="btn btn-ghost tertiary-action" type="button">取消</button>
                   </div>
                 </div>
                 <div id="attDeleteMsg" class="muted" style="margin-top:8px" hidden></div>
               </div>
             </div>
 
-            <div id="attAdminAudit" class="card" style="margin-top:16px" data-admin-only>
+            <div id="attAdminAudit" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
-                  <h3 class="h3">出勤稽核</h3>
-                  <p class="muted">attendance_audit_logs，僅管理員可讀。含 ADMIN_DELETE／網路設定變更；稽核紀錄不可刪除。</p>
+                  <h3 class="h3 section-title">出勤稽核</h3>
+                  <p class="form-hint">僅管理員可讀。含 ADMIN_DELETE／網路設定變更；稽核紀錄不可刪除。</p>
                 </div>
               </div>
-              <div class="table-wrap" style="margin-top:10px">
-                <table class="table">
+              <div class="table-wrap att-admin-table-wrap" style="margin-top:10px">
+                <table class="table table-compact">
                   <thead>
                     <tr>
                       <th>時間</th>
@@ -1895,10 +1889,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260826ds5"></script>
+    <script src="./admin3.js?v=20260826ds6"></script>
     <script src="./purchase-orders.js?v=20260815s5a"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./attendance.js?v=20260826att6"></script>
+    <script src="./attendance.js?v=20260826ds6"></script>
   </body>
 </html>
 

@@ -5473,3 +5473,83 @@ body.admin-page #reportKpiGrid .kpi-card{
     min-height: 44px;
   }
 }
+
+/* Stage 13-4B | Customers + Attendance UI */
+body.admin-page #customerStatsCards.kpi-grid{
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+body.admin-page .customers-table{
+  min-width: 980px;
+}
+body.admin-page .customer-table-wrap{
+  overflow-x: auto;
+}
+body.admin-page .att-clock-card .att-actions{
+  margin-top: 4px;
+  margin-bottom: 12px;
+  gap: 10px;
+}
+body.admin-page .att-clock-card .att-actions .btn{
+  min-height: 44px;
+  padding: 10px 16px;
+}
+body.admin-page .att-loc-ok{
+  color: #0f7a4c;
+  font-weight: 600;
+}
+body.admin-page .att-loc-err{
+  color: #9b1238;
+  font-weight: 600;
+}
+body.admin-page .att-loc-busy{
+  color: #8a5a00;
+}
+body.admin-page .att-admin-table-wrap{
+  overflow-x: auto;
+}
+@media (hover: hover) and (pointer: fine){
+  body.admin-page .customers-table tbody tr:hover td,
+  body.admin-page #customerTodayTodoTbody tr:hover td,
+  body.admin-page #attAdminTbody tr:hover td{
+    background: rgba(93, 214, 255, 0.06);
+  }
+}
+@media (max-width: 900px){
+  body.admin-page #customerStatsCards.kpi-grid{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  body.admin-page .att-clock-head{
+    grid-template-columns: 1fr;
+  }
+  body.admin-page .att-stat-grid{
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 640px){
+  body.admin-page #customerStatsCards.kpi-grid{
+    grid-template-columns: 1fr;
+  }
+  body.admin-page #tab-customers .section-actions .btn,
+  body.admin-page .btn-cr-create-order{
+    min-height: 44px;
+  }
+  body.admin-page .customers-table .table-number,
+  body.admin-page .customer-table-wrap .table-number{
+    white-space: nowrap;
+  }
+  body.admin-page .att-clock-card .att-actions{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  body.admin-page .att-clock-card .att-actions .btn{
+    width: 100%;
+    min-height: 48px;
+  }
+  body.admin-page .att-clock-card .att-actions .primary-action{
+    grid-column: 1 / -1;
+  }
+  body.admin-page .att-stat-grid{
+    grid-template-columns: 1fr;
+  }
+}
