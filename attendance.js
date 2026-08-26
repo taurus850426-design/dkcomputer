@@ -545,17 +545,51 @@
     try { playSuccessSpeech(); } catch (_) {}
   }
 
+  function profileUsernameKey(username) {
+    return String(username || "").trim().toLowerCase();
+  }
+
+  function findProfileIdByUsername(username) {
+    const key = profileUsernameKey(username);
+    if (!key) return "";
+    const ids = Object.keys(profileMap);
+    for (let i = 0; i < ids.length; i += 1) {
+      const p = profileMap[ids[i]];
+      if (p && profileUsernameKey(p.username) === key) return String(p.id || ids[i]);
+    }
+    return "";
+  }
+
+  function upsertProfileEntry(id, entry, preferExisting) {
+    const key = String(id || "");
+    if (!key || !entry) return;
+    const prev = profileMap[key];
+    if (!prev || !preferExisting) {
+      profileMap[key] = entry;
+      return;
+    }
+    profileMap[key] = {
+      id: key,
+      username: prev.username || entry.username,
+      displayName: prev.displayName || entry.displayName || prev.username || entry.username || "",
+      role: prev.role != null ? prev.role : entry.role,
+      enabled: prev.enabled != null ? prev.enabled : entry.enabled,
+    };
+  }
+
   async function loadProfilesIfAdmin() {
     profileMap = {};
-    const me = currentUser();
-    if (me && me.userId) {
-      profileMap[String(me.userId)] = {
-        id: me.userId,
-        username: me.username,
-        displayName: me.displayName || me.username,
-      };
+    if (!isAdmin()) {
+      const meOnly = currentUser();
+      if (meOnly && meOnly.userId) {
+        profileMap[String(meOnly.userId)] = {
+          id: meOnly.userId,
+          username: meOnly.username,
+          displayName: meOnly.displayName || meOnly.username,
+        };
+      }
+      return;
     }
-    if (!isAdmin()) return;
     try {
       const rows = await fetchRows("profiles", {
         select: "id,username,display_name,role,enabled",
@@ -565,21 +599,30 @@
       });
       rows.forEach(function (r) {
         if (!r || !r.id) return;
-        profileMap[String(r.id)] = {
+        upsertProfileEntry(String(r.id), {
           id: r.id,
           username: r.username,
           displayName: r.display_name || r.username || "",
           role: r.role,
           enabled: r.enabled === true,
-        };
+        }, false);
       });
     } catch (_) {}
+    const me = currentUser();
+    if (me && me.userId && !profileMap[String(me.userId)]) {
+      profileMap[String(me.userId)] = {
+        id: me.userId,
+        username: me.username,
+        displayName: me.displayName || me.username,
+      };
+    }
     try {
       const users = global.DK && global.DK.getAdminUsers ? global.DK.getAdminUsers() : [];
       (users || []).forEach(function (u) {
         if (!u || !u.id) return;
         const id = String(u.id);
-        if (profileMap[id] && profileMap[id].displayName) return;
+        if (profileMap[id]) return;
+        if (findProfileIdByUsername(u.username)) return;
         profileMap[id] = {
           id: id,
           username: u.username,
@@ -861,15 +904,20 @@
       const keep = sel.value;
       const isReport = sel.id === "attReportEmployee";
       const opts = [isReport ? '<option value="">請選擇員工</option>' : '<option value="">全部員工</option>'];
+      const seenIds = {};
       Object.keys(profileMap).sort(function (a, b) {
         return String(personName(a)).localeCompare(String(personName(b)), "zh-Hant");
-      }).forEach(function (id) {
-        const p = profileMap[id];
-        if (p && p.enabled === false) return;
-        opts.push('<option value="' + esc(id) + '">' + esc(personName(id)) + "</option>");
+      }).forEach(function (mapKey) {
+        const p = profileMap[mapKey];
+        if (!p) return;
+        const uid = String(p.id || mapKey);
+        if (seenIds[uid]) return;
+        if (p.enabled === false) return;
+        seenIds[uid] = true;
+        opts.push('<option value="' + esc(uid) + '">' + esc(personName(uid)) + "</option>");
       });
       sel.innerHTML = opts.join("");
-      if (keep && profileMap[keep]) sel.value = keep;
+      if (keep && seenIds[keep]) sel.value = keep;
     });
   }
 
