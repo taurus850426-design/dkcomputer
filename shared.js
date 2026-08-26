@@ -501,6 +501,30 @@ const PREFERRED_INVENTORY_CATEGORIES = [
   "其他",
 ];
 
+/** Stage 12-2C：必須納入補貨群組管理的品類（與 server upsert guard 一致） */
+const REPLENISHMENT_REQUIRED_CATEGORIES = ["記憶體", "硬碟", "電源供應器"];
+
+function isReplenishmentRequiredCategory(category) {
+  const c = String(category || "").trim();
+  return REPLENISHMENT_REQUIRED_CATEGORIES.indexOf(c) >= 0;
+}
+
+function mapReplenishmentWriteError(err) {
+  const raw = String(
+    (err && (err.message || err.error || err.details || err.hint)) || err || ""
+  );
+  if (/replenishment group required/i.test(raw)) {
+    return "此品項需要先設定補貨群組，請至庫存品項編輯完成設定。";
+  }
+  if (/replenishment group not found/i.test(raw)) {
+    return "補貨群組不存在或已刪除，請重新選擇。";
+  }
+  if (/admin only/i.test(raw)) {
+    return "只有管理員可以管理補貨群組。";
+  }
+  return raw;
+}
+
 function getInventoryCategories() {
   const cfg = getConfig();
   let list = cfg.inventoryCategories;
@@ -1411,6 +1435,20 @@ async function stage7UpsertReplenishmentGroup(group) {
   return stage7Rpc("backoffice_upsert_replenishment_group", { p_group: payload });
 }
 
+async function stage7DeleteReplenishmentGroup(groupId) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以刪除補貨群組" };
+  }
+  const id = String(groupId || "").trim();
+  if (!id) return { ok: false, error: "缺少群組 id" };
+  const res = await stage7Rpc("backoffice_delete_replenishment_group", { p_group_id: id });
+  if (!res || !res.ok) {
+    const mapped = mapReplenishmentWriteError(res && (res.error || res.data) || "刪除失敗");
+    return { ok: false, error: mapped, data: res && res.data, forbidden: !!(res && res.forbidden) };
+  }
+  return res;
+}
+
 async function stage7ListReplenishmentAlerts() {
   const res = await stage7Rpc("backoffice_list_replenishment_alerts", {});
   if (!res || !res.ok) return res || { ok: false, error: "讀取待補貨失敗", data: null };
@@ -1509,6 +1547,7 @@ if (typeof window !== "undefined") {
   window.stage7IsAdminRole = stage7IsAdminRole;
   window.stage7FetchReplenishmentGroups = stage7FetchReplenishmentGroups;
   window.stage7UpsertReplenishmentGroup = stage7UpsertReplenishmentGroup;
+  window.stage7DeleteReplenishmentGroup = stage7DeleteReplenishmentGroup;
   window.stage7ListReplenishmentAlerts = stage7ListReplenishmentAlerts;
 }
 
@@ -4084,6 +4123,9 @@ window.DK = {
   getConfigSyncMeta,
   saveConfigSyncMeta,
   getInventoryCategories,
+  REPLENISHMENT_REQUIRED_CATEGORIES,
+  isReplenishmentRequiredCategory,
+  mapReplenishmentWriteError,
   getInventory,
   getInventoryForDisplay,
   saveInventory,

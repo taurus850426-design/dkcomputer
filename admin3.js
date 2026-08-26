@@ -4308,6 +4308,24 @@
     /** Stage 12：補貨群組快取（不自動建立正式群組） */
     let replenishmentGroupsCache = [];
     let replenishmentAlertsCache = [];
+    let ungroupedExpanded = false;
+    let adminForceSaveWithoutGroup = false;
+    let pendingItemSavePayload = null;
+
+    function isRequiredReplenishmentCategory(category) {
+      if (DK && typeof DK.isReplenishmentRequiredCategory === "function") {
+        return DK.isReplenishmentRequiredCategory(category);
+      }
+      return ["記憶體", "硬碟", "電源供應器"].indexOf(String(category || "").trim()) >= 0;
+    }
+
+    function groupMemberCount(groupId) {
+      const gid = String(groupId || "").trim();
+      if (!gid) return 0;
+      return (DK.getItems() || []).filter(function (it) {
+        return it && String(it.replenishment_group_id || "") === gid;
+      }).length;
+    }
 
     function groupAvailableFromItems(groupId) {
       const gid = String(groupId || "").trim();
@@ -4317,6 +4335,45 @@
         const q = Number(it.qty_on_hand);
         return sum + (Number.isFinite(q) ? Math.max(0, q) : 0);
       }, 0);
+    }
+
+    function listUngroupedRequiredItems() {
+      return (DK.getItems() || []).filter(function (it) {
+        if (!it) return false;
+        if (!isRequiredReplenishmentCategory(it.category)) return false;
+        const gid = it.replenishment_group_id;
+        return gid == null || String(gid).trim() === "";
+      });
+    }
+
+    function focusItemReplenishmentGroupSelect() {
+      const sel = getItemEditorField("itemReplenishmentGroup") || document.getElementById("itemReplenishmentGroup");
+      if (!sel) return;
+      try { sel.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (_) {}
+      try { sel.focus(); } catch (_) {}
+    }
+
+    function hideItemReplenishmentWarn() {
+      const box = document.getElementById("itemReplenishmentWarn");
+      if (box) box.hidden = true;
+      const forceBtn = document.getElementById("itemReplenishmentForceSave");
+      if (forceBtn) forceBtn.hidden = true;
+      adminForceSaveWithoutGroup = false;
+      pendingItemSavePayload = null;
+    }
+
+    function showItemReplenishmentWarn(isAdmin) {
+      const box = document.getElementById("itemReplenishmentWarn");
+      const text = document.getElementById("itemReplenishmentWarnText");
+      const forceBtn = document.getElementById("itemReplenishmentForceSave");
+      if (text) {
+        text.textContent = isAdmin
+          ? "此品項尚未設定補貨群組。若繼續儲存，此商品不會納入補貨提醒。"
+          : "此品項尚未設定補貨群組。若未設定，此商品不會納入補貨提醒。請先選擇補貨規格群組。";
+      }
+      if (forceBtn) forceBtn.hidden = !isAdmin;
+      if (box) box.hidden = false;
+      focusItemReplenishmentGroupSelect();
     }
 
     function fillItemReplenishmentGroupSelect(selectedId) {
@@ -4360,10 +4417,46 @@
       }).join("");
     }
 
+    function renderUngroupedItems() {
+      const countEl = document.getElementById("replenishmentUngroupedCount");
+      const listEl = document.getElementById("replenishmentUngroupedList");
+      const rows = listUngroupedRequiredItems();
+      if (countEl) countEl.textContent = String(rows.length);
+      if (!listEl) return;
+      if (!ungroupedExpanded) {
+        listEl.hidden = true;
+        return;
+      }
+      listEl.hidden = false;
+      if (!rows.length) {
+        listEl.innerHTML = '<p class="muted" style="margin:0">目前沒有未設定補貨群組的必填品類品項。</p>';
+        return;
+      }
+      listEl.innerHTML = rows.map(function (it) {
+        const qty = it.qty_on_hand != null ? it.qty_on_hand : 0;
+        return (
+          '<div style="padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.06);display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between">' +
+          "<div><strong>" + v2Esc(it.name || "—") + "</strong>" +
+          '<div class="muted small">規格：' + v2Esc(it.spec || "—") +
+          "｜現貨 " + v2Esc(String(qty)) + "</div></div>" +
+          '<button type="button" class="btn btn-ghost btn-sm ungrouped-assign-btn" data-id="' + v2Esc(it.id) + '">指定群組</button>' +
+          "</div>"
+        );
+      }).join("");
+      listEl.querySelectorAll(".ungrouped-assign-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          const id = btn.getAttribute("data-id");
+          openV2ItemEditor(id);
+          setTimeout(focusItemReplenishmentGroupSelect, 50);
+        });
+      });
+    }
+
     function renderReplenishmentGroupsTable() {
       const tbody = document.getElementById("replenishmentGroupsTbody");
       if (!tbody) return;
       const rows = Array.isArray(replenishmentGroupsCache) ? replenishmentGroupsCache : [];
+      const isAdmin = !!(window.stage7IsAdminRole && window.stage7IsAdminRole());
       if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="6" class="muted">尚無補貨群組</td></tr>';
         return;
@@ -4371,6 +4464,15 @@
       tbody.innerHTML = rows.map(function (g) {
         const avail = groupAvailableFromItems(g.id);
         const enabled = g.enabled !== false;
+        let ops =
+          '<button type="button" class="btn btn-ghost btn-sm rg-edit-btn" data-id="' + v2Esc(g.id) + '">編輯</button> ' +
+          '<button type="button" class="btn btn-ghost btn-sm rg-toggle-btn" data-id="' + v2Esc(g.id) + '">' +
+          (enabled ? "停用" : "啟用") + "</button>";
+        if (isAdmin) {
+          ops +=
+            ' <button type="button" class="btn btn-ghost btn-sm rg-delete-btn" data-id="' + v2Esc(g.id) +
+            '" style="color:var(--danger,#c00)">刪除</button>';
+        }
         return (
           "<tr>" +
           "<td>" + v2Esc(g.name || "") + "</td>" +
@@ -4378,11 +4480,7 @@
           "<td>" + v2Esc(String(g.target_qty ?? 0)) + "</td>" +
           "<td>" + v2Esc(String(avail)) + "</td>" +
           "<td>" + (enabled ? "啟用" : "停用") + "</td>" +
-          '<td style="text-align:right;white-space:nowrap">' +
-          '<button type="button" class="btn btn-ghost btn-sm rg-edit-btn" data-id="' + v2Esc(g.id) + '">編輯</button> ' +
-          '<button type="button" class="btn btn-ghost btn-sm rg-toggle-btn" data-id="' + v2Esc(g.id) + '">' +
-          (enabled ? "停用" : "啟用") + "</button>" +
-          "</td></tr>"
+          '<td style="text-align:right;white-space:nowrap">' + ops + "</td></tr>"
         );
       }).join("");
       tbody.querySelectorAll(".rg-edit-btn").forEach(function (btn) {
@@ -4393,6 +4491,11 @@
       tbody.querySelectorAll(".rg-toggle-btn").forEach(function (btn) {
         btn.addEventListener("click", function () {
           toggleReplenishmentGroupEnabled(btn.getAttribute("data-id"));
+        });
+      });
+      tbody.querySelectorAll(".rg-delete-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          deleteReplenishmentGroupWithConfirm(btn.getAttribute("data-id"));
         });
       });
     }
@@ -4417,10 +4520,47 @@
         replenishmentGroupsCache = [];
       }
       renderReplenishmentGroupsTable();
+      renderUngroupedItems();
       const sel = document.getElementById("itemReplenishmentGroup");
       if (sel && itemEditorModal && !itemEditorModal.hidden) {
         fillItemReplenishmentGroupSelect(sel.value);
       }
+    }
+
+    async function deleteReplenishmentGroupWithConfirm(id) {
+      if (!(window.stage7IsAdminRole && window.stage7IsAdminRole())) return;
+      const g = (replenishmentGroupsCache || []).find(function (x) { return x && String(x.id) === String(id); });
+      if (!g) return;
+      const msgEl = document.getElementById("replenishmentGroupMsg");
+      const memberCount = groupMemberCount(g.id);
+      const name = g.name || "此群組";
+      let firstOk = false;
+      if (memberCount <= 0) {
+        firstOk = window.confirm("確定刪除「" + name + "」補貨群組？");
+        if (!firstOk) return;
+        if (!window.confirm("再次確認：刪除後無法復原。確定刪除？")) return;
+      } else {
+        firstOk = window.confirm(
+          "此補貨群組目前綁定 " + memberCount + " 個庫存品項。\n" +
+          "刪除後，這些品項將變成「未設定補貨群組」，\n" +
+          "並不再納入此群組的補貨計算。\n確定繼續？"
+        );
+        if (!firstOk) return;
+        if (!window.confirm("再次確認刪除「" + name + "」？\n此操作無法復原。")) return;
+      }
+      if (typeof window.stage7DeleteReplenishmentGroup !== "function") {
+        return v2Show(msgEl, "刪除 RPC 未載入");
+      }
+      const res = await window.stage7DeleteReplenishmentGroup(g.id);
+      if (!res || !res.ok) {
+        return v2Show(msgEl, (res && res.error) || "刪除失敗");
+      }
+      v2Show(msgEl, "已刪除補貨群組「" + name + "」" + (memberCount ? "（已解除 " + memberCount + " 個品項綁定）" : ""));
+      if (typeof window.DK.fetchV2DataFromSupabase === "function") {
+        await window.DK.fetchV2DataFromSupabase();
+      }
+      renderV2Items();
+      await refreshReplenishmentUI();
     }
 
     function openReplenishmentGroupForm(id) {
@@ -4732,6 +4872,7 @@
       set("itemInboundDate", item && item.inbound_date ? item.inbound_date.slice(0, 10) : todayStr());
       const boundGid = item ? (item.replenishment_group_id || "") : "";
       fillItemReplenishmentGroupSelect(boundGid);
+      hideItemReplenishmentWarn();
       if (!(replenishmentGroupsCache || []).length) {
         refreshReplenishmentUI().then(function () {
           fillItemReplenishmentGroupSelect(boundGid);
@@ -4752,6 +4893,7 @@
       if (itemEditorModal) itemEditorModal.hidden = true;
       editingV2ItemId = null;
       window.__dkVqCreatePending = null;
+      hideItemReplenishmentWarn();
       v2Hide(itemMsg);
     }
 
@@ -5058,9 +5200,14 @@
       const sku = editingItem ? editingItem.sku : generateUniqueSKU();
       const costInput = parseFloat(getItemEditorField("itemCost")?.value) || 0;
       const costUnit = canPerm("viewCost") ? costInput : undefined;
+      const groupId = (function () {
+        const v = String((getItemEditorField("itemReplenishmentGroup") || document.getElementById("itemReplenishmentGroup"))?.value || "").trim();
+        return v || null;
+      })();
+      const category = getItemEditorField("itemCategory")?.value;
       const payload = {
         sku,
-        category: getItemEditorField("itemCategory")?.value,
+        category,
         name: nameSpec,
         spec: nameSpec,
         vendor: String(getItemEditorField("itemVendor")?.value || "").trim(),
@@ -5071,14 +5218,46 @@
         price_floor: parseFloat(getItemEditorField("itemPriceFloor")?.value) || null,
         inbound_date: getItemEditorField("itemInboundDate")?.value || null,
         reorder_point: Math.max(0, parseInt(getItemEditorField("itemReorderPoint")?.value, 10) || 0),
-        replenishment_group_id: (function () {
-          const v = String((getItemEditorField("itemReplenishmentGroup") || document.getElementById("itemReplenishmentGroup"))?.value || "").trim();
-          return v || null;
-        })(),
+        replenishment_group_id: groupId,
         notes: getItemEditorField("itemNotes")?.value || "",
         updated_at: nowISO(),
       };
       if (canPerm("viewCost")) payload.cost_unit = costUnit;
+
+      const needsGroup = isRequiredReplenishmentCategory(category) && !groupId;
+      const isAdminUser = !!(window.stage7IsAdminRole && window.stage7IsAdminRole());
+      if (needsGroup && !adminForceSaveWithoutGroup) {
+        if (!isAdminUser) {
+          showItemReplenishmentWarn(false);
+          return v2Show(itemMsg, "此品項尚未設定補貨群組。若未設定，此商品不會納入補貨提醒。請先選擇補貨規格群組。");
+        }
+        pendingItemSavePayload = payload;
+        showItemReplenishmentWarn(true);
+        return v2Show(itemMsg, "請選擇補貨群組，或明確選擇「仍然儲存」。");
+      }
+      adminForceSaveWithoutGroup = false;
+      pendingItemSavePayload = null;
+      hideItemReplenishmentWarn();
+
+      function afterSaveSync(syncP, label) {
+        if (syncP) {
+          syncP.then((r) => {
+            if (r && !r.ok) {
+              const mapped = DK.mapReplenishmentWriteError
+                ? DK.mapReplenishmentWriteError(r.error || r)
+                : (r.error || "儲存失敗");
+              showSyncToast(r, label);
+              v2Show(itemMsg, mapped);
+              return;
+            }
+            showSyncToast(r, label);
+            refreshReplenishmentUI();
+          });
+        } else {
+          refreshReplenishmentUI();
+        }
+      }
+
       if (editingV2ItemId) {
         const idx = items.findIndex((x) => x.id === editingV2ItemId);
         if (idx < 0) return v2Show(itemMsg, "找不到品項");
@@ -5088,7 +5267,7 @@
         const syncP = DK.saveItems(items);
         v2Show(itemMsg, "已更新");
         auditAction("編輯庫存", editingV2ItemId);
-        if (syncP) syncP.then((r) => { showSyncToast(r, "品項"); refreshReplenishmentUI(); });
+        afterSaveSync(syncP, "品項");
       } else {
         payload.id = "i-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9);
         payload.last_moved_at = payload.inbound_date ? payload.inbound_date + "T12:00:00Z" : null;
@@ -5108,10 +5287,25 @@
           v2Show(itemMsg, "已新增");
         }
         auditAction("新增庫存", payload.id);
-        if (syncP) syncP.then((r) => { showSyncToast(r, "品項"); refreshReplenishmentUI(); });
+        afterSaveSync(syncP, "品項");
       }
       renderV2Items();
       setTimeout(closeV2ItemEditor, 800);
+    });
+
+    document.getElementById("itemReplenishmentPickGroup")?.addEventListener("click", () => {
+      hideItemReplenishmentWarn();
+      focusItemReplenishmentGroupSelect();
+      v2Hide(itemMsg);
+    });
+    document.getElementById("itemReplenishmentForceSave")?.addEventListener("click", () => {
+      if (!(window.stage7IsAdminRole && window.stage7IsAdminRole())) return;
+      adminForceSaveWithoutGroup = true;
+      document.getElementById("itemSave")?.click();
+    });
+    document.getElementById("btnToggleUngrouped")?.addEventListener("click", () => {
+      ungroupedExpanded = !ungroupedExpanded;
+      renderUngroupedItems();
     });
 
     // ===== 重複品項提醒（名稱／規格相似比對）=====

@@ -321,7 +321,9 @@
       items.unshift(newItem);
       const saved = await DK.saveItems(items);
       if (!saved || !saved.ok) {
-        el("scanFormMsg").textContent = (saved && saved.error) || "新增品項失敗";
+        const raw = (saved && saved.error) || "新增品項失敗";
+        el("scanFormMsg").textContent =
+          DK.mapReplenishmentWriteError ? DK.mapReplenishmentWriteError(raw) : raw;
         el("scanFormMsg").hidden = false;
         return;
       }
