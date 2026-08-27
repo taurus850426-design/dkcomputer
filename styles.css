@@ -6250,6 +6250,28 @@ body.admin-page .ap-final-line{
   margin-top: 8px;
   font-weight: 700;
 }
+body.admin-page .ap-pay-card{
+  display: grid;
+  gap: 10px;
+}
+body.admin-page .ap-pay-meta{
+  display: grid;
+  gap: 4px;
+}
+body.admin-page .ap-pay-amount-value{
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-top: 4px;
+}
+body.admin-page .ap-detail-actions-cancel-pay{
+  justify-content: flex-start;
+}
+body.admin-page .ap-cancel-pay-btn{
+  min-height: 44px;
+  min-width: 44px;
+  margin-left: 0;
+}
 body.admin-page .ap-detail-actions{
   position: sticky;
   bottom: 12px;
@@ -6302,15 +6324,19 @@ body.admin-page .ap-setting-row-extra{
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
   body.admin-page .ap-detail-actions .primary-action,
-  body.admin-page .ap-detail-actions .secondary-action{
+  body.admin-page .ap-detail-actions .secondary-action,
+  body.admin-page .ap-cancel-pay-btn{
     flex: 1 1 140px;
     min-height: 44px;
   }
+  body.admin-page .ap-pay-amount-value{ font-size: 26px; }
 }
 @media (max-width: 640px){
   body.admin-page #apKpiGrid.kpi-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body.admin-page .ap-detail-summary{ grid-template-columns: 1fr; }
   body.admin-page .ap-item-amounts{ grid-template-columns: 1fr; }
   body.admin-page #apDetailView.ap-detail-has-actions{ padding-bottom: 96px; }
+  body.admin-page .ap-pay-card{ grid-template-columns: 1fr; }
+  body.admin-page .ap-pay-amount-value{ font-size: 28px; }
 }
 

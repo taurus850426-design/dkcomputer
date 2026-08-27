@@ -1628,6 +1628,24 @@ async function stage7VoidVendorReconciliation(reconciliationId) {
   return stage7Rpc("backoffice_void_vendor_reconciliation", { p_reconciliation_id: id });
 }
 
+async function stage7ConfirmVendorPayment(reconciliationId) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
+  }
+  const id = String(reconciliationId || "").trim();
+  if (!id) return { ok: false, error: "reconciliation id required", data: null };
+  return stage7Rpc("backoffice_confirm_vendor_payment", { p_reconciliation_id: id });
+}
+
+async function stage7CancelVendorPayment(reconciliationId) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
+  }
+  const id = String(reconciliationId || "").trim();
+  if (!id) return { ok: false, error: "reconciliation id required", data: null };
+  return stage7Rpc("backoffice_cancel_vendor_payment", { p_reconciliation_id: id });
+}
+
 if (typeof window !== "undefined") {
   window.stage7RpcAdjustStock = stage7RpcAdjustStock;
   window.stage7UpsertItem = stage7UpsertItem;
@@ -1649,6 +1667,8 @@ if (typeof window !== "undefined") {
   window.stage7CreateVendorReconciliation = stage7CreateVendorReconciliation;
   window.stage7UpdateVendorReconciliation = stage7UpdateVendorReconciliation;
   window.stage7VoidVendorReconciliation = stage7VoidVendorReconciliation;
+  window.stage7ConfirmVendorPayment = stage7ConfirmVendorPayment;
+  window.stage7CancelVendorPayment = stage7CancelVendorPayment;
 }
 
 function isSupabaseConfigured() {
@@ -4337,6 +4357,8 @@ window.DK = {
   stage7CreateVendorReconciliation,
   stage7UpdateVendorReconciliation,
   stage7VoidVendorReconciliation,
+  stage7ConfirmVendorPayment,
+  stage7CancelVendorPayment,
   pullVendorQuotesFromCloud,
   pullPurchaseOrdersFromCloud,
   previewVendorQuotesUpload,

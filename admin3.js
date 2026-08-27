@@ -7334,8 +7334,10 @@
       if (n > 0) return "negative-number";
       return "warning-number";
     }
-    function apPaidLabel(st) {
-      return String(st || "") === "PAID" ? "已付款" : "未付款";
+    function apPaidLabel(st, row) {
+      if (String(st || "") !== "PAID") return "未付款";
+      const amt = apToNum(row && row.paid_amount);
+      return amt != null ? "已付款 " + apFmtNT(amt) : "已付款";
     }
     function apMapCreateError(raw) {
       const m = String(raw || "");
@@ -7374,6 +7376,52 @@
       if (/cannot VOID/i.test(m)) return "目前狀態不可作廢";
       if (/reconciliation not found/i.test(m)) return "找不到對帳";
       return "作廢對帳失敗";
+    }
+    function apIsNetworkish(raw) {
+      return /failed to fetch|network|timeout|abort|連線|網路/i.test(String(raw || ""));
+    }
+    function apMapPayError(raw, res) {
+      if (res && (res.notAuthenticated || res.forbidden || res.permissionDenied)) return "僅管理員可執行付款";
+      const m = String(raw || "");
+      if (/admin only|42501|permission/i.test(m)) return "僅管理員可執行付款";
+      if (/only CONFIRMED can be paid/i.test(m)) return "此對帳尚未確認，不能付款";
+      if (/expense id collision/i.test(m)) return "付款記帳發生衝突，請重新整理確認狀態";
+      if (/invalid paid amount/i.test(m)) return "付款金額無效";
+      if (/reconciliation not found/i.test(m)) return "找不到對帳";
+      if (apIsNetworkish(m)) return "連線失敗，請先重新整理確認是否已付款，避免重複操作。";
+      return "付款失敗";
+    }
+    function apMapCancelPayError(raw, res) {
+      if (res && (res.notAuthenticated || res.forbidden || res.permissionDenied)) return "僅管理員可取消付款";
+      const m = String(raw || "");
+      if (/admin only|42501|permission/i.test(m)) return "僅管理員可取消付款";
+      if (/only PAID can cancel/i.test(m)) return "此對帳不是已付款狀態";
+      if (/expense_id is not the deterministic|refusing to delete/i.test(m)) return "找不到此對帳對應的自動支出，已停止取消付款";
+      if (/reconciliation not found/i.test(m)) return "找不到對帳";
+      if (apIsNetworkish(m)) return "連線失敗，請先重新整理確認付款狀態後再操作。";
+      return "取消付款失敗";
+    }
+    function apPayPreviewAmount(header) {
+      const claimed = apToNum(header && header.vendor_claimed_amount);
+      if (claimed != null) return claimed;
+      return apToNum(header && header.system_amount);
+    }
+    function apFmtDateTime(s) {
+      const t = String(s || "").trim();
+      if (!t) return "—";
+      const d = new Date(t);
+      if (Number.isNaN(d.getTime())) return apFmtDate(t);
+      const pad = function (n) { return String(n).padStart(2, "0"); };
+      return d.getFullYear() + "/" + pad(d.getMonth() + 1) + "/" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+    }
+    async function apRefreshExpenses() {
+      try {
+        const fn = (window.DK && window.DK.fetchV2DataFromSupabase) || window.fetchV2DataFromSupabase;
+        if (typeof fn === "function") await fn();
+      } catch (_) {}
+      try {
+        if (typeof window.__adminV2Refresh === "function") window.__adminV2Refresh();
+      } catch (_) {}
     }
     function apReviewFromClaimed(claimed, system) {
       if (claimed == null) return "UNCHECKED";
@@ -7506,6 +7554,10 @@
       if (saveBtn) saveBtn.disabled = apDetailBusy;
       const voidBtn = apEl("apDetailVoidBtn");
       if (voidBtn) voidBtn.disabled = apDetailBusy;
+      const payBtn = apEl("apDetailPayBtn");
+      if (payBtn) payBtn.disabled = apDetailBusy;
+      const cancelPayBtn = apEl("apDetailCancelPayBtn");
+      if (cancelPayBtn) cancelPayBtn.disabled = apDetailBusy;
     }
 
     function apSetListVisible(showList) {
@@ -7651,7 +7703,7 @@
             '<td class="table-number">' + v2Esc(apFmtNT(r.vendor_claimed_amount)) + "</td>" +
             '<td class="table-number ' + apDiffClass(diff) + '">' + v2Esc(apFmtNT(diff)) + "</td>" +
             "<td>" + apStatusBadge(r.status) + "</td>" +
-            "<td>" + v2Esc(apPaidLabel(r.status)) + "</td>" +
+            "<td>" + v2Esc(apPaidLabel(r.status, r)) + "</td>" +
             '<td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action ap-view-btn" data-id="' + v2Esc(id) + '">查看</button></td>',
           card:
             '<div class="ap-recon-card">' +
@@ -7661,7 +7713,7 @@
               '<div class="vendor-card-meta">系統 ' + v2Esc(apFmtNT(r.system_amount)) +
                 "｜請款 " + v2Esc(apFmtNT(r.vendor_claimed_amount)) +
                 '｜差異 <span class="' + apDiffClass(diff) + '">' + v2Esc(apFmtNT(diff)) + "</span></div>" +
-              "<div>" + v2Esc(apPaidLabel(r.status)) + "</div>" +
+              "<div>" + v2Esc(apPaidLabel(r.status, r)) + "</div>" +
               '<div class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action ap-view-btn" data-id="' + v2Esc(id) + '">查看</button></div>' +
             "</div>",
         };
@@ -7948,31 +8000,57 @@
       }).join("");
 
       let lockBanner = "";
+      const payAmt = apPayPreviewAmount(header);
       if (st === "CONFIRMED") {
-        lockBanner = '<div class="section-card-soft surface-success ui-enter-soft"><span class="status-badge status-success">已確認</span>' +
-          '<div class="ap-final-line">系統應付 ' + v2Esc(apFmtNT(sys)) +
-          "｜廠商請款 " + v2Esc(claimedText) +
-          '｜最終差異 <span class="' + expl.cls + '">' + v2Esc(expl.label) + "</span></div></div>";
+        lockBanner = '<div class="section-card surface-success ui-enter-soft ap-pay-card">' +
+          '<div class="inv-section-head"><h3 class="h3 section-title">付款確認</h3><span class="status-badge status-success">已確認</span></div>' +
+          '<div class="ap-pay-meta">' +
+            "<div>廠商：" + v2Esc(header.vendor_name || "") + "</div>" +
+            "<div>對帳期間：" + v2Esc(apFmtDate(header.period_start) + " ～ " + apFmtDate(header.period_end)) + "</div>" +
+            "<div>系統應付：" + v2Esc(apFmtNT(sys)) + "</div>" +
+            "<div>廠商請款：" + v2Esc(claimedText) + "</div>" +
+            '<div>最終差異：<span class="' + expl.cls + '">' + v2Esc(expl.label) + "</span></div>" +
+          "</div>" +
+          '<div class="ap-pay-amount"><div class="muted small">本次付款金額</div>' +
+            '<div class="ap-pay-amount-value positive-number">' + v2Esc(apFmtNT(payAmt)) + "</div>" +
+            '<p class="muted small">全額付款，金額由系統依請款（若無則系統應付）決定，不可自行修改。</p>' +
+          "</div></div>";
       } else if (st === "PAID") {
-        lockBanner = '<div class="section-card-soft surface-success"><span class="status-badge status-success">已付款</span>' +
-          '<div class="muted small">已付款金額 ' + v2Esc(apFmtNT(header.paid_amount)) +
-          (header.paid_at ? "｜付款日 " + v2Esc(apFmtDate(header.paid_at)) : "") + "</div></div>";
+        const expId = String(header.expense_id || ("ex-ap-" + (header.id || ""))).trim();
+        lockBanner = '<div class="section-card surface-success ap-pay-card">' +
+          '<div class="inv-section-head"><h3 class="h3 section-title">已付款</h3><span class="status-badge status-success">已付款</span></div>' +
+          '<div class="ap-pay-meta">' +
+            '<div>付款金額 <strong class="positive-number">' + v2Esc(apFmtNT(header.paid_amount != null ? header.paid_amount : payAmt)) + "</strong></div>" +
+            "<div>付款時間：" + v2Esc(apFmtDateTime(header.paid_at)) + "</div>" +
+            "<div>支出編號：" + v2Esc(expId) + "</div>" +
+          "</div>" +
+          '<p class="muted small">已自動記入支出：進貨款</p></div>';
       } else if (st === "VOID") {
         lockBanner = '<div class="section-card-soft surface-neutral"><span class="status-badge status-muted">已作廢</span>' +
           '<p class="muted small">此對帳已作廢，僅供查看。</p></div>';
       }
 
-      const actions = editable
-        ? '<div class="ap-detail-actions">' +
+      let actions = "";
+      if (editable) {
+        actions = '<div class="ap-detail-actions">' +
             '<button type="button" class="btn btn-ghost secondary-action" id="apDetailSaveBtn" data-ap-act="save">儲存核對</button>' +
             '<button type="button" class="btn btn-primary primary-action" id="apDetailConfirmBtn" data-ap-act="confirm">確認對帳</button>' +
             (canVoid ? '<button type="button" class="btn danger-action" id="apDetailVoidBtn" data-ap-act="void">作廢對帳</button>' : "") +
-          "</div>"
-        : (canVoid
-          ? '<div class="ap-detail-actions ap-detail-actions-void-only">' +
+          "</div>";
+      } else if (st === "CONFIRMED") {
+        actions = '<div class="ap-detail-actions">' +
+            '<button type="button" class="btn btn-primary primary-action" id="apDetailPayBtn" data-ap-act="pay">確認付款</button>' +
+            '<button type="button" class="btn danger-action" id="apDetailVoidBtn" data-ap-act="void">作廢對帳</button>' +
+          "</div>";
+      } else if (st === "PAID") {
+        actions = '<div class="ap-detail-actions ap-detail-actions-cancel-pay">' +
+            '<button type="button" class="btn btn-ghost tertiary-action ap-cancel-pay-btn" id="apDetailCancelPayBtn" data-ap-act="cancel-pay">取消付款</button>' +
+          "</div>";
+      } else if (canVoid) {
+        actions = '<div class="ap-detail-actions ap-detail-actions-void-only">' +
               '<button type="button" class="btn danger-action" id="apDetailVoidBtn" data-ap-act="void">作廢對帳</button>' +
-            "</div>"
-          : "");
+            "</div>";
+      }
 
       body.innerHTML =
         (lockBanner || "") +
@@ -8020,7 +8098,7 @@
         actions;
       const editor = apEl("apDetailView");
       if (editor) {
-        if (editable || canVoid) editor.classList.add("ap-detail-has-actions");
+        if (actions) editor.classList.add("ap-detail-has-actions");
         else editor.classList.remove("ap-detail-has-actions");
       }
       apSyncDetailPreview();
@@ -8129,6 +8207,129 @@
       setTimeout(function () { apShow(apEl("apDetailMsg"), ""); }, 2500);
     }
 
+    async function apConfirmPayment() {
+      if (!apDetailHeader || apDetailBusy) return;
+      const st = String(apDetailHeader.status || "");
+      if (st === "PAID") {
+        apShow(apEl("apDetailMsg"), "此對帳已是已付款狀態");
+        const keepId = apActiveDetailId;
+        await apRefresh(false);
+        await apRefreshExpenses();
+        if (keepId) await apOpenDetail(keepId);
+        return;
+      }
+      if (st !== "CONFIRMED") {
+        apShow(apEl("apDetailMsg"), "此對帳尚未確認，不能付款");
+        return;
+      }
+      const amt = apPayPreviewAmount(apDetailHeader);
+      const ok = window.confirm(
+        "確認已支付【" + String(apDetailHeader.vendor_name || "") + "】" + apFmtNT(amt) + "？\n\n" +
+        "確認後：\n" +
+        "・此對帳會標記為已付款\n" +
+        "・系統會自動新增一筆『進貨款』支出\n" +
+        "・請勿重複手動記帳"
+      );
+      if (!ok) return;
+      const fn = window.stage7ConfirmVendorPayment || (window.DK && window.DK.stage7ConfirmVendorPayment);
+      if (!fn) {
+        apShow(apEl("apDetailMsg"), "付款功能未載入");
+        return;
+      }
+      apDetailBusy = true;
+      apSyncDetailPreview();
+      apShow(apEl("apDetailMsg"), "付款處理中…");
+      apShow(apEl("apDetailDiag"), "");
+      let res;
+      try {
+        res = await fn(apDetailHeader.id);
+      } catch (e) {
+        apDetailBusy = false;
+        apSyncDetailPreview();
+        apShow(apEl("apDetailMsg"), "連線失敗，請先重新整理確認是否已付款，避免重複操作。");
+        apShow(apEl("apDetailDiag"), String(e && e.message ? e.message : e).slice(0, 240));
+        return;
+      }
+      const raw = apRpcRaw(res);
+      const data = res && res.data && typeof res.data === "object" ? res.data : {};
+      const paidOk = !!(res && res.ok && (data.status === "PAID" || data.idempotent === true));
+      if (!paidOk) {
+        apDetailBusy = false;
+        apSyncDetailPreview();
+        if (apIsNetworkish(raw) || (res && !res.ok && !raw)) {
+          apShow(apEl("apDetailMsg"), "連線失敗，請先重新整理確認是否已付款，避免重複操作。");
+        } else {
+          apShow(apEl("apDetailMsg"), apMapPayError(raw, res));
+        }
+        apShow(apEl("apDetailDiag"), raw ? ("診斷：" + String(raw).slice(0, 240)) : "");
+        return;
+      }
+      const idem = data.idempotent === true;
+      apShow(apEl("apDetailMsg"), idem ? "此對帳已是已付款狀態" : "已確認付款");
+      const keepId = apActiveDetailId;
+      await apRefresh(false);
+      await apRefreshExpenses();
+      apDetailBusy = false;
+      if (keepId) await apOpenDetail(keepId);
+      setTimeout(function () { apShow(apEl("apDetailMsg"), ""); }, 2500);
+    }
+
+    async function apCancelPayment() {
+      if (!apDetailHeader || apDetailBusy) return;
+      const st = String(apDetailHeader.status || "");
+      if (st !== "PAID") {
+        apShow(apEl("apDetailMsg"), "此對帳不是已付款狀態");
+        return;
+      }
+      const ok = window.confirm(
+        "確定取消這筆付款？\n\n" +
+        "系統會：\n" +
+        "・將對帳恢復為『已確認』\n" +
+        "・刪除這張對帳自動產生的『進貨款』支出\n\n" +
+        "此操作不會刪除叫貨單或對帳內容。"
+      );
+      if (!ok) return;
+      const fn = window.stage7CancelVendorPayment || (window.DK && window.DK.stage7CancelVendorPayment);
+      if (!fn) {
+        apShow(apEl("apDetailMsg"), "取消付款功能未載入");
+        return;
+      }
+      apDetailBusy = true;
+      apSyncDetailPreview();
+      apShow(apEl("apDetailMsg"), "取消付款中…");
+      apShow(apEl("apDetailDiag"), "");
+      let res;
+      try {
+        res = await fn(apDetailHeader.id);
+      } catch (e) {
+        apDetailBusy = false;
+        apSyncDetailPreview();
+        apShow(apEl("apDetailMsg"), "連線失敗，請先重新整理確認付款狀態後再操作。");
+        apShow(apEl("apDetailDiag"), String(e && e.message ? e.message : e).slice(0, 240));
+        return;
+      }
+      const raw = apRpcRaw(res);
+      const data = res && res.data && typeof res.data === "object" ? res.data : {};
+      if (!res || !res.ok || (data.status && data.status !== "CONFIRMED")) {
+        apDetailBusy = false;
+        apSyncDetailPreview();
+        if (apIsNetworkish(raw)) {
+          apShow(apEl("apDetailMsg"), "連線失敗，請先重新整理確認付款狀態後再操作。");
+        } else {
+          apShow(apEl("apDetailMsg"), apMapCancelPayError(raw, res));
+        }
+        apShow(apEl("apDetailDiag"), raw ? ("診斷：" + String(raw).slice(0, 240)) : "");
+        return;
+      }
+      apShow(apEl("apDetailMsg"), "已取消付款");
+      const keepId = apActiveDetailId;
+      await apRefresh(false);
+      await apRefreshExpenses();
+      apDetailBusy = false;
+      if (keepId) await apOpenDetail(keepId);
+      setTimeout(function () { apShow(apEl("apDetailMsg"), ""); }, 2500);
+    }
+
     async function apVoidDetail() {
       if (!apDetailHeader || apDetailBusy) return;
       const st = String(apDetailHeader.status || "");
@@ -8229,6 +8430,8 @@
         if (act === "save") apSaveDetail({});
         else if (act === "confirm") apSaveDetail({ confirm: true });
         else if (act === "void") apVoidDetail();
+        else if (act === "pay") apConfirmPayment();
+        else if (act === "cancel-pay") apCancelPayment();
       });
       apDetailView.addEventListener("input", function (e) {
         const t = e.target;
