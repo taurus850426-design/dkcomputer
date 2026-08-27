@@ -7195,7 +7195,9 @@
     let apSettingsByVendor = {};
     let apCandidates = [];
     let apLoading = false;
+    let apCreateBusy = false;
     let apDetailBusy = false;
+    const AP_GO_LIVE_DEFAULT = "2026-08-27";
     let apActiveDetailId = null;
     let apDetailHeader = null;
     let apDetailItems = [];
@@ -7270,8 +7272,34 @@
         summary: specs.slice(0, 3).join("、") + (specs.length > 3 ? "…" : ""),
       };
     }
+    function apYmdSafe(v) {
+      const t = String(v == null ? "" : v).trim();
+      if (!t) return "";
+      const m = t.match(/^(\d{4}-\d{2}-\d{2})/);
+      return m ? m[1] : "";
+    }
+    function apPoRecognitionDate(order) {
+      const supplier = apYmdSafe(order && (order.supplierOrderDate || order.supplier_order_date));
+      if (supplier) return supplier;
+      return apYmdSafe(order && (order.createdAt || order.created_at));
+    }
     function apPoDate(order) {
-      return String((order && (order.supplierOrderDate || order.createdAt || order.created_at)) || "").slice(0, 10);
+      return apPoRecognitionDate(order);
+    }
+    function apReadGoLiveDate() {
+      try {
+        const getCfg = (window.DK && window.DK.getConfig) || window.getConfig;
+        const cfg = typeof getCfg === "function" ? getCfg() : null;
+        const admin = cfg && cfg.admin && typeof cfg.admin === "object" ? cfg.admin : {};
+        const nested = admin.ap && typeof admin.ap === "object" ? (admin.ap.ap_go_live_date || admin.ap.go_live_date) : "";
+        const ymd = apYmdSafe(admin.ap_go_live_date || nested);
+        if (ymd) return ymd;
+      } catch (_) {}
+      return AP_GO_LIVE_DEFAULT;
+    }
+    function apFillGoLiveInput() {
+      const input = apEl("apGoLiveDate");
+      if (input) input.value = apReadGoLiveDate();
     }
     function apSuggestedPeriod(type, weekday) {
       const today = new Date();
@@ -7592,10 +7620,14 @@
     function apEligibleCandidates(vendorName) {
       const v = String(vendorName || "").trim();
       if (!v) return [];
+      const goLive = apReadGoLiveDate();
       return apLoadOrders().filter(function (o) {
         const st = String(o.status || "");
         if (st !== "ordered" && st !== "partial" && st !== "received") return false;
-        return apVendorLines(o, v).length > 0;
+        if (!apVendorLines(o, v).length) return false;
+        const rec = apPoRecognitionDate(o);
+        if (!rec || rec < goLive) return false;
+        return true;
       }).sort(function (a, b) {
         return String(apPoDate(b)).localeCompare(String(apPoDate(a)));
       });
@@ -7824,10 +7856,10 @@
       }
       if (!apCandidates.length) {
         host.innerHTML = "";
-        apShow(state, "此期間沒有可建立對帳的叫貨單");
+        apShow(state, "沒有可建立對帳的叫貨單（草稿／已取消／啟用日期前的舊單已排除）");
         return;
       }
-      apShow(state, "共 " + apCandidates.length + " 張候選叫貨單（草稿／已取消／已刪除已排除）");
+      apShow(state, "共 " + apCandidates.length + " 張候選叫貨單（草稿／已取消／已刪除／啟用日期前已排除）");
       host.innerHTML = apCandidates.map(function (o) {
         const prev = apVendorPreview(o, vendorName);
         const miss = prev.missing > 0
@@ -7898,8 +7930,54 @@
       if (modal) modal.hidden = true;
     }
 
+    async function apSaveGoLiveDate() {
+      if (!requirePerm("ap")) return;
+      const input = apEl("apGoLiveDate");
+      const msg = apEl("apGoLiveMsg");
+      const ymd = apYmdSafe(input && input.value);
+      if (!ymd) { apShow(msg, "請選擇有效日期"); return; }
+      if (!window.confirm("修改對帳啟用日期只會影響尚未建立對帳的叫貨單，不會修改既有對帳。確定儲存？")) return;
+      const getCfg = window.DK && window.DK.getConfig;
+      const saveCfg = window.DK && window.DK.saveConfig;
+      if (typeof getCfg !== "function" || typeof saveCfg !== "function") {
+        apShow(msg, "設定功能未載入");
+        return;
+      }
+      const cfg = getCfg() || {};
+      const prevAdmin = cfg.admin && typeof cfg.admin === "object" ? cfg.admin : {};
+      const admin = {};
+      Object.keys(prevAdmin).forEach(function (k) { admin[k] = prevAdmin[k]; });
+      admin.ap_go_live_date = ymd;
+      const next = {};
+      Object.keys(cfg).forEach(function (k) { next[k] = cfg[k]; });
+      next.admin = admin;
+      const btn = apEl("apGoLiveSave");
+      if (btn) btn.disabled = true;
+      apShow(msg, "儲存中…");
+      try {
+        saveCfg(next, { skipSupabase: true });
+        if (window.DK && typeof window.DK.saveSiteConfigToSupabase === "function") {
+          const result = await window.DK.saveSiteConfigToSupabase(next);
+          if (!result || result.ok !== true) {
+            apShow(msg, "本機已儲存。" + ((result && result.error) || "雲端同步失敗"));
+            return;
+          }
+        }
+        apShow(msg, "已儲存對帳啟用日期");
+        apFillGoLiveInput();
+        const modal = apEl("apCreateModal");
+        const sel = apEl("apCreateVendor");
+        if (modal && !modal.hidden && sel) apRenderCreatePos(sel.value);
+      } catch (e) {
+        apShow(msg, "本機已儲存。雲端同步失敗");
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
     async function apSubmitCreate() {
       if (!requirePerm("ap")) return;
+      if (apCreateBusy) return;
       const vendor = String((apEl("apCreateVendor") && apEl("apCreateVendor").value) || "").trim();
       const start = String((apEl("apCreatePeriodStart") && apEl("apCreatePeriodStart").value) || "").trim();
       const end = String((apEl("apCreatePeriodEnd") && apEl("apCreatePeriodEnd").value) || "").trim();
@@ -7921,25 +7999,33 @@
       if (missingWarned && !window.confirm("部分品項【缺少單價】，系統金額可能偏低。仍要建立對帳？")) return;
       const fn = window.stage7CreateVendorReconciliation || (window.DK && window.DK.stage7CreateVendorReconciliation);
       if (!fn) { apShow(msg, "建立功能未載入"); return; }
+      apCreateBusy = true;
+      const submitBtn = apEl("apCreateSubmit");
+      if (submitBtn) submitBtn.disabled = true;
       apShow(msg, "建立中…");
-      const res = await fn({
-        vendor_name: vendor,
-        settlement_type_snapshot: setting.settlement_type,
-        period_start: start,
-        period_end: end,
-        purchase_order_ids: ids,
-        notes: notes,
-      });
-      if (!res || !res.ok) {
-        const raw = (res && (res.error || (res.data && (res.data.message || res.data.details)))) || "";
-        apShow(msg, apMapCreateError(raw));
-        apShow(rawEl, raw ? ("診斷：" + String(raw).slice(0, 240)) : "");
-        return;
+      try {
+        const res = await fn({
+          vendor_name: vendor,
+          settlement_type_snapshot: setting.settlement_type,
+          period_start: start,
+          period_end: end,
+          purchase_order_ids: ids,
+          notes: notes,
+        });
+        if (!res || !res.ok) {
+          const raw = (res && (res.error || (res.data && (res.data.message || res.data.details)))) || "";
+          apShow(msg, apMapCreateError(raw));
+          apShow(rawEl, raw ? ("診斷：" + String(raw).slice(0, 240)) : "");
+          return;
+        }
+        apCloseCreate();
+        apShow(apEl("apPageMsg"), "已建立對帳");
+        await apRefresh(true);
+        setTimeout(function () { apShow(apEl("apPageMsg"), ""); }, 2500);
+      } finally {
+        apCreateBusy = false;
+        if (submitBtn) submitBtn.disabled = false;
       }
-      apCloseCreate();
-      apShow(apEl("apPageMsg"), "已建立對帳");
-      await apRefresh(true);
-      setTimeout(function () { apShow(apEl("apPageMsg"), ""); }, 2500);
     }
 
     function apSnapshotRowsHtml(it) {
@@ -8403,6 +8489,7 @@
       apRenderRecent();
       apRenderList(apRows);
       apRenderSettings();
+      apFillGoLiveInput();
       if (showList) apSetListVisible(true);
     }
 
@@ -8449,7 +8536,9 @@
       body.hidden = !open;
       btn.textContent = open ? "收合" : "展開";
       btn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) apFillGoLiveInput();
     });
+    apEl("apGoLiveSave") && apEl("apGoLiveSave").addEventListener("click", function () { apSaveGoLiveDate(); });
     apEl("apCreateVendor") && apEl("apCreateVendor").addEventListener("change", function () {
       const v = apEl("apCreateVendor").value;
       const startEl = apEl("apCreatePeriodStart");

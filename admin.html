@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260827ap3" />
+            <link rel="stylesheet" href="./styles.css?v=20260827ap4" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -1337,7 +1337,7 @@
                 <div class="section-head inv-items-head">
                   <div>
                     <h2 class="h2 section-title">廠商對帳</h2>
-                    <p class="muted">依結帳期間核對叫貨金額。付款與請款核對請待後續階段。</p>
+                    <p class="muted">依結帳期間核對叫貨金額。確認後可付款並自動記入進貨款。</p>
                   </div>
                   <div class="section-actions">
                     <button id="apCreateBtn" class="btn btn-primary primary-action" type="button">建立對帳</button>
@@ -1388,6 +1388,17 @@
                   <p class="form-hint">結帳方式存在獨立設定，不會改廠商清單名稱。</p>
                   <div id="apSettingsBody" hidden>
                     <div id="apSettingsMsg" class="muted small admin-msg-gap" hidden></div>
+                    <div class="ap-golive-setting">
+                      <div class="field">
+                        <label for="apGoLiveDate">對帳啟用日期</label>
+                        <input id="apGoLiveDate" type="date" />
+                        <p class="form-hint">此日期之前的舊叫貨單不會自動列入新的對帳候選；已建立的對帳不受影響。</p>
+                      </div>
+                      <div class="table-actions">
+                        <button id="apGoLiveSave" class="btn btn-ghost btn-sm tertiary-action" type="button">儲存啟用日期</button>
+                      </div>
+                      <div id="apGoLiveMsg" class="muted small admin-msg-gap" hidden></div>
+                    </div>
                     <div id="apSettingsHost"></div>
                   </div>
                 </div>
@@ -2020,12 +2031,12 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260827ap3"></script>
+    <script src="./shared.js?v=20260827ap4"></script>
     <script src="./inventory-ledger.js?v=20260826rg3"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260827ap3"></script>
+    <script src="./admin3.js?v=20260827ap4"></script>
     <script src="./purchase-orders.js?v=20260827po1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260826ds7"></script>

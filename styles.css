@@ -6293,9 +6293,29 @@ body.admin-page .ap-detail-actions .secondary-action{
 body.admin-page .ap-detail-actions-void-only{
   justify-content: flex-start;
 }
+body.admin-page #tab-ap .kpi-value{
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+body.admin-page .ap-golive-setting{
+  margin: 0 0 16px;
+  padding: 0 0 14px;
+  border-bottom: 1px solid rgba(17, 24, 39, 0.08);
+}
+body.admin-page #apGoLiveSave,
+body.admin-page #apCreateBtn,
+body.admin-page #apCreateSelectAll{
+  min-height: 44px;
+}
+body.admin-page #tab-ap input[type="date"],
+body.admin-page #apCreateModal input[type="date"],
+body.admin-page #tab-ap select,
+body.admin-page #apCreateModal select{
+  min-height: 44px;
+}
 body.admin-page .ap-detail-actions .danger-action{
   margin-left: auto;
-  min-height: 40px;
+  min-height: 44px;
 }
 body.admin-page #apDetailView.ap-detail-has-actions{
   padding-bottom: 24px;
@@ -6338,5 +6358,16 @@ body.admin-page .ap-setting-row-extra{
   body.admin-page #apDetailView.ap-detail-has-actions{ padding-bottom: 96px; }
   body.admin-page .ap-pay-card{ grid-template-columns: 1fr; }
   body.admin-page .ap-pay-amount-value{ font-size: 28px; }
+  body.admin-page .ap-create-modal .ap-create-card{
+    padding-bottom: 88px;
+  }
+  body.admin-page .ap-create-actions{
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: rgba(255,255,255,0.96);
+    padding: 10px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+    margin-top: 8px;
+  }
 }
 

@@ -149,6 +149,8 @@ const DEFAULT_CONFIG = {
   },
   admin: {
     username: "",
+    /** Stage 14-6：對帳啟用日期；只影響尚未建立對帳的候選叫貨單 */
+    ap_go_live_date: "2026-08-27",
   },
   // 庫存品項品類（可於後台新增/移除；讀取時會確保正式品類齊全）
   inventoryCategories: [
