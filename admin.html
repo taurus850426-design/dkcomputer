@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260826ds7" />
+            <link rel="stylesheet" href="./styles.css?v=20260827ap1" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -60,6 +60,7 @@
             <button class="tab" data-tab="frontend" type="button" data-admin-only>前台管理</button>
             <button class="tab" data-tab="vendors" type="button" data-admin-only>廠商管理</button>
             <button class="tab" data-tab="purchase" type="button" data-admin-only>採購／叫貨單</button>
+            <button class="tab" data-tab="ap" type="button" data-admin-only>廠商對帳</button>
             <button class="tab" data-tab="customers" type="button">客戶紀錄</button>
             <button class="tab" data-tab="attendance" type="button">員工打卡</button>
             <button class="tab" data-tab="accounts" type="button" data-admin-only>帳號管理</button>
@@ -1318,6 +1319,78 @@
             </div>
           </section>
 
+          <!-- ⑦b 廠商對帳（Stage 14-3） -->
+          <section id="tab-ap" class="card" hidden data-admin-only>
+            <div id="apWorkspace">
+              <div id="apListView">
+                <div class="section-head inv-items-head">
+                  <div>
+                    <h2 class="h2 section-title">廠商對帳</h2>
+                    <p class="muted">依結帳期間核對叫貨金額。付款與請款核對請待後續階段。</p>
+                  </div>
+                  <div class="section-actions">
+                    <button id="apCreateBtn" class="btn btn-primary primary-action" type="button">建立對帳</button>
+                  </div>
+                </div>
+                <div id="apPageMsg" class="muted small admin-msg-gap" hidden></div>
+
+                <div id="apKpiGrid" class="kpi-grid ui-enter admin-stack-gap"></div>
+
+                <div class="section-card surface-info ui-enter admin-stack-gap">
+                  <div class="inv-section-head">
+                    <h3 class="h3 section-title">近期結帳</h3>
+                  </div>
+                  <div id="apRecentHost" class="ap-recent-host"></div>
+                </div>
+
+                <div class="section-card ui-enter admin-stack-gap">
+                  <div class="inv-section-head">
+                    <h3 class="h3 section-title">對帳列表</h3>
+                  </div>
+                  <div id="apListState" class="muted small admin-msg-gap" hidden></div>
+                  <div id="apListCards" class="ap-recon-cards"></div>
+                  <div class="table-wrap ap-list-table-wrap">
+                    <table class="table table-compact" id="apListTable">
+                      <thead>
+                        <tr>
+                          <th>對帳編號</th>
+                          <th>廠商</th>
+                          <th>期間</th>
+                          <th class="table-number">系統應付</th>
+                          <th class="table-number">廠商請款</th>
+                          <th class="table-number">差異</th>
+                          <th>狀態</th>
+                          <th>付款狀態</th>
+                          <th class="table-actions">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody id="apListTbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="section-card-soft surface-neutral admin-stack-gap">
+                  <div class="inv-section-head">
+                    <h3 class="h3 section-title">廠商結帳設定</h3>
+                    <button id="apSettingsToggle" class="btn btn-ghost btn-sm tertiary-action" type="button" aria-expanded="false">展開</button>
+                  </div>
+                  <p class="form-hint">結帳方式存在獨立設定，不會改廠商清單名稱。</p>
+                  <div id="apSettingsBody" hidden>
+                    <div id="apSettingsMsg" class="muted small admin-msg-gap" hidden></div>
+                    <div id="apSettingsHost"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="apDetailView" hidden>
+                <div class="actions" style="margin-top:8px;flex-wrap:wrap;gap:8px">
+                  <button id="apDetailBackBtn" class="btn btn-ghost tertiary-action" type="button">← 返回列表</button>
+                </div>
+                <div id="apDetailBody" class="admin-stack-gap" style="margin-top:12px"></div>
+              </div>
+            </div>
+          </section>
+
           <!-- ⑧ 客戶紀錄（localStorage：dk_customer_records_v1） -->
           <section id="tab-customers" class="card" hidden>
             <div id="customer-section">
@@ -1844,6 +1917,51 @@
     </main>
 
     <div id="adminToast" class="admin-toast" aria-live="polite" hidden></div>
+    <div id="apCreateModal" class="item-editor-modal ap-create-modal" hidden>
+      <div class="card item-editor-card ap-create-card" role="dialog" aria-modal="true" aria-labelledby="apCreateTitle">
+        <div class="section-head">
+          <div>
+            <h3 id="apCreateTitle" class="h3">建立對帳</h3>
+            <p class="muted small">系統金額由伺服器依叫貨單明細重算。</p>
+          </div>
+          <button id="apCreateCloseBtn" class="btn btn-ghost btn-sm tertiary-action" type="button">關閉</button>
+        </div>
+        <div class="form-grid ap-create-grid" style="margin-top:12px">
+          <div class="field">
+            <label for="apCreateVendor">廠商</label>
+            <select id="apCreateVendor"></select>
+          </div>
+          <div class="field">
+            <label>結帳方式</label>
+            <div id="apCreateTypeLabel" class="muted">請先選廠商</div>
+          </div>
+          <div class="field">
+            <label for="apCreatePeriodStart">期間起</label>
+            <input id="apCreatePeriodStart" type="date" />
+          </div>
+          <div class="field">
+            <label for="apCreatePeriodEnd">期間迄</label>
+            <input id="apCreatePeriodEnd" type="date" />
+          </div>
+          <div class="field full">
+            <label for="apCreateNotes">備註（選填）</label>
+            <input id="apCreateNotes" type="text" placeholder="可留空" />
+          </div>
+        </div>
+        <div class="inv-section-head" style="margin-top:14px">
+          <h3 class="h3 section-title">候選叫貨單</h3>
+          <button id="apCreateSelectAll" class="btn btn-ghost btn-sm tertiary-action" type="button">全選</button>
+        </div>
+        <div id="apCreatePoState" class="muted small admin-msg-gap"></div>
+        <div id="apCreatePoCards" class="ap-po-cards"></div>
+        <div id="apCreateMsg" class="muted small admin-msg-gap" hidden></div>
+        <p id="apCreateErrRaw" class="form-hint" hidden></p>
+        <div class="full actions ap-create-actions">
+          <button id="apCreateSubmit" class="btn btn-primary primary-action" type="button">建立對帳</button>
+          <button id="apCreateCancel" class="btn btn-ghost tertiary-action" type="button">取消</button>
+        </div>
+      </div>
+    </div>
     <div id="itemEditorModal" class="item-editor-modal" hidden>
       <div id="itemEditor" class="card item-editor-card" role="dialog" aria-modal="true" aria-labelledby="itemEditorTitle">
       <h3 id="itemEditorTitle" class="h3">新增 / 編輯品項</h3>
@@ -1889,12 +2007,12 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260826rg3"></script>
+    <script src="./shared.js?v=20260827ap1"></script>
     <script src="./inventory-ledger.js?v=20260826rg3"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260826ds7"></script>
+    <script src="./admin3.js?v=20260827ap1"></script>
     <script src="./purchase-orders.js?v=20260815s5a"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260826ds7"></script>

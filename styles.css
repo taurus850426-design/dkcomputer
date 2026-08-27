@@ -5962,3 +5962,89 @@ body.admin-page textarea:focus-visible{
     transform: none !important;
   }
 }
+
+/* Stage 14-3 廠商對帳 — 沿用 DS7，僅補 AP 版面 */
+body.admin-page .ap-create-modal .ap-create-card{
+  max-width: 720px;
+}
+body.admin-page .ap-create-actions{
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+body.admin-page #tab-ap .primary-action,
+body.admin-page #apCreateModal .primary-action{
+  min-height: 44px;
+  min-width: 44px;
+}
+body.admin-page #tab-ap .ap-po-card input[type="checkbox"],
+body.admin-page #apCreateModal input[type="checkbox"]{
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+}
+body.admin-page .ap-po-cards,
+body.admin-page .ap-recent-host,
+body.admin-page .ap-settings-cards{
+  display: grid;
+  gap: 10px;
+}
+body.admin-page .ap-recon-cards{
+  display: none;
+  gap: 10px;
+}
+body.admin-page .ap-po-card,
+body.admin-page .ap-recon-card,
+body.admin-page .ap-recent-card,
+body.admin-page .ap-setting-card{
+  background: var(--dk-surface-primary, #fff);
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 14px;
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+}
+body.admin-page .ap-po-card-head,
+body.admin-page .ap-recon-card-head,
+body.admin-page .ap-recent-card-head{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+body.admin-page .ap-po-card label.ap-po-check{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+}
+body.admin-page .ap-snap-table{
+  width: 100%;
+  font-size: 13px;
+}
+body.admin-page .ap-detail-summary{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+body.admin-page .ap-setting-row-extra{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+@media (max-width: 900px){
+  body.admin-page #apKpiGrid.kpi-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.admin-page .ap-create-grid.form-grid{ grid-template-columns: 1fr !important; }
+  body.admin-page .ap-setting-row-extra{ grid-template-columns: 1fr; }
+  body.admin-page .ap-list-table-wrap{ display: none !important; }
+  body.admin-page .ap-recon-cards{ display: grid !important; }
+}
+@media (max-width: 640px){
+  body.admin-page #apKpiGrid.kpi-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.admin-page .ap-detail-summary{ grid-template-columns: 1fr; }
+}
+

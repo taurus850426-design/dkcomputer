@@ -221,6 +221,7 @@
   const tabFrontend = document.getElementById("tab-frontend");
   const tabVendors = document.getElementById("tab-vendors");
   const tabPurchase = document.getElementById("tab-purchase");
+  const tabAp = document.getElementById("tab-ap");
   const tabCustomers = document.getElementById("tab-customers");
   const tabAttendance = document.getElementById("tab-attendance");
   const tabAccounts = document.getElementById("tab-accounts");
@@ -438,7 +439,7 @@
   }
 
   const ADMIN_TAB_KEY = "dk_admin_tab";
-  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "customers", "attendance", "accounts"];
+  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "ap", "customers", "attendance", "accounts"];
   function switchTab(name) {
     if (!canPerm(name)) {
       requirePerm(name);
@@ -456,6 +457,7 @@
     if (tabFrontend) tabFrontend.hidden = name !== "frontend";
     if (tabVendors) tabVendors.hidden = name !== "vendors";
     if (tabPurchase) tabPurchase.hidden = name !== "purchase";
+    if (tabAp) tabAp.hidden = name !== "ap";
     if (tabCustomers) tabCustomers.hidden = name !== "customers";
     if (tabAttendance) tabAttendance.hidden = name !== "attendance";
     if (tabAccounts) tabAccounts.hidden = name !== "accounts";
@@ -485,6 +487,11 @@
     if (name === "purchase") {
       try {
         if (typeof window.__dkPurchaseOrdersOnShow === "function") window.__dkPurchaseOrdersOnShow();
+      } catch (_) {}
+    }
+    if (name === "ap") {
+      try {
+        if (typeof window.__dkApOnShow === "function") window.__dkApOnShow();
       } catch (_) {}
     }
     if (name === "customers") {
@@ -943,6 +950,7 @@
       (name === "frontend" && tabFrontend) ||
       (name === "vendors" && tabVendors) ||
       (name === "purchase" && tabPurchase) ||
+      (name === "ap" && tabAp) ||
       (name === "customers" && tabCustomers) ||
       (name === "attendance" && tabAttendance) ||
       (name === "accounts" && tabAccounts);
@@ -1097,7 +1105,7 @@
       title: "管理員",
       badge: "完整後台權限",
       intro: "管理員可使用所有後台功能，包括：",
-      allow: ["庫存管理", "流水帳", "訂單", "支出", "報表", "上架管理", "前台管理", "廠商管理", "採購／叫貨單", "客戶紀錄", "員工打卡", "出勤管理", "出勤稽核", "帳號管理", "成本／毛利資訊", "刪除操作"],
+      allow: ["庫存管理", "流水帳", "訂單", "支出", "報表", "上架管理", "前台管理", "廠商管理", "採購／叫貨單", "廠商對帳", "客戶紀錄", "員工打卡", "出勤管理", "出勤稽核", "帳號管理", "成本／毛利資訊", "刪除操作"],
       deny: [],
     },
     staff: {
@@ -1105,7 +1113,7 @@
       badge: "日常作業權限",
       intro: "日常作業可用，成本與管理功能不可用。",
       allow: ["查看庫存", "新增庫存", "編輯庫存", "補貨", "新增訂單", "編輯訂單", "製作報價單", "客戶紀錄", "員工打卡", "搜尋／篩選"],
-      deny: ["查看單位成本", "查看成本小計", "查看毛利／毛利率", "查看庫存總成本", "刪除庫存", "刪除訂單", "刪除客戶", "流水帳", "支出", "報表", "上架管理", "前台管理", "廠商管理", "採購／叫貨單", "出勤管理", "出勤稽核", "帳號管理", "網站／同步設定"],
+      deny: ["查看單位成本", "查看成本小計", "查看毛利／毛利率", "查看庫存總成本", "刪除庫存", "刪除訂單", "刪除客戶", "流水帳", "支出", "報表", "上架管理", "前台管理", "廠商管理", "採購／叫貨單", "廠商對帳", "出勤管理", "出勤稽核", "帳號管理", "網站／同步設定"],
     },
   };
   function rolePermChipsHtml(items, kind) {
@@ -7153,6 +7161,720 @@
     if (result && result.reason === "profile_disabled") show(loginError, "此帳號已停用");
     else if (result && result.reason === "network") show(loginError, "登入服務暫時無法連線，請稍後再試。");
   }
+
+  // ===== Stage 14-3 廠商對帳（不呼叫付款 RPC、不改採購／支出公式）=====
+  (function bindVendorApWorkspace() {
+    const root = document.getElementById("apWorkspace");
+    if (!root || root.dataset.apBound === "1") return;
+    root.dataset.apBound = "1";
+
+    const AP_PO_STATUS = { ordered: "已叫貨", partial: "部分到貨", received: "已到貨" };
+    const AP_RECON_STATUS = {
+      DRAFT: "草稿",
+      MISMATCH: "金額不符",
+      CONFIRMED: "已確認",
+      PAID: "已付款",
+      VOID: "已作廢",
+    };
+    const AP_WEEKDAYS = [
+      { v: 1, t: "週一" },
+      { v: 2, t: "週二" },
+      { v: 3, t: "週三" },
+      { v: 4, t: "週四" },
+      { v: 5, t: "週五" },
+      { v: 6, t: "週六" },
+      { v: 7, t: "週日" },
+    ];
+
+    let apRows = [];
+    let apSettingsByVendor = {};
+    let apCandidates = [];
+    let apLoading = false;
+
+    function apEl(id) { return document.getElementById(id); }
+    function apToNum(v) {
+      if (v === "" || v == null) return null;
+      const n = typeof v === "number" ? v : Number(String(v).replace(/,/g, ""));
+      return Number.isFinite(n) ? n : null;
+    }
+    function apFmtNT(n) {
+      const x = apToNum(n);
+      if (x == null) return "—";
+      return "NT$" + Math.round(x).toLocaleString("zh-TW");
+    }
+    function apPadYmd(y, m, d) {
+      return String(y) + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+    }
+    function apDateYmd(d) {
+      const x = d instanceof Date ? d : new Date(d);
+      if (Number.isNaN(x.getTime())) return "";
+      return apPadYmd(x.getFullYear(), x.getMonth() + 1, x.getDate());
+    }
+    function apFmtDate(s) {
+      const t = String(s || "").trim();
+      if (!t) return "—";
+      return t.slice(0, 10).replace(/-/g, "/");
+    }
+    function apShow(el, text) {
+      if (!el) return;
+      const t = String(text || "").trim();
+      if (!t) { el.hidden = true; el.textContent = ""; return; }
+      el.hidden = false;
+      el.textContent = t;
+    }
+    function apItemVendor(it) {
+      return String((it && (it.selectedVendor || it.manualVendor)) || "").trim();
+    }
+    function apItemPrice(it) {
+      const a = apToNum(it && it.selectedUnitPrice);
+      if (a != null) return a;
+      return apToNum(it && it.manualUnitPrice);
+    }
+    function apItemQty(it) {
+      const q = Math.max(1, Math.floor(Number(it && it.quantity) || 1));
+      return q;
+    }
+    function apItemSpec(it) {
+      return String((it && (it.selectedSpec || it.requestText)) || "").trim() || "品項";
+    }
+    function apVendorLines(order, vendorName) {
+      const v = String(vendorName || "").trim();
+      return ((order && order.items) || []).filter(function (it) { return apItemVendor(it) === v; });
+    }
+    function apVendorPreview(order, vendorName) {
+      const lines = apVendorLines(order, vendorName);
+      let amount = 0;
+      let hasAmount = false;
+      let missing = 0;
+      const specs = [];
+      lines.forEach(function (it) {
+        specs.push(apItemSpec(it));
+        const p = apItemPrice(it);
+        const q = apItemQty(it);
+        if (p == null) missing += 1;
+        else { amount += p * q; hasAmount = true; }
+      });
+      return {
+        lines: lines,
+        amount: hasAmount ? amount : null,
+        missing: missing,
+        summary: specs.slice(0, 3).join("、") + (specs.length > 3 ? "…" : ""),
+      };
+    }
+    function apPoDate(order) {
+      return String((order && (order.supplierOrderDate || order.createdAt || order.created_at)) || "").slice(0, 10);
+    }
+    function apSuggestedPeriod(type, weekday) {
+      const today = new Date();
+      const t = String(type || "").toUpperCase();
+      if (t === "MONTHLY") {
+        const y = today.getFullYear();
+        const m = today.getMonth() + 1;
+        const last = new Date(y, m, 0).getDate();
+        return { start: apPadYmd(y, m, 1), end: apPadYmd(y, m, last) };
+      }
+      if (t === "WEEKLY") {
+        const ws = Number(weekday) >= 1 && Number(weekday) <= 7 ? Number(weekday) : 1;
+        const iso = today.getDay() === 0 ? 7 : today.getDay();
+        const diff = (iso - ws + 7) % 7;
+        const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - diff);
+        const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+        return { start: apDateYmd(start), end: apDateYmd(end) };
+      }
+      return { start: "", end: "" };
+    }
+    function apReminderText(setting, period) {
+      const t = String((setting && setting.settlement_type) || "").toUpperCase();
+      if (t === "CUSTOM") return "手動期間";
+      if (t === "MONTHLY") {
+        const day = Number(setting && setting.monthly_anchor_day) || 1;
+        const parts = String((period && period.start) || apDateYmd(new Date())).split("-");
+        const y = Number(parts[0]);
+        const m = Number(parts[1]);
+        const last = new Date(y, m, 0).getDate();
+        const d = Math.min(Math.max(day, 1), last);
+        return apPadYmd(y, m, d);
+      }
+      if (t === "WEEKLY") return (period && period.end) || "—";
+      return "—";
+    }
+    function apTypeLabel(type, setting) {
+      const t = String(type || "").toUpperCase();
+      if (t === "WEEKLY") {
+        const w = AP_WEEKDAYS.find(function (x) { return x.v === Number(setting && setting.week_start_weekday); });
+        return "週結" + (w ? "（" + w.t + "起）" : "");
+      }
+      if (t === "MONTHLY") return "月結";
+      if (t === "CUSTOM") return "自訂期間";
+      return "尚未設定結帳方式";
+    }
+    function apStatusBadge(st) {
+      const s = String(st || "");
+      let cls = "status-badge status-muted";
+      if (s === "DRAFT") cls = "status-badge status-info";
+      else if (s === "MISMATCH") cls = "status-badge status-danger";
+      else if (s === "CONFIRMED" || s === "PAID") cls = "status-badge status-success";
+      else if (s === "VOID") cls = "status-badge status-muted";
+      return '<span class="' + cls + '">' + v2Esc(AP_RECON_STATUS[s] || s || "—") + "</span>";
+    }
+    function apDiffClass(d) {
+      if (d == null || d === "") return "neutral-number";
+      const n = Number(d);
+      if (!Number.isFinite(n)) return "neutral-number";
+      if (n === 0) return "positive-number";
+      if (n > 0) return "negative-number";
+      return "warning-number";
+    }
+    function apPaidLabel(st) {
+      return String(st || "") === "PAID" ? "已付款" : "未付款";
+    }
+    function apMapCreateError(raw) {
+      const m = String(raw || "");
+      if (/admin only|42501|permission/i.test(m)) return "僅管理員可以建立對帳";
+      if (/already exists for vendor\/period|active reconciliation already exists/i.test(m)) return "此廠商在此期間已有未作廢對帳";
+      if (/already on active reconciliation/i.test(m)) return "此叫貨單／廠商已在其他對帳中";
+      if (/status not eligible/i.test(m)) return "叫貨單狀態不符合（草稿／已取消不可建立）";
+      if (/not on purchase order/i.test(m)) return "此叫貨單沒有該廠商明細";
+      if (/deleted/i.test(m)) return "叫貨單已刪除，無法建立";
+      if (/not found/i.test(m)) return "找不到叫貨單";
+      if (/system_amount is server-computed/i.test(m)) return "系統金額由伺服器計算，請勿送出";
+      if (/purchase_order_ids required/i.test(m)) return "請至少勾選一張叫貨單";
+      if (/period_end must be/i.test(m)) return "期間迄日不可早於起日";
+      if (/settlement_type_snapshot required/i.test(m)) return "請先設定該廠商結帳方式";
+      return "建立對帳失敗";
+    }
+
+    function apSetListVisible(showList) {
+      const list = apEl("apListView");
+      const detail = apEl("apDetailView");
+      if (list) list.hidden = !showList;
+      if (detail) detail.hidden = showList;
+    }
+
+    function apVendors() {
+      try {
+        if (typeof getVendorOptionsFromConfig === "function") return getVendorOptionsFromConfig() || [];
+      } catch (_) {}
+      return [];
+    }
+
+    function apLoadOrders() {
+      let list = [];
+      try {
+        if (window.DK && typeof window.DK.loadPurchaseOrdersRaw === "function") {
+          list = window.DK.loadPurchaseOrdersRaw(false) || [];
+        }
+      } catch (_) { list = []; }
+      return (Array.isArray(list) ? list : []).filter(function (o) {
+        if (!o) return false;
+        const del = o.deletedAt != null ? o.deletedAt : o.deleted_at;
+        if (del != null && String(del).trim() !== "") return false;
+        return true;
+      });
+    }
+
+    function apEligibleCandidates(vendorName) {
+      const v = String(vendorName || "").trim();
+      if (!v) return [];
+      return apLoadOrders().filter(function (o) {
+        const st = String(o.status || "");
+        if (st !== "ordered" && st !== "partial" && st !== "received") return false;
+        return apVendorLines(o, v).length > 0;
+      }).sort(function (a, b) {
+        return String(apPoDate(b)).localeCompare(String(apPoDate(a)));
+      });
+    }
+
+    function apComputeKpi(rows) {
+      const list = Array.isArray(rows) ? rows : [];
+      const now = new Date();
+      const m0 = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      const m1 = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+      let pendingPay = 0;
+      let pendingReview = 0;
+      let mismatch = 0;
+      let paidMonth = 0;
+      list.forEach(function (r) {
+        const st = String(r.status || "");
+        if (st === "CONFIRMED") {
+          const claimed = apToNum(r.vendor_claimed_amount);
+          const sys = apToNum(r.system_amount) || 0;
+          pendingPay += claimed != null ? claimed : sys;
+        }
+        if (st === "DRAFT" || st === "MISMATCH") pendingReview += 1;
+        if (st === "MISMATCH") mismatch += 1;
+        if (st === "PAID") {
+          const ts = Date.parse(r.paid_at || "");
+          if (Number.isFinite(ts) && ts >= m0 && ts < m1) {
+            paidMonth += apToNum(r.paid_amount) || 0;
+          }
+        }
+      });
+      return { pendingPay: pendingPay, pendingReview: pendingReview, mismatch: mismatch, paidMonth: paidMonth };
+    }
+
+    function apRenderKpi(rows) {
+      const host = apEl("apKpiGrid");
+      if (!host) return;
+      const k = apComputeKpi(rows);
+      host.innerHTML =
+        '<div class="kpi-card surface-warning"><span class="kpi-icon" aria-hidden="true">💸</span>' +
+          '<div class="kpi-label">待付款</div><div class="kpi-value warning-number">' + v2Esc(apFmtNT(k.pendingPay)) + "</div>" +
+          '<div class="kpi-meta">已確認、尚未付款</div></div>' +
+        '<div class="kpi-card surface-info"><span class="kpi-icon" aria-hidden="true">📝</span>' +
+          '<div class="kpi-label">待核對</div><div class="kpi-value neutral-number">' + v2Esc(String(k.pendingReview)) + "</div>" +
+          '<div class="kpi-meta">草稿或金額不符</div></div>' +
+        '<div class="kpi-card surface-orange"><span class="kpi-icon" aria-hidden="true">⚠️</span>' +
+          '<div class="kpi-label">金額不符</div><div class="kpi-value negative-number">' + v2Esc(String(k.mismatch)) + "</div>" +
+          '<div class="kpi-meta">MISMATCH</div></div>' +
+        '<div class="kpi-card surface-success"><span class="kpi-icon" aria-hidden="true">✅</span>' +
+          '<div class="kpi-label">本月已付款</div><div class="kpi-value positive-number">' + v2Esc(apFmtNT(k.paidMonth)) + "</div>" +
+          '<div class="kpi-meta">依付款日（本地月份）</div></div>';
+    }
+
+    function apRenderRecent() {
+      const host = apEl("apRecentHost");
+      if (!host) return;
+      const vendors = apVendors();
+      const cards = [];
+      vendors.forEach(function (name) {
+        const s = apSettingsByVendor[name];
+        if (!s) return;
+        const period = apSuggestedPeriod(s.settlement_type, s.week_start_weekday);
+        const reminder = apReminderText(s, period);
+        const periodText = String(s.settlement_type).toUpperCase() === "CUSTOM"
+          ? "手動期間"
+          : (period.start && period.end ? apFmtDate(period.start) + " ～ " + apFmtDate(period.end) : "—");
+        cards.push(
+          '<div class="ap-recent-card">' +
+            '<div class="ap-recent-card-head"><div class="vendor-card-title">' + v2Esc(name) + "</div>" +
+            '<span class="status-badge status-info">' + v2Esc(apTypeLabel(s.settlement_type, s)) + "</span></div>" +
+            '<div class="vendor-card-meta"><div>建議期間：' + v2Esc(periodText) + "</div>" +
+            "<div>提醒日：" + v2Esc(reminder) + "</div></div>" +
+            '<div class="table-actions"><button type="button" class="btn btn-ghost btn-sm secondary-action ap-recent-create" data-vendor="' + v2Esc(name) + '">建立對帳</button></div>' +
+          "</div>"
+        );
+      });
+      if (!cards.length) {
+        host.innerHTML = '<p class="muted">尚未設定結帳方式。請先在下方展開「廠商結帳設定」。</p>';
+        return;
+      }
+      host.innerHTML = cards.join("");
+      host.querySelectorAll(".ap-recent-create").forEach(function (btn) {
+        btn.addEventListener("click", function () { apOpenCreate(btn.getAttribute("data-vendor")); });
+      });
+    }
+
+    function apRenderList(rows) {
+      const tbody = apEl("apListTbody");
+      const cards = apEl("apListCards");
+      const state = apEl("apListState");
+      const list = Array.isArray(rows) ? rows : [];
+      if (state) {
+        if (apLoading) apShow(state, "載入中…");
+        else if (!list.length) apShow(state, "尚無廠商對帳紀錄");
+        else apShow(state, "");
+      }
+      function rowHtml(r) {
+        const id = String(r.id || "");
+        const diff = r.difference;
+        return {
+          cells:
+            "<td class=\"nowrap\">" + v2Esc(id) + "</td>" +
+            "<td>" + v2Esc(r.vendor_name || "") + "</td>" +
+            "<td class=\"nowrap\">" + v2Esc(apFmtDate(r.period_start) + " ～ " + apFmtDate(r.period_end)) + "</td>" +
+            '<td class="table-number">' + v2Esc(apFmtNT(r.system_amount)) + "</td>" +
+            '<td class="table-number">' + v2Esc(apFmtNT(r.vendor_claimed_amount)) + "</td>" +
+            '<td class="table-number ' + apDiffClass(diff) + '">' + v2Esc(apFmtNT(diff)) + "</td>" +
+            "<td>" + apStatusBadge(r.status) + "</td>" +
+            "<td>" + v2Esc(apPaidLabel(r.status)) + "</td>" +
+            '<td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action ap-view-btn" data-id="' + v2Esc(id) + '">查看</button></td>',
+          card:
+            '<div class="ap-recon-card">' +
+              '<div class="ap-recon-card-head"><strong>' + v2Esc(id) + "</strong>" + apStatusBadge(r.status) + "</div>" +
+              "<div>" + v2Esc(r.vendor_name || "") + "</div>" +
+              '<div class="muted small">' + v2Esc(apFmtDate(r.period_start) + " ～ " + apFmtDate(r.period_end)) + "</div>" +
+              '<div class="vendor-card-meta">系統 ' + v2Esc(apFmtNT(r.system_amount)) +
+                "｜請款 " + v2Esc(apFmtNT(r.vendor_claimed_amount)) +
+                '｜差異 <span class="' + apDiffClass(diff) + '">' + v2Esc(apFmtNT(diff)) + "</span></div>" +
+              "<div>" + v2Esc(apPaidLabel(r.status)) + "</div>" +
+              '<div class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action ap-view-btn" data-id="' + v2Esc(id) + '">查看</button></div>' +
+            "</div>",
+        };
+      }
+      if (tbody) {
+        if (!list.length) tbody.innerHTML = '<tr><td class="muted" colspan="9">尚無廠商對帳紀錄</td></tr>';
+        else tbody.innerHTML = list.map(function (r) { return "<tr>" + rowHtml(r).cells + "</tr>"; }).join("");
+      }
+      if (cards) cards.innerHTML = list.map(function (r) { return rowHtml(r).card; }).join("");
+      root.querySelectorAll(".ap-view-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () { apOpenDetail(btn.getAttribute("data-id")); });
+      });
+    }
+
+    function apRenderSettings() {
+      const host = apEl("apSettingsHost");
+      if (!host) return;
+      const vendors = apVendors();
+      if (!vendors.length) {
+        host.innerHTML = '<p class="muted">尚無廠商。請先在「廠商管理」新增廠商名稱。</p>';
+        return;
+      }
+      host.innerHTML = '<div class="ap-settings-cards">' + vendors.map(function (name) {
+        const s = apSettingsByVendor[name] || {};
+        const type = String(s.settlement_type || "");
+        const wd = Number(s.week_start_weekday) || 1;
+        const day = Number(s.monthly_anchor_day) || 1;
+        const weekOpts = AP_WEEKDAYS.map(function (w) {
+          return '<option value="' + w.v + '"' + (w.v === wd ? " selected" : "") + ">" + w.t + "</option>";
+        }).join("");
+        return '<div class="ap-setting-card" data-vendor="' + v2Esc(name) + '">' +
+          '<div class="vendor-card-title">' + v2Esc(name) + "</div>" +
+          '<div class="field"><label>結帳方式</label>' +
+          '<select class="ap-set-type">' +
+            '<option value="">尚未設定結帳方式</option>' +
+            '<option value="WEEKLY"' + (type === "WEEKLY" ? " selected" : "") + ">週結</option>" +
+            '<option value="MONTHLY"' + (type === "MONTHLY" ? " selected" : "") + ">月結</option>" +
+            '<option value="CUSTOM"' + (type === "CUSTOM" ? " selected" : "") + ">自訂期間</option>" +
+          "</select></div>" +
+          '<div class="ap-setting-row-extra">' +
+            '<div class="field ap-set-week-wrap"' + (type === "WEEKLY" ? "" : " hidden") + "><label>每週起始</label><select class=\"ap-set-week\">" + weekOpts + "</select></div>" +
+            '<div class="field ap-set-day-wrap"' + (type === "MONTHLY" ? "" : " hidden") + '><label>提醒日（1–31）</label><input class="ap-set-day" type="number" min="1" max="31" value="' + v2Esc(String(day)) + '" /></div>' +
+          "</div>" +
+          '<div class="field"><label>備註</label><input class="ap-set-notes" type="text" value="' + v2Esc(s.notes || "") + '" /></div>' +
+          '<div class="table-actions"><button type="button" class="btn btn-ghost btn-sm secondary-action ap-set-save">儲存設定</button></div>' +
+        "</div>";
+      }).join("") + "</div>";
+
+      host.querySelectorAll(".ap-setting-card").forEach(function (card) {
+        const typeSel = card.querySelector(".ap-set-type");
+        const weekWrap = card.querySelector(".ap-set-week-wrap");
+        const dayWrap = card.querySelector(".ap-set-day-wrap");
+        function syncVis() {
+          const t = String(typeSel && typeSel.value || "");
+          if (weekWrap) weekWrap.hidden = t !== "WEEKLY";
+          if (dayWrap) dayWrap.hidden = t !== "MONTHLY";
+        }
+        if (typeSel) typeSel.addEventListener("change", syncVis);
+        const saveBtn = card.querySelector(".ap-set-save");
+        if (saveBtn) saveBtn.addEventListener("click", function () { apSaveSetting(card); });
+      });
+    }
+
+    async function apSaveSetting(card) {
+      if (!requirePerm("ap")) return;
+      const name = card.getAttribute("data-vendor");
+      const type = String((card.querySelector(".ap-set-type") && card.querySelector(".ap-set-type").value) || "").trim();
+      const msg = apEl("apSettingsMsg");
+      if (!type) { apShow(msg, "請選擇結帳方式"); return; }
+      const week = card.querySelector(".ap-set-week");
+      const day = card.querySelector(".ap-set-day");
+      const notes = card.querySelector(".ap-set-notes");
+      let uid = null;
+      try {
+        if (window.DK && typeof window.DK.getSupabaseAuthUser === "function") {
+          const u = await window.DK.getSupabaseAuthUser();
+          if (u && u.id) uid = u.id;
+        }
+      } catch (_) {}
+      const saveFn = window.stage7SaveVendorSettlementSetting || (window.DK && window.DK.stage7SaveVendorSettlementSetting);
+      if (!saveFn) { apShow(msg, "儲存功能未載入"); return; }
+      apShow(msg, "儲存中…");
+      const res = await saveFn({
+        vendor_name: name,
+        settlement_type: type,
+        week_start_weekday: type === "WEEKLY" ? Number(week && week.value) || 1 : null,
+        monthly_anchor_day: type === "MONTHLY" ? Number(day && day.value) || 1 : null,
+        notes: notes ? notes.value : "",
+        updated_by: uid,
+      });
+      if (!res || !res.ok) {
+        apShow(msg, "儲存失敗：" + ((res && res.error) || "未知錯誤"));
+        return;
+      }
+      apShow(msg, "已儲存「" + name + "」結帳設定");
+      await apRefresh(false);
+    }
+
+    function apRenderCreatePos(vendorName) {
+      const state = apEl("apCreatePoState");
+      const host = apEl("apCreatePoCards");
+      if (!host) return;
+      apCandidates = apEligibleCandidates(vendorName);
+      if (!vendorName) {
+        host.innerHTML = "";
+        apShow(state, "請先選廠商");
+        return;
+      }
+      if (!apCandidates.length) {
+        host.innerHTML = "";
+        apShow(state, "此期間沒有可建立對帳的叫貨單");
+        return;
+      }
+      apShow(state, "共 " + apCandidates.length + " 張候選叫貨單（草稿／已取消／已刪除已排除）");
+      host.innerHTML = apCandidates.map(function (o) {
+        const prev = apVendorPreview(o, vendorName);
+        const miss = prev.missing > 0
+          ? '<span class="status-badge status-warning">缺少單價 ×' + prev.missing + "</span>"
+          : "";
+        const amt = prev.missing && prev.amount == null
+          ? '<span class="warning-number">【缺少單價】</span>'
+          : v2Esc(apFmtNT(prev.amount)) + (prev.missing ? ' <span class="warning-number">（部分缺單價）</span>' : "");
+        return '<div class="ap-po-card">' +
+          '<label class="ap-po-check"><input type="checkbox" class="ap-po-cb" value="' + v2Esc(String(o.id)) + '" />' +
+          "<span><strong>" + v2Esc(o.orderNo || o.order_no || o.id) + "</strong></span></label>" +
+          '<div class="ap-po-card-head"><span class="status-badge status-info">' + v2Esc(AP_PO_STATUS[o.status] || o.status) + "</span>" + miss + "</div>" +
+          '<div class="muted small">日期：' + v2Esc(apFmtDate(apPoDate(o))) + "</div>" +
+          "<div>" + v2Esc(prev.summary || "—") + "</div>" +
+          "<div>系統參考金額：" + amt + "</div>" +
+        "</div>";
+      }).join("");
+    }
+
+    function apFillCreateType(vendorName) {
+      const label = apEl("apCreateTypeLabel");
+      const s = apSettingsByVendor[vendorName];
+      const startEl = apEl("apCreatePeriodStart");
+      const endEl = apEl("apCreatePeriodEnd");
+      if (!s || !s.settlement_type) {
+        if (label) label.textContent = "尚未設定結帳方式";
+        if (startEl) startEl.value = "";
+        if (endEl) endEl.value = "";
+        return;
+      }
+      if (label) label.textContent = apTypeLabel(s.settlement_type, s);
+      const period = apSuggestedPeriod(s.settlement_type, s.week_start_weekday);
+      const custom = String(s.settlement_type).toUpperCase() === "CUSTOM";
+      if (custom) {
+        if (startEl && !startEl.dataset.userEdited) startEl.value = "";
+        if (endEl && !endEl.dataset.userEdited) endEl.value = "";
+      } else {
+        if (startEl) startEl.value = period.start;
+        if (endEl) endEl.value = period.end;
+      }
+    }
+
+    function apOpenCreate(preVendor) {
+      if (!requirePerm("ap")) return;
+      const modal = apEl("apCreateModal");
+      const sel = apEl("apCreateVendor");
+      const vendors = apVendors();
+      if (sel) {
+        sel.innerHTML = '<option value="">請選擇廠商</option>' + vendors.map(function (v) {
+          return '<option value="' + v2Esc(v) + '">' + v2Esc(v) + "</option>";
+        }).join("");
+        if (preVendor) sel.value = preVendor;
+      }
+      const startEl = apEl("apCreatePeriodStart");
+      const endEl = apEl("apCreatePeriodEnd");
+      if (startEl) { startEl.value = ""; startEl.dataset.userEdited = ""; }
+      if (endEl) { endEl.value = ""; endEl.dataset.userEdited = ""; }
+      if (apEl("apCreateNotes")) apEl("apCreateNotes").value = "";
+      apShow(apEl("apCreateMsg"), "");
+      apShow(apEl("apCreateErrRaw"), "");
+      apFillCreateType(sel && sel.value);
+      apRenderCreatePos(sel && sel.value);
+      if (modal) modal.hidden = false;
+    }
+
+    function apCloseCreate() {
+      const modal = apEl("apCreateModal");
+      if (modal) modal.hidden = true;
+    }
+
+    async function apSubmitCreate() {
+      if (!requirePerm("ap")) return;
+      const vendor = String((apEl("apCreateVendor") && apEl("apCreateVendor").value) || "").trim();
+      const start = String((apEl("apCreatePeriodStart") && apEl("apCreatePeriodStart").value) || "").trim();
+      const end = String((apEl("apCreatePeriodEnd") && apEl("apCreatePeriodEnd").value) || "").trim();
+      const notes = String((apEl("apCreateNotes") && apEl("apCreateNotes").value) || "").trim();
+      const msg = apEl("apCreateMsg");
+      const rawEl = apEl("apCreateErrRaw");
+      apShow(rawEl, "");
+      if (!vendor) { apShow(msg, "請選擇廠商"); return; }
+      const setting = apSettingsByVendor[vendor];
+      if (!setting || !setting.settlement_type) { apShow(msg, "尚未設定結帳方式"); return; }
+      if (!start || !end) { apShow(msg, "請指定對帳期間"); return; }
+      if (end < start) { apShow(msg, "期間迄日不可早於起日"); return; }
+      const ids = Array.from(document.querySelectorAll("#apCreatePoCards .ap-po-cb:checked")).map(function (cb) { return cb.value; });
+      if (!ids.length) { apShow(msg, "請至少勾選一張叫貨單"); return; }
+      const missingWarned = apCandidates.some(function (o) {
+        if (ids.indexOf(String(o.id)) === -1) return false;
+        return apVendorPreview(o, vendor).missing > 0;
+      });
+      if (missingWarned && !window.confirm("部分品項【缺少單價】，系統金額可能偏低。仍要建立對帳？")) return;
+      const fn = window.stage7CreateVendorReconciliation || (window.DK && window.DK.stage7CreateVendorReconciliation);
+      if (!fn) { apShow(msg, "建立功能未載入"); return; }
+      apShow(msg, "建立中…");
+      const res = await fn({
+        vendor_name: vendor,
+        settlement_type_snapshot: setting.settlement_type,
+        period_start: start,
+        period_end: end,
+        purchase_order_ids: ids,
+        notes: notes,
+      });
+      if (!res || !res.ok) {
+        const raw = (res && (res.error || (res.data && (res.data.message || res.data.details)))) || "";
+        apShow(msg, apMapCreateError(raw));
+        apShow(rawEl, raw ? ("診斷：" + String(raw).slice(0, 240)) : "");
+        return;
+      }
+      apCloseCreate();
+      apShow(apEl("apPageMsg"), "已建立對帳");
+      await apRefresh(true);
+      setTimeout(function () { apShow(apEl("apPageMsg"), ""); }, 2500);
+    }
+
+    async function apOpenDetail(id) {
+      if (!requirePerm("ap")) return;
+      const body = apEl("apDetailBody");
+      if (!body) return;
+      apSetListVisible(false);
+      body.innerHTML = '<p class="muted">載入中…</p>';
+      const header = apRows.find(function (r) { return String(r.id) === String(id); });
+      const fetchItems = window.stage7FetchVendorReconciliationItems || (window.DK && window.DK.stage7FetchVendorReconciliationItems);
+      let items = [];
+      if (fetchItems) {
+        const res = await fetchItems(id);
+        if (res && res.ok && Array.isArray(res.data)) items = res.data;
+        else if (!res || !res.ok) {
+          body.innerHTML = '<p class="muted">載入明細失敗：' + v2Esc((res && res.error) || "未知錯誤") + "</p>";
+          return;
+        }
+      }
+      if (!header) {
+        body.innerHTML = '<p class="muted">找不到對帳</p>';
+        return;
+      }
+      const snapHtml = items.map(function (it) {
+        let lines = it.line_snapshot_json;
+        if (typeof lines === "string") {
+          try { lines = JSON.parse(lines); } catch (_) { lines = []; }
+        }
+        if (!Array.isArray(lines)) lines = [];
+        const snapRows = lines.map(function (ln) {
+          return "<tr><td>" + v2Esc(ln.selectedSpec || ln.requestText || ln.id || "品項") +
+            "</td><td class=\"table-number\">" + v2Esc(String(ln.quantity != null ? ln.quantity : "—")) +
+            "</td><td class=\"table-number\">" + v2Esc(apFmtNT(ln.unit_price)) +
+            "</td><td class=\"table-number\">" + v2Esc(apFmtNT(ln.line_total)) + "</td></tr>";
+        }).join("");
+        return '<div class="section-card-soft">' +
+          "<div><strong>" + v2Esc(it.order_no || it.purchase_order_id) + "</strong> " +
+          '<span class="status-badge status-muted">' + v2Esc(it.review_status || "UNCHECKED") + "</span></div>" +
+          '<div class="vendor-card-meta">系統 ' + v2Esc(apFmtNT(it.system_amount)) +
+            "｜請款 " + v2Esc(apFmtNT(it.vendor_claimed_amount)) +
+            '｜差異 <span class="' + apDiffClass(it.difference) + '">' + v2Esc(apFmtNT(it.difference)) + "</span></div>" +
+          "<details><summary>凍結品項</summary>" +
+          (snapRows
+            ? '<div class="table-wrap" style="margin-top:8px;overflow-x:auto"><table class="table table-compact ap-snap-table"><thead><tr><th>規格</th><th class="table-number">數量</th><th class="table-number">單價</th><th class="table-number">小計</th></tr></thead><tbody>' +
+              snapRows + "</tbody></table></div>"
+            : '<p class="muted">無凍結品項</p>') +
+          "</details></div>";
+      }).join("");
+      body.innerHTML =
+        '<div class="section-card">' +
+          "<h2 class=\"h2\">" + v2Esc(header.id) + "</h2>" +
+          "<p>廠商：" + v2Esc(header.vendor_name || "") + "<br>期間：" +
+          v2Esc(apFmtDate(header.period_start) + " ～ " + apFmtDate(header.period_end)) +
+          "<br>結帳方式：" + v2Esc(apTypeLabel(header.settlement_type_snapshot, { settlement_type: header.settlement_type_snapshot, week_start_weekday: null })) +
+          "<br>狀態：" + apStatusBadge(header.status) + "</p>" +
+          '<div class="ap-detail-summary">' +
+            '<div class="kpi-card surface-neutral"><div class="kpi-label">系統應付</div><div class="kpi-value">' + v2Esc(apFmtNT(header.system_amount)) + "</div></div>" +
+            '<div class="kpi-card surface-neutral"><div class="kpi-label">廠商請款</div><div class="kpi-value">' + v2Esc(apFmtNT(header.vendor_claimed_amount)) + "</div></div>" +
+            '<div class="kpi-card"><div class="kpi-label">差異</div><div class="kpi-value ' + apDiffClass(header.difference) + '">' + v2Esc(apFmtNT(header.difference)) + "</div></div>" +
+            '<div class="kpi-card surface-neutral"><div class="kpi-label">已付金額</div><div class="kpi-value">' + v2Esc(apFmtNT(header.paid_amount)) + "</div></div>" +
+          "</div>" +
+          (header.notes ? '<p class="muted">備註：' + v2Esc(header.notes) + "</p>" : "") +
+        "</div>" +
+        '<div class="section-card"><h3 class="h3">逐單（唯讀）</h3>' + (snapHtml || '<p class="muted">無明細</p>') + "</div>";
+    }
+
+    async function apRefresh(showList) {
+      if (!canPerm("ap")) return;
+      apLoading = true;
+      apRenderList(apRows);
+      const fetchSet = window.stage7FetchVendorSettlementSettings || (window.DK && window.DK.stage7FetchVendorSettlementSettings);
+      const fetchRec = window.stage7FetchVendorReconciliations || (window.DK && window.DK.stage7FetchVendorReconciliations);
+      const pageMsg = apEl("apPageMsg");
+      if (!fetchSet || !fetchRec) {
+        apLoading = false;
+        apShow(pageMsg, "對帳 API 未載入");
+        apRenderKpi([]);
+        apRenderList([]);
+        return;
+      }
+      const [setRes, recRes] = await Promise.all([fetchSet(), fetchRec()]);
+      apLoading = false;
+      apSettingsByVendor = {};
+      if (setRes && setRes.ok && Array.isArray(setRes.data)) {
+        setRes.data.forEach(function (r) {
+          if (r && r.vendor_name) apSettingsByVendor[r.vendor_name] = r;
+        });
+      } else if (setRes && !setRes.ok) {
+        apShow(pageMsg, "結帳設定載入失敗：" + (setRes.error || "未知錯誤"));
+      }
+      if (recRes && recRes.ok && Array.isArray(recRes.data)) {
+        apRows = recRes.data;
+      } else {
+        apRows = [];
+        if (recRes && !recRes.ok) apShow(pageMsg, "對帳列表載入失敗：" + (recRes.error || "未知錯誤"));
+      }
+      apRenderKpi(apRows);
+      apRenderRecent();
+      apRenderList(apRows);
+      apRenderSettings();
+      if (showList) apSetListVisible(true);
+    }
+
+    apEl("apCreateBtn") && apEl("apCreateBtn").addEventListener("click", function () { apOpenCreate(""); });
+    apEl("apCreateCloseBtn") && apEl("apCreateCloseBtn").addEventListener("click", apCloseCreate);
+    apEl("apCreateCancel") && apEl("apCreateCancel").addEventListener("click", apCloseCreate);
+    apEl("apCreateSubmit") && apEl("apCreateSubmit").addEventListener("click", function () { apSubmitCreate(); });
+    apEl("apDetailBackBtn") && apEl("apDetailBackBtn").addEventListener("click", function () { apSetListVisible(true); });
+    apEl("apSettingsToggle") && apEl("apSettingsToggle").addEventListener("click", function () {
+      const body = apEl("apSettingsBody");
+      const btn = apEl("apSettingsToggle");
+      if (!body || !btn) return;
+      const open = !!body.hidden;
+      body.hidden = !open;
+      btn.textContent = open ? "收合" : "展開";
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    apEl("apCreateVendor") && apEl("apCreateVendor").addEventListener("change", function () {
+      const v = apEl("apCreateVendor").value;
+      const startEl = apEl("apCreatePeriodStart");
+      const endEl = apEl("apCreatePeriodEnd");
+      if (startEl) startEl.dataset.userEdited = "";
+      if (endEl) endEl.dataset.userEdited = "";
+      apFillCreateType(v);
+      apRenderCreatePos(v);
+    });
+    apEl("apCreatePeriodStart") && apEl("apCreatePeriodStart").addEventListener("change", function () {
+      this.dataset.userEdited = "1";
+    });
+    apEl("apCreatePeriodEnd") && apEl("apCreatePeriodEnd").addEventListener("change", function () {
+      this.dataset.userEdited = "1";
+    });
+    apEl("apCreateSelectAll") && apEl("apCreateSelectAll").addEventListener("click", function () {
+      const boxes = Array.from(document.querySelectorAll("#apCreatePoCards .ap-po-cb"));
+      const allOn = boxes.length && boxes.every(function (b) { return b.checked; });
+      boxes.forEach(function (b) { b.checked = !allOn; });
+    });
+    const createModal = apEl("apCreateModal");
+    if (createModal) {
+      createModal.addEventListener("click", function (e) {
+        if (e.target === createModal) apCloseCreate();
+      });
+    }
+
+    window.__dkApOnShow = function () {
+      if (!canPerm("ap")) return;
+      apSetListVisible(true);
+      apRefresh(true);
+    };
+  })();
+
   bootAuthUI();
 })();
 

@@ -1535,6 +1535,57 @@ async function stage7InsertAudit(row) {
   });
 }
 
+async function stage7FetchVendorSettlementSettings() {
+  return stage7GetTable("vendor_settlement_settings", "*");
+}
+
+async function stage7SaveVendorSettlementSetting(row) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
+  }
+  const r = row && typeof row === "object" ? row : {};
+  const body = {
+    vendor_name: String(r.vendor_name || "").trim(),
+    settlement_type: String(r.settlement_type || "").trim(),
+    week_start_weekday: r.week_start_weekday == null || r.week_start_weekday === "" ? null : Number(r.week_start_weekday),
+    monthly_anchor_day: r.monthly_anchor_day == null || r.monthly_anchor_day === "" ? null : Number(r.monthly_anchor_day),
+    notes: r.notes == null || String(r.notes).trim() === "" ? null : String(r.notes),
+    updated_by: r.updated_by || null,
+  };
+  if (!body.vendor_name) return { ok: false, error: "vendor_name required", data: null };
+  return stage7RestJson("vendor_settlement_settings?on_conflict=vendor_name", {
+    method: "POST",
+    body: [body],
+    prefer: "resolution=merge-duplicates,return=minimal",
+  });
+}
+
+async function stage7FetchVendorReconciliations() {
+  return stage7RestJson(`vendor_reconciliations?select=*&order=updated_at.desc&limit=${STAGE7_REST_LIMIT}`);
+}
+
+async function stage7FetchVendorReconciliationItems(reconciliationId) {
+  const id = encodeURIComponent(String(reconciliationId || ""));
+  if (!id) return { ok: false, error: "reconciliation id required", data: null };
+  return stage7RestJson(`vendor_reconciliation_items?reconciliation_id=eq.${id}&select=*&order=order_no.asc&limit=${STAGE7_REST_LIMIT}`);
+}
+
+async function stage7CreateVendorReconciliation(payload) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
+  }
+  const p = payload && typeof payload === "object" ? payload : {};
+  const safe = {
+    vendor_name: String(p.vendor_name || "").trim(),
+    settlement_type_snapshot: String(p.settlement_type_snapshot || "").trim(),
+    period_start: p.period_start,
+    period_end: p.period_end,
+    purchase_order_ids: Array.isArray(p.purchase_order_ids) ? p.purchase_order_ids.map(String) : [],
+  };
+  if (p.notes != null && String(p.notes).trim() !== "") safe.notes = String(p.notes).trim();
+  return stage7Rpc("backoffice_create_vendor_reconciliation", { p_payload: safe });
+}
+
 if (typeof window !== "undefined") {
   window.stage7RpcAdjustStock = stage7RpcAdjustStock;
   window.stage7UpsertItem = stage7UpsertItem;
@@ -1549,6 +1600,11 @@ if (typeof window !== "undefined") {
   window.stage7UpsertReplenishmentGroup = stage7UpsertReplenishmentGroup;
   window.stage7DeleteReplenishmentGroup = stage7DeleteReplenishmentGroup;
   window.stage7ListReplenishmentAlerts = stage7ListReplenishmentAlerts;
+  window.stage7FetchVendorSettlementSettings = stage7FetchVendorSettlementSettings;
+  window.stage7SaveVendorSettlementSetting = stage7SaveVendorSettlementSetting;
+  window.stage7FetchVendorReconciliations = stage7FetchVendorReconciliations;
+  window.stage7FetchVendorReconciliationItems = stage7FetchVendorReconciliationItems;
+  window.stage7CreateVendorReconciliation = stage7CreateVendorReconciliation;
 }
 
 function isSupabaseConfigured() {
@@ -2212,6 +2268,7 @@ const ADMIN_ONLY_PERMS = {
   publish: true,
   vendors: true,
   purchase: true,
+  ap: true,
   settings: true,
   sync: true,
   deleteItem: true,
@@ -4229,6 +4286,11 @@ window.DK = {
   saveVendorQuotesRaw,
   loadPurchaseOrdersRaw,
   savePurchaseOrdersRaw,
+  stage7FetchVendorSettlementSettings,
+  stage7SaveVendorSettlementSetting,
+  stage7FetchVendorReconciliations,
+  stage7FetchVendorReconciliationItems,
+  stage7CreateVendorReconciliation,
   pullVendorQuotesFromCloud,
   pullPurchaseOrdersFromCloud,
   previewVendorQuotesUpload,
