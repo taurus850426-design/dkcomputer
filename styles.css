@@ -5109,52 +5109,114 @@ body.admin-page .admin-subtabs-gap{
   margin-bottom: 12px;
 }
 
-/* Stage 15-1: two-layer admin navigation */
-body.admin-page .admin-nav{
-  margin: 10px 0 14px;
+/* Stage 15-1B: workspace navigation presentation */
+body.admin-page nav.admin-nav{
+  margin: 0 0 16px;
   max-width: 100%;
+  padding: 8px 10px 6px;
+  background: #fff;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 14px;
+  box-shadow: none;
 }
-body.admin-page .admin-nav-groups.tabs,
-body.admin-page .admin-nav-children.tabs{
+body.admin-page nav.admin-nav .admin-nav-groups.tabs,
+body.admin-page nav.admin-nav .admin-nav-children.tabs{
   max-width: 100%;
-}
-body.admin-page .admin-nav-groups.tabs{
-  margin: 0 0 8px;
-  gap: 8px;
-}
-body.admin-page .admin-nav-children.tabs{
   margin: 0;
-  gap: 6px;
+  box-shadow: none;
 }
-body.admin-page .admin-nav-groups .admin-nav-group{
-  font-weight: 800;
-  min-height: 44px;
-  padding: 10px 16px;
+body.admin-page nav.admin-nav .admin-nav-groups.tabs{
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px;
+  margin: 0;
+  background: var(--dk-surface-secondary);
+  border-radius: 12px;
 }
-body.admin-page .admin-nav-groups .admin-nav-group.active{
-  background: rgba(17,24,39,0.12);
-  border-color: rgba(17,24,39,0.28);
-  color: rgba(17,24,39,0.96);
-  box-shadow: 0 8px 18px rgba(17,24,39,0.10);
+body.admin-page nav.admin-nav .admin-nav-groups .admin-nav-group{
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(17, 24, 39, 0.78);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: none;
 }
-body.admin-page .admin-nav-children .admin-nav-child{
+body.admin-page nav.admin-nav .admin-nav-groups .admin-nav-group:hover{
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(17, 24, 39, 0.06);
+  color: rgba(17, 24, 39, 0.92);
+  box-shadow: none;
+}
+body.admin-page nav.admin-nav .admin-nav-groups .admin-nav-group.active,
+body.admin-page nav.admin-nav .admin-nav-groups .admin-nav-group.active:hover{
+  background: var(--dk-blue);
+  border-color: var(--dk-blue);
+  color: #fff;
+  box-shadow: none;
+}
+body.admin-page nav.admin-nav .admin-nav-groups .admin-nav-group:focus-visible{
+  outline: 2px solid rgba(29, 78, 216, 0.45);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+body.admin-page nav.admin-nav .admin-nav-children.tabs{
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 4px 14px;
+  min-height: 38px;
+  margin: 4px 0 0;
+  padding: 2px 6px 0;
+  border-top: 1px solid rgba(17, 24, 39, 0.08);
+  background: transparent;
+}
+body.admin-page nav.admin-nav .admin-nav-children .admin-nav-child{
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 8px 2px 7px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(17, 24, 39, 0.55);
   font-weight: 600;
   font-size: 13px;
-  min-height: 36px;
-  padding: 6px 12px;
+  line-height: 1.2;
+  white-space: nowrap;
   box-shadow: none;
-  background: rgba(255,255,255,0.72);
 }
-body.admin-page .admin-nav-children .admin-nav-child.active{
-  background: rgba(17,24,39,0.08);
-  border-color: rgba(17,24,39,0.20);
-  color: rgba(17,24,39,0.92);
+body.admin-page nav.admin-nav .admin-nav-children .admin-nav-child:hover{
+  background: transparent;
+  color: rgba(17, 24, 39, 0.88);
+  border-color: transparent;
+  box-shadow: none;
+}
+body.admin-page nav.admin-nav .admin-nav-children .admin-nav-child.active,
+body.admin-page nav.admin-nav .admin-nav-children .admin-nav-child.active:hover{
+  background: transparent;
+  color: var(--dk-blue);
   font-weight: 700;
+  border: none;
+  border-bottom: 2px solid var(--dk-blue);
+  box-shadow: none;
 }
-body.admin-page .admin-nav-children .admin-nav-child[hidden]{
+body.admin-page nav.admin-nav .admin-nav-children .admin-nav-child:focus-visible{
+  outline: 2px solid rgba(29, 78, 216, 0.45);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+body.admin-page nav.admin-nav .admin-nav-children .admin-nav-child[hidden]{
   display: none !important;
 }
-body.admin-page .admin-nav-groups .admin-nav-group[hidden]{
+body.admin-page nav.admin-nav .admin-nav-groups .admin-nav-group[hidden]{
   display: none !important;
 }
 
@@ -5318,11 +5380,23 @@ body.admin-page .inv-ungrouped-row .ungrouped-assign-btn{
     margin-bottom: 12px;
     scrollbar-width: thin;
   }
-  body.admin-page .admin-nav-groups{
-    margin-bottom: 6px;
+  body.admin-page nav.admin-nav{
+    padding: 8px 8px 4px;
+    margin-bottom: 14px;
   }
-  body.admin-page .admin-nav-children{
-    margin-bottom: 10px;
+  body.admin-page nav.admin-nav .admin-nav-groups,
+  body.admin-page nav.admin-nav .admin-nav-children{
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+  body.admin-page nav.admin-nav .admin-nav-groups.tabs{
+    gap: 4px;
+    padding: 4px;
+  }
+  body.admin-page nav.admin-nav .admin-nav-children.tabs{
+    gap: 4px 12px;
+    margin-top: 4px;
+    padding: 2px 4px 0;
   }
   body.admin-page .tab,
   body.admin-page .v2-tab,
@@ -5333,10 +5407,17 @@ body.admin-page .inv-ungrouped-row .ungrouped-assign-btn{
     min-height: 44px;
     padding: 10px 14px;
   }
-  body.admin-page .admin-nav-children .admin-nav-child{
+  body.admin-page nav.admin-nav .admin-nav-groups .admin-nav-group{
     min-height: 44px;
-    font-size: 14px;
     padding: 10px 14px;
+  }
+  body.admin-page nav.admin-nav .admin-nav-children .admin-nav-child{
+    min-height: 44px;
+    padding: 10px 8px 8px;
+    font-size: 14px;
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
   }
   body.admin-page .inv-items-head{
     align-items: stretch;
@@ -5397,6 +5478,15 @@ body.admin-page .inv-ungrouped-row .ungrouped-assign-btn{
     min-height: 44px;
     min-width: 44px;
     width: auto;
+  }
+  body.admin-page nav.admin-nav .admin-nav-groups .admin-nav-group{
+    min-height: 44px;
+  }
+  body.admin-page nav.admin-nav .admin-nav-children .admin-nav-child{
+    min-height: 44px;
+    padding: 10px 8px 8px;
+    border-radius: 0;
+    box-shadow: none;
   }
   body.admin-page .admin-nav .tab{
     width: auto;
