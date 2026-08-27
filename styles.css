@@ -5002,6 +5002,13 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
   font-weight: 800;
   color: var(--text);
 }
+body.admin-page .section-head .h2,
+body.admin-page #vendorManageCard > .section-head .h2{
+  font-size: 18px;
+  line-height: 1.25;
+  margin: 0 0 4px;
+  font-weight: 800;
+}
 .section-meta{
   margin: 4px 0 0;
   font-size: 12px;

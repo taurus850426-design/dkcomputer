@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260827print1" />
+            <link rel="stylesheet" href="./styles.css?v=20260827ui1" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -221,8 +221,10 @@
             <!-- 流水帳 -->
             <div id="v2-ledger" class="v2-panel" hidden>
               <div class="section-head">
-                <div><h2 class="h2">進出庫流水帳</h2><p class="muted">入庫／出庫／調整；入庫會更新品項數量與最後異動時間</p></div>
-                <button id="btnNewLedger" class="btn btn-primary" type="button">新增一筆</button>
+                <div><h2 class="h2">流水帳</h2><p class="muted">入庫／出庫／調整；入庫會更新品項數量與最後異動時間</p></div>
+                <div class="section-actions">
+                  <button id="btnNewLedger" class="btn btn-primary primary-action" type="button">新增一筆</button>
+                </div>
               </div>
               <div class="table-wrap">
                 <table class="table">
@@ -371,7 +373,9 @@
             <div id="v2-expenses" class="v2-panel" hidden>
               <div class="section-head">
                 <div><h2 class="h2">支出</h2><p class="muted">銷貨成本／營業費用／其他</p></div>
-                <button id="btnNewExpense" class="btn btn-primary" type="button">新增支出</button>
+                <div class="section-actions">
+                  <button id="btnNewExpense" class="btn btn-primary primary-action" type="button">新增支出</button>
+                </div>
               </div>
               <div class="table-wrap">
                 <table class="table">
@@ -457,7 +461,7 @@
                 <p class="muted">目前前台架上的商品如下；若要新增，請點右上角「上架商品」。</p>
               </div>
               <div class="section-actions">
-                <button id="publishSubmitBtn" class="btn btn-primary" type="button">上架商品</button>
+                <button id="publishSubmitBtn" class="btn btn-primary primary-action" type="button">上架商品</button>
               </div>
             </div>
             <div id="publishMsg" class="muted" style="margin-bottom: 12px" hidden></div>
@@ -593,10 +597,10 @@
                 <p class="muted">修改首頁、整機販售等頁面的文字與外觀設定。</p>
               </div>
               <div class="section-actions mobile-sticky-actions">
-                <a class="btn btn-ghost" href="./index.html" target="_blank" rel="noreferrer">預覽首頁</a>
-                <button id="frontendExpandAllBtn" class="btn btn-ghost btn-sm" type="button">全部展開</button>
-                <button id="frontendCollapseAllBtn" class="btn btn-ghost btn-sm" type="button">全部收合</button>
-                <button id="frontendSaveBtn" class="btn btn-primary" type="button">儲存設定</button>
+                <a class="btn btn-ghost tertiary-action" href="./index.html" target="_blank" rel="noreferrer">預覽首頁</a>
+                <button id="frontendExpandAllBtn" class="btn btn-ghost btn-sm tertiary-action" type="button">全部展開</button>
+                <button id="frontendCollapseAllBtn" class="btn btn-ghost btn-sm tertiary-action" type="button">全部收合</button>
+                <button id="frontendSaveBtn" class="btn btn-primary primary-action" type="button">儲存設定</button>
               </div>
             </div>
 
@@ -1028,8 +1032,12 @@
           <!-- ⑥ 廠商管理 -->
           <section id="tab-vendors" class="card" hidden>
             <div id="vendor-section">
-              <div id="vendorManageCard" class="card" style="margin-bottom:12px">
-                <h2 class="h2">廠商管理</h2>
+              <div id="vendorManageCard" style="margin-bottom:12px">
+                <div class="section-head">
+                  <div>
+                    <h2 class="h2">廠商</h2>
+                  </div>
+                </div>
                 <div id="vendorQuotesSyncPanel" class="dk-sync-panel" data-sync="vendor-quotes">
                   <div class="dk-sync-panel__head">
                     <span class="dk-sync-panel__title">廠商報價雲端同步 1.0</span>
@@ -1050,7 +1058,7 @@
                     <input id="newVendorName" type="text" placeholder="輸入廠商名稱" autocomplete="off" />
                   </div>
                   <div class="field" style="display:flex; align-items:flex-end">
-                    <button id="addVendorBtn" class="btn btn-ghost" type="button">新增</button>
+                    <button id="addVendorBtn" class="btn btn-primary" type="button">新增</button>
                   </div>
                 </div>
                 <div id="vendorOptionsCards" class="vendor-card-grid"></div>
@@ -1070,7 +1078,7 @@
               </div>
 
               <!-- 廠商報價紀錄（localStorage：dk_vendor_quotes_v1） -->
-              <div id="vendorQuotesCard" class="card" style="margin-bottom:12px">
+              <div id="vendorQuotesCard" class="section-card-soft surface-neutral admin-stack-gap">
                 <h3 class="h3">廠商報價紀錄</h3>
                 <div class="actions" style="margin-top:12px">
                   <button id="vqFormToggleBtn" class="btn btn-primary" type="button">新增報價</button>
@@ -1147,11 +1155,11 @@
             <div id="purchaseOrdersRoot" class="po-root">
               <div class="section-head">
                 <div>
-                  <h2 class="h2">採購／叫貨單</h2>
+                  <h2 class="h2">叫貨單</h2>
                   <p class="muted">查詢歷史廠商報價、比價後建立叫貨單；可依廠商複製叫貨文字。</p>
                 </div>
                 <div class="section-actions">
-                  <button id="poNewBtn" class="btn btn-primary" type="button">新增叫貨單</button>
+                  <button id="poNewBtn" class="btn btn-primary primary-action" type="button">新增叫貨單</button>
                 </div>
               </div>
               <div id="purchaseOrdersSyncPanel" class="dk-sync-panel" data-sync="purchase-orders">
@@ -1828,7 +1836,7 @@
                     <input id="attDeleteReason" type="text" maxlength="200" placeholder="例如：重複打卡、測試資料" />
                   </div>
                   <div class="full actions">
-                    <button id="attDeleteSubmit" class="btn btn-primary danger-action" type="button">確認刪除</button>
+                    <button id="attDeleteSubmit" class="btn btn-ghost danger-action" type="button">確認刪除</button>
                     <button id="attDeleteCancel" class="btn btn-ghost tertiary-action" type="button">取消</button>
                   </div>
                 </div>
