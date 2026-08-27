@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260827ap4" />
+            <link rel="stylesheet" href="./styles.css?v=20260827nav1" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -54,33 +54,39 @@
           <div id="syncStatusBar" class="sync-status-bar" role="status" aria-live="polite" data-admin-only>
             <span id="syncStatusText" class="sync-status-text"></span>
           </div>
-          <div class="tabs">
-            <button class="tab active" data-tab="inv" type="button">庫存＋記帳</button>
-            <button class="tab" data-tab="publish" type="button" data-admin-only>上架管理</button>
-            <button class="tab" data-tab="frontend" type="button" data-admin-only>前台管理</button>
-            <button class="tab" data-tab="vendors" type="button" data-admin-only>廠商管理</button>
-            <button class="tab" data-tab="purchase" type="button" data-admin-only>採購／叫貨單</button>
-            <button class="tab" data-tab="ap" type="button" data-admin-only>廠商對帳</button>
-            <button class="tab" data-tab="customers" type="button">客戶紀錄</button>
-            <button class="tab" data-tab="attendance" type="button">員工打卡</button>
-            <button class="tab" data-tab="accounts" type="button" data-admin-only>帳號管理</button>
-          </div>
+          <nav class="admin-nav" aria-label="後台導航">
+            <div class="tabs admin-nav-groups" role="tablist" aria-label="工作區">
+              <button class="tab admin-nav-group active" type="button" data-nav-group="ops">營運</button>
+              <button class="tab admin-nav-group" type="button" data-nav-group="purchase" data-admin-only>採購</button>
+              <button class="tab admin-nav-group" type="button" data-nav-group="finance" data-admin-only>財務</button>
+              <button class="tab admin-nav-group" type="button" data-nav-group="site" data-admin-only>網站</button>
+              <button class="tab admin-nav-group" type="button" data-nav-group="system">系統</button>
+            </div>
+            <div class="tabs admin-nav-children" role="tablist" aria-label="功能">
+              <button class="tab v2-tab admin-nav-child active" type="button" data-v2="items" data-nav-parent="ops">庫存</button>
+              <button class="tab v2-tab admin-nav-child" type="button" data-v2="orders" data-nav-parent="ops">訂單</button>
+              <button class="tab admin-nav-child" type="button" data-tab="customers" data-nav-parent="ops">客戶紀錄</button>
+              <button class="tab admin-nav-child" type="button" data-tab="vendors" data-nav-parent="purchase" data-admin-only hidden>廠商</button>
+              <button class="tab admin-nav-child" type="button" data-tab="purchase" data-nav-parent="purchase" data-admin-only hidden>叫貨單</button>
+              <button class="tab admin-nav-child" type="button" data-tab="ap" data-nav-parent="purchase" data-admin-only hidden>廠商對帳</button>
+              <button class="tab v2-tab admin-nav-child" type="button" data-v2="ledger" data-nav-parent="finance" data-admin-only hidden>流水帳</button>
+              <button class="tab v2-tab admin-nav-child" type="button" data-v2="expenses" data-nav-parent="finance" data-admin-only hidden>支出</button>
+              <button class="tab v2-tab admin-nav-child" type="button" data-v2="reports" data-nav-parent="finance" data-admin-only hidden>報表</button>
+              <button class="tab admin-nav-child" type="button" data-tab="publish" data-nav-parent="site" data-admin-only hidden>上架管理</button>
+              <button class="tab admin-nav-child" type="button" data-tab="frontend" data-nav-parent="site" data-admin-only hidden>前台管理</button>
+              <button class="tab admin-nav-child" type="button" data-tab="attendance" data-nav-parent="system" hidden>員工打卡</button>
+              <button class="tab admin-nav-child" type="button" data-tab="accounts" data-nav-parent="system" data-admin-only hidden>帳號管理</button>
+            </div>
+          </nav>
 
           <!-- ① 庫存＋記帳（品項／流水帳／訂單／支出／報表） -->
           <section id="tab-inv" class="card">
-            <div class="tabs v2-sub-tabs admin-subtabs-gap">
-              <button class="tab v2-tab active" data-v2="items" type="button">庫存 Items</button>
-              <button class="tab v2-tab" data-v2="ledger" type="button" data-admin-only>流水帳</button>
-              <button class="tab v2-tab" data-v2="orders" type="button">訂單</button>
-              <button class="tab v2-tab" data-v2="expenses" type="button" data-admin-only>支出</button>
-              <button class="tab v2-tab" data-v2="reports" type="button" data-admin-only>報表</button>
-            </div>
             <div class="v2-panels-wrap">
-            <!-- 庫存 Items -->
+            <!-- 庫存 -->
             <div id="v2-items" class="v2-panel">
             <div class="section-head inv-items-head">
               <div>
-                <h2 class="h2 section-title">庫存 Items</h2>
+                <h2 class="h2 section-title">庫存</h2>
               </div>
               <div class="section-actions">
                 <button id="btnNewItem" class="btn btn-primary primary-action" type="button">新增品項</button>
@@ -2036,7 +2042,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260827ap4"></script>
+    <script src="./admin3.js?v=20260827nav1"></script>
     <script src="./purchase-orders.js?v=20260827po1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260826ds7"></script>

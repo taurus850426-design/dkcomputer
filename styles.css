@@ -4688,6 +4688,7 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
 @media print{
   body.po-printing #loginCard,
   body.po-printing .tabs,
+  body.po-printing .admin-nav,
   body.po-printing #syncStatusBar,
   body.po-printing #adminToast,
   body.po-printing #poListView,
@@ -4837,6 +4838,7 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
   }
   body.att-printing .att-print-root[hidden]{ display: block !important; }
   body.att-printing .admin-shell .tabs,
+  body.att-printing .admin-nav,
   body.att-printing .admin-head,
   body.att-printing #loginCard,
   body.att-printing #authBootCard,
@@ -5107,6 +5109,55 @@ body.admin-page .admin-subtabs-gap{
   margin-bottom: 12px;
 }
 
+/* Stage 15-1: two-layer admin navigation */
+body.admin-page .admin-nav{
+  margin: 10px 0 14px;
+  max-width: 100%;
+}
+body.admin-page .admin-nav-groups.tabs,
+body.admin-page .admin-nav-children.tabs{
+  max-width: 100%;
+}
+body.admin-page .admin-nav-groups.tabs{
+  margin: 0 0 8px;
+  gap: 8px;
+}
+body.admin-page .admin-nav-children.tabs{
+  margin: 0;
+  gap: 6px;
+}
+body.admin-page .admin-nav-groups .admin-nav-group{
+  font-weight: 800;
+  min-height: 44px;
+  padding: 10px 16px;
+}
+body.admin-page .admin-nav-groups .admin-nav-group.active{
+  background: rgba(17,24,39,0.12);
+  border-color: rgba(17,24,39,0.28);
+  color: rgba(17,24,39,0.96);
+  box-shadow: 0 8px 18px rgba(17,24,39,0.10);
+}
+body.admin-page .admin-nav-children .admin-nav-child{
+  font-weight: 600;
+  font-size: 13px;
+  min-height: 36px;
+  padding: 6px 12px;
+  box-shadow: none;
+  background: rgba(255,255,255,0.72);
+}
+body.admin-page .admin-nav-children .admin-nav-child.active{
+  background: rgba(17,24,39,0.08);
+  border-color: rgba(17,24,39,0.20);
+  color: rgba(17,24,39,0.92);
+  font-weight: 700;
+}
+body.admin-page .admin-nav-children .admin-nav-child[hidden]{
+  display: none !important;
+}
+body.admin-page .admin-nav-groups .admin-nav-group[hidden]{
+  display: none !important;
+}
+
 @media (max-width: 900px){
   .kpi-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .section-card,
@@ -5256,7 +5307,9 @@ body.admin-page .inv-ungrouped-row .ungrouped-assign-btn{
 
 @media (max-width: 900px){
   body.admin-page .tabs,
-  body.admin-page .v2-sub-tabs{
+  body.admin-page .v2-sub-tabs,
+  body.admin-page .admin-nav-groups,
+  body.admin-page .admin-nav-children{
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -5265,11 +5318,24 @@ body.admin-page .inv-ungrouped-row .ungrouped-assign-btn{
     margin-bottom: 12px;
     scrollbar-width: thin;
   }
+  body.admin-page .admin-nav-groups{
+    margin-bottom: 6px;
+  }
+  body.admin-page .admin-nav-children{
+    margin-bottom: 10px;
+  }
   body.admin-page .tab,
-  body.admin-page .v2-tab{
+  body.admin-page .v2-tab,
+  body.admin-page .admin-nav-group,
+  body.admin-page .admin-nav-child{
     flex: 0 0 auto;
     white-space: nowrap;
-    min-height: 42px;
+    min-height: 44px;
+    padding: 10px 14px;
+  }
+  body.admin-page .admin-nav-children .admin-nav-child{
+    min-height: 44px;
+    font-size: 14px;
     padding: 10px 14px;
   }
   body.admin-page .inv-items-head{
@@ -5317,6 +5383,24 @@ body.admin-page .inv-ungrouped-row .ungrouped-assign-btn{
 }
 
 @media (max-width: 640px){
+  body.admin-page .admin-nav-groups,
+  body.admin-page .admin-nav-children{
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  body.admin-page .admin-nav-group,
+  body.admin-page .admin-nav-child,
+  body.admin-page .admin-nav-children .admin-nav-child{
+    flex: 0 0 auto;
+    white-space: nowrap;
+    min-height: 44px;
+    min-width: 44px;
+    width: auto;
+  }
+  body.admin-page .admin-nav .tab{
+    width: auto;
+  }
   body.admin-page .inv-items-head{
     flex-direction: column;
     align-items: stretch;

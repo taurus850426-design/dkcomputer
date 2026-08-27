@@ -214,8 +214,8 @@
   const usernameEl = document.getElementById("username");
   const passwordEl = document.getElementById("password");
 
-  // 只針對主 tab（有 data-tab 的）做切換，避免點 v2 子 tab 把整個 panel 關掉
-  const tabs = Array.from(document.querySelectorAll("#panel > .tabs > .tab[data-tab]"));
+  // 只針對功能 tab（有 data-tab 的）做切換，避免點 v2 子 tab 把整個 panel 關掉
+  const tabs = Array.from(document.querySelectorAll("#panel .admin-nav-children .tab[data-tab]"));
   const tabInv = document.getElementById("tab-inv");
   const tabPublish = document.getElementById("tab-publish");
   const tabFrontend = document.getElementById("tab-frontend");
@@ -407,6 +407,7 @@
     const user = window.DK?.getCurrentAdminUser?.() || null;
     const role = user && user.role ? user.role : "";
     document.body.classList.toggle("dk-role-staff", role === "staff");
+    try { syncAdminNavVisibility(); } catch (_) {}
     const label = document.getElementById("adminCurrentUser");
     if (label) {
       if (user && window.DK?.isAdminAuthed?.()) {
@@ -439,7 +440,184 @@
   }
 
   const ADMIN_TAB_KEY = "dk_admin_tab";
+  const ADMIN_V2_KEY = "dk_admin_active_v2";
+  const ADMIN_NAV_LAST_KEY = "dk_admin_nav_last_child";
   const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "ap", "customers", "attendance", "accounts"];
+  const VALID_V2 = ["items", "ledger", "orders", "expenses", "reports"];
+  const NAV_CHILD_PERM = {
+    items: "items",
+    orders: "orders",
+    customers: "customers",
+    vendors: "vendors",
+    purchase: "purchase",
+    ap: "ap",
+    ledger: "ledger",
+    expenses: "expenses",
+    reports: "reports",
+    publish: "publish",
+    frontend: "frontend",
+    attendance: "attendance",
+    accounts: "accounts",
+  };
+
+  function readSavedV2() {
+    try {
+      const v = localStorage.getItem(ADMIN_V2_KEY);
+      if (v && VALID_V2.includes(v)) return v;
+    } catch (_) {}
+    const active = document.querySelector(".admin-nav-children .v2-tab.active");
+    const fromDom = active && active.getAttribute("data-v2");
+    return (fromDom && VALID_V2.includes(fromDom)) ? fromDom : "items";
+  }
+  function persistV2(name) {
+    if (!name || !VALID_V2.includes(name)) return;
+    try { localStorage.setItem(ADMIN_V2_KEY, name); } catch (_) {}
+  }
+  function readNavLast() {
+    try {
+      const raw = localStorage.getItem(ADMIN_NAV_LAST_KEY);
+      const o = raw ? JSON.parse(raw) : {};
+      return (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
+    } catch (_) {
+      return {};
+    }
+  }
+  function writeNavLast(group, childKey) {
+    if (!group || !childKey) return;
+    const o = readNavLast();
+    o[group] = childKey;
+    try { localStorage.setItem(ADMIN_NAV_LAST_KEY, JSON.stringify(o)); } catch (_) {}
+  }
+  function navChildKeyFromBtn(btn) {
+    if (!btn) return "";
+    const v2 = btn.getAttribute("data-v2");
+    if (v2) return "v2:" + v2;
+    const tab = btn.getAttribute("data-tab");
+    if (tab) return "tab:" + tab;
+    return "";
+  }
+  function navGroupForFeature(tabName, v2Name) {
+    if (tabName === "customers") return "ops";
+    if (tabName === "vendors" || tabName === "purchase" || tabName === "ap") return "purchase";
+    if (tabName === "publish" || tabName === "frontend") return "site";
+    if (tabName === "attendance" || tabName === "accounts") return "system";
+    if (tabName === "inv") {
+      if (v2Name === "ledger" || v2Name === "expenses" || v2Name === "reports") return "finance";
+      return "ops";
+    }
+    return "ops";
+  }
+  function currentMainTabName() {
+    if (tabPublish && !tabPublish.hidden) return "publish";
+    if (tabFrontend && !tabFrontend.hidden) return "frontend";
+    if (tabVendors && !tabVendors.hidden) return "vendors";
+    if (tabPurchase && !tabPurchase.hidden) return "purchase";
+    if (tabAp && !tabAp.hidden) return "ap";
+    if (tabCustomers && !tabCustomers.hidden) return "customers";
+    if (tabAttendance && !tabAttendance.hidden) return "attendance";
+    if (tabAccounts && !tabAccounts.hidden) return "accounts";
+    return "inv";
+  }
+  function childPermForBtn(btn) {
+    if (!btn) return "";
+    const v2 = btn.getAttribute("data-v2");
+    if (v2) return NAV_CHILD_PERM[v2] || v2;
+    const tab = btn.getAttribute("data-tab");
+    return NAV_CHILD_PERM[tab] || tab;
+  }
+  function isNavChildPermitted(btn) {
+    const perm = childPermForBtn(btn);
+    if (!perm) return false;
+    return canPerm(perm);
+  }
+  function navChildButtons() {
+    return Array.from(document.querySelectorAll("#panel .admin-nav-children .admin-nav-child"));
+  }
+  function navGroupButtons() {
+    return Array.from(document.querySelectorAll("#panel .admin-nav-groups .admin-nav-group"));
+  }
+  function syncAdminNavVisibility() {
+    const authed = window.DK?.isAdminAuthed?.() === true;
+    const groups = navGroupButtons();
+    const children = navChildButtons();
+    groups.forEach(function (g) {
+      const id = g.getAttribute("data-nav-group");
+      if (!authed) {
+        g.hidden = false;
+        return;
+      }
+      const any = children.some(function (c) {
+        return c.getAttribute("data-nav-parent") === id && isNavChildPermitted(c);
+      });
+      g.hidden = !any;
+    });
+  }
+  function applyV2TabActive(name) {
+    const v2 = (name && VALID_V2.includes(name)) ? name : "items";
+    document.querySelectorAll(".v2-tab").forEach(function (t) {
+      t.classList.toggle("active", (t.getAttribute("data-v2") || "") === v2);
+    });
+    persistV2(v2);
+  }
+  function syncAdminNav(tabName) {
+    const tab = tabName || currentMainTabName();
+    const v2 = readSavedV2();
+    const group = navGroupForFeature(tab, v2);
+    navGroupButtons().forEach(function (g) {
+      g.classList.toggle("active", g.getAttribute("data-nav-group") === group);
+    });
+    navChildButtons().forEach(function (c) {
+      const parent = c.getAttribute("data-nav-parent");
+      c.hidden = parent !== group;
+      let on = false;
+      if (tab === "inv") on = c.getAttribute("data-v2") === v2;
+      else on = c.getAttribute("data-tab") === tab;
+      c.classList.toggle("active", on);
+      if (on && parent === group) writeNavLast(group, navChildKeyFromBtn(c));
+    });
+    syncAdminNavVisibility();
+  }
+  function scrollAdminNavActiveIntoView() {
+    const groupBtn = document.querySelector("#panel .admin-nav-groups .admin-nav-group.active");
+    const childBtn = document.querySelector("#panel .admin-nav-children .admin-nav-child.active:not([hidden])");
+    [groupBtn, childBtn].forEach(function (btn) {
+      if (!btn || typeof btn.scrollIntoView !== "function") return;
+      try {
+        btn.scrollIntoView({ inline: "nearest", block: "nearest" });
+      } catch (_) {
+        try { btn.scrollIntoView(); } catch (__) {}
+      }
+    });
+  }
+  function confirmLeaveForTab(toTab) {
+    if (toTab !== "publish" && tabPublish && !tabPublish.hidden && publishFormCard && !publishFormCard.hidden) {
+      if (!confirm("上架表單尚未送出，確定要離開？")) return false;
+    }
+    const itemModal = document.getElementById("itemEditorModal");
+    if (toTab !== "inv" && itemModal && !itemModal.hidden) {
+      if (!confirm("品項編輯尚未儲存，確定要離開？")) return false;
+    }
+    return true;
+  }
+  function firstPermittedChildInGroup(group) {
+    return navChildButtons().find(function (c) {
+      return c.getAttribute("data-nav-parent") === group && isNavChildPermitted(c);
+    }) || null;
+  }
+  function findNavChildByKey(group, childKey) {
+    if (!childKey) return null;
+    return navChildButtons().find(function (c) {
+      return c.getAttribute("data-nav-parent") === group && navChildKeyFromBtn(c) === childKey && isNavChildPermitted(c);
+    }) || null;
+  }
+  function activateNavGroup(group) {
+    if (!group) return;
+    const last = readNavLast()[group];
+    const child = findNavChildByKey(group, last) || firstPermittedChildInGroup(group);
+    if (!child) return;
+    child.click();
+  }
+
   function switchTab(name) {
     if (!canPerm(name)) {
       requirePerm(name);
@@ -462,6 +640,11 @@
     if (tabAttendance) tabAttendance.hidden = name !== "attendance";
     if (tabAccounts) tabAccounts.hidden = name !== "accounts";
     if (name === "inv") {
+      let v2Now = readSavedV2();
+      if ((v2Now === "ledger" || v2Now === "expenses" || v2Now === "reports") && !canPerm(v2Now)) {
+        v2Now = canPerm("items") ? "items" : "orders";
+      }
+      applyV2TabActive(v2Now);
       const doRefresh = () => {
         if (typeof window.__adminV2Refresh === "function") window.__adminV2Refresh();
       };
@@ -505,6 +688,8 @@
     if (name === "accounts") {
       if (typeof renderAccountsPage === "function") renderAccountsPage();
     }
+    syncAdminNav(name);
+    scrollAdminNavActiveIntoView();
   }
 
   // ---------- 上架管理（publish）：renderPublish / submitPublish / 編輯／圖片壓縮 ----------
@@ -931,16 +1116,16 @@
   for (const t of tabs) {
     t.addEventListener("click", () => {
       const toTab = t.dataset.tab;
-      if (toTab !== "publish" && tabPublish && !tabPublish.hidden && publishFormCard && !publishFormCard.hidden) {
-        if (!confirm("上架表單尚未送出，確定要離開？")) return;
-      }
-      const itemModal = document.getElementById("itemEditorModal");
-      if (itemModal && !itemModal.hidden) {
-        if (!confirm("品項編輯尚未儲存，確定要離開？")) return;
-      }
+      if (!confirmLeaveForTab(toTab)) return;
       switchTab(toTab);
     });
   }
+  navGroupButtons().forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const group = btn.getAttribute("data-nav-group");
+      activateNavGroup(group);
+    });
+  });
   /* F5 重新整理後還原上次分頁：優先 localStorage dk_admin_active_tab，再 hash / sessionStorage */
   function restoreAdminTab() {
     const fromStorage = (function () { try { return localStorage.getItem("dk_admin_active_tab"); } catch (_) { return null; } })();
@@ -954,13 +1139,28 @@
       (name === "customers" && tabCustomers) ||
       (name === "attendance" && tabAttendance) ||
       (name === "accounts" && tabAccounts);
+    function restoreV2ForInv() {
+      let v2 = readSavedV2();
+      if ((v2 === "ledger" || v2 === "expenses" || v2 === "reports") && !canPerm(v2)) {
+        v2 = canPerm("items") ? "items" : "orders";
+      }
+      applyV2TabActive(v2);
+      const handler = window.__adminV2Handler;
+      if (typeof handler === "function") {
+        try { handler(v2); } catch (_) {}
+      }
+    }
     if (fromStorage && VALID_TABS.includes(fromStorage) && hasPanel(fromStorage) && canPerm(fromStorage)) {
+      if (fromStorage === "inv") restoreV2ForInv();
       switchTab(fromStorage);
       return;
     }
     const fromHash = (location.hash || "").replace(/^#/, "").trim().toLowerCase();
     const saved = (VALID_TABS.includes(fromHash) ? fromHash : null) || (function () { try { return sessionStorage.getItem(ADMIN_TAB_KEY); } catch (_) { return null; } })();
-    if (saved && VALID_TABS.includes(saved) && canPerm(saved)) switchTab(saved);
+    if (saved && VALID_TABS.includes(saved) && canPerm(saved)) {
+      if (saved === "inv") restoreV2ForInv();
+      switchTab(saved);
+    }
   }
   function formatSupabaseLoginError(code) {
     const c = String(code || "");
@@ -4325,7 +4525,12 @@
         requirePerm(name);
         return;
       }
+      if (!confirmLeaveForTab("inv")) return;
+      applyV2TabActive(name);
+      if (tabInv && tabInv.hidden) switchTab("inv");
       (window.__adminV2Handler || switchV2TabUIOnly)(name);
+      syncAdminNav("inv");
+      scrollAdminNavActiveIntoView();
     });
   })();
 
@@ -4365,6 +4570,7 @@
         requirePerm(name);
         return;
       }
+      applyV2TabActive(name);
       v2Tabs.forEach((t) => t.classList.toggle("active", (t.getAttribute("data-v2") || "") === name));
       v2Panels.forEach((p) => {
         const el = document.getElementById("v2-" + p);
@@ -4378,6 +4584,7 @@
       if (name === "orders") renderV2Orders();
       if (name === "expenses") renderV2Expenses();
       if (name === "reports") renderV2Reports();
+      syncAdminNav("inv");
     }
     if (typeof window.__adminV2TabSwitch === "function") window.__adminV2TabSwitch(switchV2Tab);
 
