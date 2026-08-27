@@ -6128,6 +6128,8 @@ body.admin-page textarea:focus-visible{
   body.admin-page .card,
   body.admin-page .btn,
   body.admin-page .fade-up,
+  body.admin-page .ui-enter,
+  body.admin-page .ui-enter-soft,
   body.admin-page #tab-frontend .admin-collapsible.is-open .admin-collapsible-body{
     transition: none !important;
     animation: none !important;
@@ -6200,8 +6202,81 @@ body.admin-page .ap-snap-table{
 }
 body.admin-page .ap-detail-summary{
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+body.admin-page .ap-detail-meta{
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+body.admin-page .ap-header-claimed-field input,
+body.admin-page .ap-item-claimed{
+  width: 100%;
+}
+body.admin-page .ap-item-card{
+  margin-top: 10px;
+}
+body.admin-page .ap-item-head{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+body.admin-page .ap-item-amounts{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+  align-items: end;
+}
+body.admin-page .ap-item-sum-warn{
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+body.admin-page .ap-item-snap summary{
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 700;
+}
+body.admin-page .ap-snap-wrap{
+  overflow-x: auto;
+}
+body.admin-page .ap-final-line{
+  margin-top: 8px;
+  font-weight: 700;
+}
+body.admin-page .ap-detail-actions{
+  position: sticky;
+  bottom: 12px;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-top: 12px;
+  border: 1px solid rgba(17,24,39,0.12);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.96);
+  box-shadow: 0 8px 24px rgba(17,24,39,0.12);
+}
+body.admin-page .ap-detail-actions .primary-action,
+body.admin-page .ap-detail-actions .secondary-action{
+  min-height: 44px;
+}
+body.admin-page .ap-detail-actions-void-only{
+  justify-content: flex-start;
+}
+body.admin-page .ap-detail-actions .danger-action{
+  margin-left: auto;
+  min-height: 40px;
+}
+body.admin-page #apDetailView.ap-detail-has-actions{
+  padding-bottom: 24px;
 }
 body.admin-page .ap-setting-row-extra{
   display: grid;
@@ -6214,9 +6289,28 @@ body.admin-page .ap-setting-row-extra{
   body.admin-page .ap-setting-row-extra{ grid-template-columns: 1fr; }
   body.admin-page .ap-list-table-wrap{ display: none !important; }
   body.admin-page .ap-recon-cards{ display: grid !important; }
+  body.admin-page .ap-detail-summary{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.admin-page .ap-item-amounts{ grid-template-columns: 1fr; }
+  body.admin-page .ap-header-claimed-field input,
+  body.admin-page .ap-item-claimed,
+  body.admin-page #apDetailNotes{
+    width: 100%;
+    min-height: 44px;
+  }
+  body.admin-page .ap-detail-actions{
+    position: sticky;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  body.admin-page .ap-detail-actions .primary-action,
+  body.admin-page .ap-detail-actions .secondary-action{
+    flex: 1 1 140px;
+    min-height: 44px;
+  }
 }
 @media (max-width: 640px){
   body.admin-page #apKpiGrid.kpi-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body.admin-page .ap-detail-summary{ grid-template-columns: 1fr; }
+  body.admin-page .ap-item-amounts{ grid-template-columns: 1fr; }
+  body.admin-page #apDetailView.ap-detail-has-actions{ padding-bottom: 96px; }
 }
 

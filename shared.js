@@ -1586,6 +1586,48 @@ async function stage7CreateVendorReconciliation(payload) {
   return stage7Rpc("backoffice_create_vendor_reconciliation", { p_payload: safe });
 }
 
+function stage7ApClaimedOrNull(v) {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(String(v).replace(/,/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+async function stage7UpdateVendorReconciliation(payload) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
+  }
+  const p = payload && typeof payload === "object" ? payload : {};
+  const safe = { id: String(p.id || "").trim() };
+  if (!safe.id) return { ok: false, error: "id required", data: null };
+  if (Object.prototype.hasOwnProperty.call(p, "vendor_claimed_amount")) {
+    safe.vendor_claimed_amount = stage7ApClaimedOrNull(p.vendor_claimed_amount);
+  }
+  if (Object.prototype.hasOwnProperty.call(p, "notes")) {
+    safe.notes = p.notes == null ? "" : String(p.notes);
+  }
+  if (Array.isArray(p.items)) {
+    safe.items = p.items.map(function (it) {
+      const row = { id: String((it && it.id) || "").trim() };
+      if (it && Object.prototype.hasOwnProperty.call(it, "vendor_claimed_amount")) {
+        row.vendor_claimed_amount = stage7ApClaimedOrNull(it.vendor_claimed_amount);
+      }
+      if (it && it.review_status) row.review_status = String(it.review_status);
+      return row;
+    });
+  }
+  if (p.status === "CONFIRMED" || p.status === "MISMATCH") safe.status = p.status;
+  return stage7Rpc("backoffice_update_vendor_reconciliation", { p_payload: safe });
+}
+
+async function stage7VoidVendorReconciliation(reconciliationId) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
+  }
+  const id = String(reconciliationId || "").trim();
+  if (!id) return { ok: false, error: "reconciliation id required", data: null };
+  return stage7Rpc("backoffice_void_vendor_reconciliation", { p_reconciliation_id: id });
+}
+
 if (typeof window !== "undefined") {
   window.stage7RpcAdjustStock = stage7RpcAdjustStock;
   window.stage7UpsertItem = stage7UpsertItem;
@@ -1605,6 +1647,8 @@ if (typeof window !== "undefined") {
   window.stage7FetchVendorReconciliations = stage7FetchVendorReconciliations;
   window.stage7FetchVendorReconciliationItems = stage7FetchVendorReconciliationItems;
   window.stage7CreateVendorReconciliation = stage7CreateVendorReconciliation;
+  window.stage7UpdateVendorReconciliation = stage7UpdateVendorReconciliation;
+  window.stage7VoidVendorReconciliation = stage7VoidVendorReconciliation;
 }
 
 function isSupabaseConfigured() {
@@ -4291,6 +4335,8 @@ window.DK = {
   stage7FetchVendorReconciliations,
   stage7FetchVendorReconciliationItems,
   stage7CreateVendorReconciliation,
+  stage7UpdateVendorReconciliation,
+  stage7VoidVendorReconciliation,
   pullVendorQuotesFromCloud,
   pullPurchaseOrdersFromCloud,
   previewVendorQuotesUpload,

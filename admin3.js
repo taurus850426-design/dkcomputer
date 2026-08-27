@@ -7170,11 +7170,16 @@
 
     const AP_PO_STATUS = { ordered: "已叫貨", partial: "部分到貨", received: "已到貨" };
     const AP_RECON_STATUS = {
-      DRAFT: "草稿",
+      DRAFT: "待核對",
       MISMATCH: "金額不符",
       CONFIRMED: "已確認",
       PAID: "已付款",
       VOID: "已作廢",
+    };
+    const AP_REVIEW_STATUS = {
+      UNCHECKED: "未核對",
+      MATCHED: "相符",
+      MISMATCH: "金額不符",
     };
     const AP_WEEKDAYS = [
       { v: 1, t: "週一" },
@@ -7190,6 +7195,10 @@
     let apSettingsByVendor = {};
     let apCandidates = [];
     let apLoading = false;
+    let apDetailBusy = false;
+    let apActiveDetailId = null;
+    let apDetailHeader = null;
+    let apDetailItems = [];
 
     function apEl(id) { return document.getElementById(id); }
     function apToNum(v) {
@@ -7343,6 +7352,161 @@
       if (/settlement_type_snapshot required/i.test(m)) return "請先設定該廠商結帳方式";
       return "建立對帳失敗";
     }
+    function apMapUpdateError(raw) {
+      const m = String(raw || "");
+      if (/admin only|42501|permission/i.test(m)) return "僅管理員可以核對對帳";
+      if (/cannot update PAID/i.test(m)) return "已付款對帳不可修改";
+      if (/cannot update VOID/i.test(m)) return "已作廢對帳不可修改";
+      if (/system_amount is immutable/i.test(m)) return "系統金額由伺服器鎖定，請勿送出";
+      if (/vendor_claimed_amount must be/i.test(m)) return "請款金額不可為負數";
+      if (/invalid review_status/i.test(m)) return "核對狀態不正確";
+      if (/item not found/i.test(m)) return "找不到對帳品項";
+      if (/reconciliation not found/i.test(m)) return "找不到對帳";
+      if (/status must be CONFIRMED or MISMATCH/i.test(m)) return "狀態只能確認或標示金額不符";
+      if (/item id required/i.test(m)) return "品項資料不完整";
+      if (/id required/i.test(m)) return "對帳編號缺失";
+      return "儲存核對失敗";
+    }
+    function apMapVoidError(raw) {
+      const m = String(raw || "");
+      if (/admin only|42501|permission/i.test(m)) return "僅管理員可以作廢對帳";
+      if (/PAID cannot VOID/i.test(m)) return "已付款對帳不可作廢，請先取消付款";
+      if (/cannot VOID/i.test(m)) return "目前狀態不可作廢";
+      if (/reconciliation not found/i.test(m)) return "找不到對帳";
+      return "作廢對帳失敗";
+    }
+    function apReviewFromClaimed(claimed, system) {
+      if (claimed == null) return "UNCHECKED";
+      const sys = apToNum(system) || 0;
+      return claimed - sys === 0 ? "MATCHED" : "MISMATCH";
+    }
+    function apDiffExplain(claimed, system) {
+      if (claimed == null) return { n: null, label: "尚未核對", cls: "neutral-number" };
+      const sys = apToNum(system) || 0;
+      const n = claimed - sys;
+      if (n === 0) return { n: 0, label: "金額相符", cls: "positive-number" };
+      if (n > 0) return { n: n, label: "廠商多請 " + apFmtNT(n), cls: "negative-number" };
+      return { n: n, label: "廠商少請 " + apFmtNT(-n), cls: "warning-number" };
+    }
+    function apReviewBadge(st) {
+      const s = String(st || "UNCHECKED");
+      let cls = "status-badge status-info";
+      if (s === "MATCHED") cls = "status-badge status-success";
+      else if (s === "MISMATCH") cls = "status-badge status-danger";
+      return '<span class="' + cls + '">' + v2Esc(AP_REVIEW_STATUS[s] || s) + "</span>";
+    }
+    function apParseClaimedInput(el) {
+      if (!el) return { ok: true, value: null };
+      const raw = String(el.value || "").trim();
+      if (!raw) return { ok: true, value: null };
+      const n = Number(raw.replace(/,/g, ""));
+      if (!Number.isFinite(n) || n < 0) return { ok: false, value: null };
+      return { ok: true, value: n };
+    }
+    function apReadDetailForm() {
+      const headerEl = apEl("apHeaderClaimed");
+      const notesEl = apEl("apDetailNotes");
+      const header = headerEl
+        ? apParseClaimedInput(headerEl)
+        : { ok: true, value: apToNum(apDetailHeader && apDetailHeader.vendor_claimed_amount) };
+      const items = (apDetailItems || []).map(function (it) {
+        const inp = apEl("apItemClaimed_" + apSafeItemDomId(it.id));
+        const parsed = inp ? apParseClaimedInput(inp) : { ok: true, value: apToNum(it.vendor_claimed_amount) };
+        return {
+          id: String(it.id || ""),
+          system_amount: apToNum(it.system_amount) || 0,
+          vendor_claimed_amount: parsed.value,
+          parseOk: parsed.ok,
+          review_status: apReviewFromClaimed(parsed.ok ? parsed.value : null, it.system_amount),
+        };
+      });
+      return {
+        headerOk: header.ok,
+        vendor_claimed_amount: header.value,
+        notes: notesEl ? notesEl.value : String((apDetailHeader && apDetailHeader.notes) || ""),
+        items: items,
+      };
+    }
+    function apItemClaimedSum(form) {
+      let sum = 0;
+      let allFilled = true;
+      (form.items || []).forEach(function (it) {
+        if (it.vendor_claimed_amount == null) allFilled = false;
+        else sum += it.vendor_claimed_amount;
+      });
+      return { sum: sum, allFilled: allFilled && (form.items || []).length > 0 };
+    }
+    function apConfirmGate(form) {
+      const st = String((apDetailHeader && apDetailHeader.status) || "");
+      if (st !== "DRAFT" && st !== "MISMATCH") return { ok: false, reason: "僅待核對或金額不符可確認" };
+      if (apDetailBusy) return { ok: false, reason: "處理中" };
+      if (!form.headerOk) return { ok: false, reason: "廠商請款金額格式不正確" };
+      if (form.vendor_claimed_amount == null) return { ok: false, reason: "請先輸入廠商請款總額" };
+      if (!(form.items || []).length) return { ok: false, reason: "沒有可核對的叫貨單" };
+      for (let i = 0; i < form.items.length; i++) {
+        const it = form.items[i];
+        if (!it.parseOk) return { ok: false, reason: "有品項請款金額格式不正確" };
+        if (it.vendor_claimed_amount == null) return { ok: false, reason: "所有叫貨單都需輸入請款" };
+        if (it.review_status === "UNCHECKED") return { ok: false, reason: "所有叫貨單都需完成核對" };
+      }
+      const tot = apItemClaimedSum(form);
+      if (!tot.allFilled) return { ok: false, reason: "所有叫貨單都需輸入請款" };
+      if (Math.round(tot.sum) !== Math.round(form.vendor_claimed_amount)) {
+        return { ok: false, reason: "逐單請款合計與廠商請款總額不一致" };
+      }
+      return { ok: true, reason: "" };
+    }
+    function apSyncDetailPreview() {
+      if (!apDetailHeader) return;
+      const form = apReadDetailForm();
+      const sys = apToNum(apDetailHeader.system_amount) || 0;
+      const claimedEl = apEl("apSumClaimed");
+      const claimedHint = apEl("apSumClaimedHint");
+      if (claimedEl) claimedEl.textContent = form.vendor_claimed_amount == null ? "尚未輸入" : apFmtNT(form.vendor_claimed_amount);
+      if (claimedHint) claimedHint.textContent = form.vendor_claimed_amount == null ? "尚未輸入" : "";
+      const expl = apDiffExplain(form.vendor_claimed_amount, sys);
+      const diffEl = apEl("apSumDiff");
+      const diffHint = apEl("apSumDiffHint");
+      if (diffEl) {
+        diffEl.className = "kpi-value " + expl.cls;
+        diffEl.textContent = expl.n == null ? "尚未核對" : apFmtNT(expl.n);
+      }
+      if (diffHint) diffHint.textContent = expl.label;
+      (form.items || []).forEach(function (it) {
+        const sid = String(it.id || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+        const dEl = apEl("apItemDiff_" + sid);
+        const rEl = apEl("apItemReview_" + sid);
+        const ie = apDiffExplain(it.parseOk ? it.vendor_claimed_amount : null, it.system_amount);
+        if (dEl) {
+          dEl.className = "ap-item-diff " + ie.cls;
+          dEl.textContent = ie.n == null ? "尚未核對" : ie.label;
+        }
+        if (rEl) rEl.innerHTML = apReviewBadge(it.review_status);
+      });
+      const tot = apItemClaimedSum(form);
+      const sumEl = apEl("apItemSumValue");
+      const warnEl = apEl("apItemSumWarn");
+      if (sumEl) sumEl.textContent = tot.allFilled ? ("逐單請款合計：" + apFmtNT(tot.sum)) : "";
+      if (warnEl) {
+        const mismatch = tot.allFilled && form.vendor_claimed_amount != null && Math.round(tot.sum) !== Math.round(form.vendor_claimed_amount);
+        warnEl.hidden = !mismatch;
+      }
+      const sumText = apEl("apDiffSummaryText");
+      if (sumText) {
+        sumText.className = expl.cls;
+        sumText.textContent = expl.label;
+      }
+      const gate = apConfirmGate(form);
+      const confirmBtn = apEl("apDetailConfirmBtn");
+      if (confirmBtn) {
+        confirmBtn.disabled = !gate.ok || apDetailBusy;
+        confirmBtn.title = gate.ok ? "" : gate.reason;
+      }
+      const saveBtn = apEl("apDetailSaveBtn");
+      if (saveBtn) saveBtn.disabled = apDetailBusy;
+      const voidBtn = apEl("apDetailVoidBtn");
+      if (voidBtn) voidBtn.disabled = apDetailBusy;
+    }
 
     function apSetListVisible(showList) {
       const list = apEl("apListView");
@@ -7423,10 +7587,10 @@
           '<div class="kpi-meta">已確認、尚未付款</div></div>' +
         '<div class="kpi-card surface-info"><span class="kpi-icon" aria-hidden="true">📝</span>' +
           '<div class="kpi-label">待核對</div><div class="kpi-value neutral-number">' + v2Esc(String(k.pendingReview)) + "</div>" +
-          '<div class="kpi-meta">草稿或金額不符</div></div>' +
+          '<div class="kpi-meta">待核對或金額不符</div></div>' +
         '<div class="kpi-card surface-orange"><span class="kpi-icon" aria-hidden="true">⚠️</span>' +
           '<div class="kpi-label">金額不符</div><div class="kpi-value negative-number">' + v2Esc(String(k.mismatch)) + "</div>" +
-          '<div class="kpi-meta">MISMATCH</div></div>' +
+          '<div class="kpi-meta">請款與系統應付不同</div></div>' +
         '<div class="kpi-card surface-success"><span class="kpi-icon" aria-hidden="true">✅</span>' +
           '<div class="kpi-label">本月已付款</div><div class="kpi-value positive-number">' + v2Esc(apFmtNT(k.paidMonth)) + "</div>" +
           '<div class="kpi-meta">依付款日（本地月份）</div></div>';
@@ -7726,12 +7890,151 @@
       setTimeout(function () { apShow(apEl("apPageMsg"), ""); }, 2500);
     }
 
+    function apSnapshotRowsHtml(it) {
+      let lines = it && it.line_snapshot_json;
+      if (typeof lines === "string") {
+        try { lines = JSON.parse(lines); } catch (_) { lines = []; }
+      }
+      if (!Array.isArray(lines)) lines = [];
+      const snapRows = lines.map(function (ln) {
+        return "<tr><td>" + v2Esc(ln.selectedSpec || ln.requestText || ln.id || "品項") +
+          "</td><td class=\"table-number\">" + v2Esc(String(ln.quantity != null ? ln.quantity : "—")) +
+          "</td><td class=\"table-number\">" + v2Esc(apFmtNT(ln.unit_price)) +
+          "</td><td class=\"table-number\">" + v2Esc(apFmtNT(ln.line_total)) + "</td></tr>";
+      }).join("");
+      return snapRows
+        ? '<div class="table-wrap ap-snap-wrap" style="margin-top:8px"><table class="table table-compact ap-snap-table"><thead><tr><th>品名／規格</th><th class="table-number">數量</th><th class="table-number">單價</th><th class="table-number">小計</th></tr></thead><tbody>' +
+          snapRows + "</tbody></table></div>"
+        : '<p class="muted">無凍結品項</p>';
+    }
+
+    function apSafeItemDomId(id) {
+      return String(id || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+    }
+
+    function apRenderDetailWorkspace() {
+      const body = apEl("apDetailBody");
+      if (!body || !apDetailHeader) return;
+      const header = apDetailHeader;
+      const st = String(header.status || "");
+      const locked = st === "CONFIRMED" || st === "PAID" || st === "VOID";
+      const editable = st === "DRAFT" || st === "MISMATCH";
+      const canVoid = st === "DRAFT" || st === "MISMATCH" || st === "CONFIRMED";
+      const sys = apToNum(header.system_amount) || 0;
+      const claimed = apToNum(header.vendor_claimed_amount);
+      const expl = apDiffExplain(claimed, sys);
+      const claimedText = claimed == null ? "尚未輸入" : apFmtNT(claimed);
+      const items = apDetailItems || [];
+      const itemCards = items.map(function (it) {
+        const sid = apSafeItemDomId(it.id);
+        const ic = apToNum(it.vendor_claimed_amount);
+        const ie = apDiffExplain(ic, it.system_amount);
+        const review = it.review_status || apReviewFromClaimed(ic, it.system_amount);
+        return '<div class="ap-item-card section-card-soft" data-item-id="' + v2Esc(String(it.id || "")) + '">' +
+          '<div class="ap-item-head"><strong>' + v2Esc(it.order_no || it.purchase_order_id || "—") + "</strong>" +
+          '<span id="apItemReview_' + sid + '">' + apReviewBadge(review) + "</span></div>" +
+          '<div class="ap-item-amounts">' +
+            '<div><div class="muted small">系統金額</div><div class="ap-item-sys">' + v2Esc(apFmtNT(it.system_amount)) + "</div></div>" +
+            '<div class="field ap-item-claimed-field"><label for="apItemClaimed_' + sid + '">廠商請款</label>' +
+            (editable
+              ? '<input id="apItemClaimed_' + sid + '" class="ap-item-claimed" type="number" min="0" step="1" inputmode="decimal" value="' + (ic == null ? "" : v2Esc(String(ic))) + '" />'
+              : '<div>' + v2Esc(ic == null ? "尚未輸入" : apFmtNT(ic)) + "</div>") +
+            "</div>" +
+            '<div><div class="muted small">差異</div><div id="apItemDiff_' + sid + '" class="ap-item-diff ' + ie.cls + '">' +
+              v2Esc(ie.n == null ? "尚未核對" : ie.label) + "</div></div>" +
+          "</div>" +
+          "<details class=\"ap-item-snap\"><summary>查看品項</summary>" + apSnapshotRowsHtml(it) + "</details>" +
+        "</div>";
+      }).join("");
+
+      let lockBanner = "";
+      if (st === "CONFIRMED") {
+        lockBanner = '<div class="section-card-soft surface-success ui-enter-soft"><span class="status-badge status-success">已確認</span>' +
+          '<div class="ap-final-line">系統應付 ' + v2Esc(apFmtNT(sys)) +
+          "｜廠商請款 " + v2Esc(claimedText) +
+          '｜最終差異 <span class="' + expl.cls + '">' + v2Esc(expl.label) + "</span></div></div>";
+      } else if (st === "PAID") {
+        lockBanner = '<div class="section-card-soft surface-success"><span class="status-badge status-success">已付款</span>' +
+          '<div class="muted small">已付款金額 ' + v2Esc(apFmtNT(header.paid_amount)) +
+          (header.paid_at ? "｜付款日 " + v2Esc(apFmtDate(header.paid_at)) : "") + "</div></div>";
+      } else if (st === "VOID") {
+        lockBanner = '<div class="section-card-soft surface-neutral"><span class="status-badge status-muted">已作廢</span>' +
+          '<p class="muted small">此對帳已作廢，僅供查看。</p></div>';
+      }
+
+      const actions = editable
+        ? '<div class="ap-detail-actions">' +
+            '<button type="button" class="btn btn-ghost secondary-action" id="apDetailSaveBtn" data-ap-act="save">儲存核對</button>' +
+            '<button type="button" class="btn btn-primary primary-action" id="apDetailConfirmBtn" data-ap-act="confirm">確認對帳</button>' +
+            (canVoid ? '<button type="button" class="btn danger-action" id="apDetailVoidBtn" data-ap-act="void">作廢對帳</button>' : "") +
+          "</div>"
+        : (canVoid
+          ? '<div class="ap-detail-actions ap-detail-actions-void-only">' +
+              '<button type="button" class="btn danger-action" id="apDetailVoidBtn" data-ap-act="void">作廢對帳</button>' +
+            "</div>"
+          : "");
+
+      body.innerHTML =
+        (lockBanner || "") +
+        '<div class="section-card ui-enter">' +
+          '<div class="inv-section-head"><h3 class="h3 section-title">對帳基本資料</h3>' + apStatusBadge(st) + "</div>" +
+          '<div class="ap-detail-meta">' +
+            "<div>對帳編號：" + v2Esc(header.id || "") + "</div>" +
+            "<div>廠商：" + v2Esc(header.vendor_name || "") + "</div>" +
+            "<div>結帳方式：" + v2Esc(apTypeLabel(header.settlement_type_snapshot, { settlement_type: header.settlement_type_snapshot })) + "</div>" +
+            "<div>對帳期間：" + v2Esc(apFmtDate(header.period_start) + " ～ " + apFmtDate(header.period_end)) + "</div>" +
+            "<div>目前狀態：" + v2Esc(AP_RECON_STATUS[st] || st) + "</div>" +
+          "</div>" +
+        "</div>" +
+        '<div class="kpi-grid ap-detail-summary ui-enter">' +
+          '<div class="kpi-card surface-neutral"><div class="kpi-label">系統應付</div><div class="kpi-value" id="apSumSystem">' + v2Esc(apFmtNT(sys)) + "</div></div>" +
+          '<div class="kpi-card surface-info"><div class="kpi-label">廠商請款</div><div class="kpi-value" id="apSumClaimed">' + v2Esc(claimedText) + "</div>" +
+            '<div class="kpi-meta" id="apSumClaimedHint">' + (claimed == null ? "尚未輸入" : "") + "</div></div>" +
+          '<div class="kpi-card"><div class="kpi-label">差異</div><div class="kpi-value ' + expl.cls + '" id="apSumDiff">' +
+            v2Esc(expl.n == null ? "尚未核對" : apFmtNT(expl.n)) + "</div>" +
+            '<div class="kpi-meta" id="apSumDiffHint">' + v2Esc(expl.label) + "</div></div>" +
+        "</div>" +
+        '<div class="section-card">' +
+          '<h3 class="h3 section-title">廠商請款輸入</h3>' +
+          '<div class="field ap-header-claimed-field"><label for="apHeaderClaimed">廠商請款總額</label>' +
+          (editable
+            ? '<input id="apHeaderClaimed" type="number" min="0" step="1" inputmode="decimal" value="' + (claimed == null ? "" : v2Esc(String(claimed))) + '" />'
+            : '<div class="ap-readonly-amount">' + v2Esc(claimedText) + "</div>") +
+          "</div>" +
+          '<div class="field"><label for="apDetailNotes">備註</label>' +
+          (editable
+            ? '<input id="apDetailNotes" type="text" value="' + v2Esc(header.notes || "") + '" />'
+            : '<div class="muted">' + v2Esc(header.notes || "—") + "</div>") +
+          "</div>" +
+        "</div>" +
+        '<div class="section-card">' +
+          '<div class="inv-section-head"><h3 class="h3 section-title">逐張叫貨單核對</h3></div>' +
+          (itemCards || '<p class="muted">無明細</p>') +
+          '<div id="apItemSumValue" class="muted small admin-msg-gap"></div>' +
+          '<div id="apItemSumWarn" class="ap-item-sum-warn surface-warning" hidden>逐單請款合計與廠商請款總額不一致</div>' +
+        "</div>" +
+        '<div class="section-card-soft">' +
+          '<h3 class="h3 section-title">差異摘要</h3>' +
+          '<p id="apDiffSummaryText" class="' + expl.cls + '">' + v2Esc(expl.label) + "</p>" +
+        "</div>" +
+        actions;
+      const editor = apEl("apDetailView");
+      if (editor) {
+        if (editable || canVoid) editor.classList.add("ap-detail-has-actions");
+        else editor.classList.remove("ap-detail-has-actions");
+      }
+      apSyncDetailPreview();
+    }
+
     async function apOpenDetail(id) {
       if (!requirePerm("ap")) return;
       const body = apEl("apDetailBody");
       if (!body) return;
+      apActiveDetailId = String(id || "");
       apSetListVisible(false);
       body.innerHTML = '<p class="muted">載入中…</p>';
+      apShow(apEl("apDetailMsg"), "");
+      apShow(apEl("apDetailDiag"), "");
       const header = apRows.find(function (r) { return String(r.id) === String(id); });
       const fetchItems = window.stage7FetchVendorReconciliationItems || (window.DK && window.DK.stage7FetchVendorReconciliationItems);
       let items = [];
@@ -7747,47 +8050,122 @@
         body.innerHTML = '<p class="muted">找不到對帳</p>';
         return;
       }
-      const snapHtml = items.map(function (it) {
-        let lines = it.line_snapshot_json;
-        if (typeof lines === "string") {
-          try { lines = JSON.parse(lines); } catch (_) { lines = []; }
+      apDetailHeader = header;
+      apDetailItems = items;
+      apRenderDetailWorkspace();
+    }
+
+    function apRpcRaw(res) {
+      return (res && (res.error || (res.data && (res.data.message || res.data.details || res.data.hint)))) || "";
+    }
+
+    async function apSaveDetail(opts) {
+      opts = opts || {};
+      if (!apDetailHeader || apDetailBusy) return;
+      const st = String(apDetailHeader.status || "");
+      if (opts.confirm) {
+        if (st !== "DRAFT" && st !== "MISMATCH") return;
+      } else if (st !== "DRAFT" && st !== "MISMATCH") {
+        apShow(apEl("apDetailMsg"), "目前狀態不可修改");
+        return;
+      }
+      const form = apReadDetailForm();
+      if (!form.headerOk || form.items.some(function (it) { return !it.parseOk; })) {
+        apShow(apEl("apDetailMsg"), "請款金額格式不正確");
+        return;
+      }
+      if (opts.confirm) {
+        const gate = apConfirmGate(form);
+        if (!gate.ok) {
+          apShow(apEl("apDetailMsg"), gate.reason);
+          return;
         }
-        if (!Array.isArray(lines)) lines = [];
-        const snapRows = lines.map(function (ln) {
-          return "<tr><td>" + v2Esc(ln.selectedSpec || ln.requestText || ln.id || "品項") +
-            "</td><td class=\"table-number\">" + v2Esc(String(ln.quantity != null ? ln.quantity : "—")) +
-            "</td><td class=\"table-number\">" + v2Esc(apFmtNT(ln.unit_price)) +
-            "</td><td class=\"table-number\">" + v2Esc(apFmtNT(ln.line_total)) + "</td></tr>";
-        }).join("");
-        return '<div class="section-card-soft">' +
-          "<div><strong>" + v2Esc(it.order_no || it.purchase_order_id) + "</strong> " +
-          '<span class="status-badge status-muted">' + v2Esc(it.review_status || "UNCHECKED") + "</span></div>" +
-          '<div class="vendor-card-meta">系統 ' + v2Esc(apFmtNT(it.system_amount)) +
-            "｜請款 " + v2Esc(apFmtNT(it.vendor_claimed_amount)) +
-            '｜差異 <span class="' + apDiffClass(it.difference) + '">' + v2Esc(apFmtNT(it.difference)) + "</span></div>" +
-          "<details><summary>凍結品項</summary>" +
-          (snapRows
-            ? '<div class="table-wrap" style="margin-top:8px;overflow-x:auto"><table class="table table-compact ap-snap-table"><thead><tr><th>規格</th><th class="table-number">數量</th><th class="table-number">單價</th><th class="table-number">小計</th></tr></thead><tbody>' +
-              snapRows + "</tbody></table></div>"
-            : '<p class="muted">無凍結品項</p>') +
-          "</details></div>";
-      }).join("");
-      body.innerHTML =
-        '<div class="section-card">' +
-          "<h2 class=\"h2\">" + v2Esc(header.id) + "</h2>" +
-          "<p>廠商：" + v2Esc(header.vendor_name || "") + "<br>期間：" +
-          v2Esc(apFmtDate(header.period_start) + " ～ " + apFmtDate(header.period_end)) +
-          "<br>結帳方式：" + v2Esc(apTypeLabel(header.settlement_type_snapshot, { settlement_type: header.settlement_type_snapshot, week_start_weekday: null })) +
-          "<br>狀態：" + apStatusBadge(header.status) + "</p>" +
-          '<div class="ap-detail-summary">' +
-            '<div class="kpi-card surface-neutral"><div class="kpi-label">系統應付</div><div class="kpi-value">' + v2Esc(apFmtNT(header.system_amount)) + "</div></div>" +
-            '<div class="kpi-card surface-neutral"><div class="kpi-label">廠商請款</div><div class="kpi-value">' + v2Esc(apFmtNT(header.vendor_claimed_amount)) + "</div></div>" +
-            '<div class="kpi-card"><div class="kpi-label">差異</div><div class="kpi-value ' + apDiffClass(header.difference) + '">' + v2Esc(apFmtNT(header.difference)) + "</div></div>" +
-            '<div class="kpi-card surface-neutral"><div class="kpi-label">已付金額</div><div class="kpi-value">' + v2Esc(apFmtNT(header.paid_amount)) + "</div></div>" +
-          "</div>" +
-          (header.notes ? '<p class="muted">備註：' + v2Esc(header.notes) + "</p>" : "") +
-        "</div>" +
-        '<div class="section-card"><h3 class="h3">逐單（唯讀）</h3>' + (snapHtml || '<p class="muted">無明細</p>') + "</div>";
+        const expl = apDiffExplain(form.vendor_claimed_amount, apDetailHeader.system_amount);
+        if (expl.n != null && expl.n !== 0) {
+          const ok = window.confirm(
+            "系統應付 " + apFmtNT(apDetailHeader.system_amount) + "\n" +
+            "廠商請款 " + apFmtNT(form.vendor_claimed_amount) + "\n" +
+            "差異 " + apFmtNT(expl.n) + "\n\n" +
+            "目前金額不相符，確定仍要確認此對帳？"
+          );
+          if (!ok) return;
+        }
+      }
+      const fn = window.stage7UpdateVendorReconciliation || (window.DK && window.DK.stage7UpdateVendorReconciliation);
+      if (!fn) {
+        apShow(apEl("apDetailMsg"), "核對功能未載入");
+        return;
+      }
+      const payload = {
+        id: apDetailHeader.id,
+        vendor_claimed_amount: form.vendor_claimed_amount,
+        notes: form.notes,
+        items: form.items.map(function (it) {
+          return {
+            id: it.id,
+            vendor_claimed_amount: it.vendor_claimed_amount,
+            review_status: it.review_status,
+          };
+        }),
+      };
+      if (opts.confirm) payload.status = "CONFIRMED";
+      apDetailBusy = true;
+      apSyncDetailPreview();
+      apShow(apEl("apDetailMsg"), opts.confirm ? "確認中…" : "儲存中…");
+      apShow(apEl("apDetailDiag"), "");
+      const res = await fn(payload);
+      apDetailBusy = false;
+      if (!res || !res.ok) {
+        const raw = apRpcRaw(res);
+        apShow(apEl("apDetailMsg"), apMapUpdateError(raw));
+        apShow(apEl("apDetailDiag"), raw ? ("診斷：" + String(raw).slice(0, 240)) : "");
+        apSyncDetailPreview();
+        return;
+      }
+      apShow(apEl("apDetailMsg"), opts.confirm ? "已確認對帳" : "已儲存核對");
+      const keepId = apActiveDetailId;
+      await apRefresh(false);
+      if (keepId) await apOpenDetail(keepId);
+      setTimeout(function () { apShow(apEl("apDetailMsg"), ""); }, 2500);
+    }
+
+    async function apVoidDetail() {
+      if (!apDetailHeader || apDetailBusy) return;
+      const st = String(apDetailHeader.status || "");
+      if (st === "PAID") {
+        apShow(apEl("apDetailMsg"), "已付款對帳不可作廢");
+        return;
+      }
+      if (st === "VOID") return;
+      if (st !== "DRAFT" && st !== "MISMATCH" && st !== "CONFIRMED") {
+        apShow(apEl("apDetailMsg"), "目前狀態不可作廢");
+        return;
+      }
+      const ok = window.confirm("作廢後，此對帳不會刪除，但此期間與相關叫貨單可重新建立新的對帳。確定作廢？");
+      if (!ok) return;
+      const fn = window.stage7VoidVendorReconciliation || (window.DK && window.DK.stage7VoidVendorReconciliation);
+      if (!fn) {
+        apShow(apEl("apDetailMsg"), "作廢功能未載入");
+        return;
+      }
+      apDetailBusy = true;
+      apSyncDetailPreview();
+      apShow(apEl("apDetailMsg"), "作廢中…");
+      apShow(apEl("apDetailDiag"), "");
+      const res = await fn(apDetailHeader.id);
+      apDetailBusy = false;
+      if (!res || !res.ok) {
+        const raw = apRpcRaw(res);
+        apShow(apEl("apDetailMsg"), apMapVoidError(raw));
+        apShow(apEl("apDetailDiag"), raw ? ("診斷：" + String(raw).slice(0, 240)) : "");
+        apSyncDetailPreview();
+        return;
+      }
+      apShow(apEl("apDetailMsg"), "已作廢對帳");
+      const keepId = apActiveDetailId;
+      await apRefresh(false);
+      if (keepId) await apOpenDetail(keepId);
+      setTimeout(function () { apShow(apEl("apDetailMsg"), ""); }, 2500);
     }
 
     async function apRefresh(showList) {
@@ -7831,7 +8209,35 @@
     apEl("apCreateCloseBtn") && apEl("apCreateCloseBtn").addEventListener("click", apCloseCreate);
     apEl("apCreateCancel") && apEl("apCreateCancel").addEventListener("click", apCloseCreate);
     apEl("apCreateSubmit") && apEl("apCreateSubmit").addEventListener("click", function () { apSubmitCreate(); });
-    apEl("apDetailBackBtn") && apEl("apDetailBackBtn").addEventListener("click", function () { apSetListVisible(true); });
+    apEl("apDetailBackBtn") && apEl("apDetailBackBtn").addEventListener("click", function () {
+      apActiveDetailId = null;
+      apDetailHeader = null;
+      apDetailItems = [];
+      const dv = apEl("apDetailView");
+      if (dv) dv.classList.remove("ap-detail-has-actions");
+      apSetListVisible(true);
+    });
+    const apDetailView = apEl("apDetailView");
+    if (apDetailView && !apDetailView.dataset.apDetailBound) {
+      apDetailView.dataset.apDetailBound = "1";
+      apDetailView.addEventListener("click", function (e) {
+        const t = e.target;
+        if (!t || !t.closest) return;
+        const actBtn = t.closest("[data-ap-act]");
+        if (!actBtn) return;
+        const act = actBtn.getAttribute("data-ap-act");
+        if (act === "save") apSaveDetail({});
+        else if (act === "confirm") apSaveDetail({ confirm: true });
+        else if (act === "void") apVoidDetail();
+      });
+      apDetailView.addEventListener("input", function (e) {
+        const t = e.target;
+        if (!t) return;
+        if (t.id === "apHeaderClaimed" || t.id === "apDetailNotes" || (t.classList && t.classList.contains("ap-item-claimed"))) {
+          apSyncDetailPreview();
+        }
+      });
+    }
     apEl("apSettingsToggle") && apEl("apSettingsToggle").addEventListener("click", function () {
       const body = apEl("apSettingsBody");
       const btn = apEl("apSettingsToggle");
