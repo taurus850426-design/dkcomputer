@@ -4686,31 +4686,51 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
 }
 
 @media print{
-  body.po-printing #loginCard,
-  body.po-printing .tabs,
-  body.po-printing .admin-nav,
-  body.po-printing #syncStatusBar,
-  body.po-printing #adminToast,
-  body.po-printing #poListView,
-  body.po-printing #poEditorView,
-  body.po-printing .site-header,
-  body.po-printing .sticky-bar,
-  body.po-printing #poStickyCart{
-    display: none !important;
+  @page{
+    size: A4;
+    margin: 12mm;
   }
+  body.po-printing{
+    background: #fff !important;
+  }
+  body.po-printing,
+  body.po-printing .admin-shell,
+  body.po-printing .admin-shell .container,
   body.po-printing #panel,
   body.po-printing #tab-purchase,
   body.po-printing #purchaseOrdersRoot{
     display: block !important;
     visibility: visible !important;
     position: static !important;
-    box-shadow: none !important;
+    float: none !important;
+    width: auto !important;
+    max-width: none !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
     border: none !important;
+    box-shadow: none !important;
     background: #fff !important;
-    color: #000 !important;
+    overflow: visible !important;
+    transform: none !important;
+  }
+  body.po-printing > *:not(.admin-shell),
+  body.po-printing .admin-shell > *:not(.container),
+  body.po-printing .container > *:not(#panel),
+  body.po-printing #panel > *:not(#tab-purchase),
+  body.po-printing #tab-purchase > *:not(#purchaseOrdersRoot),
+  body.po-printing #purchaseOrdersRoot > *:not(#poPrintArea){
+    display: none !important;
   }
   body.po-printing .po-print-area{
     display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: auto !important;
+    max-width: none !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #000 !important;
   }
   body.po-printing .po-print-inner{
     font-size: 12pt;
@@ -4720,10 +4740,18 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
     font-size: 18pt;
     margin: 0 0 8pt;
   }
+  body.po-printing .po-print-inner h3{
+    break-after: avoid;
+    page-break-after: avoid;
+  }
   body.po-printing .po-print-inner table{
     width: 100%;
     border-collapse: collapse;
     margin: 8pt 0;
+  }
+  body.po-printing .po-print-inner tr{
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   body.po-printing .po-print-inner th,
   body.po-printing .po-print-inner td{
