@@ -4514,6 +4514,177 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
 .po-items-summary{ line-height: 1.5; }
 .po-print-area{ display: none; }
 
+#poEditorView.po-editor-has-sticky{ padding-bottom: 96px; }
+.po-editor-actions{ align-items: center; }
+.po-info-card{ padding: 10px 12px; }
+.po-info-card .h3{ font-size: 14px; font-weight: 700; margin: 0; }
+.po-info-card .form-grid{ gap: 8px; }
+.po-info-card .field label{ font-size: 12px; }
+.po-editor-meta{ font-size: 12px; }
+.po-item-note-field label{ color: var(--dk-muted); }
+.po-add-item-actions{ flex-wrap: wrap; }
+.po-manual-box{
+  padding: 10px;
+  border: 1px dashed rgba(17,24,39,0.14);
+  border-radius: 12px;
+  background: rgba(17,24,39,0.02);
+}
+.po-current-pick{
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  min-width: 0;
+}
+.po-current-pick-label{
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dk-muted);
+  margin-bottom: 4px;
+}
+.po-current-pick-vendor{ font-weight: 800; }
+.po-current-pick-spec{
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.po-current-pick-line,
+.po-current-pick-sub{ margin-top: 4px; }
+.po-search-heading{
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+.po-quote-cards{
+  display: grid;
+  gap: 8px;
+}
+.po-quote-card{
+  border: 1px solid rgba(17,24,39,0.12);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  min-width: 0;
+}
+.po-quote-card-top{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.po-quote-card-vendor{ font-weight: 800; }
+.po-quote-card-spec{
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  margin-top: 2px;
+}
+.po-quote-card-meta,
+.po-quote-card-note{ margin-top: 4px; font-size: 12px; }
+.po-quote-card-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+.po-quote-card-price{ font-weight: 700; }
+.po-quote-card-row [data-po-pick]{
+  min-height: 44px;
+  min-width: 88px;
+}
+.po-pick-added{ font-weight: 700; }
+.po-quote-pager{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.po-quote-pager-btn{
+  min-height: 44px;
+  min-width: 88px;
+}
+.po-quote-pager-status{ font-size: 13px; }
+.po-items-head{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.po-items-head .h3{ margin: 0; }
+.po-items-summary{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-weight: 700;
+}
+.po-vendor-card .h3{ font-size: 14px; }
+.po-sticky-cart{
+  position: sticky;
+  bottom: 12px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(17,24,39,0.12);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.96);
+  box-shadow: 0 8px 24px rgba(17,24,39,0.12);
+}
+.po-sticky-cart[hidden]{ display: none !important; }
+.po-sticky-cart-main{ min-width: 0; }
+.po-sticky-cart-title{ font-size: 12px; font-weight: 800; color: var(--dk-muted); }
+.po-sticky-cart-meta{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.po-sticky-view-btn{
+  flex-shrink: 0;
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+@media (min-width: 901px){
+  .po-sticky-cart{
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    left: auto;
+    width: min(360px, calc(100vw - 48px));
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 900px){
+  #poSearchQuotesBtn,
+  #poAddManualItemBtn,
+  #poConfirmManualBtn{
+    width: 100%;
+    min-height: 44px;
+  }
+  .po-sticky-cart{
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    margin-top: 0;
+  }
+  #poEditorView.po-editor-has-sticky{ padding-bottom: 108px; }
+}
+
+@media (max-width: 640px){
+  .po-editor-actions .btn{ min-height: 44px; }
+  .po-current-pick,
+  .po-quote-card-spec,
+  .po-sticky-cart-meta{ overflow-wrap: anywhere; word-break: break-word; }
+}
+
 @media print{
   body.po-printing #loginCard,
   body.po-printing .tabs,
@@ -4522,7 +4693,8 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
   body.po-printing #poListView,
   body.po-printing #poEditorView,
   body.po-printing .site-header,
-  body.po-printing .sticky-bar{
+  body.po-printing .sticky-bar,
+  body.po-printing #poStickyCart{
     display: none !important;
   }
   body.po-printing #panel,

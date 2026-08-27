@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260827ap1" />
+            <link rel="stylesheet" href="./styles.css?v=20260827po1" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -1175,7 +1175,7 @@
                     <label for="poListStatusFilter">狀態</label>
                     <select id="poListStatusFilter">
                       <option value="">全部</option>
-                      <option value="draft">草稿</option>
+                      <option value="draft">編輯中</option>
                       <option value="ordered">已叫貨</option>
                       <option value="partial">部分到貨</option>
                       <option value="received">已到貨</option>
@@ -1205,21 +1205,21 @@
 
               <!-- 編輯／檢視 -->
               <div id="poEditorView" hidden>
-                <div class="actions" style="margin-top:8px;flex-wrap:wrap;gap:8px">
-                  <button id="poBackToListBtn" class="btn btn-ghost" type="button">← 返回列表</button>
-                  <button id="poSaveBtn" class="btn btn-primary" type="button">儲存叫貨單</button>
-                  <button id="poCopyAllBtn" class="btn btn-ghost" type="button">複製全部叫貨文字</button>
-                  <button id="poPrintBtn" class="btn btn-ghost" type="button">列印叫貨單</button>
+                <div class="actions po-editor-actions" style="margin-top:8px;flex-wrap:wrap;gap:8px">
+                  <button id="poSaveBtn" class="btn btn-primary primary-action" type="button">儲存叫貨單</button>
+                  <button id="poBackToListBtn" class="btn btn-ghost secondary-action" type="button">← 返回列表</button>
+                  <button id="poCopyAllBtn" class="btn btn-ghost tertiary-action" type="button">複製全部叫貨文字</button>
+                  <button id="poPrintBtn" class="btn btn-ghost tertiary-action" type="button">列印叫貨單</button>
                 </div>
 
-                <div class="card" style="margin-top:12px">
-                  <h3 class="h3">叫貨單資訊</h3>
-                  <div class="form-grid" style="margin-top:10px">
+                <div class="section-card-soft po-info-card" style="margin-top:12px">
+                  <h3 class="h3">叫貨單基本資訊</h3>
+                  <div class="form-grid" style="margin-top:8px">
                     <div class="field"><label>單號</label><input id="poOrderNo" type="text" readonly /></div>
                     <div class="field">
                       <label for="poStatus">狀態</label>
                       <select id="poStatus">
-                        <option value="draft">草稿</option>
+                        <option value="draft">編輯中</option>
                         <option value="ordered">已叫貨</option>
                         <option value="partial">部分到貨</option>
                         <option value="received">已到貨</option>
@@ -1230,11 +1230,11 @@
                     <div class="field"><label for="poExpectedDate">預計到貨日</label><input id="poExpectedDate" type="date" /></div>
                     <div class="field full"><label for="poNote">整單備註</label><input id="poNote" type="text" placeholder="例如：急件／分批到貨" /></div>
                   </div>
-                  <div id="poEditorMeta" class="muted small" style="margin-top:8px"></div>
-                  <div id="poEditorLockHint" class="muted small" style="margin-top:6px" hidden></div>
+                  <div id="poEditorMeta" class="muted small po-editor-meta" style="margin-top:6px"></div>
+                  <div id="poEditorLockHint" class="muted small" style="margin-top:4px" hidden></div>
                 </div>
 
-                <div class="card" style="margin-top:12px" id="poAddItemCard">
+                <div class="card po-add-item-card" style="margin-top:12px" id="poAddItemCard">
                   <h3 class="h3">新增叫貨品項</h3>
                   <div class="form-grid" style="margin-top:10px">
                     <div class="field full">
@@ -1249,17 +1249,17 @@
                       <label for="poItemQty">數量</label>
                       <input id="poItemQty" type="number" min="1" step="1" value="1" />
                     </div>
-                    <div class="field full">
+                    <div class="field full po-item-note-field">
                       <label for="poItemNote">品項備註</label>
                       <input id="poItemNote" type="text" placeholder="可空白" />
                     </div>
-                    <div class="full actions" style="gap:8px">
-                      <button id="poSearchQuotesBtn" class="btn btn-primary" type="button">搜尋歷史報價</button>
-                      <button id="poAddManualItemBtn" class="btn btn-ghost" type="button">改用手動報價加入</button>
+                    <div class="full actions po-add-item-actions" style="gap:8px">
+                      <button id="poSearchQuotesBtn" class="btn btn-primary primary-action" type="button">搜尋歷史報價</button>
+                      <button id="poAddManualItemBtn" class="btn btn-ghost tertiary-action" type="button">找不到歷史報價？手動加入</button>
                     </div>
                   </div>
 
-                  <div id="poManualBox" class="form-grid" style="margin-top:10px" hidden>
+                  <div id="poManualBox" class="form-grid po-manual-box" style="margin-top:10px" hidden>
                     <div class="field">
                       <label for="poManualVendor">手動廠商</label>
                       <select id="poManualVendor"></select>
@@ -1274,18 +1274,21 @@
                     </div>
                     <div class="full actions">
                       <button id="poConfirmManualBtn" class="btn btn-primary" type="button">確認手動加入</button>
-                      <button id="poCancelManualBtn" class="btn btn-ghost" type="button">取消</button>
+                      <button id="poCancelManualBtn" class="btn btn-ghost tertiary-action" type="button">取消</button>
                     </div>
                   </div>
 
+                  <div id="poCurrentPick" class="po-current-pick surface-info" hidden></div>
                   <div id="poCompareSummary" class="po-compare-summary" style="margin-top:12px" hidden></div>
                   <div id="poSearchResults" class="po-search-results" style="margin-top:10px" hidden></div>
                 </div>
 
-                <div class="card" style="margin-top:12px">
-                  <h3 class="h3">叫貨品項</h3>
-                  <div id="poItemsSummary" class="po-items-summary muted small" style="margin-top:8px"></div>
-                  <div class="table-wrap" style="margin-top:10px">
+                <div class="card po-items-card" style="margin-top:12px" id="poItemsSection">
+                  <div class="po-items-head">
+                    <h3 class="h3">叫貨清單</h3>
+                    <div id="poItemsSummary" class="po-items-summary"></div>
+                  </div>
+                  <div class="table-wrap po-items-table-wrap" style="margin-top:10px">
                     <table class="table">
                       <thead>
                         <tr>
@@ -1306,11 +1309,19 @@
                   </div>
                 </div>
 
-                <div class="card" style="margin-top:12px">
+                <div class="section-card-soft po-vendor-card" style="margin-top:12px">
                   <div class="section-head" style="margin-bottom:8px">
                     <h3 class="h3">依廠商檢視／複製</h3>
                   </div>
                   <div id="poVendorGroups" class="po-vendor-groups"></div>
+                </div>
+
+                <div id="poStickyCart" class="po-sticky-cart" hidden>
+                  <div class="po-sticky-cart-main">
+                    <div class="po-sticky-cart-title">叫貨清單</div>
+                    <div id="poStickyCartMeta" class="po-sticky-cart-meta"></div>
+                  </div>
+                  <button id="poStickyViewBtn" class="btn btn-primary primary-action po-sticky-view-btn" type="button">查看叫貨清單</button>
                 </div>
               </div>
 
@@ -2013,7 +2024,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script src="./admin3.js?v=20260827ap1"></script>
-    <script src="./purchase-orders.js?v=20260815s5a"></script>
+    <script src="./purchase-orders.js?v=20260827po1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260826ds7"></script>
   </body>

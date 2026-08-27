@@ -4,12 +4,13 @@
 
   const PO_KEY = "dk_purchase_orders_v1";
   const STATUS_LABEL = {
-    draft: "草稿",
+    draft: "編輯中",
     ordered: "已叫貨",
     partial: "部分到貨",
     received: "已到貨",
     cancelled: "已取消",
   };
+  const QUOTE_PAGE_SIZE = 10;
   const ALLOWED_TRANSITIONS = {
     draft: ["draft", "ordered", "cancelled"],
     ordered: ["ordered", "partial", "received", "cancelled"],
@@ -22,6 +23,8 @@
   let editingItemId = null;
   let searchTimer = null;
   let lastSearchRows = [];
+  let quotePage = 1;
+  let lastAddedItemId = null;
 
   function bridge() {
     return window.DKPurchaseBridge || {};
@@ -370,11 +373,78 @@
     return document.getElementById(id);
   }
 
+  function isQuoteInCurrentCart(quoteId) {
+    if (!currentOrder || quoteId == null || quoteId === "") return false;
+    const id = String(quoteId);
+    return (currentOrder.items || []).some(function (it) {
+      return String(it.selectedQuoteId || "") === id;
+    });
+  }
+
+  function renderCurrentPick(item) {
+    const box = el("poCurrentPick");
+    if (!box) return;
+    if (!item) {
+      box.hidden = true;
+      box.innerHTML = "";
+      return;
+    }
+    const vendor = itemVendor(item) || "—";
+    const spec = itemSpec(item) || item.requestText || "—";
+    const price = itemPrice(item);
+    const qty = Number(item.quantity) || 0;
+    const sub = itemSubtotal(item);
+    const priceBit = price == null
+      ? '<span class="warning-number">缺少單價</span> × ' + esc(String(qty))
+      : esc(fmtNT(price)) + " × " + esc(String(qty));
+    box.hidden = false;
+    box.innerHTML =
+      '<div class="po-current-pick-label">目前選擇</div>' +
+      '<div class="po-current-pick-vendor">' + esc(vendor) + "</div>" +
+      '<div class="po-current-pick-spec">' + esc(spec) + "</div>" +
+      '<div class="po-current-pick-line">' + priceBit + "</div>" +
+      '<div class="po-current-pick-sub">小計 ' + (sub == null ? '<span class="warning-number">缺少單價</span>' : esc(fmtNT(sub))) + "</div>";
+    try {
+      box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    } catch (_) {}
+  }
+
+  function updateStickyCart() {
+    const sticky = el("poStickyCart");
+    const meta = el("poStickyCartMeta");
+    const editor = el("poEditorView");
+    if (!sticky) return;
+    const show = !!(currentOrder && editor && !editor.hidden);
+    sticky.hidden = !show;
+    if (editor) {
+      if (show) editor.classList.add("po-editor-has-sticky");
+      else editor.classList.remove("po-editor-has-sticky");
+    }
+    if (!show || !meta) return;
+    const tot = orderTotals(currentOrder);
+    meta.innerHTML =
+      "<span>" + esc(String(tot.itemCount)) + " 項</span>" +
+      "<span>總數量 " + esc(String(tot.totalQty)) + "</span>" +
+      "<span>預計採購 " + esc(fmtNT(tot.totalAmount)) + "</span>";
+  }
+
+  function refreshVisibleQuoteResults() {
+    const box = el("poSearchResults");
+    if (box && !box.hidden && lastSearchRows.length) renderQuoteResultPage();
+  }
+
   function setListVisible(showList) {
     const list = el("poListView");
     const editor = el("poEditorView");
     if (list) list.hidden = !showList;
     if (editor) editor.hidden = showList;
+    if (showList) {
+      const sticky = el("poStickyCart");
+      if (sticky) sticky.hidden = true;
+      if (editor) editor.classList.remove("po-editor-has-sticky");
+    } else {
+      updateStickyCart();
+    }
   }
 
   function fillCategorySelect() {
@@ -425,7 +495,7 @@
         "<tr>" +
         "<td class=\"nowrap\">" + esc(o.orderNo) + "</td>" +
         "<td class=\"nowrap\">" + esc(fmtDate(o.createdAt)) + "</td>" +
-        "<td><span class=\"badge " + statusBadgeClass(o.status) + "\">" + esc(STATUS_LABEL[o.status] || o.status) + "</span></td>" +
+        "<td><span class=\"" + statusBadgeClass(o.status) + "\">" + esc(STATUS_LABEL[o.status] || o.status) + "</span></td>" +
         '<td style="text-align:right">' + esc(String(tot.vendorCount)) + "</td>" +
         '<td style="text-align:right">' + esc(String(tot.itemCount)) + "</td>" +
         '<td style="text-align:right">' + esc(fmtNT(tot.totalAmount)) + "</td>" +
@@ -443,12 +513,12 @@
   }
 
   function statusBadgeClass(st) {
-    if (st === "draft") return "tag";
-    if (st === "ordered") return "info";
-    if (st === "partial") return "warn";
-    if (st === "received") return "ok";
-    if (st === "cancelled") return "danger";
-    return "tag";
+    if (st === "draft") return "status-badge status-info";
+    if (st === "ordered") return "badge info";
+    if (st === "partial") return "badge warn";
+    if (st === "received") return "badge ok";
+    if (st === "cancelled") return "badge danger";
+    return "badge tag";
   }
 
   function openOrder(id, forceView) {
@@ -477,7 +547,7 @@
     editingItemId = null;
     fillEditor(false);
     setListVisible(false);
-    showMsg("已建立草稿（記得按儲存）", 2500);
+    showMsg("已建立叫貨單（記得按儲存）", 2500);
   }
 
   function fillEditor(readOnlyHint) {
@@ -500,7 +570,7 @@
     if (lock) {
       if (!editable) {
         lock.hidden = false;
-        lock.textContent = "此叫貨單狀態為「" + (STATUS_LABEL[o.status] || o.status) + "」。建議僅查看；變更狀態請確認後再儲存。品項編輯以草稿為主。";
+        lock.textContent = "此單狀態為「" + (STATUS_LABEL[o.status] || o.status) + "」，品項僅供查看。";
       } else {
         lock.hidden = true;
       }
@@ -509,8 +579,10 @@
     if (el("poManualBox")) el("poManualBox").hidden = true;
     if (el("poCompareSummary")) el("poCompareSummary").hidden = true;
     if (el("poSearchResults")) el("poSearchResults").hidden = true;
+    renderCurrentPick(null);
     renderItems();
     renderVendorGroups();
+    updateStickyCart();
   }
 
   function readEditorMetaIntoCurrent() {
@@ -569,17 +641,18 @@
     const items = currentOrder.items || [];
     const tot = orderTotals(currentOrder);
     if (sum) {
-      sum.textContent =
-        "品項數 " + tot.itemCount +
-        "｜總數量 " + tot.totalQty +
-        "｜預計採購總額 " + fmtNT(tot.totalAmount) +
-        "｜未選廠商 " + tot.unassigned +
-        "｜過期報價 " + tot.stale;
+      sum.innerHTML =
+        "<span>品項 " + esc(String(tot.itemCount)) + "</span>" +
+        "<span>總數量 " + esc(String(tot.totalQty)) + "</span>" +
+        "<span>預計採購 " + esc(fmtNT(tot.totalAmount)) + "</span>";
     }
+    updateStickyCart();
     if (!items.length) {
+      lastAddedItemId = null;
       tbody.innerHTML = '<tr><td class="muted" colspan="10">尚未加入品項</td></tr>';
       return;
     }
+    const highlightId = lastAddedItemId;
     tbody.innerHTML = items.map(function (it) {
       const d = daysAgo(it.quotedAt);
       const age = ageLabel(d);
@@ -589,8 +662,9 @@
           ? '<span class="badge warn">過期參考</span>'
           : '<span class="badge ' + age.tone + '">' + esc(age.text) + "</span>");
       const canEdit = isEditable(currentOrder);
+      const hl = highlightId && String(it.id) === String(highlightId) ? " ui-enter-soft" : "";
       return (
-        "<tr>" +
+        '<tr class="' + hl.trim() + '" data-poi-row="' + esc(it.id) + '">' +
         "<td>" + esc(it.requestText || "—") + "</td>" +
         "<td>" + esc(itemSpec(it) || "—") + "</td>" +
         "<td>" + esc(itemVendor(it) || "—") + "</td>" +
@@ -608,6 +682,7 @@
         "</td></tr>"
       );
     }).join("");
+    lastAddedItemId = null;
   }
 
   function groupByVendor(order) {
@@ -721,6 +796,67 @@
     wrap.innerHTML = html;
   }
 
+  function renderQuoteResultPage() {
+    const box = el("poSearchResults");
+    if (!box) return;
+    const total = lastSearchRows.length;
+    const levelTitle = { high: "高度符合", partial: "部分符合", other: "其他可能相關" };
+    if (!total) {
+      box.innerHTML = '<p class="muted">沒有符合的歷史報價。可改關鍵字，或手動加入。</p>';
+      box.hidden = false;
+      return;
+    }
+    const totalPages = Math.max(1, Math.ceil(total / QUOTE_PAGE_SIZE));
+    if (quotePage > totalPages) quotePage = totalPages;
+    if (quotePage < 1) quotePage = 1;
+    const start = (quotePage - 1) * QUOTE_PAGE_SIZE;
+    const pageRows = lastSearchRows.slice(start, start + QUOTE_PAGE_SIZE);
+    const groups = { high: [], partial: [], other: [] };
+    pageRows.forEach(function (row) {
+      if (groups[row.level]) groups[row.level].push(row);
+    });
+    let html = '<div class="po-search-heading">搜尋歷史報價結果</div>';
+    ["high", "partial", "other"].forEach(function (lv) {
+      const arr = groups[lv];
+      if (!arr.length) return;
+      const allCount = lastSearchRows.filter(function (r) { return r.level === lv; }).length;
+      html += '<div class="po-result-group"><div class="po-result-group-title">' + esc(levelTitle[lv]) + "（" + allCount + "）</div>";
+      html += '<div class="po-quote-cards">';
+      arr.forEach(function (row) {
+        const age = ageLabel(row.days);
+        const added = isQuoteInCurrentCart(row.quote.id);
+        const btnClass = added ? "btn btn-ghost btn-sm po-pick-added" : "btn btn-primary btn-sm";
+        const btnLabel = added ? "✓ 已加入" : "選擇";
+        html +=
+          '<div class="po-quote-card">' +
+          '<div class="po-quote-card-top">' +
+          '<span class="badge ' + (lv === "high" ? "ok" : lv === "partial" ? "warn" : "tag") + '">' + esc(levelTitle[lv]) + "</span>" +
+          '<span class="badge ' + age.tone + '">' + esc(age.text) + "</span>" +
+          "</div>" +
+          '<div class="po-quote-card-vendor">' + esc(row.quote.vendor || "—") + "</div>" +
+          '<div class="po-quote-card-spec">' + esc(row.name) + "</div>" +
+          '<div class="po-quote-card-meta">' + esc(row.quote.category || "—") + " · " + esc(fmtDate(row.quote.date)) + "</div>" +
+          (row.quote.note ? '<div class="po-quote-card-note muted small">' + esc(row.quote.note) + "</div>" : "") +
+          '<div class="po-quote-card-row">' +
+          '<div class="po-quote-card-price">' + (row.price == null ? '<span class="muted">價格未確認</span>' : esc(fmtNT(row.price))) + "</div>" +
+          '<button type="button" class="' + btnClass + '" data-po-pick="' + esc(row.quote.id) + '">' + btnLabel + "</button>" +
+          "</div></div>";
+      });
+      html += "</div></div>";
+    });
+    if (total > QUOTE_PAGE_SIZE) {
+      html +=
+        '<div class="po-quote-pager">' +
+        '<button type="button" class="btn btn-ghost po-quote-pager-btn" data-po-quote-page="prev"' + (quotePage <= 1 ? " disabled" : "") + ">上一頁</button>" +
+        '<span class="po-quote-pager-status">第 ' + quotePage + " / " + totalPages + " 頁</span>" +
+        '<button type="button" class="btn btn-ghost po-quote-pager-btn" data-po-quote-page="next"' + (quotePage >= totalPages ? " disabled" : "") + ">下一頁</button>" +
+        "</div>";
+    }
+    html = annotateLowBadges(html, lastSearchRows.filter(function (r) { return r.level === "high"; }));
+    box.innerHTML = html;
+    box.hidden = false;
+  }
+
   function searchQuotes(query) {
     const q = String(query || "").trim();
     const summary = el("poCompareSummary");
@@ -730,6 +866,8 @@
       box.hidden = true;
       if (summary) summary.hidden = true;
       box.innerHTML = "";
+      lastSearchRows = [];
+      quotePage = 1;
       return;
     }
     const quotes = loadQuotes();
@@ -761,44 +899,10 @@
     sortBucket(buckets.partial);
     sortBucket(buckets.other);
     lastSearchRows = buckets.high.concat(buckets.partial, buckets.other);
+    quotePage = 1;
 
-    // 摘要：高度符合
     renderCompareSummary(buckets.high, summary);
-
-    const levelTitle = { high: "高度符合", partial: "部分符合", other: "其他可能相關" };
-    let html = "";
-    ["high", "partial", "other"].forEach(function (lv) {
-      const arr = buckets[lv];
-      if (!arr.length) return;
-      html += '<div class="po-result-group"><div class="po-result-group-title">' + esc(levelTitle[lv]) + "（" + arr.length + "）</div>";
-      html += '<div class="table-wrap"><table class="table"><thead><tr>' +
-        "<th>符合</th><th>廠商</th><th>規格</th><th>分類</th>" +
-        '<th style="text-align:right">單價</th><th>報價日期</th><th>新舊</th><th>備註</th><th></th>' +
-        "</tr></thead><tbody>";
-      arr.forEach(function (row) {
-        const age = ageLabel(row.days);
-        const recentLow = false; // filled below badges via data
-        html += "<tr>" +
-          "<td><span class=\"badge " + (lv === "high" ? "ok" : lv === "partial" ? "warn" : "tag") + "\">" + esc(levelTitle[lv]) + "</span></td>" +
-          "<td>" + esc(row.quote.vendor || "—") + "</td>" +
-          "<td>" + esc(row.name) + "</td>" +
-          "<td>" + esc(row.quote.category || "—") + "</td>" +
-          '<td style="text-align:right">' + (row.price == null ? '<span class="muted">價格未確認</span>' : esc(fmtNT(row.price))) + "</td>" +
-          "<td class=\"nowrap\">" + esc(fmtDate(row.quote.date)) + "</td>" +
-          "<td><span class=\"badge " + age.tone + "\">" + esc(age.text) + "</span></td>" +
-          "<td>" + esc(row.quote.note || "") + "</td>" +
-          '<td style="text-align:right"><button type="button" class="btn btn-primary btn-sm" data-po-pick="' + esc(row.quote.id) + '">選擇</button></td>' +
-          "</tr>";
-      });
-      html += "</tbody></table></div></div>";
-    });
-    if (!html) {
-      html = '<p class="muted">沒有高度符合結果。可改關鍵字，或使用「改用手動報價加入」。</p>';
-    }
-    // 標記近期最低／歷史最低（僅高度符合有效價）
-    html = annotateLowBadges(html, buckets.high);
-    box.innerHTML = html;
-    box.hidden = false;
+    renderQuoteResultPage();
   }
 
   function annotateLowBadges(html, highRows) {
@@ -812,7 +916,7 @@
     const recent = valid.filter(function (r) { return r.days != null && r.days <= 30; });
     if (!highRows.length) {
       summaryEl.hidden = false;
-      summaryEl.innerHTML = '<div class="muted">尚無高度符合結果。請確認規格，或改用手動報價。</div>';
+      summaryEl.innerHTML = '<div class="muted">尚無高度符合結果。</div>';
       return;
     }
     // 各廠商最新有效報價（摘要用）
@@ -854,7 +958,7 @@
     }
     const vendors = new Set(highRows.map(function (r) { return String(r.quote.vendor || ""); }));
     html += "<div class=\"muted\">歷史報價筆數：" + highRows.length + "｜涉及廠商：" + vendors.size + "</div>";
-    html += '<div class="muted small">不會自動選定最低價，請點「選擇」確認。</div>';
+    html += '<div class="muted small">請選擇報價。</div>';
     html += "</div>";
     summaryEl.innerHTML = html;
     summaryEl.hidden = false;
@@ -862,7 +966,7 @@
 
   function pickQuote(quoteId) {
     if (!currentOrder || !isEditable(currentOrder)) {
-      showMsg("僅草稿可加入／變更品項");
+      showMsg("僅編輯中可加入／變更品項");
       return;
     }
     const row = lastSearchRows.find(function (r) { return String(r.quote.id) === String(quoteId); });
@@ -900,14 +1004,17 @@
       currentOrder.items.push(item);
     }
     editingItemId = null;
+    lastAddedItemId = item.id;
     showMsg("已加入品項（記得儲存叫貨單）", 2000);
+    renderCurrentPick(item);
     renderItems();
     renderVendorGroups();
+    refreshVisibleQuoteResults();
   }
 
   function addManualItem() {
     if (!currentOrder || !isEditable(currentOrder)) {
-      showMsg("僅草稿可加入品項");
+      showMsg("僅編輯中可加入品項");
       return;
     }
     const vendor = String((el("poManualVendor") && el("poManualVendor").value) || "").trim();
@@ -947,10 +1054,13 @@
       else currentOrder.items.push(item);
     } else currentOrder.items.push(item);
     editingItemId = null;
+    lastAddedItemId = item.id;
     if (el("poManualBox")) el("poManualBox").hidden = true;
     showMsg("已手動加入品項（記得儲存）", 2000);
+    renderCurrentPick(item);
     renderItems();
     renderVendorGroups();
+    refreshVisibleQuoteResults();
   }
 
   function buildPrintHtml(order, onlyVendor) {
@@ -1040,6 +1150,12 @@
       if (el("poManualBox")) el("poManualBox").hidden = true;
     });
     el("poConfirmManualBtn") && el("poConfirmManualBtn").addEventListener("click", addManualItem);
+    el("poStickyViewBtn") && el("poStickyViewBtn").addEventListener("click", function () {
+      const target = el("poItemsSection") || el("poItemsSummary");
+      if (target && target.scrollIntoView) {
+        try { target.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (_) { target.scrollIntoView(true); }
+      }
+    });
 
     root.addEventListener("click", function (e) {
       const t = e.target;
@@ -1098,6 +1214,16 @@
         return;
       }
 
+      const qpage = t.closest("[data-po-quote-page]");
+      if (qpage) {
+        if (qpage.disabled) return;
+        const dir = qpage.getAttribute("data-po-quote-page");
+        if (dir === "prev") quotePage -= 1;
+        else if (dir === "next") quotePage += 1;
+        renderQuoteResultPage();
+        return;
+      }
+
       const pick = t.closest("[data-po-pick]");
       if (pick) {
         pickQuote(pick.getAttribute("data-po-pick"));
@@ -1112,6 +1238,7 @@
           currentOrder.items = currentOrder.items.filter(function (x) { return x.id !== id; });
           renderItems();
           renderVendorGroups();
+          refreshVisibleQuoteResults();
         } else if (act === "reprice") {
           const it = currentOrder.items.find(function (x) { return x.id === id; });
           if (!it) return;
