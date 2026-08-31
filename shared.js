@@ -4078,6 +4078,142 @@ async function createBackofficeAuthUser(input) {
   }
 }
 
+async function callBackofficeEdgeFunction(fnName, body) {
+  if (!isSupabaseConfigured()) return { ok: false, code: "network", status: 0, data: null, error: "Supabase 未設定" };
+  const hdr = await getSupabaseRestAuthHeaders({ requireUser: true });
+  if (!hdr || !hdr.ok || !hdr.headers) {
+    return {
+      ok: false,
+      code: (hdr && hdr.notAuthenticated) ? "unauthenticated" : "network",
+      status: (hdr && hdr.notAuthenticated) ? 401 : 0,
+      data: null,
+      error: (hdr && hdr.error) || "請先登入後台",
+    };
+  }
+  const url = String(SUPABASE_URL || "").replace(/\/$/, "") + "/functions/v1/" + String(fnName || "");
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: hdr.headers.Authorization,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body || {}),
+    });
+    let data = null;
+    try { data = await res.json(); } catch (_) { data = null; }
+    return { ok: !!(data && data.ok === true), status: res.status, data: data, error: null };
+  } catch (_) {
+    return { ok: false, code: "network", status: 0, data: null, error: "網路錯誤" };
+  }
+}
+
+function mapBackofficeAdminError(status, data, fallback) {
+  const code = String((data && data.code) || "");
+  if (status === 401 || code === "unauthenticated") {
+    return { ok: false, code: "unauthenticated", status: status, error: "請先登入後台" };
+  }
+  if (status === 403 && code === "self_lock") {
+    return { ok: false, code: "self_lock", status: status, error: "目前登入中的管理員不能停用或降權自己。" };
+  }
+  if (status === 403 && code === "last_admin") {
+    return { ok: false, code: "last_admin", status: status, error: "不能停用或降權最後一位管理員。" };
+  }
+  if (status === 403 || code === "forbidden") {
+    return { ok: false, code: "forbidden", status: status, error: "只有管理員可以執行此操作" };
+  }
+  if (status === 404 && code === "not_found") {
+    return { ok: false, code: "not_found", status: status, error: "找不到此帳號" };
+  }
+  if (status === 404) {
+    return { ok: false, code: "not_deployed", status: 404, error: "服務尚未部署" };
+  }
+  if (code === "validation") {
+    const raw = String((data && data.error) || "");
+    let msg = "資料不正確";
+    if (raw.indexOf("display_name") !== -1) msg = "請填顯示名稱";
+    else if (raw.indexOf("role") !== -1) msg = "角色只能是管理員或員工";
+    else if (raw.indexOf("password") !== -1) msg = "請填新密碼（至少 6 碼）";
+    else if (raw.indexOf("user_id") !== -1) msg = "帳號編號不正確";
+    return { ok: false, code: "validation", status: status, error: msg };
+  }
+  if (code === "edge_misconfigured") {
+    return { ok: false, code: "edge_misconfigured", status: status, error: "建立服務設定不完整" };
+  }
+  return { ok: false, code: code || "network", status: status, error: fallback || "操作失敗" };
+}
+
+async function stage7FetchProfiles() {
+  try {
+    const client = await getSupabaseAuthClient();
+    if (!client) return { ok: false, error: "Supabase 未設定", rows: [] };
+    const result = await client
+      .from("profiles")
+      .select("id,username,display_name,role,enabled,created_at,updated_at")
+      .order("created_at", { ascending: true });
+    if (result && result.error) {
+      return { ok: false, error: "無法讀取帳號列表", rows: [] };
+    }
+    const rows = result && Array.isArray(result.data) ? result.data : [];
+    return { ok: true, rows: rows };
+  } catch (_) {
+    return { ok: false, error: "無法讀取帳號列表", rows: [] };
+  }
+}
+
+async function updateBackofficeUser(input) {
+  const userId = String((input && input.userId) || "").trim();
+  const displayName = String((input && input.displayName) || "").trim();
+  const role = input && input.role === "admin" ? "admin" : (input && input.role === "staff" ? "staff" : "");
+  const enabled = !!(input && input.enabled);
+  if (!userId) return { ok: false, code: "validation", error: "帳號編號不正確" };
+  if (!displayName) return { ok: false, code: "validation", error: "請填顯示名稱" };
+  if (!role) return { ok: false, code: "validation", error: "角色只能是管理員或員工" };
+  const called = await callBackofficeEdgeFunction("update-backoffice-user", {
+    user_id: userId,
+    display_name: displayName,
+    role: role,
+    enabled: enabled === true,
+  });
+  if (called.ok && called.data && called.data.user) {
+    const u = called.data.user;
+    return {
+      ok: true,
+      user: {
+        id: String(u.id || userId),
+        username: String(u.username || ""),
+        displayName: String(u.display_name || u.displayName || displayName),
+        role: u.role === "admin" ? "admin" : "staff",
+        enabled: u.enabled === true,
+      },
+    };
+  }
+  if (called.error && !called.data) return { ok: false, code: called.code || "network", error: called.error };
+  return mapBackofficeAdminError(called.status || 0, called.data, "無法更新帳號");
+}
+
+async function resetBackofficeUserPassword(input) {
+  const userId = String((input && input.userId) || "").trim();
+  const newPassword = input && typeof input.newPassword === "string" ? input.newPassword : "";
+  try {
+    if (!userId) return { ok: false, code: "validation", error: "帳號編號不正確" };
+    if (!newPassword) return { ok: false, code: "validation", error: "請填新密碼" };
+    if (newPassword.length < 6) return { ok: false, code: "validation", error: "請填新密碼（至少 6 碼）" };
+    const called = await callBackofficeEdgeFunction("reset-backoffice-user-password", {
+      user_id: userId,
+      new_password: newPassword,
+    });
+    if (called.ok && called.data && called.data.user_id) {
+      return { ok: true, userId: String(called.data.user_id) };
+    }
+    if (called.error && !called.data) return { ok: false, code: called.code || "network", error: called.error };
+    return mapBackofficeAdminError(called.status || 0, called.data, "無法更新密碼");
+  } finally {
+    try { if (input && typeof input === "object") input.newPassword = ""; } catch (_) {}
+  }
+}
+
 function getSupabaseJsCreateClientSync() {
   try {
     if (typeof window !== "undefined" && window.supabase && typeof window.supabase.createClient === "function") {
@@ -4446,6 +4582,9 @@ window.DK = {
   getSupabaseAuthUser,
   adminUsernameToAuthEmail,
   createBackofficeAuthUser,
+  stage7FetchProfiles,
+  updateBackofficeUser,
+  resetBackofficeUserPassword,
   getAuthMigrationStatus,
   signInSupabaseAuthForMigration,
   signOutSupabaseAuthForMigration,

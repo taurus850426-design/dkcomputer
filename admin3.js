@@ -1294,6 +1294,32 @@
     const mine = String(me.username || "").trim().toLowerCase();
     return !!(u && mine && u === mine);
   }
+  let __dkAccountProfiles = [];
+  function mapAccountProfile(row) {
+    if (!row || !row.id) return null;
+    return {
+      id: String(row.id),
+      username: String(row.username || ""),
+      displayName: String(row.displayName || row.display_name || row.username || ""),
+      role: row.role === "admin" ? "admin" : "staff",
+      enabled: row.enabled === true,
+      createdAt: row.createdAt || row.created_at || null,
+    };
+  }
+  function sortAccountProfiles(list) {
+    return (list || []).slice().sort(function (a, b) {
+      if (!!a.enabled !== !!b.enabled) return a.enabled ? -1 : 1;
+      const ua = String(a.username || "").toLowerCase();
+      const ub = String(b.username || "").toLowerCase();
+      if (ua !== ub) return ua < ub ? -1 : 1;
+      const ta = Date.parse(a.createdAt || 0) || 0;
+      const tb = Date.parse(b.createdAt || 0) || 0;
+      return ta - tb;
+    });
+  }
+  function countEnabledAdmins(users, exceptId) {
+    return (users || []).filter((u) => u.role === "admin" && u.enabled && u.id !== exceptId).length;
+  }
   function syncAccountFormMode() {
     const isEdit = isAccountEditMode();
     const titleEl = document.getElementById("accountFormTitle");
@@ -1307,7 +1333,7 @@
     if (titleEl) titleEl.textContent = isEdit ? "編輯帳號" : "新增帳號";
     if (noteText) {
       noteText.textContent = isEdit
-        ? "此帳號使用 Supabase Auth。DK 後台不顯示或保存密碼。編輯角色／停用目前只更新此頁資料。"
+        ? "此帳號使用 Supabase Auth。登入帳號不可更改。角色與啟用狀態會寫入 profiles。"
         : "密碼由 Supabase Auth 管理，不會儲存在 DK 後台。";
     }
     if (saveBtn) {
@@ -1323,6 +1349,20 @@
     if (pwField) pwField.hidden = isEdit;
     if (enField) enField.hidden = !isEdit;
     if (provisionEl) provisionEl.hidden = isEdit;
+    const userEl = document.getElementById("accountUsername");
+    if (userEl) userEl.readOnly = isEdit;
+    const editingSelf = isEdit && isCurrentLoggedInAccount(
+      document.getElementById("accountEditId")?.value,
+      userEl && userEl.value
+    );
+    const selfLock = document.getElementById("accountSelfLockHint");
+    if (selfLock) selfLock.hidden = !editingSelf;
+    const roleEl = document.getElementById("accountRole");
+    const enEl = document.getElementById("accountEnabled");
+    const staffOpt = roleEl && roleEl.querySelector('option[value="staff"]');
+    if (staffOpt) staffOpt.disabled = !!editingSelf;
+    const offOpt = enEl && enEl.querySelector('option[value="0"]');
+    if (offOpt) offOpt.disabled = !!editingSelf;
   }
   function clearAccountPasswordField() {
     const passEl = document.getElementById("accountInitialPassword");
@@ -1465,43 +1505,61 @@
       try { box.hidden = true; } catch (__) {}
     }
   }
-  function renderAccountsPage() {
+  async function renderAccountsPage() {
     if (!requirePerm("accounts")) return;
     try { renderAuthMigrationStatus(); } catch (_) {}
     const hint = document.getElementById("authAccountsLegacyHint");
     if (hint) hint.hidden = !window.DK?.isAuthLoginModeSupabase?.();
-    try { window.DK.ensureAdminUsersPersisted?.(); } catch (_) {}
     const tbody = document.getElementById("accountsTbody");
     if (!tbody) return;
-    const users = window.DK.getAdminUsers ? window.DK.getAdminUsers() : [];
     const roleText = (r) => (window.DK.roleLabel ? window.DK.roleLabel(r) : (r === "staff" ? "員工" : "管理員"));
+    tbody.innerHTML = `<tr><td class="muted" colspan="6">讀取帳號列表…</td></tr>`;
+    renderRolePermCards();
+    syncAccountFormMode();
+    if (typeof window.DK.stage7FetchProfiles !== "function") {
+      tbody.innerHTML = `<tr><td class="muted" colspan="6">無法讀取 profiles</td></tr>`;
+      return;
+    }
+    let res = null;
+    try {
+      res = await window.DK.stage7FetchProfiles();
+    } catch (_) {
+      res = { ok: false, error: "無法讀取帳號列表", rows: [] };
+    }
+    if (!res || !res.ok) {
+      tbody.innerHTML = `<tr><td class="muted" colspan="6">${v2Esc((res && res.error) || "無法讀取帳號列表")}</td></tr>`;
+      return;
+    }
+    const users = sortAccountProfiles((res.rows || []).map(mapAccountProfile).filter(Boolean));
+    __dkAccountProfiles = users;
+    const enabledAdminCount = users.filter((u) => u.role === "admin" && u.enabled).length;
     tbody.innerHTML = users.length
       ? users.map((u) => {
           const created = u.createdAt ? String(u.createdAt).slice(0, 10) : "—";
           const roleCls = u.role === "admin" ? "status-badge role-badge-admin" : "status-badge role-badge-staff";
           const enabledCls = u.enabled ? "status-badge status-success" : "status-badge status-muted status-danger-low";
+          const isSelf = isCurrentLoggedInAccount(u.id, u.username);
+          const blockDisable = u.enabled && (isSelf || (u.role === "admin" && enabledAdminCount < 2));
+          const togLabel = u.enabled ? "停用" : "啟用";
+          const togDisabled = blockDisable ? " disabled" : "";
           return `<tr>
             <td class="table-primary">${v2Esc(u.displayName)}</td>
             <td class="table-secondary">${v2Esc(u.username)}</td>
             <td class="nowrap"><span class="${roleCls}">${v2Esc(roleText(u.role))}</span> <button type="button" class="btn btn-ghost btn-sm btn-account-perm" data-role="${v2Esc(u.role === "admin" ? "admin" : "staff")}">權限</button></td>
             <td><span class="${enabledCls}">${u.enabled ? "啟用" : "停用"}</span></td>
             <td class="nowrap table-secondary">${v2Esc(created)}</td>
-            <td style="text-align:right;white-space:nowrap">
+            <td class="table-actions" style="text-align:right;white-space:nowrap">
               <button type="button" class="btn btn-ghost btn-sm btn-account-edit" data-id="${v2Esc(u.id)}">編輯</button>
-              <button type="button" class="btn btn-ghost btn-sm btn-account-toggle" data-id="${v2Esc(u.id)}">${u.enabled ? "停用" : "啟用"}</button>
+              <button type="button" class="btn btn-ghost btn-sm btn-account-resetpw" data-id="${v2Esc(u.id)}" data-username="${v2Esc(u.username)}">重設密碼</button>
+              <button type="button" class="btn btn-ghost btn-sm btn-account-toggle" data-id="${v2Esc(u.id)}"${togDisabled}>${togLabel}</button>
             </td>
           </tr>`;
         }).join("")
       : `<tr><td class="muted" colspan="6">尚無帳號</td></tr>`;
-    renderRolePermCards();
     syncAccountFormMode();
   }
-  function countEnabledAdmins(users, exceptId) {
-    return users.filter((u) => u.role === "admin" && u.enabled && u.id !== exceptId).length;
-  }
   function fillAccountForm(id) {
-    const users = window.DK.getAdminUsers ? window.DK.getAdminUsers() : [];
-    const u = users.find((x) => x.id === id);
+    const u = __dkAccountProfiles.find((x) => x.id === id);
     if (!u) return;
     document.getElementById("accountEditId").value = u.id;
     document.getElementById("accountDisplayName").value = u.displayName || "";
@@ -1513,87 +1571,43 @@
     const formHelp = document.getElementById("accountFormRoleHelp");
     if (formHelp && !formHelp.hidden) fillRoleHelpPanel(formHelp, u.role === "admin" ? "admin" : "staff");
   }
-  function saveAccountFromForm() {
+  async function saveAccountFromForm() {
     if (!requirePerm("accounts")) return;
     const editId = String(document.getElementById("accountEditId")?.value || "").trim();
     const displayName = String(document.getElementById("accountDisplayName")?.value || "").trim();
     const username = String(document.getElementById("accountUsername")?.value || "").trim();
     const role = document.getElementById("accountRole")?.value === "admin" ? "admin" : "staff";
     const enabled = document.getElementById("accountEnabled")?.value !== "0";
-    if (!editId) {
-      return showAccountMsg("目前無法在此建立可登入帳號。請先在 Supabase Auth 建立 User，再建立對應 profile。");
-    }
+    if (!editId) return showAccountMsg("請先從列表選擇要編輯的帳號");
     if (!displayName) return showAccountMsg("請填顯示名稱");
-    if (!username) return showAccountMsg("請填登入帳號");
-    const users = (window.DK.getAdminUsers ? window.DK.getAdminUsers() : []).map((u) => {
-      const n = { ...u };
-      delete n.password;
-      return n;
-    });
-    const dup = users.find((u) => u.username.toLowerCase() === username.toLowerCase() && u.id !== editId);
-    if (dup) return showAccountMsg("登入帳號不可重複");
-    const now = new Date().toISOString();
-    const idx = users.findIndex((u) => u.id === editId);
-    if (idx < 0) return showAccountMsg("找不到帳號");
-    const prev = users[idx];
-    if (!enabled && isCurrentLoggedInAccount(editId, username)) {
-      return showAccountMsg("不能停用目前登入中的帳號");
+    if (isCurrentLoggedInAccount(editId, username) && (!enabled || role !== "admin")) {
+      return showAccountMsg("目前登入中的管理員不能停用或降權自己。");
     }
-    if (!enabled && prev.role === "admin" && countEnabledAdmins(users, editId) < 1) {
-      return showAccountMsg("不能停用最後一位管理員");
+    if (typeof window.DK.updateBackofficeUser !== "function") {
+      return showAccountMsg("更新服務尚未就緒");
     }
-    if (prev.role === "admin" && role !== "admin" && countEnabledAdmins(users, editId) < 1) {
-      return showAccountMsg("不能把最後一位管理員改成員工");
+    const saveBtn = document.getElementById("accountSaveBtn");
+    if (saveBtn) saveBtn.disabled = true;
+    showAccountMsg("正在更新帳號…");
+    let result = null;
+    try {
+      result = await window.DK.updateBackofficeUser({
+        userId: editId,
+        displayName,
+        role,
+        enabled,
+      });
+    } catch (_) {
+      result = { ok: false, error: "網路錯誤，無法更新帳號" };
     }
-    const nextUser = {
-      ...prev,
-      displayName,
-      username,
-      role,
-      enabled,
-      updatedAt: now,
-    };
-    delete nextUser.password;
-    const nextList = users.map((u, i) => (i === idx ? nextUser : u));
-    if (!nextList.some((u) => u.role === "admin" && u.enabled)) {
-      return showAccountMsg("系統必須至少保留一位有效管理員");
+    if (saveBtn) saveBtn.disabled = false;
+    if (!result || !result.ok) {
+      return showAccountMsg((result && result.error) || "無法更新帳號");
     }
-    users[idx] = nextUser;
-    window.DK.saveAdminUsers(users);
-    showAccountMsg("已更新帳號資料。此頁不保存密碼；正式登入仍以 Supabase Auth 與 profiles 為準。");
     resetAccountForm();
-    renderAccountsPage();
+    await renderAccountsPage();
     applyRoleUI();
-  }
-  function mergeProvisionedUserIntoLocalList(created) {
-    if (!created || !created.id || !created.username) return;
-    const now = new Date().toISOString();
-    const users = (window.DK.getAdminUsers ? window.DK.getAdminUsers() : []).map((u) => {
-      const n = { ...u };
-      delete n.password;
-      return n;
-    });
-    const uname = String(created.username).trim().toLowerCase();
-    const nextRow = {
-      id: String(created.id),
-      username: String(created.username).trim(),
-      displayName: String(created.displayName || created.username).trim(),
-      role: created.role === "admin" ? "admin" : "staff",
-      enabled: true,
-      createdAt: now,
-      updatedAt: now,
-    };
-    const byId = users.findIndex((u) => String(u.id) === String(created.id));
-    const byName = users.findIndex((u) => String(u.username || "").trim().toLowerCase() === uname);
-    if (byId >= 0) {
-      users[byId] = { ...users[byId], ...nextRow, createdAt: users[byId].createdAt || now };
-    } else if (byName >= 0) {
-      users[byName] = { ...users[byName], ...nextRow, createdAt: users[byName].createdAt || now };
-    } else {
-      users.push(nextRow);
-    }
-    users.forEach((u) => { delete u.password; });
-    window.DK.saveAdminUsers(users);
+    showAccountMsg("已更新帳號。角色與啟用狀態以 profiles 為準。");
   }
   async function createAccountFromForm() {
     if (!requirePerm("accounts")) return;
@@ -1626,39 +1640,118 @@
       return showAccountMsg((result && result.error) || "無法建立登入帳號");
     }
     if (passEl) passEl.value = "";
-    try { mergeProvisionedUserIntoLocalList(result.user); } catch (_) {}
     resetAccountForm();
-    renderAccountsPage();
+    await renderAccountsPage();
     applyRoleUI();
     showAccountMsg("已建立登入帳號「" + String((result.user && result.user.username) || username) + "」，可立即用此帳號與密碼登入。");
   }
-  function toggleAccountEnabled(id) {
+  async function toggleAccountEnabled(id) {
     if (!requirePerm("accounts")) return;
-    const users = (window.DK.getAdminUsers ? window.DK.getAdminUsers() : []).map((u) => {
-      const n = { ...u };
-      delete n.password;
-      return n;
-    });
-    const idx = users.findIndex((u) => u.id === id);
-    if (idx < 0) return;
-    const prev = users[idx];
+    const prev = __dkAccountProfiles.find((u) => u.id === id);
+    if (!prev) return;
     if (prev.enabled) {
-      if (isCurrentLoggedInAccount(id, prev.username)) return showAccountMsg("不能停用目前登入中的帳號");
-      if (prev.role === "admin" && countEnabledAdmins(users, id) < 1) return showAccountMsg("不能停用最後一位管理員");
+      if (isCurrentLoggedInAccount(id, prev.username)) {
+        return showAccountMsg("目前登入中的管理員不能停用或降權自己。");
+      }
+      if (prev.role === "admin" && countEnabledAdmins(__dkAccountProfiles, id) < 1) {
+        return showAccountMsg("不能停用最後一位管理員");
+      }
     }
-    const nextEnabled = !prev.enabled;
-    const nextList = users.map((u, i) => (i === idx ? { ...prev, enabled: nextEnabled, updatedAt: new Date().toISOString() } : u));
-    if (!nextList.some((u) => u.role === "admin" && u.enabled)) {
-      return showAccountMsg("系統必須至少保留一位有效管理員");
+    if (typeof window.DK.updateBackofficeUser !== "function") {
+      return showAccountMsg("更新服務尚未就緒");
     }
-    users[idx] = nextList[idx];
-    window.DK.saveAdminUsers(users);
+    showAccountMsg(prev.enabled ? "正在停用…" : "正在啟用…");
+    let result = null;
+    try {
+      result = await window.DK.updateBackofficeUser({
+        userId: prev.id,
+        displayName: prev.displayName,
+        role: prev.role,
+        enabled: !prev.enabled,
+      });
+    } catch (_) {
+      result = { ok: false, error: "網路錯誤，無法更新帳號" };
+    }
+    if (!result || !result.ok) {
+      return showAccountMsg((result && result.error) || "無法更新帳號");
+    }
+    await renderAccountsPage();
     showAccountMsg(
-      users[idx].enabled
-        ? "已啟用此頁帳號資料。正式後台可否使用，以 Supabase profiles.enabled 為準。"
-        : "已停用此頁帳號資料。不會刪除 Auth User；正式登入仍以 profiles.enabled 為準。"
+      result.user && result.user.enabled
+        ? "已啟用。此帳號可再次使用 DK 後台。"
+        : "已停用。此帳號仍存在於 Supabase Auth，但無法使用 DK 後台。"
     );
-    renderAccountsPage();
+  }
+  function showAccountResetPwMsg(text) {
+    const el = document.getElementById("accountResetPwMsg");
+    if (!el) return;
+    if (!text) { el.hidden = true; el.textContent = ""; return; }
+    el.hidden = false;
+    el.textContent = text;
+  }
+  function clearAccountResetPwFields() {
+    const a = document.getElementById("accountResetPwNew");
+    const b = document.getElementById("accountResetPwConfirm");
+    if (a) { a.value = ""; a.type = "password"; }
+    if (b) b.value = "";
+    const tog = document.getElementById("accountResetPwToggle");
+    if (tog) tog.textContent = "顯示";
+  }
+  function closeAccountResetPwModal() {
+    const modal = document.getElementById("accountResetPwModal");
+    if (modal) modal.hidden = true;
+    const idEl = document.getElementById("accountResetPwUserId");
+    if (idEl) idEl.value = "";
+    clearAccountResetPwFields();
+    showAccountResetPwMsg("");
+  }
+  function openAccountResetPwModal(id) {
+    const u = __dkAccountProfiles.find((x) => x.id === id);
+    if (!u) return;
+    const modal = document.getElementById("accountResetPwModal");
+    const idEl = document.getElementById("accountResetPwUserId");
+    const target = document.getElementById("accountResetPwTarget");
+    if (idEl) idEl.value = u.id;
+    if (target) target.textContent = "帳號：" + (u.username || "") + "。密碼已更新後，之後登入請使用新密碼。";
+    clearAccountResetPwFields();
+    showAccountResetPwMsg("");
+    if (modal) modal.hidden = false;
+  }
+  async function submitAccountResetPassword() {
+    if (!requirePerm("accounts")) return;
+    const userId = String(document.getElementById("accountResetPwUserId")?.value || "").trim();
+    const aEl = document.getElementById("accountResetPwNew");
+    const bEl = document.getElementById("accountResetPwConfirm");
+    let pw = String(aEl?.value || "");
+    let pw2 = String(bEl?.value || "");
+    if (!userId) return showAccountResetPwMsg("找不到帳號");
+    if (!pw) return showAccountResetPwMsg("請填新密碼");
+    if (pw.length < 6) return showAccountResetPwMsg("請填新密碼（至少 6 碼）");
+    if (pw !== pw2) return showAccountResetPwMsg("兩次密碼不一致");
+    if (typeof window.DK.resetBackofficeUserPassword !== "function") {
+      pw = "";
+      pw2 = "";
+      return showAccountResetPwMsg("重設服務尚未就緒");
+    }
+    const btn = document.getElementById("accountResetPwSubmit");
+    if (btn) btn.disabled = true;
+    showAccountResetPwMsg("正在更新密碼…");
+    let result = null;
+    try {
+      result = await window.DK.resetBackofficeUserPassword({ userId, newPassword: pw });
+    } catch (_) {
+      result = { ok: false, error: "網路錯誤，無法更新密碼" };
+    } finally {
+      pw = "";
+      pw2 = "";
+    }
+    if (btn) btn.disabled = false;
+    if (!result || !result.ok) {
+      return showAccountResetPwMsg((result && result.error) || "無法更新密碼");
+    }
+    clearAccountResetPwFields();
+    showAccountResetPwMsg("密碼已更新，之後登入請使用新密碼。");
+    showAccountMsg("密碼已更新，之後登入請使用新密碼。");
   }
   document.getElementById("accountSaveBtn")?.addEventListener("click", saveAccountFromForm);
   document.getElementById("accountCreateBtn")?.addEventListener("click", () => {
@@ -1686,15 +1779,30 @@
   document.getElementById("accountsTbody")?.addEventListener("click", (e) => {
     const editBtn = e.target.closest?.(".btn-account-edit");
     const togBtn = e.target.closest?.(".btn-account-toggle");
+    const pwBtn = e.target.closest?.(".btn-account-resetpw");
     const permBtn = e.target.closest?.(".btn-account-perm");
     if (editBtn) fillAccountForm(editBtn.getAttribute("data-id"));
-    else if (togBtn) toggleAccountEnabled(togBtn.getAttribute("data-id"));
+    else if (pwBtn) openAccountResetPwModal(pwBtn.getAttribute("data-id"));
+    else if (togBtn && !togBtn.disabled) toggleAccountEnabled(togBtn.getAttribute("data-id"));
     else if (permBtn) {
       const role = permBtn.getAttribute("data-role") === "admin" ? "admin" : "staff";
       const listHelp = document.getElementById("accountListRoleHelp");
       showRoleHelpPanel(listHelp, role, true);
       highlightRolePermCard(role);
     }
+  });
+  document.getElementById("accountResetPwClose")?.addEventListener("click", closeAccountResetPwModal);
+  document.getElementById("accountResetPwCancel")?.addEventListener("click", closeAccountResetPwModal);
+  document.getElementById("accountResetPwSubmit")?.addEventListener("click", () => {
+    submitAccountResetPassword();
+  });
+  document.getElementById("accountResetPwToggle")?.addEventListener("click", () => {
+    const passEl = document.getElementById("accountResetPwNew");
+    const tog = document.getElementById("accountResetPwToggle");
+    if (!passEl) return;
+    const show = passEl.type === "password";
+    passEl.type = show ? "text" : "password";
+    if (tog) tog.textContent = show ? "隱藏" : "顯示";
   });
 
   try { restoreAdminTab(); } catch (_) {}

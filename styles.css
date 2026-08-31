@@ -6667,4 +6667,23 @@ body.admin-page .account-password-row .btn{
   flex: 0 0 auto;
   min-height: 44px;
 }
+body.admin-page .account-reset-pw-card{
+  max-width: 480px;
+}
+body.admin-page #tab-accounts .table-actions{
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+@media (max-width: 640px){
+  body.admin-page #accountResetPwModal .item-editor-card{
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+  }
+  body.admin-page #accountResetPwModal .full.actions .btn{
+    width: 100%;
+    min-height: 44px;
+  }
+}
 

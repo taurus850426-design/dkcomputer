@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260831auth2" />
+            <link rel="stylesheet" href="./styles.css?v=20260831auth3" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -1879,8 +1879,8 @@
             <div class="section-head" style="margin-bottom: 10px">
               <div>
                 <h2 class="h2">帳號管理</h2>
-                <p class="muted">可建立真正可登入的 Auth 帳號。既有帳號的顯示名稱、角色與停用，目前仍只更新此頁資料。</p>
-                <p id="authAccountsLegacyHint" class="muted small" hidden>正式登入已使用 Supabase Auth。新增會建立 Auth User 與 profile；密碼不會寫入網站設定。</p>
+                <p class="muted">帳號以 Supabase Auth 與 profiles 為準。可新增登入帳號、調整角色／啟用狀態，並重設密碼。</p>
+                <p id="authAccountsLegacyHint" class="muted small" hidden>正式登入已使用 Supabase Auth。密碼不會寫入網站設定。</p>
               </div>
             </div>
             <div id="authMigrationStatus" class="section-card-soft surface-neutral admin-stack-gap auth-status-panel" data-admin-only hidden>
@@ -1915,7 +1915,7 @@
                 <div class="field">
                   <label for="accountUsername">登入帳號</label>
                   <input id="accountUsername" type="text" autocomplete="off" />
-                  <p class="form-hint" id="accountUsernameHint">登入識別為 username，對應 Auth email：username@login.dkcomputer.internal</p>
+                  <p class="form-hint" id="accountUsernameHint">登入識別為 username，對應 Auth email：username@login.dkcomputer.internal。編輯時不可更改登入帳號。</p>
                 </div>
                 <div class="field" id="accountPasswordField">
                   <label for="accountInitialPassword">初始密碼</label>
@@ -1939,7 +1939,8 @@
                     <option value="1">啟用</option>
                     <option value="0">停用</option>
                   </select>
-                  <p class="form-hint" id="accountEnabledHint">停用只更新此頁帳號資料，不會刪除 Auth User。正式後台可否使用，以 Supabase profiles.enabled 為準。</p>
+                  <p class="form-hint" id="accountEnabledHint">停用後此帳號仍存在於 Supabase Auth，但無法使用 DK 後台。重新啟用即可恢復。</p>
+                  <p class="form-hint" id="accountSelfLockHint" hidden>目前登入中的管理員不能停用或降權自己。</p>
                 </div>
                 <div class="full actions">
                   <button id="accountCreateBtn" class="btn btn-primary primary-action" type="button">建立登入帳號</button>
@@ -1949,7 +1950,7 @@
               </div>
               <div id="accountMsg" class="muted" style="margin-top:10px" hidden></div>
             </div>
-            <p class="muted small" id="accountListHint">顯示名稱、登入帳號、角色、狀態、建立時間。新建立的登入帳號會列入此表；編輯／停用目前仍只改此頁資料，正式登入以 Auth 與 profiles 為準。</p>
+            <p class="muted small" id="accountListHint">列表來自 public.profiles。停用後無法使用 DK 後台，不會刪除 Auth User。</p>
             <div class="table-wrap account-table-wrap">
               <table class="table">
                 <thead>
@@ -1968,7 +1969,7 @@
             <div id="accountListRoleHelp" class="account-role-help" hidden style="margin-top:12px"></div>
             <h3 class="h3" style="margin-top:18px">角色權限說明</h3>
             <div id="rolePermCards" class="role-perm-grid"></div>
-            <p class="muted small" style="margin-top:10px">這是前端權限控制（1.0），不是 Supabase Auth。登入密碼請在 Supabase Auth 管理，不要寫入 site_config。</p>
+            <p class="muted small" style="margin-top:10px">這是前端權限控制（1.0）。登入驗證與帳號狀態以 Supabase Auth 與 profiles 為準。</p>
           </section>
 
         </section>
@@ -1977,6 +1978,37 @@
     </main>
 
     <div id="adminToast" class="admin-toast" aria-live="polite" hidden></div>
+    <div id="accountResetPwModal" class="item-editor-modal" hidden>
+      <div class="card item-editor-card account-reset-pw-card" role="dialog" aria-modal="true" aria-labelledby="accountResetPwTitle">
+        <div class="section-head">
+          <div>
+            <h3 id="accountResetPwTitle" class="h3">重設密碼</h3>
+            <p class="muted small" id="accountResetPwTarget">將更新 Supabase Auth 密碼，不會儲存在 DK 後台。</p>
+          </div>
+          <button id="accountResetPwClose" class="btn btn-ghost btn-sm tertiary-action" type="button">關閉</button>
+        </div>
+        <input type="hidden" id="accountResetPwUserId" value="" />
+        <div class="form-grid" style="margin-top:12px">
+          <div class="field full">
+            <label for="accountResetPwNew">新密碼</label>
+            <div class="account-password-row">
+              <input id="accountResetPwNew" type="password" autocomplete="new-password" />
+              <button id="accountResetPwToggle" class="btn btn-ghost btn-sm" type="button">顯示</button>
+            </div>
+          </div>
+          <div class="field full">
+            <label for="accountResetPwConfirm">確認新密碼</label>
+            <input id="accountResetPwConfirm" type="password" autocomplete="new-password" />
+            <p class="form-hint">至少 6 碼。送出後立即清除，不會寫入 localStorage、site_config 或 profile。</p>
+          </div>
+          <div class="full actions">
+            <button id="accountResetPwSubmit" class="btn btn-primary primary-action" type="button">更新密碼</button>
+            <button id="accountResetPwCancel" class="btn btn-ghost tertiary-action" type="button">取消</button>
+          </div>
+        </div>
+        <div id="accountResetPwMsg" class="muted" style="margin-top:10px" hidden></div>
+      </div>
+    </div>
     <div id="apCreateModal" class="item-editor-modal ap-create-modal" hidden>
       <div class="card item-editor-card ap-create-card" role="dialog" aria-modal="true" aria-labelledby="apCreateTitle">
         <div class="section-head">
@@ -2067,12 +2099,12 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260831auth2"></script>
+    <script src="./shared.js?v=20260831auth3"></script>
     <script src="./inventory-ledger.js?v=20260826rg3"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260831auth2"></script>
+    <script src="./admin3.js?v=20260831auth3"></script>
     <script src="./purchase-orders.js?v=20260827po1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260826ds7"></script>

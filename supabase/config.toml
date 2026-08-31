@@ -2,9 +2,17 @@
 # Production deploy:
 #   supabase functions deploy attendance-network
 #   supabase functions deploy create-backoffice-user
+#   supabase functions deploy update-backoffice-user
+#   supabase functions deploy reset-backoffice-user-password
 
 [functions.attendance-network]
 verify_jwt = true
 
 [functions.create-backoffice-user]
+verify_jwt = true
+
+[functions.update-backoffice-user]
+verify_jwt = true
+
+[functions.reset-backoffice-user-password]
 verify_jwt = true
