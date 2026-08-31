@@ -6580,3 +6580,77 @@ body.admin-page .ap-setting-row-extra{
   }
 }
 
+/* Stage 15-4 | Account Auth UX */
+body.admin-page .auth-status-panel{
+  padding: 10px 12px;
+  margin-bottom: 16px;
+}
+body.admin-page .auth-status-panel .h3{
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dk-muted);
+  margin: 0 0 4px;
+}
+body.admin-page .auth-status-panel ul{
+  margin: 4px 0 0;
+  padding-left: 18px;
+  line-height: 1.65;
+  font-size: 12px;
+}
+body.admin-page .auth-status-panel #authStage3Test{
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(17, 24, 39, 0.08);
+}
+body.admin-page .account-form-card{
+  margin-bottom: 16px;
+}
+body.admin-page .account-auth-note,
+body.admin-page .account-provision-banner{
+  margin: 10px 0 0;
+  padding: 10px 12px;
+}
+body.admin-page .account-auth-note .form-section-title,
+body.admin-page .account-provision-banner .form-section-title{
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dk-muted);
+}
+body.admin-page .account-auth-note .form-hint,
+body.admin-page .account-provision-banner .form-hint{
+  margin-top: 4px;
+}
+body.admin-page .status-danger-low{
+  background: rgba(255, 92, 122, 0.08);
+  border-color: rgba(255, 92, 122, 0.18);
+  color: #9b1238;
+  font-weight: 600;
+}
+body.admin-page #accountListHint{
+  margin: 0 0 8px;
+}
+body.admin-page #tab-accounts .account-table-wrap{
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 640px){
+  body.admin-page #tab-accounts .form-grid{
+    grid-template-columns: 1fr !important;
+  }
+  body.admin-page #tab-accounts input[type="text"],
+  body.admin-page #tab-accounts select{
+    width: 100%;
+    min-height: 44px;
+  }
+  body.admin-page #tab-accounts .full.actions{
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  body.admin-page #tab-accounts .full.actions .btn{
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+}
+
