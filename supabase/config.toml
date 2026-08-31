@@ -1,5 +1,10 @@
 # Supabase local / CLI config for Edge Functions.
-# Production deploy: supabase functions deploy attendance-network
+# Production deploy:
+#   supabase functions deploy attendance-network
+#   supabase functions deploy create-backoffice-user
 
 [functions.attendance-network]
+verify_jwt = true
+
+[functions.create-backoffice-user]
 verify_jwt = true

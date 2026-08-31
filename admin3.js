@@ -1299,11 +1299,15 @@
     const titleEl = document.getElementById("accountFormTitle");
     const noteText = document.getElementById("accountAuthNoteText");
     const saveBtn = document.getElementById("accountSaveBtn");
+    const createBtn = document.getElementById("accountCreateBtn");
     const provisionEl = document.getElementById("accountProvisionBanner");
+    const pwField = document.getElementById("accountPasswordField");
+    const enField = document.getElementById("accountEnabledField");
+    const canCreate = !!(window.DK?.isAuthLoginModeSupabase?.() && typeof window.DK.createBackofficeAuthUser === "function");
     if (titleEl) titleEl.textContent = isEdit ? "編輯帳號" : "新增帳號";
     if (noteText) {
       noteText.textContent = isEdit
-        ? "此帳號使用 Supabase Auth。DK 後台不顯示或保存密碼。"
+        ? "此帳號使用 Supabase Auth。DK 後台不顯示或保存密碼。編輯角色／停用目前只更新此頁資料。"
         : "密碼由 Supabase Auth 管理，不會儲存在 DK 後台。";
     }
     if (saveBtn) {
@@ -1311,7 +1315,23 @@
       saveBtn.disabled = !isEdit;
       saveBtn.textContent = "儲存帳號";
     }
+    if (createBtn) {
+      createBtn.hidden = isEdit;
+      createBtn.disabled = isEdit || !canCreate;
+      createBtn.textContent = "建立登入帳號";
+    }
+    if (pwField) pwField.hidden = isEdit;
+    if (enField) enField.hidden = !isEdit;
     if (provisionEl) provisionEl.hidden = isEdit;
+  }
+  function clearAccountPasswordField() {
+    const passEl = document.getElementById("accountInitialPassword");
+    if (passEl) {
+      passEl.value = "";
+      passEl.type = "password";
+    }
+    const tog = document.getElementById("accountPasswordToggle");
+    if (tog) tog.textContent = "顯示";
   }
   function resetAccountForm() {
     const idEl = document.getElementById("accountEditId");
@@ -1324,6 +1344,7 @@
     if (userEl) userEl.value = "";
     if (roleEl) roleEl.value = "staff";
     if (enEl) enEl.value = "1";
+    clearAccountPasswordField();
     showAccountMsg("");
     const formHelp = document.getElementById("accountFormRoleHelp");
     if (formHelp && !formHelp.hidden) fillRoleHelpPanel(formHelp, "staff");
@@ -1544,6 +1565,73 @@
     renderAccountsPage();
     applyRoleUI();
   }
+  function mergeProvisionedUserIntoLocalList(created) {
+    if (!created || !created.id || !created.username) return;
+    const now = new Date().toISOString();
+    const users = (window.DK.getAdminUsers ? window.DK.getAdminUsers() : []).map((u) => {
+      const n = { ...u };
+      delete n.password;
+      return n;
+    });
+    const uname = String(created.username).trim().toLowerCase();
+    const nextRow = {
+      id: String(created.id),
+      username: String(created.username).trim(),
+      displayName: String(created.displayName || created.username).trim(),
+      role: created.role === "admin" ? "admin" : "staff",
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const byId = users.findIndex((u) => String(u.id) === String(created.id));
+    const byName = users.findIndex((u) => String(u.username || "").trim().toLowerCase() === uname);
+    if (byId >= 0) {
+      users[byId] = { ...users[byId], ...nextRow, createdAt: users[byId].createdAt || now };
+    } else if (byName >= 0) {
+      users[byName] = { ...users[byName], ...nextRow, createdAt: users[byName].createdAt || now };
+    } else {
+      users.push(nextRow);
+    }
+    users.forEach((u) => { delete u.password; });
+    window.DK.saveAdminUsers(users);
+  }
+  async function createAccountFromForm() {
+    if (!requirePerm("accounts")) return;
+    if (isAccountEditMode()) return;
+    const displayName = String(document.getElementById("accountDisplayName")?.value || "").trim();
+    const username = String(document.getElementById("accountUsername")?.value || "").trim();
+    const role = document.getElementById("accountRole")?.value === "admin" ? "admin" : "staff";
+    const passEl = document.getElementById("accountInitialPassword");
+    let password = String(passEl?.value || "");
+    if (!displayName) return showAccountMsg("請填顯示名稱");
+    if (!username) return showAccountMsg("請填登入帳號");
+    if (!password) return showAccountMsg("請填初始密碼");
+    if (typeof window.DK?.createBackofficeAuthUser !== "function") {
+      password = "";
+      return showAccountMsg("建立服務尚未就緒");
+    }
+    const createBtn = document.getElementById("accountCreateBtn");
+    if (createBtn) createBtn.disabled = true;
+    showAccountMsg("正在建立登入帳號…");
+    let result = null;
+    try {
+      result = await window.DK.createBackofficeAuthUser({ displayName, username, password, role });
+    } catch (_) {
+      result = { ok: false, code: "network", error: "網路錯誤，無法建立帳號" };
+    } finally {
+      password = "";
+    }
+    if (!result || !result.ok) {
+      if (createBtn) createBtn.disabled = false;
+      return showAccountMsg((result && result.error) || "無法建立登入帳號");
+    }
+    if (passEl) passEl.value = "";
+    try { mergeProvisionedUserIntoLocalList(result.user); } catch (_) {}
+    resetAccountForm();
+    renderAccountsPage();
+    applyRoleUI();
+    showAccountMsg("已建立登入帳號「" + String((result.user && result.user.username) || username) + "」，可立即用此帳號與密碼登入。");
+  }
   function toggleAccountEnabled(id) {
     if (!requirePerm("accounts")) return;
     const users = (window.DK.getAdminUsers ? window.DK.getAdminUsers() : []).map((u) => {
@@ -1573,6 +1661,17 @@
     renderAccountsPage();
   }
   document.getElementById("accountSaveBtn")?.addEventListener("click", saveAccountFromForm);
+  document.getElementById("accountCreateBtn")?.addEventListener("click", () => {
+    createAccountFromForm();
+  });
+  document.getElementById("accountPasswordToggle")?.addEventListener("click", () => {
+    const passEl = document.getElementById("accountInitialPassword");
+    const tog = document.getElementById("accountPasswordToggle");
+    if (!passEl) return;
+    const show = passEl.type === "password";
+    passEl.type = show ? "text" : "password";
+    if (tog) tog.textContent = show ? "隱藏" : "顯示";
+  });
   document.getElementById("accountResetFormBtn")?.addEventListener("click", resetAccountForm);
   try { syncAccountFormMode(); } catch (_) {}
   document.getElementById("accountRoleHelpBtn")?.addEventListener("click", () => {

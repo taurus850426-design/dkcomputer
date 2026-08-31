@@ -3966,6 +3966,118 @@ function adminUsernameToAuthEmail(username) {
   return u + "@login.dkcomputer.internal";
 }
 
+function mapCreateBackofficeUserError(status, data) {
+  const code = String((data && data.code) || "");
+  const userId = data && data.user_id ? String(data.user_id) : "";
+  if (status === 401 || code === "unauthenticated") {
+    return { ok: false, code: "unauthenticated", status: status, error: "請先登入後台" };
+  }
+  if (status === 403 || code === "forbidden") {
+    return { ok: false, code: "forbidden", status: status, error: "只有管理員可以建立登入帳號" };
+  }
+  if (status === 409 || code === "conflict") {
+    return { ok: false, code: "conflict", status: status, error: "此登入帳號已存在，未覆蓋既有帳號" };
+  }
+  if (status === 404) {
+    return { ok: false, code: "not_deployed", status: 404, error: "建立服務尚未部署（create-backoffice-user）" };
+  }
+  if (code === "validation") {
+    const raw = String((data && data.error) || "");
+    let msg = "建立資料不正確";
+    if (raw.indexOf("display_name") !== -1) msg = "請填顯示名稱";
+    else if (raw.indexOf("username") !== -1) msg = "登入帳號格式不正確";
+    else if (raw.indexOf("role") !== -1) msg = "角色只能是管理員或員工";
+    else if (raw.indexOf("password") !== -1) msg = "請填初始密碼（至少 6 碼）";
+    return { ok: false, code: "validation", status: status, error: msg };
+  }
+  if (code === "rollback_failed") {
+    return {
+      ok: false,
+      code: "rollback_failed",
+      status: status,
+      error: "建立失敗且無法回滾 Auth User" + (userId ? "（user " + userId + "）" : ""),
+      user_id: userId || undefined,
+    };
+  }
+  if (code === "profile_failed") {
+    return { ok: false, code: "profile_failed", status: status, error: "Profile 建立失敗，已嘗試回滾 Auth User" };
+  }
+  if (code === "edge_misconfigured") {
+    return { ok: false, code: "edge_misconfigured", status: status, error: "建立服務設定不完整" };
+  }
+  return { ok: false, code: code || "network", status: status, error: "無法建立登入帳號" };
+}
+
+/**
+ * Stage 15-4B：以目前登入者 JWT 呼叫 Edge Function 建立 Auth User + profile。
+ * 不得使用 service_role。password 只送 request body，不寫 localStorage / site_config / profiles。
+ */
+async function createBackofficeAuthUser(input) {
+  const displayName = String((input && input.displayName) || "").trim();
+  const username = String((input && input.username) || "").trim();
+  const password = input && typeof input.password === "string" ? input.password : "";
+  const role = input && input.role === "admin" ? "admin" : (input && input.role === "staff" ? "staff" : "");
+  try {
+    if (!displayName) return { ok: false, code: "validation", error: "請填顯示名稱" };
+    const email = adminUsernameToAuthEmail(username);
+    if (!email) return { ok: false, code: "validation", error: "登入帳號格式不正確" };
+    if (!role) return { ok: false, code: "validation", error: "角色只能是管理員或員工" };
+    if (!password) return { ok: false, code: "validation", error: "請填初始密碼" };
+    if (password.length < 6) return { ok: false, code: "validation", error: "請填初始密碼（至少 6 碼）" };
+    if (!isSupabaseConfigured()) return { ok: false, code: "network", error: "Supabase 未設定" };
+    const hdr = await getSupabaseRestAuthHeaders({ requireUser: true });
+    if (!hdr || !hdr.ok || !hdr.headers) {
+      return {
+        ok: false,
+        code: (hdr && hdr.notAuthenticated) ? "unauthenticated" : "network",
+        status: (hdr && hdr.notAuthenticated) ? 401 : 0,
+        error: (hdr && hdr.error) || "請先登入後台",
+      };
+    }
+    const url = String(SUPABASE_URL || "").replace(/\/$/, "") + "/functions/v1/create-backoffice-user";
+    let res = null;
+    let data = null;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: hdr.headers.Authorization,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          display_name: displayName,
+          username: username,
+          password: password,
+          role: role,
+        }),
+      });
+      try {
+        data = await res.json();
+      } catch (_) {
+        data = null;
+      }
+    } catch (_) {
+      return { ok: false, code: "network", error: "網路錯誤，無法建立帳號" };
+    }
+    if (data && data.ok === true && data.user && data.user.id) {
+      return {
+        ok: true,
+        user: {
+          id: String(data.user.id),
+          username: String(data.user.username || username).trim(),
+          displayName: String(data.user.display_name || data.user.displayName || displayName).trim(),
+          role: data.user.role === "admin" ? "admin" : "staff",
+          enabled: data.user.enabled === true,
+        },
+      };
+    }
+    return mapCreateBackofficeUserError(res ? res.status : 0, data);
+  } finally {
+    try { if (input && typeof input === "object") input.password = ""; } catch (_) {}
+  }
+}
+
 function getSupabaseJsCreateClientSync() {
   try {
     if (typeof window !== "undefined" && window.supabase && typeof window.supabase.createClient === "function") {
@@ -4333,6 +4445,7 @@ window.DK = {
   getSupabaseAuthSession,
   getSupabaseAuthUser,
   adminUsernameToAuthEmail,
+  createBackofficeAuthUser,
   getAuthMigrationStatus,
   signInSupabaseAuthForMigration,
   signOutSupabaseAuthForMigration,

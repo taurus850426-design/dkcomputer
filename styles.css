@@ -6654,3 +6654,17 @@ body.admin-page #tab-accounts .account-table-wrap{
   }
 }
 
+body.admin-page .account-password-row{
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+body.admin-page .account-password-row input{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+body.admin-page .account-password-row .btn{
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+
