@@ -1148,6 +1148,7 @@ function stage7MapItemRow(row, costMap, admin) {
     archived_at: row.archived_at,
     isArchived: !!row.is_archived,
     archivedAt: row.archived_at || null,
+    exclude_from_inventory_value: !!row.exclude_from_inventory_value,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -1352,7 +1353,7 @@ async function stage7RpcAdjustStock(entry) {
 
 function stage7ItemPayload(item) {
   const src = item || {};
-  return {
+  const payload = {
     id: src.id || undefined,
     sku: src.sku || "",
     category: src.category || "",
@@ -1375,6 +1376,10 @@ function stage7ItemPayload(item) {
     location: src.location || "",
     notes: src.notes || "",
   };
+  if (stage7IsAdminRole() && Object.prototype.hasOwnProperty.call(src, "exclude_from_inventory_value")) {
+    payload.exclude_from_inventory_value = !!src.exclude_from_inventory_value;
+  }
+  return payload;
 }
 
 function stage7OrderLinesPayload(lines, headerTotal) {
@@ -1639,7 +1644,63 @@ async function stage7ConfirmVendorPayment(reconciliationId) {
   return stage7Rpc("backoffice_confirm_vendor_payment", { p_reconciliation_id: id });
 }
 
-async function stage7CancelVendorPayment(reconciliationId) {
+async function stage7ParseProfitRpc(res) {
+  if (!res || !res.ok) {
+    return { ok: false, error: (res && (res.error || res.data)) || "分潤讀取失敗", data: res && res.data, forbidden: !!(res && res.forbidden) };
+  }
+  const body = res.data && typeof res.data === "object" && !Array.isArray(res.data) ? res.data : {};
+  if (body.ok === false) {
+    return { ok: false, error: body.error || "分潤讀取失敗", data: body };
+  }
+  return { ok: true, data: body };
+}
+
+function stage7PreviewMonthlyProfit(periodMonth) {
+  if (!stage7IsAdminRole()) {
+    return Promise.resolve({ ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以查看分潤" });
+  }
+  const d = String(periodMonth || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    return Promise.resolve({ ok: false, error: "period_month required" });
+  }
+  return stage7Rpc("backoffice_preview_monthly_profit", { p_period_month: d }).then(stage7ParseProfitRpc);
+}
+
+function stage7PreviewProfitRange(fromStr, toStr) {
+  if (!stage7IsAdminRole()) {
+    return Promise.resolve({ ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以查看分潤" });
+  }
+  const from = String(fromStr || "").slice(0, 10);
+  const to = String(toStr || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return Promise.resolve({ ok: false, error: "date range required" });
+  }
+  return stage7Rpc("backoffice_preview_profit_range", { p_from: from, p_to: to }).then(stage7ParseProfitRpc);
+}
+
+function stage7PreviewYearProfit(year) {
+  if (!stage7IsAdminRole()) {
+    return Promise.resolve({ ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以查看分潤" });
+  }
+  const y = parseInt(year, 10);
+  if (!Number.isFinite(y)) {
+    return Promise.resolve({ ok: false, error: "year required" });
+  }
+  return stage7Rpc("backoffice_preview_year_profit", { p_year: y }).then(stage7ParseProfitRpc);
+}
+
+function stage7SettleMonthlyProfit(periodMonth) {
+  if (!stage7IsAdminRole()) {
+    return Promise.resolve({ ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以結算分潤" });
+  }
+  const d = String(periodMonth || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    return Promise.resolve({ ok: false, error: "period_month required" });
+  }
+  return stage7Rpc("backoffice_settle_monthly_profit", { p_period_month: d }).then(stage7ParseProfitRpc);
+}
+
+function stage7CancelVendorPayment(reconciliationId) {
   if (!stage7IsAdminRole()) {
     return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
   }
@@ -1671,6 +1732,10 @@ if (typeof window !== "undefined") {
   window.stage7VoidVendorReconciliation = stage7VoidVendorReconciliation;
   window.stage7ConfirmVendorPayment = stage7ConfirmVendorPayment;
   window.stage7CancelVendorPayment = stage7CancelVendorPayment;
+  window.stage7PreviewMonthlyProfit = stage7PreviewMonthlyProfit;
+  window.stage7PreviewProfitRange = stage7PreviewProfitRange;
+  window.stage7PreviewYearProfit = stage7PreviewYearProfit;
+  window.stage7SettleMonthlyProfit = stage7SettleMonthlyProfit;
 }
 
 function isSupabaseConfigured() {
@@ -4613,6 +4678,10 @@ window.DK = {
   stage7VoidVendorReconciliation,
   stage7ConfirmVendorPayment,
   stage7CancelVendorPayment,
+  stage7PreviewMonthlyProfit,
+  stage7PreviewProfitRange,
+  stage7PreviewYearProfit,
+  stage7SettleMonthlyProfit,
   pullVendorQuotesFromCloud,
   pullPurchaseOrdersFromCloud,
   previewVendorQuotesUpload,

@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260831auth3" />
+            <link rel="stylesheet" href="./styles.css?v=20260831s16" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -429,7 +429,22 @@
                   <select id="reportYearYear"></select>
                 </div>
               </div>
+              <div id="reportOpsHeading" class="section-card-soft surface-neutral admin-stack-gap" style="margin-bottom:8px">
+                <h3 class="h3 section-title" style="margin:0">營運</h3>
+              </div>
               <div id="reportKpiGrid" class="kpi-grid ui-enter admin-stack-gap"></div>
+              <div id="reportSettleBar" class="section-card-soft surface-info admin-stack-gap reports-settle-bar" hidden>
+                <div>
+                  <div id="reportSettleStatus" class="muted"></div>
+                </div>
+                <div class="section-actions">
+                  <button id="btnSettleMonth" class="btn btn-primary" type="button" hidden>結算此月份</button>
+                </div>
+              </div>
+              <div id="reportShareHeading" class="section-card-soft surface-neutral admin-stack-gap" style="margin-bottom:8px">
+                <h3 class="h3 section-title" style="margin:0">庫存與分潤</h3>
+              </div>
+              <div id="reportShareKpiGrid" class="kpi-grid ui-enter admin-stack-gap"></div>
               <div id="reportQueryResult" hidden></div>
               <div class="section-card-soft surface-neutral admin-stack-gap">
                 <h3 class="h3 section-title">銷售類型統計</h3>
@@ -2066,6 +2081,12 @@
         <div class="field"><label for="itemStatus">狀態</label><select id="itemStatus"><option value="READY">可售</option><option value="TESTING">待測</option><option value="PREP">待整理</option><option value="RESERVED">保留</option><option value="CLEARANCE">待出清</option><option value="SCRAP">報廢拆料</option></select></div>
         <div class="field"><label for="itemQty">現貨數量</label><input id="itemQty" type="number" min="0" value="0" /></div>
         <div class="field" data-admin-only><label for="itemCost">單位成本</label><input id="itemCost" type="number" min="0" step="1" value="0" /></div>
+        <div class="field full" data-admin-only>
+          <label class="check-row" for="itemExcludeFromInventoryValue">
+            <input id="itemExcludeFromInventoryValue" type="checkbox" />
+            <span>不納入庫存金額<span class="form-hint" style="display:block;font-weight:400;margin-top:4px">勾選後，此品項仍可正常管理與銷售，但不計入財務報表的庫存總成本。</span></span>
+          </label>
+        </div>
         <div class="field"><label for="itemPriceList">建議售價</label><input id="itemPriceList" type="number" min="0" step="1" /></div>
         <div class="field"><label for="itemPriceFloor">最低價</label><input id="itemPriceFloor" type="number" min="0" step="1" /></div>
         <div class="field"><label for="itemInboundDate">入庫日</label><input id="itemInboundDate" type="date" /></div>
@@ -2099,12 +2120,12 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260831auth3"></script>
-    <script src="./inventory-ledger.js?v=20260826rg3"></script>
+    <script src="./shared.js?v=20260831s16"></script>
+    <script src="./inventory-ledger.js?v=20260831s16"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260831auth3"></script>
+    <script src="./admin3.js?v=20260831s16"></script>
     <script src="./purchase-orders.js?v=20260827po1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260826ds7"></script>

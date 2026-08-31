@@ -97,6 +97,7 @@
           ? null
           : String(it.replenishment_group_id),
         cost_unit: it.cost_unit, qty_on_hand: it.qty_on_hand,
+        exclude_from_inventory_value: !!it.exclude_from_inventory_value,
       });
     }
     const prevMap = Object.fromEntries(prev.map((x) => [String(x.id), x]));
@@ -129,6 +130,70 @@
   function todayStr() {
     const d = new Date();
     return d.toISOString().slice(0, 10);
+  }
+
+  /** 本地日曆 YYYY-MM-DD（不用 toISOString，避免 UTC 跨日） */
+  function formatLocalDate(d) {
+    const dt = d instanceof Date ? d : new Date(d);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const day = String(dt.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  }
+
+  /**
+   * 訂單 business date：與 Stage 16 SQL dk_order_business_date 對齊。
+   * 優先 orders.date（DATE）；缺值才用 created_at 的 UTC 日期。
+   */
+  function orderBusinessDate(o) {
+    const dateCol = o && o.date != null ? String(o.date).slice(0, 10) : "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateCol)) return dateCol;
+    const created = o && o.created_at != null ? String(o.created_at).slice(0, 10) : "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(created)) return created;
+    return "";
+  }
+
+  function ntRound(n) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return 0;
+    return Math.round(x);
+  }
+
+  function splitProfitShares(distributable) {
+    const dist = ntRound(distributable);
+    const base = Math.max(dist, 0);
+    const share35 = ntRound((base * 35) / 100);
+    const share40 = ntRound((base * 40) / 100);
+    return {
+      distributable: dist,
+      share35,
+      share40,
+      company: base - share35 - share40,
+    };
+  }
+
+  function isOperatingExpense(e) {
+    const t = String((e && e.type) || "");
+    return t === "OPEX" || t === "OTHER";
+  }
+
+  function isCogsExpense(e) {
+    return String((e && e.type) || "") === "COGS";
+  }
+
+  function itemCountsTowardInventoryAsset(item) {
+    if (!item) return false;
+    if (isItemArchived(item)) return false;
+    if (item.exclude_from_inventory_value === true) return false;
+    const qty = Number(item.qty_on_hand);
+    return Number.isFinite(qty) && qty > 0;
+  }
+
+  function currentInventoryAssetValue() {
+    return getItems().reduce((s, i) => {
+      if (!itemCountsTowardInventoryAsset(i)) return s;
+      return s + itemInventoryValue(i);
+    }, 0);
   }
 
   function nowISO() {
@@ -355,7 +420,7 @@
 
   function reportSalesTypeStats(fromStr, toStr) {
     const orders = getOrders().filter((o) => {
-      const d = (o.created_at || o.date || "").toString().slice(0, 10);
+      const d = orderBusinessDate(o);
       return d >= fromStr && d <= toStr && o.status !== "refunded";
     });
     const keys = ORDER_SALES_TYPES.concat(["未分類"]);
@@ -463,29 +528,19 @@
     const end = new Date(start);
     end.setDate(start.getDate() + 6);
     end.setHours(23, 59, 59, 999);
-    const fromStr = start.toISOString().slice(0, 10);
-    const toStr = end.toISOString().slice(0, 10);
-
-    const orders = getOrders().filter((o) => {
-      const d = (o.created_at || o.date || "").toString().slice(0, 10);
-      return d >= fromStr && d <= toStr && o.status !== "refunded";
-    });
-    const ordersProfit = orders.reduce((s, o) => s + orderGrossProfit(o), 0);
-
-    const expenses = getExpenses().filter((e) => e.date >= fromStr && e.date <= toStr);
-    const expensesTotal = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-
-    const items = getItems();
-    const inventoryValue = items.reduce((s, i) => s + itemInventoryValue(i), 0);
-
+    const fromStr = formatLocalDate(start);
+    const toStr = formatLocalDate(end);
+    const summary = reportSummaryByDateRange(fromStr, toStr);
     return {
       weekFrom: fromStr,
       weekTo: toStr,
-      ordersProfit,
-      expensesTotal,
-      inventoryValue,
-      ordersCount: orders.length,
-      expensesCount: expenses.length,
+      ordersProfit: summary.ordersProfit,
+      expensesTotal: summary.operatingExpenseTotal,
+      inventoryValue: summary.inventoryValue,
+      ordersCount: summary.ordersCount,
+      expensesCount: summary.operatingExpenseCount,
+      operatingExpenseTotal: summary.operatingExpenseTotal,
+      cogsExpenseTotal: summary.cogsExpenseTotal,
     };
   }
 
@@ -497,59 +552,63 @@
     start.setHours(0, 0, 0, 0);
     const end = new Date(y, m + 1, 0);
     end.setHours(23, 59, 59, 999);
-    const fromStr = start.toISOString().slice(0, 10);
-    const toStr = end.toISOString().slice(0, 10);
-
-    const orders = getOrders().filter((o) => {
-      const d = (o.created_at || o.date || "").toString().slice(0, 10);
-      return d >= fromStr && d <= toStr && o.status !== "refunded";
-    });
-    const ordersProfit = orders.reduce((s, o) => s + orderGrossProfit(o), 0);
-
-    const expenses = getExpenses().filter((e) => e.date >= fromStr && e.date <= toStr);
-    const expensesTotal = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-
-    const items = getItems();
-    const inventoryValue = items.reduce((s, i) => s + itemInventoryValue(i), 0);
-
+    const fromStr = formatLocalDate(start);
+    const toStr = formatLocalDate(end);
+    const summary = reportSummaryByDateRange(fromStr, toStr);
     return {
       monthFrom: fromStr,
       monthTo: toStr,
-      ordersProfit,
-      expensesTotal,
-      inventoryValue,
-      ordersCount: orders.length,
-      expensesCount: expenses.length,
+      ordersProfit: summary.ordersProfit,
+      expensesTotal: summary.operatingExpenseTotal,
+      inventoryValue: summary.inventoryValue,
+      ordersCount: summary.ordersCount,
+      expensesCount: summary.operatingExpenseCount,
+      operatingExpenseTotal: summary.operatingExpenseTotal,
+      cogsExpenseTotal: summary.cogsExpenseTotal,
     };
   }
 
-  /** 指定日期區間查詢報表（fromStr/toStr 格式 YYYY-MM-DD） */
+  /** 指定日期區間查詢報表（fromStr/toStr 格式 YYYY-MM-DD，含起迄日） */
   function reportSummaryByDateRange(fromStr, toStr) {
     const orders = getOrders().filter((o) => {
-      const d = (o.created_at || o.date || "").toString().slice(0, 10);
+      const d = orderBusinessDate(o);
       return d >= fromStr && d <= toStr && o.status !== "refunded";
     });
     const ordersProfit = orders.reduce((s, o) => s + orderGrossProfit(o), 0);
-    const expenses = getExpenses().filter((e) => e.date >= fromStr && e.date <= toStr);
-    const expensesTotal = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    const items = getItems();
-    const inventoryValue = items.reduce((s, i) => s + itemInventoryValue(i), 0);
+    const revenueTotal = orders.reduce((s, o) => s + orderRevenue(o), 0);
+    const expenses = getExpenses().filter((e) => {
+      const d = (e && e.date != null ? String(e.date) : "").slice(0, 10);
+      return d >= fromStr && d <= toStr;
+    });
+    const operating = expenses.filter(isOperatingExpense);
+    const cogsExp = expenses.filter(isCogsExpense);
+    const operatingExpenseTotal = operating.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const cogsExpenseTotal = cogsExp.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const distributable = ordersProfit - operatingExpenseTotal;
+    const shares = splitProfitShares(distributable);
     return {
       fromStr,
       toStr,
-      ordersProfit,
-      expensesTotal,
-      inventoryValue,
+      revenueTotal: ntRound(revenueTotal),
+      ordersProfit: ntRound(ordersProfit),
+      expensesTotal: ntRound(operatingExpenseTotal),
+      operatingExpenseTotal: ntRound(operatingExpenseTotal),
+      cogsExpenseTotal: ntRound(cogsExpenseTotal),
+      distributableProfit: shares.distributable,
+      share35: shares.share35,
+      share40: shares.share40,
+      companyRetained: shares.company,
+      inventoryValue: ntRound(currentInventoryAssetValue()),
       ordersCount: orders.length,
-      expensesCount: expenses.length,
+      expensesCount: operating.length,
     };
   }
 
-  /** 取得指定日期區間內的訂單（供匯出用） */
+  /** 取得指定日期區間內的訂單（KPI／CSV 同規則：排除 refunded） */
   function getOrdersInDateRange(fromStr, toStr) {
     return getOrders().filter((o) => {
-      const d = (o.created_at || o.date || "").toString().slice(0, 10);
-      return d >= fromStr && d <= toStr;
+      const d = orderBusinessDate(o);
+      return d >= fromStr && d <= toStr && o.status !== "refunded";
     });
   }
 
@@ -619,6 +678,14 @@
     itemAgeDays,
     itemIdleDays,
     itemInventoryValue,
+    itemCountsTowardInventoryAsset,
+    currentInventoryAssetValue,
+    orderBusinessDate,
+    formatLocalDate,
+    ntRound,
+    splitProfitShares,
+    isOperatingExpense,
+    isCogsExpense,
     isSellableOnHand,
     isItemArchived,
     isCurrentOnHandItem,

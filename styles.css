@@ -873,6 +873,39 @@ body.theme-apple #home-entries .home-entry-sub{
   background: rgba(18,24,38,0.08);
   vertical-align: middle;
 }
+.item-exclude-asset-badge{
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #8a5a00;
+  background: rgba(232, 168, 56, 0.18);
+  vertical-align: middle;
+}
+.check-row{
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.check-row input{
+  width: auto;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+.reports-settle-bar{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+body.admin-page #reportShareKpiGrid .kpi-card{
+  min-height: 96px;
+}
 
 .radio-row{ display: flex; gap: 20px; flex-wrap: wrap; }
 .radio-wrap{ display: flex; align-items: center; gap: 8px; cursor: pointer; }

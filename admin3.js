@@ -5397,12 +5397,13 @@
           ? ('<div class="item-name-stack"><div class="table-primary">' + v2Esc(name || spec || "") + "</div></div>")
           : ('<div class="item-name-stack"><div class="table-primary">' + v2Esc(name) + '</div><div class="table-secondary">' + v2Esc(spec) + "</div></div>");
         const archivedBadge = archived ? '<span class="item-archived-badge">已封存</span>' : "";
+        const excludeBadge = x.exclude_from_inventory_value ? '<span class="item-exclude-asset-badge">不計資產</span>' : "";
         const brand = x.vendor || x.brand || "";
         const brandBadge = brand ? ('<div style="margin-top:4px"><span class="status-badge status-info">' + v2Esc(brand) + "</span></div>") : "";
         const qtyBadge = '<span class="' + invQtyBadgeClass(x.qty_on_hand) + '">' + v2Esc(String(x.qty_on_hand ?? 0)) + "</span>";
         return `<tr class="${rowClass}">
           <td><input type="checkbox" class="item-row-cb" data-id="${v2Esc(x.id)}" /></td>
-          <td>${nameHtml}${brandBadge}${archivedBadge}</td>
+          <td>${nameHtml}${brandBadge}${archivedBadge}${excludeBadge}</td>
           <td class="table-secondary">${v2Esc(x.category || "")}</td>
           <td><span class="status-badge status-muted">${v2Esc(STATUS_LABEL[x.status] || x.status)}</span></td>
           <td class="table-number">${qtyBadge}</td>
@@ -5491,6 +5492,8 @@
       }
       set("itemReorderPoint", item ? (item.reorder_point ?? 0) : 0);
       set("itemNotes", item ? item.notes ?? "" : (preset.notes != null ? String(preset.notes) : ""));
+      const excludeEl = document.getElementById("itemExcludeFromInventoryValue");
+      if (excludeEl) excludeEl.checked = !!(item && item.exclude_from_inventory_value);
       const itemDeleteBtn = getItemEditorField("itemDelete") || document.getElementById("itemDelete");
       if (itemDeleteBtn) itemDeleteBtn.hidden = !item || !canPerm("deleteItem");
       if (itemEditorModal) itemEditorModal.hidden = false;
@@ -5834,6 +5837,9 @@
         updated_at: nowISO(),
       };
       if (canPerm("viewCost")) payload.cost_unit = costUnit;
+      if (window.stage7IsAdminRole && window.stage7IsAdminRole()) {
+        payload.exclude_from_inventory_value = !!document.getElementById("itemExcludeFromInventoryValue")?.checked;
+      }
 
       const needsGroup = isRequiredReplenishmentCategory(category) && !groupId;
       const isAdminUser = !!(window.stage7IsAdminRole && window.stage7IsAdminRole());
@@ -6286,7 +6292,10 @@
     }
 
     function getOrderDateStr(o) {
-      return (o.created_at || o.date || "").toString().slice(0, 10);
+      if (typeof DK.orderBusinessDate === "function") return DK.orderBusinessDate(o);
+      const dateCol = o && o.date != null ? String(o.date).slice(0, 10) : "";
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateCol)) return dateCol;
+      return (o.created_at || "").toString().slice(0, 10);
     }
     function getFilteredOrders() {
       let list = DK.getOrders().map(DK.enrichOrder);
@@ -7341,63 +7350,236 @@
       const period = document.querySelector(".report-period-btn.active")?.getAttribute("data-period") || "week";
       if (period === "week") {
         const w = DK.reportWeeklySummary();
-        return { fromStr: w.weekFrom, toStr: w.weekTo, label: "本週" };
+        return { period: "week", fromStr: w.weekFrom, toStr: w.weekTo, label: "本週", periodMonth: null, year: null };
       }
       if (period === "month") {
         const m = DK.reportMonthlySummary();
-        return { fromStr: m.monthFrom, toStr: m.monthTo, label: "本月" };
+        return { period: "month", fromStr: m.monthFrom, toStr: m.monthTo, label: "本月", periodMonth: m.monthFrom, year: null };
       }
       if (period === "customMonth" && reportMonthYearEl && reportMonthMonthEl) {
         const y = parseInt(reportMonthYearEl.value, 10);
         const m = parseInt(reportMonthMonthEl.value, 10);
         const fromStr = `${y}-${String(m).padStart(2, "0")}-01`;
         const toStr = `${y}-${String(m).padStart(2, "0")}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
-        return { fromStr, toStr, label: `${y}年${m}月` };
+        return { period: "customMonth", fromStr, toStr, label: `${y}年${m}月`, periodMonth: fromStr, year: null };
       }
       if (period === "customYear" && reportYearYearEl) {
         const y = parseInt(reportYearYearEl.value, 10);
-        return { fromStr: `${y}-01-01`, toStr: `${y}-12-31`, label: `${y}年` };
+        return { period: "customYear", fromStr: `${y}-01-01`, toStr: `${y}-12-31`, label: `${y}年`, periodMonth: null, year: y };
       }
       const w = DK.reportWeeklySummary();
-      return { fromStr: w.weekFrom, toStr: w.weekTo, label: "本週" };
+      return { period: "week", fromStr: w.weekFrom, toStr: w.weekTo, label: "本週", periodMonth: null, year: null };
     }
 
-    function renderV2Reports() {
+    let reportsRenderGen = 0;
+    let lastReportProfitView = null;
+    let settleInFlight = false;
+
+    function numProfit(v) {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function profitFromCalc(calc, fallback) {
+      const src = calc && typeof calc === "object" ? calc : {};
+      const fb = fallback || {};
+      return {
+        revenue: numProfit(src.revenue_snapshot != null ? src.revenue_snapshot : (src.revenue != null ? src.revenue : fb.revenueTotal)),
+        grossProfit: numProfit(src.gross_profit_snapshot != null ? src.gross_profit_snapshot : (src.gross_profit != null ? src.gross_profit : fb.ordersProfit)),
+        operatingExpense: numProfit(src.operating_expense_snapshot != null ? src.operating_expense_snapshot : (src.operating_expense != null ? src.operating_expense : fb.operatingExpenseTotal)),
+        cogsExpense: numProfit(src.cogs_expense_snapshot != null ? src.cogs_expense_snapshot : (src.cogs_expense != null ? src.cogs_expense : fb.cogsExpenseTotal)),
+        distributable: numProfit(src.distributable_profit_snapshot != null ? src.distributable_profit_snapshot : (src.distributable_profit != null ? src.distributable_profit : fb.distributableProfit)),
+        share35: numProfit(src.share_35_amount != null ? src.share_35_amount : (src.share35 != null ? src.share35 : fb.share35)),
+        share40: numProfit(src.share_40_amount != null ? src.share_40_amount : (src.share40 != null ? src.share40 : fb.share40)),
+        company: numProfit(src.company_retained_amount != null ? src.company_retained_amount : (src.companyRetained != null ? src.companyRetained : fb.companyRetained)),
+        inventoryValue: numProfit(src.inventory_value != null ? src.inventory_value : fb.inventoryValue),
+        cumulative: numProfit(src.company_retained_cumulative),
+        status: src.status || "preview",
+        alreadySettled: src.already_settled === true || src.status === "settled",
+        canSettle: src.can_settle === true,
+        settledAt: src.settled_at || "",
+        settledByName: src.settled_by_display_name || "",
+        periodMonth: src.period_month || fb.periodMonth || "",
+        source: src.status === "settled" ? "snapshot" : "preview",
+      };
+    }
+
+    async function loadReportProfit(params, live) {
+      const fallback = profitFromCalc(null, live);
+      fallback.inventoryValue = numProfit(live.inventoryValue);
+      if (params.period === "customYear") {
+        if (typeof window.stage7PreviewYearProfit === "function") {
+          const res = await window.stage7PreviewYearProfit(params.year);
+          if (res && res.ok && res.data) {
+            const d = res.data;
+            return {
+              ...fallback,
+              share35: numProfit(d.share_35_amount),
+              share40: numProfit(d.share_40_amount),
+              company: numProfit(d.company_retained_amount),
+              inventoryValue: numProfit(d.inventory_value != null ? d.inventory_value : fallback.inventoryValue),
+              cumulative: numProfit(d.company_retained_cumulative),
+              status: "year",
+              alreadySettled: false,
+              canSettle: false,
+              source: "year-months",
+              yearMonths: Array.isArray(d.months) ? d.months : [],
+            };
+          }
+        }
+        let s35 = 0;
+        let s40 = 0;
+        let co = 0;
+        const y = params.year;
+        for (let m = 1; m <= 12; m++) {
+          const fromStr = y + "-" + String(m).padStart(2, "0") + "-01";
+          const toStr = y + "-" + String(m).padStart(2, "0") + "-" + String(new Date(y, m, 0).getDate()).padStart(2, "0");
+          const monthLive = DK.reportSummaryByDateRange(fromStr, toStr);
+          s35 += numProfit(monthLive.share35);
+          s40 += numProfit(monthLive.share40);
+          co += numProfit(monthLive.companyRetained);
+        }
+        return {
+          ...fallback,
+          share35: s35,
+          share40: s40,
+          company: co,
+          canSettle: false,
+          status: "year",
+          source: "preview-fallback",
+        };
+      }
+      if (params.periodMonth && typeof window.stage7PreviewMonthlyProfit === "function") {
+        const res = await window.stage7PreviewMonthlyProfit(params.periodMonth);
+        if (res && res.ok && res.data) return profitFromCalc(res.data, live);
+      }
+      if (typeof window.stage7PreviewProfitRange === "function") {
+        const res = await window.stage7PreviewProfitRange(params.fromStr, params.toStr);
+        if (res && res.ok && res.data) {
+          const mapped = profitFromCalc(res.data, live);
+          mapped.canSettle = false;
+          return mapped;
+        }
+      }
+      return { ...fallback, canSettle: false, source: "preview-fallback", status: "preview" };
+    }
+
+    function kpiCard(surface, icon, label, valueHtml, metaHtml) {
+      return '<div class="kpi-card ' + surface + '"><span class="kpi-icon" aria-hidden="true">' + icon + "</span>" +
+        '<div class="kpi-label">' + label + "</div>" +
+        '<div class="kpi-value">' + valueHtml + "</div>" +
+        '<div class="kpi-meta">' + metaHtml + "</div></div>";
+    }
+
+    async function renderV2Reports() {
+      const gen = ++reportsRenderGen;
       const params = getReportQueryParams();
-      const summary = DK.reportSummaryByDateRange(params.fromStr, params.toStr);
+      const live = DK.reportSummaryByDateRange(params.fromStr, params.toStr);
       const salesStats = (DK.reportSalesTypeStats && DK.reportSalesTypeStats(params.fromStr, params.toStr)) || { rows: [], pcCount: 0, partsCount: 0, serviceCount: 0 };
       const salesRows = Array.isArray(salesStats.rows) ? salesStats.rows : [];
-      const revenueTotal = salesRows.reduce(function (s, r) { return s + (Number(r.revenue) || 0); }, 0);
-      const profitCls = profitNumberClass(summary.ordersProfit);
-      const profitSurface = Number(summary.ordersProfit) > 0
-        ? "surface-success"
-        : (Number(summary.ordersProfit) < 0 ? "surface-danger" : "surface-neutral");
+      let profit = await loadReportProfit(params, live);
+      if (gen !== reportsRenderGen) return;
+
+      const isMonth = !!(params.periodMonth);
+      const isYear = params.period === "customYear";
+      const isSettled = isMonth && profit.alreadySettled;
+      const opsRevenue = isMonth ? profit.revenue : numProfit(live.revenueTotal);
+      const opsGross = isMonth ? profit.grossProfit : numProfit(live.ordersProfit);
+      const opsOpex = isMonth ? profit.operatingExpense : numProfit(live.operatingExpenseTotal);
+      const opsDist = isMonth ? profit.distributable : numProfit(live.distributableProfit);
+      const opsCogs = isMonth ? profit.cogsExpense : numProfit(live.cogsExpenseTotal);
+      const shareTag = isSettled ? "已結算" : (isYear ? "各月份加總" : "預估 / Preview");
+      lastReportProfitView = {
+        params,
+        live,
+        profit,
+        opsRevenue,
+        opsGross,
+        opsOpex,
+        opsDist,
+        opsCogs,
+        isSettled,
+        isMonth,
+        isYear,
+      };
+
+      const profitCls = profitNumberClass(opsGross);
+      const profitSurface = Number(opsGross) > 0 ? "surface-success" : (Number(opsGross) < 0 ? "surface-danger" : "surface-neutral");
+      const distCls = profitNumberClass(opsDist);
+      const distSurface = Number(opsDist) > 0 ? "surface-success" : (Number(opsDist) < 0 ? "surface-danger" : "surface-neutral");
       const elKpi = document.getElementById("reportKpiGrid");
       if (elKpi) {
         elKpi.innerHTML =
-          '<div class="kpi-card surface-info"><span class="kpi-icon" aria-hidden="true">💵</span>' +
-            '<div class="kpi-label">營業額</div>' +
-            '<div class="kpi-value neutral-number">NT$ ' + v2FmtNum(revenueTotal) + "</div>" +
-            '<div class="kpi-meta">' + v2Esc(params.label) + " " + v2Esc(summary.fromStr) + " ~ " + v2Esc(summary.toStr) + "</div>" +
-          "</div>" +
-          '<div class="kpi-card ' + profitSurface + '"><span class="kpi-icon" aria-hidden="true">📈</span>' +
-            '<div class="kpi-label">訂單毛利</div>' +
-            '<div class="kpi-value ' + profitCls + '">NT$ ' + v2FmtNum(summary.ordersProfit) + "</div>" +
-            '<div class="kpi-meta">' + v2Esc(String(summary.ordersCount)) + " 筆訂單</div>" +
-          "</div>" +
-          '<div class="kpi-card surface-neutral"><span class="kpi-icon" aria-hidden="true">🧾</span>' +
-            '<div class="kpi-label">訂單數</div>' +
-            '<div class="kpi-value neutral-number">' + v2Esc(String(summary.ordersCount)) + "</div>" +
-            '<div class="kpi-meta">整機 ' + v2Esc(String(salesStats.pcCount || 0)) +
-              "｜零組件 " + v2Esc(String(salesStats.partsCount || 0)) +
-              "｜維修 " + v2Esc(String(salesStats.serviceCount || 0)) + "</div>" +
-          "</div>" +
-          '<div class="kpi-card surface-warning"><span class="kpi-icon" aria-hidden="true">📤</span>' +
-            '<div class="kpi-label">支出</div>' +
-            '<div class="kpi-value neutral-number">NT$ ' + v2FmtNum(summary.expensesTotal) + "</div>" +
-            '<div class="kpi-meta">' + v2Esc(String(summary.expensesCount)) + " 筆｜庫存成本 NT$ " + v2FmtNum(summary.inventoryValue) + "</div>" +
-          "</div>";
+          kpiCard("surface-info", "💵", "營業額",
+            '<span class="neutral-number">NT$ ' + v2FmtNum(opsRevenue) + "</span>",
+            v2Esc(params.label) + " " + v2Esc(params.fromStr) + " ~ " + v2Esc(params.toStr) + (isSettled ? "｜已結算快照" : "")) +
+          kpiCard(profitSurface, "📈", "訂單毛利",
+            '<span class="' + profitCls + '">NT$ ' + v2FmtNum(opsGross) + "</span>",
+            v2Esc(String(live.ordersCount)) + " 筆訂單（不含退款）") +
+          kpiCard("surface-warning", "📤", "營業支出",
+            '<span class="neutral-number">NT$ ' + v2FmtNum(opsOpex) + "</span>",
+            "OPEX + OTHER｜另有進貨／COGS NT$ " + v2FmtNum(opsCogs) + "，不納入分潤扣除") +
+          kpiCard(distSurface, "🧮", "可分配淨利",
+            '<span class="' + distCls + '">NT$ ' + v2FmtNum(opsDist) + "</span>",
+            Number(opsDist) <= 0 ? "本月無可分配利潤（虧損仍保留此數字）" : "訂單毛利 − 營業支出");
       }
+
+      const settleBar = document.getElementById("reportSettleBar");
+      const settleStatus = document.getElementById("reportSettleStatus");
+      const settleBtn = document.getElementById("btnSettleMonth");
+      if (settleBar) settleBar.hidden = false;
+      if (isMonth && isSettled) {
+        const when = profit.settledAt ? String(profit.settledAt).replace("T", " ").slice(0, 19) : "";
+        const who = profit.settledByName ? ("｜" + profit.settledByName) : "";
+        if (settleStatus) settleStatus.textContent = "已結算 " + (when || "") + who + "。後續修改訂單或支出不會改變本次金額。";
+        if (settleBtn) {
+          settleBtn.hidden = false;
+          settleBtn.disabled = true;
+          settleBtn.textContent = "已結算";
+        }
+      } else if (isMonth) {
+        if (settleStatus) {
+          settleStatus.textContent = profit.canSettle
+            ? "此月份尚未結算，目前為即時預估。結算後金額將鎖定。"
+            : "此月份為即時預估。結算需管理員權限，且須已執行 Stage 16 SQL；未來月份不可結算。";
+        }
+        if (settleBtn) {
+          settleBtn.hidden = !profit.canSettle;
+          settleBtn.disabled = settleInFlight || !profit.canSettle;
+          settleBtn.textContent = "結算此月份";
+        }
+      } else if (isYear) {
+        if (settleStatus) settleStatus.textContent = "年度分潤依各月份結算／預估加總，不可一次結算全年。";
+        if (settleBtn) settleBtn.hidden = true;
+      } else {
+        if (settleStatus) settleStatus.textContent = "本週僅提供分潤預估，不能結算。請改用「本月」或「指定月份」。";
+        if (settleBtn) settleBtn.hidden = true;
+      }
+
+      const share35 = isMonth || isYear ? profit.share35 : numProfit(live.share35);
+      const share40 = isMonth || isYear ? profit.share40 : numProfit(live.share40);
+      const company = isMonth || isYear ? profit.company : numProfit(live.companyRetained);
+      const invVal = numProfit(profit.inventoryValue != null ? profit.inventoryValue : live.inventoryValue);
+      const elShare = document.getElementById("reportShareKpiGrid");
+      if (elShare) {
+        elShare.innerHTML =
+          kpiCard("surface-neutral", "📦", "目前庫存總成本",
+            '<span class="neutral-number">NT$ ' + v2FmtNum(invVal) + "</span>",
+            "目前庫存資產成本（非該月月底快照）") +
+          kpiCard("surface-info", "35", "35% 分潤",
+            '<span class="neutral-number">NT$ ' + v2FmtNum(share35) + "</span>",
+            shareTag) +
+          kpiCard("surface-info", "40", "40% 分潤",
+            '<span class="neutral-number">NT$ ' + v2FmtNum(share40) + "</span>",
+            shareTag) +
+          kpiCard("surface-purple", "25", "公司留存 25%",
+            '<span class="neutral-number">NT$ ' + v2FmtNum(company) + "</span>",
+            shareTag) +
+          kpiCard("surface-success", "🏦", "公司累積留存",
+            '<span class="neutral-number">NT$ ' + v2FmtNum(profit.cumulative) + "</span>",
+            "已結算月份公司 25% 累計（不是銀行餘額）");
+      }
+
       const elResult = document.getElementById("reportQueryResult");
       if (elResult) {
         elResult.hidden = true;
@@ -7412,8 +7594,6 @@
           return `<tr><td class="table-primary">${v2Esc(r.salesType)}</td><td class="table-number neutral-number">${Number(r.count) || 0}</td><td class="table-number neutral-number">NT$ ${v2FmtNum(Number(r.revenue) || 0)}</td><td class="table-number ${pCls}">NT$ ${v2FmtNum(Number(r.profit) || 0)}</td><td class="table-number neutral-number">NT$ ${v2FmtNum(Number(r.avg) || 0)}</td></tr>`;
         }).join("")}</tbody></table>`;
       }
-      // 庫齡排行前 20（滯留天數最多）：只顯示目前仍有庫存（qty_on_hand > 0）
-      // ⚠ 只改此排行榜的顯示用資料，不動 DK 的其他報表/排序邏輯
       const top20 = (DK.getEnrichedItems ? DK.getEnrichedItems() : [])
         .filter(isCurrentOnHandItem)
         .filter((x) => x.idle_days != null)
@@ -7441,28 +7621,89 @@
     reportMonthMonthEl?.addEventListener("change", renderV2Reports);
     reportYearYearEl?.addEventListener("change", renderV2Reports);
 
+    document.getElementById("btnSettleMonth")?.addEventListener("click", async () => {
+      if (settleInFlight) return;
+      if (!requirePerm("reports")) return;
+      const view = lastReportProfitView;
+      if (!view || !view.isMonth || !view.params.periodMonth) return;
+      if (view.isSettled) return;
+      const ym = String(view.params.periodMonth).slice(0, 7);
+      const ok = window.confirm(
+        "結算後，本月份的分潤金額將鎖定。\n後續修改訂單或支出，不會自動變更本次結算結果。\nStage 16 V1 不提供取消或重新結算。\n確定要結算 " + ym + " 嗎？"
+      );
+      if (!ok) return;
+      settleInFlight = true;
+      const btn = document.getElementById("btnSettleMonth");
+      if (btn) btn.disabled = true;
+      try {
+        if (typeof window.stage7SettleMonthlyProfit !== "function") {
+          window.alert("結算功能尚未就緒（需先執行 Stage 16 SQL）。");
+          return;
+        }
+        const res = await window.stage7SettleMonthlyProfit(view.params.periodMonth);
+        if (!res || !res.ok) {
+          window.alert((res && res.error && (res.error.message || res.error)) || "結算失敗");
+          return;
+        }
+        await renderV2Reports();
+      } finally {
+        settleInFlight = false;
+      }
+    });
+
     function csvCell(v) {
       const s = v == null ? "" : String(v);
       if (/[,"\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
       return s;
     }
-    function exportReportCSV() {
+    async function exportReportCSV() {
       if (!requirePerm("reports")) return;
       const params = getReportQueryParams();
-      const summary = DK.reportSummaryByDateRange(params.fromStr, params.toStr);
-      const orders = (DK.getOrdersInDateRange && DK.getOrdersInDateRange(params.fromStr, params.toStr)) || DK.getOrders();
+      const live = DK.reportSummaryByDateRange(params.fromStr, params.toStr);
+      const profit = await loadReportProfit(params, live);
+      const isMonth = !!(params.periodMonth);
+      const opsRevenue = isMonth ? profit.revenue : numProfit(live.revenueTotal);
+      const opsGross = isMonth ? profit.grossProfit : numProfit(live.ordersProfit);
+      const opsOpex = isMonth ? profit.operatingExpense : numProfit(live.operatingExpenseTotal);
+      const opsDist = isMonth ? profit.distributable : numProfit(live.distributableProfit);
+      const opsCogs = isMonth ? profit.cogsExpense : numProfit(live.cogsExpenseTotal);
+      const share35 = (isMonth || params.period === "customYear") ? profit.share35 : numProfit(live.share35);
+      const share40 = (isMonth || params.period === "customYear") ? profit.share40 : numProfit(live.share40);
+      const company = (isMonth || params.period === "customYear") ? profit.company : numProfit(live.companyRetained);
+      const settleStatus = profit.alreadySettled ? "已結算" : (params.period === "customYear" ? "年度加總" : "預估");
+      const orders = (DK.getOrdersInDateRange && DK.getOrdersInDateRange(params.fromStr, params.toStr)) || [];
       const enrichedOrders = orders.map((o) => DK.enrichOrder(o));
-      const headers = ["報表類型", "期間", "訂單毛利合計", "訂單筆數", "支出合計", "支出筆數", "庫存總成本"];
-      const rows = [[params.label, `${summary.fromStr} ~ ${summary.toStr}`, summary.ordersProfit, summary.ordersCount, summary.expensesTotal, summary.expensesCount, summary.inventoryValue]];
+      const headers = [
+        "報表類型", "期間", "營業額", "訂單毛利合計", "訂單筆數",
+        "營業支出（OPEX+OTHER）", "COGS支出（不納入分潤）", "可分配淨利",
+        "35%", "40%", "公司25%", "結算狀態", "結算時間", "目前庫存總成本", "公司累積留存",
+      ];
+      const rows = [[
+        params.label,
+        `${params.fromStr} ~ ${params.toStr}`,
+        opsRevenue,
+        opsGross,
+        live.ordersCount,
+        opsOpex,
+        opsCogs,
+        opsDist,
+        share35,
+        share40,
+        company,
+        settleStatus,
+        profit.settledAt || "",
+        numProfit(profit.inventoryValue != null ? profit.inventoryValue : live.inventoryValue),
+        numProfit(profit.cumulative),
+      ]];
       let csv = "\uFEFF" + headers.join(",") + "\n";
       rows.forEach((r) => { csv += r.map(csvCell).join(",") + "\n"; });
       const salesStats = (DK.reportSalesTypeStats && DK.reportSalesTypeStats(params.fromStr, params.toStr)) || { rows: [] };
-      csv += "\n銷售類型統計\n";
+      csv += "\n銷售類型統計（不含退款）\n";
       csv += "銷售類型,訂單數,營業額,毛利,平均客單\n";
       (salesStats.rows || []).forEach((r) => {
         csv += [r.salesType, Number(r.count) || 0, Number(r.revenue) || 0, Number(r.profit) || 0, Number(r.avg) || 0].map(csvCell).join(",") + "\n";
       });
-      csv += "\n訂單明細（查詢區間內）\n";
+      csv += "\n訂單明細（查詢區間內，不含退款）\n";
       csv += "訂單編號,客戶,售價,運費,折扣,成本,毛利,毛利率,狀態,日期,銷售類型\n";
       enrichedOrders.forEach((o) => {
         const margin = o.gross_margin != null ? (o.gross_margin * 100).toFixed(1) + "%" : "";
