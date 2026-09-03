@@ -1170,6 +1170,13 @@ function stage7MapLedgerRow(row, costMap, admin) {
     ref_id: row.ref_id,
     note: row.note,
     created_at: row.created_at,
+    movement_type: row.movement_type || extra.movement_type || "",
+    business_date: row.business_date ? String(row.business_date).slice(0, 10) : "",
+    source_type: row.source_type || "",
+    source_id: row.source_id || "",
+    corrects_ledger_id: row.corrects_ledger_id || "",
+    created_by: row.created_by || "",
+    cost_status: row.cost_status || extra.cost_status || "",
   };
   if (admin && costMap && Object.prototype.hasOwnProperty.call(costMap, row.id)) {
     rec.unit_cost = costMap[row.id];
@@ -1326,12 +1333,29 @@ async function saveV2DataToSupabase() {
   return { ok: true, skipped: true, cutover: true };
 }
 
+function dkNewInboundRequestId() {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch (_) {}
+  return "req-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+}
+
 async function stage7RpcAdjustStock(entry) {
   const admin = stage7IsAdminRole();
   const type = String((entry && entry.type) || "");
   const qty = Number(entry && entry.qty) || 0;
   const inbound = entry && entry.inbound_date ? String(entry.inbound_date).slice(0, 10) : null;
   const note = entry && entry.note != null ? String(entry.note) : null;
+  const movementType = entry && entry.movement_type ? String(entry.movement_type) : null;
+  const sourceType = entry && entry.source_type ? String(entry.source_type) : "client_request";
+  const sourceId = entry && entry.source_id ? String(entry.source_id) : dkNewInboundRequestId();
+  const extra = {
+    p_movement_type: movementType,
+    p_source_type: sourceType,
+    p_source_id: sourceId,
+  };
   if (admin && (type === "IN" || type === "ADJUST") && entry && entry.unit_cost != null && entry.unit_cost !== "") {
     return stage7Rpc("backoffice_admin_adjust_stock", {
       p_item_id: String(entry.item_id || ""),
@@ -1340,6 +1364,7 @@ async function stage7RpcAdjustStock(entry) {
       p_unit_cost: Number(entry.unit_cost) || 0,
       p_note: note,
       p_inbound_date: inbound,
+      ...extra,
     });
   }
   return stage7Rpc("backoffice_adjust_stock", {
@@ -1348,6 +1373,7 @@ async function stage7RpcAdjustStock(entry) {
     p_operation_type: type,
     p_note: note,
     p_inbound_date: inbound,
+    ...extra,
   });
 }
 
@@ -1689,6 +1715,84 @@ function stage7PreviewYearProfit(year) {
   return stage7Rpc("backoffice_preview_year_profit", { p_year: y }).then(stage7ParseProfitRpc);
 }
 
+function stage7InboundAmount(fromStr, toStr) {
+  if (!stage7IsAdminRole()) {
+    return Promise.resolve({ ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以查看入庫金額" });
+  }
+  const from = String(fromStr || "").slice(0, 10);
+  const to = String(toStr || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return Promise.resolve({ ok: false, error: "date range required" });
+  }
+  return stage7Rpc("backoffice_inventory_inbound_amount", { p_from: from, p_to: to }).then(stage7ParseProfitRpc);
+}
+
+function stage7MapInboundError(raw) {
+  const s = String(raw || "");
+  if (s.indexOf("INBOUND_CORRECTION_STOCK_CONFLICT") >= 0) {
+    return "此更正會使目前庫存低於 0，代表更正內容與後續庫存異動存在衝突。請先確認是否有漏登入庫或其他庫存異動。";
+  }
+  return s;
+}
+
+function stage7CorrectInbound(originalLedgerId, qtyDelta, reason, idempotencyKey) {
+  if (!stage7IsAdminRole()) {
+    return Promise.resolve({ ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以更正入庫" });
+  }
+  const id = String(originalLedgerId || "").trim();
+  const reasonText = String(reason || "").trim();
+  const key = String(idempotencyKey || "").trim() || dkNewInboundRequestId();
+  const qty = Number(qtyDelta);
+  if (!id) return Promise.resolve({ ok: false, error: "original ledger id required" });
+  if (!Number.isFinite(qty) || qty === 0) return Promise.resolve({ ok: false, error: "更正數量不可為 0" });
+  if (!reasonText) return Promise.resolve({ ok: false, error: "請填更正原因" });
+  return stage7Rpc("backoffice_correct_inventory_inbound", {
+    p_original_ledger_id: id,
+    p_qty_delta: qty,
+    p_reason: reasonText,
+    p_idempotency_key: key,
+  }).then(stage7ParseProfitRpc).then(function (res) {
+    if (res && !res.ok) res.error = stage7MapInboundError(res.error);
+    return res;
+  });
+}
+
+function stage7CorrectInboundCost(originalLedgerId, unitCost, reason, idempotencyKey) {
+  if (!stage7IsAdminRole()) {
+    return Promise.resolve({ ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以更正入庫成本" });
+  }
+  const id = String(originalLedgerId || "").trim();
+  const reasonText = String(reason || "").trim();
+  const key = String(idempotencyKey || "").trim() || dkNewInboundRequestId();
+  const cost = Number(unitCost);
+  if (!id) return Promise.resolve({ ok: false, error: "original ledger id required" });
+  if (!Number.isFinite(cost) || cost < 0) return Promise.resolve({ ok: false, error: "請填正確單位成本" });
+  if (!reasonText) return Promise.resolve({ ok: false, error: "請填更正原因" });
+  return stage7Rpc("backoffice_correct_inbound_cost", {
+    p_original_ledger_id: id,
+    p_unit_cost: cost,
+    p_reason: reasonText,
+    p_idempotency_key: key,
+  }).then(stage7ParseProfitRpc).then(function (res) {
+    if (res && !res.ok) res.error = stage7MapInboundError(res.error);
+    return res;
+  });
+}
+
+function stage7ConfirmInboundCost(ledgerId, unitCost) {
+  if (!stage7IsAdminRole()) {
+    return Promise.resolve({ ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以補入庫成本" });
+  }
+  const id = String(ledgerId || "").trim();
+  const cost = Number(unitCost);
+  if (!id) return Promise.resolve({ ok: false, error: "ledger id required" });
+  if (!Number.isFinite(cost) || cost < 0) return Promise.resolve({ ok: false, error: "請填單位成本" });
+  return stage7Rpc("backoffice_confirm_inbound_cost", {
+    p_ledger_id: id,
+    p_unit_cost: cost,
+  }).then(stage7ParseProfitRpc);
+}
+
 function stage7SettleMonthlyProfit(periodMonth) {
   if (!stage7IsAdminRole()) {
     return Promise.resolve({ ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以結算分潤" });
@@ -1736,6 +1840,11 @@ if (typeof window !== "undefined") {
   window.stage7PreviewProfitRange = stage7PreviewProfitRange;
   window.stage7PreviewYearProfit = stage7PreviewYearProfit;
   window.stage7SettleMonthlyProfit = stage7SettleMonthlyProfit;
+  window.stage7InboundAmount = stage7InboundAmount;
+  window.stage7CorrectInbound = stage7CorrectInbound;
+  window.stage7CorrectInboundCost = stage7CorrectInboundCost;
+  window.stage7ConfirmInboundCost = stage7ConfirmInboundCost;
+  window.dkNewInboundRequestId = dkNewInboundRequestId;
 }
 
 function isSupabaseConfigured() {
@@ -4682,6 +4791,11 @@ window.DK = {
   stage7PreviewProfitRange,
   stage7PreviewYearProfit,
   stage7SettleMonthlyProfit,
+  stage7InboundAmount,
+  stage7CorrectInbound,
+  stage7CorrectInboundCost,
+  stage7ConfirmInboundCost,
+  dkNewInboundRequestId,
   pullVendorQuotesFromCloud,
   pullPurchaseOrdersFromCloud,
   previewVendorQuotesUpload,

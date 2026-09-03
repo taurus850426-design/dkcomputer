@@ -5219,6 +5219,20 @@
     const STATUS_LABEL = { READY: "可售", TESTING: "待測", PREP: "待整理", RESERVED: "保留", CLEARANCE: "待出清", SCRAP: "報廢拆料" };
     const CONDITION_LABEL = { NEW: "全新", USED: "二手", REFURB: "整新" };
     const LEDGER_TYPE_LABEL = { IN: "入庫", OUT: "出庫", ADJUST: "調整" };
+    const MOVEMENT_TYPE_LABEL = {
+      INITIAL_STOCK: "初始庫存",
+      MANUAL_IN: "入庫",
+      PURCHASE_RECEIPT: "採購收貨",
+      INBOUND_CORRECTION: "入庫更正",
+      INBOUND_COST_CORRECTION: "入庫成本更正",
+      MANUAL_OUT: "出庫",
+      SALE: "銷售扣庫",
+      SALE_RETURN: "銷售退回",
+      ADJUSTMENT_IN: "庫存調整＋",
+      ADJUSTMENT_OUT: "庫存調整−",
+      LEGACY: "舊資料",
+    };
+    const FORMAL_INBOUND_TYPES = { INITIAL_STOCK: true, MANUAL_IN: true, PURCHASE_RECEIPT: true };
     const REF_TYPE_LABEL = { PURCHASE: "進貨", ORDER: "訂單", RMA: "退換", SCRAP: "報廢", MOVE: "移倉", ADJUST: "調整" };
     const ORDER_STATUS_LABEL = { pending: "待處理", paid: "已付款", shipped: "已出貨", completed: "已完成", refunded: "已退貨" };
     const ORDER_PAYMENT_LABEL = { cash: "現金", transfer: "轉帳", card: "刷卡" };
@@ -6089,6 +6103,31 @@
     const ledgerTbody = document.getElementById("ledgerTbody");
     const ledgerForm = document.getElementById("ledgerForm");
     const ledgerMsg = document.getElementById("ledgerMsg");
+    function inboundEffectiveQty(originalId) {
+      const list = DK.getLedger() || [];
+      const orig = list.find((r) => String(r.id) === String(originalId));
+      if (!orig) return null;
+      const origQty = Number(orig.qty) || 0;
+      const corrSum = list.reduce((s, r) => {
+        if (String(r.corrects_ledger_id || "") !== String(originalId)) return s;
+        if (String(r.movement_type || "") !== "INBOUND_CORRECTION") return s;
+        return s + (Number(r.qty) || 0);
+      }, 0);
+      return origQty + corrSum;
+    }
+    function inboundEffectiveUnitCost(originalId) {
+      const list = DK.getLedger() || [];
+      const orig = list.find((r) => String(r.id) === String(originalId));
+      if (!orig) return null;
+      const latest = list
+        .filter((r) =>
+          String(r.corrects_ledger_id || "") === String(originalId)
+          && String(r.movement_type || "") === "INBOUND_COST_CORRECTION"
+        )
+        .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
+      if (latest.length) return Number(latest[latest.length - 1].unit_cost) || 0;
+      return Number(orig.unit_cost) || 0;
+    }
     function renderV2Ledger() {
       if (!ledgerTbody) return;
       const list = DK.getLedger();
@@ -6096,12 +6135,27 @@
       const byId = Object.fromEntries(items.map((i) => [i.id, i]));
       const pageInfo = paginateV2(list, ledgerPage, V2_PAGE_SIZE);
       ledgerPage = pageInfo.page;
+      const isAdminUser = !!(window.stage7IsAdminRole && window.stage7IsAdminRole());
       ledgerTbody.innerHTML = pageInfo.pageItems.map((r) => {
         const item = byId[r.item_id];
         const baseName = item ? (item.name || item.sku || "") : String(r.item_id || "");
         const spec = item ? String(item.spec || "").trim() : "";
         const displayName = spec ? `${baseName} ${spec}` : baseName;
-        return `<tr><td class="nowrap">${v2Esc((r.created_at || "").toString().slice(0, 19))}</td><td>${v2Esc(displayName)}</td><td>${v2Esc(LEDGER_TYPE_LABEL[r.type] || r.type)}</td><td>${r.qty}</td><td>${v2FmtNum(r.unit_cost)}</td><td>${v2Esc(REF_TYPE_LABEL[r.ref_type] || r.ref_type)}</td><td>${v2Esc(r.ref_id)}</td><td class="muted">${v2Esc(r.note)}</td></tr>`;
+        const move = String(r.movement_type || "");
+        const typeLabel = MOVEMENT_TYPE_LABEL[move] || LEDGER_TYPE_LABEL[r.type] || r.type;
+        const biz = (r.business_date || "").toString().slice(0, 10);
+        const costStatus = String(r.cost_status || "");
+        const costStatusLabel = costStatus === "pending" ? "待補成本" : (move && move !== "LEGACY" ? "已確認" : "—");
+        let actions = "";
+        if (isAdminUser && FORMAL_INBOUND_TYPES[move]) {
+          if (costStatus === "pending") {
+            actions += '<button type="button" class="btn btn-ghost btn-sm inbound-confirm-cost-btn" data-id="' + v2Esc(String(r.id)) + '">補成本</button>';
+          } else if (costStatus === "confirmed") {
+            actions += '<button type="button" class="btn btn-ghost btn-sm inbound-correct-btn" data-id="' + v2Esc(String(r.id)) + '">更正入庫</button>';
+            actions += '<button type="button" class="btn btn-ghost btn-sm inbound-cost-correct-btn" data-id="' + v2Esc(String(r.id)) + '">更正成本</button>';
+          }
+        }
+        return `<tr><td class="nowrap">${v2Esc((r.created_at || "").toString().slice(0, 19).replace("T", " "))}</td><td class="nowrap">${v2Esc(biz)}</td><td>${v2Esc(displayName)}</td><td>${v2Esc(typeLabel)}</td><td>${r.qty}</td><td>${v2FmtNum(r.unit_cost)}</td><td>${v2Esc(costStatusLabel)}</td><td>${v2Esc(r.ref_id)}</td><td class="muted">${v2Esc(r.note)}</td><td class="table-actions">${actions}</td></tr>`;
       }).join("");
 
       const pager = document.getElementById("ledgerPagination");
@@ -6140,6 +6194,8 @@
     document.getElementById("ledgerCancel")?.addEventListener("click", () => { if (ledgerForm) ledgerForm.hidden = true; v2Hide(ledgerMsg); });
     document.getElementById("ledgerSubmit")?.addEventListener("click", async () => {
       if (!requirePerm("ledger")) return;
+      const btn = document.getElementById("ledgerSubmit");
+      if (btn && btn.dataset.saving === "1") return;
       const itemId = document.getElementById("ledgerItemId")?.value;
       const type = document.getElementById("ledgerType")?.value;
       const qty = parseInt(document.getElementById("ledgerQty")?.value, 10);
@@ -6150,13 +6206,237 @@
       if (!itemId) return v2Show(ledgerMsg, "請選擇品項");
       if (!Number.isFinite(qty) || (type === "IN" && qty <= 0) || (type === "OUT" && qty <= 0)) return v2Show(ledgerMsg, "數量需大於 0");
       if (type === "IN" && unitCost < 0) return v2Show(ledgerMsg, "入庫請填單位成本");
-      const result = await DK.addLedgerEntry({ item_id: itemId, type, qty: type === "ADJUST" ? qty : Math.abs(qty), unit_cost: unitCost, ref_type: refType, ref_id: refId, note });
-      if (!result.ok) return v2Show(ledgerMsg, result.error || "失敗");
-      v2Show(ledgerMsg, "已寫入流水並更新品項");
-      showSyncToast({ ok: true }, "流水帳");
-      renderV2Ledger();
-      renderV2Items();
-      setTimeout(() => { if (ledgerForm) ledgerForm.hidden = true; v2Hide(ledgerMsg); }, 1000);
+      if (btn) btn.dataset.saving = "1";
+      try {
+        const result = await DK.addLedgerEntry({
+          item_id: itemId,
+          type,
+          qty: type === "ADJUST" ? qty : Math.abs(qty),
+          unit_cost: unitCost,
+          ref_type: refType,
+          ref_id: refId,
+          note,
+          movement_type: type === "IN" ? "MANUAL_IN" : (type === "OUT" ? "MANUAL_OUT" : undefined),
+        });
+        if (!result.ok) return v2Show(ledgerMsg, result.error || "失敗");
+        v2Show(ledgerMsg, "已寫入流水並更新品項");
+        showSyncToast({ ok: true }, "流水帳");
+        renderV2Ledger();
+        renderV2Items();
+        setTimeout(() => { if (ledgerForm) ledgerForm.hidden = true; v2Hide(ledgerMsg); }, 1000);
+      } finally {
+        if (btn) btn.dataset.saving = "";
+      }
+    });
+
+    const inboundCorrectModal = document.getElementById("inboundCorrectModal");
+    const inboundCorrectMsg = document.getElementById("inboundCorrectMsg");
+    function closeInboundCorrectModal() {
+      if (inboundCorrectModal) inboundCorrectModal.hidden = true;
+      const idEl = document.getElementById("inboundCorrectLedgerId");
+      if (idEl) idEl.value = "";
+      v2Hide(inboundCorrectMsg);
+    }
+    function openInboundCorrectModal(ledgerId) {
+      const row = (DK.getLedger() || []).find((r) => String(r.id) === String(ledgerId));
+      if (!row || !FORMAL_INBOUND_TYPES[String(row.movement_type || "")]) {
+        return;
+      }
+      const item = DK.findItemById(row.item_id);
+      const eff = inboundEffectiveQty(row.id);
+      const origQty = Number(row.qty) || 0;
+      const corr = (Number(eff) || 0) - origQty;
+      const summary = document.getElementById("inboundCorrectSummary");
+      if (summary) {
+        summary.innerHTML =
+          "品項：" + v2Esc((item && (item.name || item.sku)) || row.item_id) + "<br>" +
+          "原始入庫日期：" + v2Esc(String(row.business_date || "").slice(0, 10)) + "<br>" +
+          "原始入庫數量：" + v2Esc(String(origQty)) + "<br>" +
+          "原始單位成本：NT$ " + v2Esc(v2FmtNum(row.unit_cost)) + "<br>" +
+          "目前累積更正：" + v2Esc(String(corr)) + "<br>" +
+          "目前有效入庫數量：" + v2Esc(String(eff));
+      }
+      const idEl = document.getElementById("inboundCorrectLedgerId");
+      if (idEl) idEl.value = String(row.id);
+      const qtyEl = document.getElementById("inboundCorrectQty");
+      if (qtyEl) qtyEl.value = "";
+      const reasonEl = document.getElementById("inboundCorrectReason");
+      if (reasonEl) reasonEl.value = "";
+      if (inboundCorrectModal) inboundCorrectModal.hidden = false;
+      v2Hide(inboundCorrectMsg);
+    }
+    ledgerTbody?.addEventListener("click", (e) => {
+      const correctBtn = e.target && e.target.closest && e.target.closest(".inbound-correct-btn");
+      if (correctBtn) {
+        if (!requirePerm("ledger")) return;
+        openInboundCorrectModal(correctBtn.getAttribute("data-id"));
+        return;
+      }
+      const costBtn = e.target && e.target.closest && e.target.closest(".inbound-confirm-cost-btn");
+      if (costBtn) {
+        if (!requirePerm("ledger")) return;
+        openInboundConfirmCostModal(costBtn.getAttribute("data-id"));
+        return;
+      }
+      const costCorrectBtn = e.target && e.target.closest && e.target.closest(".inbound-cost-correct-btn");
+      if (costCorrectBtn) {
+        if (!requirePerm("ledger")) return;
+        openInboundCostCorrectModal(costCorrectBtn.getAttribute("data-id"));
+      }
+    });
+    document.getElementById("inboundCorrectClose")?.addEventListener("click", closeInboundCorrectModal);
+    document.getElementById("inboundCorrectCancel")?.addEventListener("click", closeInboundCorrectModal);
+    document.getElementById("inboundCorrectSubmit")?.addEventListener("click", async () => {
+      const btn = document.getElementById("inboundCorrectSubmit");
+      if (btn && btn.dataset.saving === "1") return;
+      const ledgerId = document.getElementById("inboundCorrectLedgerId")?.value;
+      const qty = parseFloat(document.getElementById("inboundCorrectQty")?.value);
+      const reason = String(document.getElementById("inboundCorrectReason")?.value || "").trim();
+      if (!ledgerId) return v2Show(inboundCorrectMsg, "找不到原始入庫");
+      if (!Number.isFinite(qty) || qty === 0) return v2Show(inboundCorrectMsg, "請填本次更正數量（不可為 0）");
+      if (!reason) return v2Show(inboundCorrectMsg, "請填更正原因");
+      if (!window.confirm("此操作會修正庫存數量與原入庫期間的入庫金額，並永久保留更正紀錄。確定執行嗎？")) return;
+      if (typeof window.stage7CorrectInbound !== "function") return v2Show(inboundCorrectMsg, "更正功能未載入");
+      if (btn) btn.dataset.saving = "1";
+      try {
+        const res = await window.stage7CorrectInbound(ledgerId, qty, reason);
+        if (!res || !res.ok) return v2Show(inboundCorrectMsg, (res && res.error) || "更正失敗");
+        if (typeof DK.fetchV2DataFromSupabase === "function") {
+          await (window.fetchV2DataFromSupabase ? window.fetchV2DataFromSupabase() : Promise.resolve());
+        } else if (typeof window.fetchV2DataFromSupabase === "function") {
+          await window.fetchV2DataFromSupabase();
+        }
+        v2Show(inboundCorrectMsg, "已更正入庫");
+        renderV2Ledger();
+        renderV2Items();
+        renderV2Reports();
+        setTimeout(closeInboundCorrectModal, 800);
+      } finally {
+        if (btn) btn.dataset.saving = "";
+      }
+    });
+
+    const inboundConfirmCostModal = document.getElementById("inboundConfirmCostModal");
+    const inboundConfirmCostMsg = document.getElementById("inboundConfirmCostMsg");
+    function closeInboundConfirmCostModal() {
+      if (inboundConfirmCostModal) inboundConfirmCostModal.hidden = true;
+      const idEl = document.getElementById("inboundConfirmCostLedgerId");
+      if (idEl) idEl.value = "";
+      v2Hide(inboundConfirmCostMsg);
+    }
+    function openInboundConfirmCostModal(ledgerId) {
+      const row = (DK.getLedger() || []).find((r) => String(r.id) === String(ledgerId));
+      if (!row || String(row.cost_status || "") !== "pending") return;
+      const item = DK.findItemById(row.item_id);
+      const summary = document.getElementById("inboundConfirmCostSummary");
+      if (summary) {
+        summary.innerHTML =
+          "品項：" + v2Esc((item && (item.name || item.sku)) || row.item_id) + "<br>" +
+          "入庫日期：" + v2Esc(String(row.business_date || "").slice(0, 10)) + "<br>" +
+          "入庫數量：" + v2Esc(String(row.qty));
+      }
+      const idEl = document.getElementById("inboundConfirmCostLedgerId");
+      if (idEl) idEl.value = String(row.id);
+      const costEl = document.getElementById("inboundConfirmCostValue");
+      if (costEl) costEl.value = "";
+      if (inboundConfirmCostModal) inboundConfirmCostModal.hidden = false;
+      v2Hide(inboundConfirmCostMsg);
+    }
+    document.getElementById("inboundConfirmCostClose")?.addEventListener("click", closeInboundConfirmCostModal);
+    document.getElementById("inboundConfirmCostCancel")?.addEventListener("click", closeInboundConfirmCostModal);
+    document.getElementById("inboundConfirmCostSubmit")?.addEventListener("click", async () => {
+      const btn = document.getElementById("inboundConfirmCostSubmit");
+      if (btn && btn.dataset.saving === "1") return;
+      const ledgerId = document.getElementById("inboundConfirmCostLedgerId")?.value;
+      const cost = parseFloat(document.getElementById("inboundConfirmCostValue")?.value);
+      if (!ledgerId) return v2Show(inboundConfirmCostMsg, "找不到入庫流水");
+      if (!Number.isFinite(cost) || cost < 0) return v2Show(inboundConfirmCostMsg, "請填單位成本");
+      if (typeof window.stage7ConfirmInboundCost !== "function") return v2Show(inboundConfirmCostMsg, "補成本功能未載入");
+      if (btn) btn.dataset.saving = "1";
+      try {
+        const res = await window.stage7ConfirmInboundCost(ledgerId, cost);
+        if (!res || !res.ok) return v2Show(inboundConfirmCostMsg, (res && res.error) || "補成本失敗");
+        if (typeof window.fetchV2DataFromSupabase === "function") {
+          await window.fetchV2DataFromSupabase();
+        }
+        v2Show(inboundConfirmCostMsg, "已補上正式入庫成本");
+        renderV2Ledger();
+        renderV2Reports();
+        setTimeout(closeInboundConfirmCostModal, 800);
+      } finally {
+        if (btn) btn.dataset.saving = "";
+      }
+    });
+
+    const inboundCostCorrectModal = document.getElementById("inboundCostCorrectModal");
+    const inboundCostCorrectMsg = document.getElementById("inboundCostCorrectMsg");
+    function closeInboundCostCorrectModal() {
+      if (inboundCostCorrectModal) inboundCostCorrectModal.hidden = true;
+      const idEl = document.getElementById("inboundCostCorrectLedgerId");
+      if (idEl) idEl.value = "";
+      v2Hide(inboundCostCorrectMsg);
+    }
+    function openInboundCostCorrectModal(ledgerId) {
+      const row = (DK.getLedger() || []).find((r) => String(r.id) === String(ledgerId));
+      if (!row || !FORMAL_INBOUND_TYPES[String(row.movement_type || "")]) return;
+      if (String(row.cost_status || "") !== "confirmed") return;
+      const item = DK.findItemById(row.item_id);
+      const origCost = Number(row.unit_cost) || 0;
+      const effCost = inboundEffectiveUnitCost(row.id);
+      const summary = document.getElementById("inboundCostCorrectSummary");
+      if (summary) {
+        summary.innerHTML =
+          "品項：" + v2Esc((item && (item.name || item.sku)) || row.item_id) + "<br>" +
+          "原始入庫日期：" + v2Esc(String(row.business_date || "").slice(0, 10)) + "<br>" +
+          "有效入庫數量：" + v2Esc(String(inboundEffectiveQty(row.id))) + "<br>" +
+          "原始成本：NT$ " + v2Esc(v2FmtNum(origCost)) + "<br>" +
+          "目前有效成本：NT$ " + v2Esc(v2FmtNum(effCost));
+      }
+      const idEl = document.getElementById("inboundCostCorrectLedgerId");
+      if (idEl) idEl.value = String(row.id);
+      const costEl = document.getElementById("inboundCostCorrectValue");
+      if (costEl) costEl.value = "";
+      const reasonEl = document.getElementById("inboundCostCorrectReason");
+      if (reasonEl) reasonEl.value = "";
+      if (inboundCostCorrectModal) inboundCostCorrectModal.hidden = false;
+      v2Hide(inboundCostCorrectMsg);
+    }
+    document.getElementById("inboundCostCorrectClose")?.addEventListener("click", closeInboundCostCorrectModal);
+    document.getElementById("inboundCostCorrectCancel")?.addEventListener("click", closeInboundCostCorrectModal);
+    document.getElementById("inboundCostCorrectSubmit")?.addEventListener("click", async () => {
+      const btn = document.getElementById("inboundCostCorrectSubmit");
+      if (btn && btn.dataset.saving === "1") return;
+      const ledgerId = document.getElementById("inboundCostCorrectLedgerId")?.value;
+      const cost = parseFloat(document.getElementById("inboundCostCorrectValue")?.value);
+      const reason = String(document.getElementById("inboundCostCorrectReason")?.value || "").trim();
+      if (!ledgerId) return v2Show(inboundCostCorrectMsg, "找不到原始入庫");
+      if (!Number.isFinite(cost) || cost < 0) return v2Show(inboundCostCorrectMsg, "請填正確單位成本");
+      if (!reason) return v2Show(inboundCostCorrectMsg, "請填更正原因");
+      const row = (DK.getLedger() || []).find((r) => String(r.id) === String(ledgerId));
+      const origCost = row ? (Number(row.unit_cost) || 0) : 0;
+      const effCost = row ? inboundEffectiveUnitCost(row.id) : 0;
+      if (!window.confirm(
+        "原始成本：NT$ " + v2FmtNum(origCost) +
+        "\n目前有效成本：NT$ " + v2FmtNum(effCost) +
+        "\n正確成本：NT$ " + v2FmtNum(cost) +
+        "\n\n不會修改原始進價快照。確定執行嗎？"
+      )) return;
+      if (typeof window.stage7CorrectInboundCost !== "function") return v2Show(inboundCostCorrectMsg, "更正成本功能未載入");
+      if (btn) btn.dataset.saving = "1";
+      try {
+        const res = await window.stage7CorrectInboundCost(ledgerId, cost, reason);
+        if (!res || !res.ok) return v2Show(inboundCostCorrectMsg, (res && res.error) || "更正成本失敗");
+        if (typeof window.fetchV2DataFromSupabase === "function") {
+          await window.fetchV2DataFromSupabase();
+        }
+        v2Show(inboundCostCorrectMsg, "已更正入庫成本");
+        renderV2Ledger();
+        renderV2Items();
+        renderV2Reports();
+        setTimeout(closeInboundCostCorrectModal, 800);
+      } finally {
+        if (btn) btn.dataset.saving = "";
+      }
     });
 
     const ordersTbody = document.getElementById("ordersTbody");
@@ -6801,6 +7081,8 @@
     });
     document.getElementById("restockSubmit")?.addEventListener("click", async () => {
       if (!requirePerm("restock")) return;
+      const btn = document.getElementById("restockSubmit");
+      if (btn && btn.dataset.saving === "1") return;
       const itemId = document.getElementById("restockItemId")?.value;
       const qty = parseInt(document.getElementById("restockQty")?.value, 10);
       let unitCost = parseFloat(document.getElementById("restockUnitCost")?.value) || 0;
@@ -6809,16 +7091,31 @@
       if (!itemId) return v2Show(restockMsg, "請選擇品項");
       if (!Number.isFinite(qty) || qty <= 0) return v2Show(restockMsg, "數量需大於 0");
       if (canPerm("viewCost") && unitCost < 0) return v2Show(restockMsg, "請填單位成本");
-      const result = await DK.addLedgerEntry({ item_id: itemId, type: "IN", qty, unit_cost: unitCost, ref_type: "PURCHASE", ref_id: "", note: "補貨", inbound_date: inboundDate || undefined });
-      if (!result.ok) return v2Show(restockMsg, result.error || "入庫失敗");
-      auditAction("補貨", itemId);
-      v2Show(restockMsg, "已入庫，入庫日已更新");
-      showSyncToast({ ok: true }, "補貨");
-      renderV2Items();
-      renderV2Ledger();
-      refreshReplenishmentUI();
-      if (restockForm) restockForm.hidden = true;
-      setTimeout(() => { v2Hide(restockMsg); }, 1500);
+      if (btn) btn.dataset.saving = "1";
+      try {
+        const result = await DK.addLedgerEntry({
+          item_id: itemId,
+          type: "IN",
+          qty,
+          unit_cost: unitCost,
+          ref_type: "PURCHASE",
+          ref_id: "",
+          note: "補貨",
+          inbound_date: inboundDate || undefined,
+          movement_type: "MANUAL_IN",
+        });
+        if (!result.ok) return v2Show(restockMsg, result.error || "入庫失敗");
+        auditAction("補貨", itemId);
+        v2Show(restockMsg, "已入庫，入庫日已更新");
+        showSyncToast({ ok: true }, "補貨");
+        renderV2Items();
+        renderV2Ledger();
+        refreshReplenishmentUI();
+        if (restockForm) restockForm.hidden = true;
+        setTimeout(() => { v2Hide(restockMsg); }, 1500);
+      } finally {
+        if (btn) btn.dataset.saving = "";
+      }
     });
     document.getElementById("restockGoNew")?.addEventListener("click", () => {
       if (restockForm) restockForm.hidden = true;
@@ -7372,7 +7669,8 @@
     }
 
     let reportsRenderGen = 0;
-    let lastReportProfitView = null;
+      let lastReportProfitView = null;
+      let lastReportInboundView = null;
     let settleInFlight = false;
 
     function numProfit(v) {
@@ -7477,7 +7775,11 @@
       const live = DK.reportSummaryByDateRange(params.fromStr, params.toStr);
       const salesStats = (DK.reportSalesTypeStats && DK.reportSalesTypeStats(params.fromStr, params.toStr)) || { rows: [], pcCount: 0, partsCount: 0, serviceCount: 0 };
       const salesRows = Array.isArray(salesStats.rows) ? salesStats.rows : [];
+      const inboundPromise = (typeof window.stage7InboundAmount === "function")
+        ? window.stage7InboundAmount(params.fromStr, params.toStr)
+        : Promise.resolve(null);
       let profit = await loadReportProfit(params, live);
+      const inboundRes = await inboundPromise;
       if (gen !== reportsRenderGen) return;
 
       const isMonth = !!(params.periodMonth);
@@ -7560,9 +7862,29 @@
       const share40 = isMonth || isYear ? profit.share40 : numProfit(live.share40);
       const company = isMonth || isYear ? profit.company : numProfit(live.companyRetained);
       const invVal = numProfit(profit.inventoryValue != null ? profit.inventoryValue : live.inventoryValue);
+      const inboundData = inboundRes && inboundRes.ok && inboundRes.data ? inboundRes.data : null;
+      const inboundCoverage = inboundData && inboundData.coverage ? String(inboundData.coverage) : "";
+      const inboundMeta = inboundData && inboundData.meta
+        ? String(inboundData.meta)
+        : (inboundRes && inboundRes.ok === false ? "尚未啟用入庫追蹤（請先執行 Stage 17 SQL）" : "依查詢期間實際入庫成本");
+      const inboundAmountNull = !inboundData || inboundCoverage === "none" || inboundData.amount == null;
+      const inboundValueHtml = inboundAmountNull
+        ? '<span class="muted">—</span>'
+        : '<span class="neutral-number">NT$ ' + v2FmtNum(numProfit(inboundData.amount)) + "</span>";
+      lastReportInboundView = {
+        amount: inboundAmountNull ? null : numProfit(inboundData.amount),
+        meta: inboundMeta,
+        coverage: inboundCoverage || "unavailable",
+        trackingStart: inboundData && inboundData.tracking_start_date ? String(inboundData.tracking_start_date).slice(0, 10) : "",
+        from: params.fromStr,
+        to: params.toStr,
+      };
       const elShare = document.getElementById("reportShareKpiGrid");
       if (elShare) {
         elShare.innerHTML =
+          kpiCard("surface-info", "📥", "入庫金額",
+            inboundValueHtml,
+            v2Esc(inboundMeta)) +
           kpiCard("surface-neutral", "📦", "目前庫存總成本",
             '<span class="neutral-number">NT$ ' + v2FmtNum(invVal) + "</span>",
             "目前庫存資產成本（非該月月底快照）") +
@@ -7673,10 +7995,25 @@
       const settleStatus = profit.alreadySettled ? "已結算" : (params.period === "customYear" ? "年度加總" : "預估");
       const orders = (DK.getOrdersInDateRange && DK.getOrdersInDateRange(params.fromStr, params.toStr)) || [];
       const enrichedOrders = orders.map((o) => DK.enrichOrder(o));
+      const inboundRes = (typeof window.stage7InboundAmount === "function")
+        ? await window.stage7InboundAmount(params.fromStr, params.toStr)
+        : null;
+      const inboundData = inboundRes && inboundRes.ok && inboundRes.data ? inboundRes.data : null;
+      const inboundCoverage = inboundData && inboundData.coverage ? String(inboundData.coverage) : "unavailable";
+      const inboundAmountOut = (!inboundData || inboundCoverage === "none" || inboundData.amount == null)
+        ? ""
+        : numProfit(inboundData.amount);
+      const inboundNote = inboundData && inboundData.meta
+        ? String(inboundData.meta)
+        : "尚未啟用入庫追蹤";
+      const inboundStart = inboundData && inboundData.tracking_start_date
+        ? String(inboundData.tracking_start_date).slice(0, 10)
+        : "";
       const headers = [
         "報表類型", "期間", "營業額", "訂單毛利合計", "訂單筆數",
         "營業支出（OPEX+OTHER）", "COGS支出（不納入分潤）", "可分配淨利",
         "35%", "40%", "公司25%", "結算狀態", "結算時間", "目前庫存總成本", "公司累積留存",
+        "入庫金額", "入庫追蹤起始日", "入庫統計說明",
       ];
       const rows = [[
         params.label,
@@ -7694,6 +8031,9 @@
         profit.settledAt || "",
         numProfit(profit.inventoryValue != null ? profit.inventoryValue : live.inventoryValue),
         numProfit(profit.cumulative),
+        inboundAmountOut,
+        inboundStart,
+        inboundNote,
       ]];
       let csv = "\uFEFF" + headers.join(",") + "\n";
       rows.forEach((r) => { csv += r.map(csvCell).join(",") + "\n"; });

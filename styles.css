@@ -906,6 +906,9 @@ body.theme-apple #home-entries .home-entry-sub{
 body.admin-page #reportShareKpiGrid .kpi-card{
   min-height: 96px;
 }
+.inbound-correct-card{
+  max-width: 560px;
+}
 
 .radio-row{ display: flex; gap: 20px; flex-wrap: wrap; }
 .radio-wrap{ display: flex; align-items: center; gap: 8px; cursor: pointer; }

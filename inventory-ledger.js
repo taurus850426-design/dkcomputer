@@ -113,14 +113,34 @@
       const nextQty = Number(item.qty_on_hand);
       const targetQty = Number.isFinite(nextQty) ? Math.max(0, nextQty) : 0;
       if (targetQty !== prevQty && typeof global.stage7RpcAdjustStock === "function") {
-        const adj = await global.stage7RpcAdjustStock({
-          item_id: item.id,
-          type: "ADJUST",
-          qty: targetQty,
-          unit_cost: item.cost_unit,
-          note: wasNew ? "新增品項數量" : "品項數量調整",
-        });
-        if (!adj.ok) return adj;
+        let adj;
+        if (wasNew && targetQty > 0) {
+          adj = await global.stage7RpcAdjustStock({
+            item_id: item.id,
+            type: "IN",
+            qty: targetQty,
+            unit_cost: item.cost_unit,
+            note: "新增品項數量",
+            inbound_date: item.inbound_date,
+            movement_type: "INITIAL_STOCK",
+            source_type: "initial_stock",
+            source_id: String(item.id),
+          });
+        } else if (!wasNew) {
+          adj = await global.stage7RpcAdjustStock({
+            item_id: item.id,
+            type: "ADJUST",
+            qty: targetQty,
+            unit_cost: item.cost_unit,
+            note: "品項數量調整",
+            movement_type: targetQty > prevQty ? "ADJUSTMENT_IN" : "ADJUSTMENT_OUT",
+            source_type: "client_request",
+            source_id: typeof global.dkNewInboundRequestId === "function"
+              ? global.dkNewInboundRequestId()
+              : ("adj-" + Date.now() + "-" + Math.random().toString(16).slice(2)),
+          });
+        }
+        if (adj && !adj.ok) return adj;
       }
     }
     await refreshFromCloud();
@@ -348,6 +368,11 @@
       unit_cost,
       note,
       inbound_date,
+      movement_type: entry.movement_type,
+      source_type: entry.source_type || "client_request",
+      source_id: entry.source_id || (typeof global.dkNewInboundRequestId === "function"
+        ? global.dkNewInboundRequestId()
+        : ("req-" + Date.now() + "-" + Math.random().toString(16).slice(2))),
     });
     if (!res.ok) return { ok: false, error: rpcError(res) };
     await refreshFromCloud();

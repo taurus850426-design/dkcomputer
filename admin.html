@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260831s16" />
+            <link rel="stylesheet" href="./styles.css?v=20260903s17" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -126,6 +126,7 @@
                 <button id="restockSubmit" class="btn btn-primary primary-action" type="button">入庫</button>
               </div>
               <p class="form-hint">找不到品項？<button type="button" id="restockGoNew" class="btn btn-ghost btn-sm tertiary-action">新增品項</button></p>
+              <p class="form-hint">員工入庫不會把平均成本當成進價；需管理員在流水帳補上正式成本後，才會計入入庫金額。</p>
               <div id="restockMsg" class="muted" hidden></div>
             </div>
 
@@ -221,7 +222,7 @@
             <!-- 流水帳 -->
             <div id="v2-ledger" class="v2-panel" hidden>
               <div class="section-head">
-                <div><h2 class="h2">流水帳</h2><p class="muted">入庫／出庫／調整；入庫會更新品項數量與最後異動時間</p></div>
+                <div><h2 class="h2">流水帳</h2><p class="muted">正式入庫、出庫、調整與入庫更正。直接改品項數量不會計入入庫金額。</p></div>
                 <div class="section-actions">
                   <button id="btnNewLedger" class="btn btn-primary primary-action" type="button">新增一筆</button>
                 </div>
@@ -229,7 +230,7 @@
               <div class="table-wrap">
                 <table class="table">
                   <thead>
-                    <tr><th>時間</th><th>品項 / 規格</th><th>類型</th><th>數量</th><th>單位成本</th><th>參考類型</th><th>參考單號</th><th>備註</th></tr>
+                    <tr><th>時間</th><th>營業日</th><th>品項 / 規格</th><th>類型</th><th>數量</th><th>單位成本</th><th>成本狀態</th><th>參考單號</th><th>備註</th><th class="table-actions">操作</th></tr>
                   </thead>
                   <tbody id="ledgerTbody"></tbody>
                 </table>
@@ -2069,6 +2070,87 @@
         </div>
       </div>
     </div>
+    <div id="inboundCorrectModal" class="item-editor-modal" hidden>
+      <div class="card item-editor-card inbound-correct-card" role="dialog" aria-modal="true" aria-labelledby="inboundCorrectTitle">
+        <div class="section-head">
+          <div>
+            <h3 id="inboundCorrectTitle" class="h3">更正入庫</h3>
+            <p class="muted small">此操作會修正庫存數量，並把金額歸回原始入庫日期。不會刪除原始流水。</p>
+          </div>
+          <button id="inboundCorrectClose" class="btn btn-ghost btn-sm tertiary-action" type="button">關閉</button>
+        </div>
+        <input type="hidden" id="inboundCorrectLedgerId" value="" />
+        <div id="inboundCorrectSummary" class="muted small admin-msg-gap"></div>
+        <div class="form-grid" style="margin-top:12px">
+          <div class="field">
+            <label for="inboundCorrectQty">本次更正數量</label>
+            <input id="inboundCorrectQty" type="number" step="1" placeholder="例：-45 或 +2" />
+            <p class="form-hint">負數＝減少誤輸入的入庫；正數＝補登漏掉的入庫。</p>
+          </div>
+          <div class="field full">
+            <label for="inboundCorrectReason">更正原因</label>
+            <input id="inboundCorrectReason" type="text" placeholder="例：原入庫誤填 50，實際 5" />
+          </div>
+          <div class="full actions">
+            <button id="inboundCorrectSubmit" class="btn btn-primary primary-action" type="button">確認更正</button>
+            <button id="inboundCorrectCancel" class="btn btn-ghost tertiary-action" type="button">取消</button>
+          </div>
+        </div>
+        <div id="inboundCorrectMsg" class="muted" style="margin-top:10px" hidden></div>
+      </div>
+    </div>
+    <div id="inboundCostCorrectModal" class="item-editor-modal" hidden>
+      <div class="card item-editor-card inbound-correct-card" role="dialog" aria-modal="true" aria-labelledby="inboundCostCorrectTitle">
+        <div class="section-head">
+          <div>
+            <h3 id="inboundCostCorrectTitle" class="h3">更正成本</h3>
+            <p class="muted small">此操作會保留原始進價快照，另記一筆成本更正，並重建目前加權平均。金額歸回原始入庫日期。</p>
+          </div>
+          <button id="inboundCostCorrectClose" class="btn btn-ghost btn-sm tertiary-action" type="button">關閉</button>
+        </div>
+        <input type="hidden" id="inboundCostCorrectLedgerId" value="" />
+        <div id="inboundCostCorrectSummary" class="muted small admin-msg-gap"></div>
+        <div class="form-grid" style="margin-top:12px">
+          <div class="field">
+            <label for="inboundCostCorrectValue">正確單位成本</label>
+            <input id="inboundCostCorrectValue" type="number" min="0" step="1" />
+          </div>
+          <div class="field full">
+            <label for="inboundCostCorrectReason">更正原因</label>
+            <input id="inboundCostCorrectReason" type="text" placeholder="例：進價多打一個 0" />
+          </div>
+          <div class="full actions">
+            <button id="inboundCostCorrectSubmit" class="btn btn-primary primary-action" type="button">確認更正成本</button>
+            <button id="inboundCostCorrectCancel" class="btn btn-ghost tertiary-action" type="button">取消</button>
+          </div>
+        </div>
+        <div id="inboundCostCorrectMsg" class="muted" style="margin-top:10px" hidden></div>
+      </div>
+    </div>
+    <div id="inboundConfirmCostModal" class="item-editor-modal" hidden>
+      <div class="card item-editor-card inbound-correct-card" role="dialog" aria-modal="true" aria-labelledby="inboundConfirmCostTitle">
+        <div class="section-head">
+          <div>
+            <h3 id="inboundConfirmCostTitle" class="h3">補入庫成本</h3>
+            <p class="muted small">員工入庫尚未有正式進價。補上後才會計入入庫金額。不會改原始流水數量。</p>
+          </div>
+          <button id="inboundConfirmCostClose" class="btn btn-ghost btn-sm tertiary-action" type="button">關閉</button>
+        </div>
+        <input type="hidden" id="inboundConfirmCostLedgerId" value="" />
+        <div id="inboundConfirmCostSummary" class="muted small admin-msg-gap"></div>
+        <div class="form-grid" style="margin-top:12px">
+          <div class="field">
+            <label for="inboundConfirmCostValue">正式單位成本</label>
+            <input id="inboundConfirmCostValue" type="number" min="0" step="1" />
+          </div>
+          <div class="full actions">
+            <button id="inboundConfirmCostSubmit" class="btn btn-primary primary-action" type="button">確認成本</button>
+            <button id="inboundConfirmCostCancel" class="btn btn-ghost tertiary-action" type="button">取消</button>
+          </div>
+        </div>
+        <div id="inboundConfirmCostMsg" class="muted" style="margin-top:10px" hidden></div>
+      </div>
+    </div>
     <div id="itemEditorModal" class="item-editor-modal" hidden>
       <div id="itemEditor" class="card item-editor-card" role="dialog" aria-modal="true" aria-labelledby="itemEditorTitle">
       <h3 id="itemEditorTitle" class="h3">新增 / 編輯品項</h3>
@@ -2079,7 +2161,7 @@
         <div class="field"><label for="itemVendor">廠商</label><select id="itemVendor"></select></div>
         <div class="field"><label for="itemCondition">成色</label><select id="itemCondition"><option value="NEW">全新</option><option value="USED">二手</option><option value="REFURB">整新</option></select></div>
         <div class="field"><label for="itemStatus">狀態</label><select id="itemStatus"><option value="READY">可售</option><option value="TESTING">待測</option><option value="PREP">待整理</option><option value="RESERVED">保留</option><option value="CLEARANCE">待出清</option><option value="SCRAP">報廢拆料</option></select></div>
-        <div class="field"><label for="itemQty">現貨數量</label><input id="itemQty" type="number" min="0" value="0" /></div>
+        <div class="field"><label for="itemQty">現貨數量</label><input id="itemQty" type="number" min="0" value="0" /><p class="form-hint">直接改數量會記成庫存調整，不計入入庫金額。補貨請用「補貨」。</p></div>
         <div class="field" data-admin-only><label for="itemCost">單位成本</label><input id="itemCost" type="number" min="0" step="1" value="0" /></div>
         <div class="field full" data-admin-only>
           <label class="check-row" for="itemExcludeFromInventoryValue">
@@ -2120,12 +2202,12 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260831s16"></script>
-    <script src="./inventory-ledger.js?v=20260831s16"></script>
+    <script src="./shared.js?v=20260903s17"></script>
+    <script src="./inventory-ledger.js?v=20260903s17"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260831s16"></script>
+    <script src="./admin3.js?v=20260903s17"></script>
     <script src="./purchase-orders.js?v=20260827po1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260826ds7"></script>
