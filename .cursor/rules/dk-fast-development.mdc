@@ -1,0 +1,371 @@
+---
+description: DK Computer 官網快速開發規則。固定採用最小讀取範圍、最小修改範圍、局部驗收，避免無關全 repo 掃描與重驗已 PASS 功能。
+alwaysApply: true
+---
+
+# DK Computer Fast Development Rule
+
+本規則適用於 DK Computer 官網專案。
+
+核心流程：
+
+最小讀取範圍 → 最小修改範圍 → 局部驗收 → 簡短回報
+
+## 1. Scope First
+
+每次任務先確認：
+
+- 本次唯一目標
+- 直接相關檔案
+- 可能修改檔案
+- 明確不受影響範圍
+
+只讀本次需求直接需要的檔案。
+
+禁止預設：
+
+- 全 repo 掃描
+- 全專案架構分析
+- 所有 JS / HTML / CSS / SQL 重讀
+- 所有歷史 Stage 重新分析
+
+只有遇到真正 blocker 才擴大範圍。
+
+## 2. 精準定位
+
+已知 function、RPC、HTML ID、CSS class、table、symbol 時：
+
+直接搜尋該名稱及附近程式碼。
+
+不要先廣泛搜尋整個 repository。
+
+大型檔案例如：
+
+- admin3.js
+- shared.js
+- admin.html
+- styles.css
+
+只讀與本次功能相關區塊。
+
+## 3. 最小修改
+
+能修改一個 function，就不要重構整個檔案。
+
+能新增局部 UI，就不要重排整個頁面。
+
+能新增局部 CSS，就不要整理整份 styles.css。
+
+禁止：
+
+- 順便優化
+- 順便重構
+- 順便統一命名
+- 修改與需求無關的 technical debt
+
+除非它直接阻擋本次功能。
+
+## 4. 已 PASS 功能不重驗
+
+已經：
+
+- Production PASS
+- Smoke Test PASS
+- Stage CLOSED
+- 使用者確認正常
+
+的功能視為 baseline。
+
+如果本次修改沒有直接影響：
+
+不要重新讀取。
+不要重新驗收。
+不要重新重構。
+
+例如 Attendance 任務若未碰：
+
+- Stage 16
+- Stage 17
+- AP
+- PO
+- Inventory
+- Orders
+- Account Management
+- Storefront
+
+就不要重新檢查它們。
+
+## 5. 模組優先範圍
+
+Attendance：
+
+優先：
+- attendance.js
+- admin.html Attendance 區塊
+- attendance 相關 styles
+- 當前 Stage Attendance SQL
+
+Inventory：
+
+優先：
+- inventory-ledger.js
+- 直接相關 admin/shared 區塊
+- 直接相關 SQL
+
+Purchase Orders：
+
+優先：
+- purchase-orders.js
+- PO 相關 UI / SQL
+
+Finance：
+
+只讀直接相關：
+- 財務 UI
+- 財務 function
+- 對應 RPC / SQL
+
+Storefront：
+
+後台任務預設不讀：
+- index.html
+- home.js
+- machine.html
+- machine.js
+
+## 6. 共用核心
+
+修改以下內容時可以提高檢查強度：
+
+- shared.js 共用函式
+- admin3.js 共用函式
+- Supabase schema
+- RPC
+- RLS
+- Auth
+- profiles
+- permission logic
+- 金額
+- 庫存數量
+- 薪資
+
+但仍然只檢查：
+
+本次修改區塊
++
+直接 caller / dependency。
+
+不要因此重新 audit 全站。
+
+## 7. Supabase
+
+涉及 SQL 時：
+
+只看：
+
+- 本 Stage SQL
+- 直接相關 table
+- 直接相關 RPC
+- 直接相關 frontend caller
+
+不要重讀所有 supabase-stage*.sql。
+
+涉及：
+
+- RLS
+- SECURITY DEFINER
+- GRANT / REVOKE
+- Auth
+- 薪資
+- 金額
+- 庫存
+
+必須保留必要 security review。
+
+速度優化不能犧牲安全性。
+
+## 8. Production
+
+除非任務明確要求：
+
+禁止自動：
+
+- 執行 Production SQL
+- INSERT Production 資料
+- UPDATE Production
+- DELETE Production
+- 建立測試訂單
+- 建立測試庫存
+- 修改真實出勤
+- 修改真實薪資
+
+SQL 預設流程：
+
+產生 → 局部 Review → 使用者手動執行
+
+## 9. Git
+
+除非任務明確要求：
+
+不要自動：
+
+- git add
+- commit
+- push
+- deploy
+
+Implementation 完成後先停止等待確認。
+
+## 10. 局部驗收
+
+只驗收本次真正受影響功能。
+
+例如修改班別 UI：
+
+只驗：
+
+- 班別新增
+- 班別編輯
+- 班別停用
+- 權限
+- 修改 JS syntax
+
+不要重新驗：
+
+- GPS
+- Network
+- Stage 16
+- Stage 17
+- AP
+- PO
+
+除非本次有修改它們。
+
+## 11. Static Checks
+
+只檢查修改範圍。
+
+JS：
+只對本次修改 JS 執行 node --check。
+
+HTML：
+只檢查新增/修改 ID 與 selector。
+
+CSS：
+只檢查修改區塊。
+
+SQL：
+只 review 本次 SQL 與直接 dependency。
+
+禁止每次重新跑大型全站 static audit。
+
+## 12. Blocker 才擴大
+
+只有發現：
+
+- caller 不明
+- dependency 不明
+- schema 相依
+- RLS 外洩風險
+- Auth 安全問題
+- 資料一致性問題
+- 共用 function 真正被多模組使用
+
+才允許擴大搜尋。
+
+擴大時只增加解決 blocker 所需範圍。
+
+## 13. 不重複讀大型檔案
+
+同一任務已讀過的區塊不要反覆重新讀整份檔案。
+
+優先使用：
+
+- symbol
+- function
+- RPC name
+- HTML ID
+- CSS class
+- table name
+
+精準定位。
+
+## 14. 一次一個目標
+
+每個 Cursor 任務原則上只完成一個明確目標。
+
+如果 Schema、UI、Payroll、Security Review、Deploy 可以分開：
+
+就分開處理。
+
+不要把多個不同 Stage 塞進同一個 Prompt。
+
+## 15. 優先沿用既有架構
+
+優先沿用現有：
+
+- UI pattern
+- modal pattern
+- RPC wrapper
+- SQL section pattern
+- RLS pattern
+- permission pattern
+- table style
+
+不要建立第二套框架或不必要抽象層。
+
+DK Computer 維持：
+
+靜態 HTML / JavaScript / CSS + Supabase
+
+現有架構即可。
+
+## 16. 最終回報
+
+Cursor 完成任務後只需要回報：
+
+### Modified files
+修改了哪些檔案。
+
+### Changes
+修改了什麼。
+
+### Verification
+本次局部驗收結果。
+
+### Risk / Next confirmation
+是否有風險、blocker 或需要使用者下一步確認。
+
+不要重新輸出：
+
+- 全 repo 架構
+- 所有歷史 Stage
+- 未修改功能的大量 checklist
+
+## Final Principle
+
+DK Computer 後續固定遵守：
+
+不重新理解已知系統。
+不重做已 PASS 功能。
+不掃描無關檔案。
+不做無關重構。
+一次只完成一個明確目標。
+真正涉及共用核心、安全或資料正確性時才擴大檢查。
+
+速度優化不得犧牲：
+
+- 資料正確性
+- Auth
+- RLS
+- 金額安全
+- 庫存一致性
+- 薪資安全
+- Production 安全
+
+完成後只回報：
+
+Modified files
+Changes
+Verification
+Risk / Next confirmation
