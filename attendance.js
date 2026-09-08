@@ -1,9 +1,11 @@
 /**
- * Stage 11 / 11-5 員工打卡。
+ * Stage 11 / 11-5 員工打卡；Stage 18-2 班別管理與每月 WORK 排班；Stage 18-3 排休申請。
  * 讀 attendance_shifts / attendance_breaks / attendance_audit_logs / attendance_settings（RLS）。
+ * 讀 attendance_shift_templates / employee_schedules / attendance_leave_requests（RLS）；寫入走 Stage 18 RPC。
  * GPS：authenticated RPC（p_latitude/p_longitude/p_accuracy）。
  * 公司網路：Edge 取 server-side Public IP，再以 service_role 呼叫 *_company_network。
  * 不直接 INSERT/UPDATE/DELETE attendance 表；不送 client IP／timestamp；不背景追蹤 GPS。
+ * 排班不自行組 snapshot；不送 created_by / updated_by。REST_DAY 核准寫 OFF；病假／事假／特休為 WORKDAY overlay。
  */
 (function (global) {
   const TZ = "Asia/Taipei";
@@ -43,6 +45,25 @@
   let lastFetchError = "";
   let lastReportHtml = "";
   let pendingGpsPreview = null;
+  let shiftTemplates = [];
+  let monthSchedules = [];
+  let defaultShiftPeriods = [];
+  let monthDefaultPeriods = [];
+  let myLeaveRequests = [];
+  let adminLeaveRequests = [];
+  let monthLeaveRequests = [];
+  let monthCompliance = null;
+  let tplBusy = false;
+  let schedBusy = false;
+  let defBusy = false;
+  let leaveBusy = false;
+  let compensationPeriods = [];
+  let compBusy = false;
+  let payrollBusy = false;
+  let lastPayrollPreview = null;
+  let lastOtCandidates = [];
+  let lastPayrollSettlement = null;
+  let lastPayslipHtml = "";
 
   function $(id) {
     return document.getElementById(id);
@@ -267,7 +288,8 @@
     const raw = String(
       (err && (err.message || err.error || err.details || err.hint)) || err || ""
     );
-    const m = raw.toLowerCase();
+    const code = err && err.code != null ? String(err.code) : "";
+    const m = (raw + " " + code).toLowerCase();
     if (/open shift already exists/.test(m)) return "已經有進行中的班次，無法再次上班打卡。";
     if (/no open shift/.test(m)) return "目前沒有進行中的班次。";
     if (/open break already exists/.test(m)) return "已經在休息中。";
@@ -275,6 +297,15 @@
     if (/no open break/.test(m)) return "目前沒有進行中的休息。";
     if (/reason required/.test(m)) return "修改理由必填。";
     if (/admin only/.test(m)) return "只有管理員可以執行此操作。";
+    if (/permission denied for function/.test(m)) {
+      return "伺服器拒絕執行內部函式：" + raw.slice(0, 140);
+    }
+    if (/permission denied for table|permission denied for schema/.test(m)) {
+      return "伺服器拒絕寫入資料表：" + raw.slice(0, 140);
+    }
+    if (/^permission denied$/.test(raw.trim().toLowerCase()) && /42501/.test(m)) {
+      return "後台帳號未通過伺服器驗證（enabled / role）。";
+    }
     if (/permission denied/.test(m) || /42501/.test(m)) return "沒有權限執行此操作。";
     if (/employee mismatch/.test(m)) return "不能更改班次所屬員工。";
     if (/nothing to correct/.test(m)) return "沒有可更正的內容。";
@@ -288,7 +319,100 @@
     if (/outside company range/.test(m)) return "超出公司允許範圍，無法打卡。";
     if (/invalid location/.test(m)) return "定位資料無效。";
     if (/invalid radius|invalid max accuracy|enabled required/.test(m)) return "地點設定參數無效。";
+    if (/shift template not found/.test(m)) return "找不到該班別。";
+    if (/shift template disabled/.test(m)) return "此班別已停用，無法指定。";
+    if (/cannot create past schedule/.test(m)) return "不可新增過去日期的排班。";
+    if (/today or past schedule is frozen/.test(m)) return "今天或過去的排班已凍結，無法修改或清除。";
+    if (/cannot move schedule onto today or past/.test(m)) return "不可把排班改到今天或過去。";
+    if (/schedule not found/.test(m)) return "找不到該筆排班。";
+    if (/name required/.test(m)) return "請填班別名稱。";
+    if (/invalid time|time required|invalid input syntax/.test(m)) return "請填有效的上下班時間（24小時制，例如 19:00）。";
+    if (/start_time and end_time cannot be equal/.test(m)) return "上班與下班時間不可相同。";
+    if (/cross_midnight requires/.test(m)) return "跨午夜班別的下班時間必須早於上班時間。";
+    if (/same-day shift requires/.test(m)) return "非跨午夜班別的下班時間必須晚於上班時間。";
+    if (/invalid minutes/.test(m)) return "休息／寬限分鐘數無效。";
+    if (/invalid cross_midnight/.test(m)) return "跨午夜設定無效。";
+    if (/invalid enabled/.test(m)) return "啟用狀態無效。";
+    if (/server fields are not client-writable/.test(m)) return "不可傳送伺服器欄位。";
+    if (/employee not found/.test(m)) return "找不到該員工。";
+    if (/employee disabled or not a backoffice user/.test(m)) return "該員工已停用或不是後台使用者。";
+    if (/user_id required/.test(m)) return "請選擇員工。";
+    if (/work_date required/.test(m)) return "請選擇日期。";
+    if (/shift_template_id required/.test(m)) return "請選擇班別。";
+    if (/effective_from required/.test(m)) return "請選擇生效日期。";
+    if (/default shift period overlap/.test(m)) return "預設班別期間重疊，請改用較晚的生效日。";
+    if (/schedule_conflict|employee_schedules_user_date_uidx/.test(m)) return "該日已有不同類型的排班（例外上班／排休），不可直接覆蓋。";
+    if (/cannot request leave for another employee/.test(m)) return "只能替自己提出申請。";
+    if (/leave_date must be after today/.test(m)) return "只能申請今天之後的日期。";
+    if (/duplicate leave request|attendance_leave_requests_active_uidx/.test(m)) return "同一天已有待核准或已核准的請假／排休。";
+    if (/cannot cancel another employee leave/.test(m)) return "只能取消自己的申請。";
+    if (/only PENDING leave can be cancelled by staff/.test(m)) return "只能取消待核准的申請。";
+    if (/leave request is not PENDING/.test(m)) return "此申請不是待核准狀態。";
+    if (/only APPROVED leave can be revoked/.test(m)) return "只能撤銷已核准的請假／排休。";
+    if (/leave request not found/.test(m)) return "找不到該筆申請。";
+    if (/LEAVE_REQUIRES_SCHEDULED_WORKDAY/.test(m)) return "該日不是預定工作日，無法核准病假／事假／特休。";
+    if (/LEAVE_CONFLICT/.test(m)) return "該日已有衝突的請假或排休，請先處理後再操作。";
+    if (/invalid leave_unit/.test(m)) return "目前僅支援整日請假。";
+    if (/invalid leave_type/.test(m)) return "請假類型無效。";
+    if (/leave_date required/.test(m)) return "請選擇休假日期。";
+    if (/id required/.test(m)) return "缺少申請編號。";
+    if (/month required/.test(m)) return "請選擇月份。";
+    if (/eval arguments required/.test(m)) return "出勤判定參數不完整。";
+    if (/compensation_period_overlap|employee_compensation_periods_open_uidx|employee_compensation_periods_user_from_uidx/.test(m)) return "薪資期間重疊，請改日期或改用調薪。";
+    if (/invalid compensation period range/.test(m)) return "薪資期間日期無效。";
+    if (/invalid monthly_salary|monthly_salary required/.test(m)) return "請輸入有效的月薪（整數 NT$）。";
+    if (/invalid employment_stage/.test(m)) return "薪資階段無效。";
+    if (/invalid pay_type/.test(m)) return "目前僅支援月薪。";
+    if (/probation_from required/.test(m)) return "請選擇試用開始日。";
+    if (/probation_to required/.test(m)) return "請選擇試用結束日。";
+    if (/regular_from required/.test(m)) return "請選擇正式生效日。";
+    if (/day_type required/.test(m)) return "請選擇日別（休息日或例假）。";
+    if (/invalid day_type/.test(m)) return "日別無效。請選擇休息日或例假。";
+    if (/duplicate key|unique constraint|name_ci_uidx/.test(m)) return "班別名稱已存在。";
     if (/not authenticated|請先登入/.test(m)) return "請先登入後台。";
+    if (/attendance_leave_requests|backoffice_request_leave|backoffice_cancel_leave|backoffice_approve_leave|backoffice_reject_leave|backoffice_revoke_leave|backoffice_set_employee_rest/.test(m)) {
+      return "排休功能尚未就緒，請先執行 Stage 18-3 SQL。";
+    }
+    if (/backoffice_attendance_evaluate_month|dk_attendance_eval_day/.test(m)) {
+      return "出勤判定尚未就緒，請先執行 Stage 18-4 SQL。";
+    }
+    if (/employee_compensation_periods|backoffice_set_employee_compensation/.test(m)) {
+      return "薪資設定尚未就緒，請先執行 Stage 18-5 SQL。";
+    }
+    if (/backoffice_attendance_schedule_compliance|dk_attendance_resolve_schedule|attendance_calendar_days/.test(m)) {
+      return "日別／排班檢查尚未就緒，請先執行 Stage 18-6 SQL。";
+    }
+    if (/leave_unit/.test(m)) {
+      return "請假種類尚未就緒，請先執行 Stage 18-7 SQL。";
+    }
+    if (/PAYROLL_ALREADY_SETTLED/.test(raw) || /PAYROLL_ALREADY_SETTLED/.test(m)) {
+      return "本月份已結算，不可重複結算。";
+    }
+    if (/PAYROLL_NOT_READY/.test(raw) || /PAYROLL_NOT_READY/.test(m)) {
+      let extra = "";
+      try {
+        const det = err && err.details;
+        const flags = typeof det === "string" ? JSON.parse(det) : det;
+        const items = payrollReviewItems(flags);
+        if (items.length) extra = "：" + items.map(function (r) { return r.text; }).join("、");
+      } catch (_) {}
+      return "本月尚不可結算" + extra + "。";
+    }
+    if (/HOURLY_PAYROLL_NOT_IMPLEMENTED/.test(m)) return "時薪制薪資尚未實作。";
+    if (/REGULAR_HOLIDAY_NOT_APPROVABLE/.test(m)) return "例假出勤不可用一般加班核准結算。";
+    if (/no overtime candidate/.test(m)) return "該日沒有可確認的加班候選。";
+    if (/approved_minutes exceeds candidate/.test(m)) return "核准分鐘不可超過候選分鐘。";
+    if (/invalid approved_minutes|approved_minutes required/.test(m)) return "請輸入有效的核准分鐘。";
+    if (/invalid overtime_type|invalid overtime status/.test(m)) return "加班類型或狀態無效。";
+    if (/backoffice_payroll_preview_month|dk_payroll_preview_day/.test(m)) {
+      return "薪資預覽尚未就緒，請先執行 Stage 18-8 SQL。";
+    }
+    if (/attendance_overtime_approvals|backoffice_get_overtime_candidates|backoffice_set_overtime_approval/.test(m)) {
+      return "加班確認尚未就緒，請先執行 Stage 18-9 SQL。";
+    }
+    if (/payroll_settlements|backoffice_settle_payroll_month|backoffice_get_payroll_settlement/.test(m)) {
+      return "薪資月結尚未就緒，請先執行 Stage 18-10 SQL。";
+    }
     if (/could not find the function|pgrst202|404/.test(m)) return "打卡功能尚未就緒，請稍後再試或通知管理員。";
     return raw.slice(0, 180) || "操作失敗";
   }
@@ -912,12 +1036,12 @@
   }
 
   function fillEmployeeSelect() {
-    const sels = [$("attAdminEmployee"), $("attReportEmployee")];
+    const sels = [$("attAdminEmployee"), $("attReportEmployee"), $("attSchedEmployee"), $("attDefEmployee"), $("attLeaveDirectEmployee"), $("attCompEmployee"), $("attPayrollEmployee")];
     sels.forEach(function (sel) {
       if (!sel || !isAdmin()) return;
       const keep = sel.value;
-      const isReport = sel.id === "attReportEmployee";
-      const opts = [isReport ? '<option value="">請選擇員工</option>' : '<option value="">全部員工</option>'];
+      const isAll = sel.id === "attAdminEmployee";
+      const opts = [isAll ? '<option value="">全部員工</option>' : '<option value="">請選擇員工</option>'];
       const seenIds = {};
       Object.keys(profileMap).sort(function (a, b) {
         return String(personName(a)).localeCompare(String(personName(b)), "zh-Hant");
@@ -1049,15 +1173,67 @@
         adminAuditRows = await fetchAdminAudit();
         renderAdminTable();
         renderAudit(adminAuditRows);
+        try {
+          await loadShiftTemplates();
+          renderShiftTemplates();
+        } catch (e) {
+          showMsg($("attTplMsg"), mapRpcError(e), true);
+        }
+        try {
+          await loadMonthlySchedule();
+          renderMonthlySchedule();
+        } catch (e) {
+          showMsg($("attSchedMsg"), mapRpcError(e), true);
+        }
+        try {
+          fillDefTemplateSelect();
+          await loadDefaultShiftPeriods();
+          renderDefaultShift();
+        } catch (e) {
+          showMsg($("attDefMsg"), mapRpcError(e), true);
+        }
+        try {
+          await loadAdminLeaveRequests();
+          renderAdminLeave();
+        } catch (e) {
+          showMsg($("attLeaveAdminMsg"), mapRpcError(e), true);
+        }
+        try {
+          await loadCompensationPeriods();
+          renderCompensation();
+          syncCompensationProbationFields();
+        } catch (e) {
+          showMsg($("attCompMsg"), mapRpcError(e), true);
+        }
       } else {
         locationSettings = null;
         adminShifts = [];
         adminBreaks = [];
         adminAuditRows = [];
+        shiftTemplates = [];
+        monthSchedules = [];
+        defaultShiftPeriods = [];
+        monthDefaultPeriods = [];
+        adminLeaveRequests = [];
+        monthLeaveRequests = [];
+        compensationPeriods = [];
+        monthCompliance = null;
         if ($("attAdminManage")) $("attAdminManage").hidden = true;
         if ($("attAdminAudit")) $("attAdminAudit").hidden = true;
         if ($("attLocationSettings")) $("attLocationSettings").hidden = true;
         if ($("attNetworkSettings")) $("attNetworkSettings").hidden = true;
+        if ($("attShiftTemplates")) $("attShiftTemplates").hidden = true;
+        if ($("attMonthlySchedule")) $("attMonthlySchedule").hidden = true;
+        if ($("attDefaultShift")) $("attDefaultShift").hidden = true;
+        if ($("attLeaveAdmin")) $("attLeaveAdmin").hidden = true;
+        if ($("attComp")) $("attComp").hidden = true;
+        if ($("attPayroll")) $("attPayroll").hidden = true;
+      }
+      try {
+        await loadMyLeaveRequests();
+        renderMyLeave();
+      } catch (e) {
+        showMsg($("attLeaveMsg"), mapRpcError(e), true);
       }
       renderClockFace();
       if (!silent) showMsg($("attMsg"), "", false);
@@ -1403,6 +1579,59 @@
     return { start: start, end: end, nextStart: nextTaipeiDay(end) };
   }
 
+  function minutesToDuration(min) {
+    const n = Number(min);
+    if (!Number.isFinite(n) || n <= 0) return "—";
+    return formatDuration(Math.round(n) * 60000);
+  }
+
+  function evalStatusLabel(status) {
+    if (status === "NO_SCHEDULE") return "未排班";
+    if (status === "OFF") return "排休";
+    if (status === "LEAVE") return "請假";
+    if (status === "NORMAL") return "正常";
+    if (status === "LATE") return "遲到";
+    if (status === "EARLY_LEAVE") return "早退";
+    if (status === "LATE_AND_EARLY") return "遲到＋早退";
+    if (status === "INCOMPLETE") return "未完成";
+    if (status === "ABSENT") return "未出勤";
+    return status || "—";
+  }
+
+  function evalLeaveLabel(leaveType) {
+    if (leaveType === "SICK_LEAVE") return "病假";
+    if (leaveType === "PERSONAL_LEAVE") return "事假";
+    if (leaveType === "ANNUAL_LEAVE") return "特休";
+    return "—";
+  }
+
+  function evalStatusText(row) {
+    const status = row && row.attendance_status;
+    const label = evalStatusLabel(status);
+    if (row && row.anomaly === "LEAVE_WITH_ATTENDANCE") return label + "（請假日出勤）";
+    return label;
+  }
+
+  function evalDayTypeLabel(dayType) {
+    if (dayType === "WORKDAY") return "一般工作日";
+    if (dayType === "REST_DAY") return "休息日";
+    if (dayType === "REGULAR_HOLIDAY") return "例假";
+    if (dayType === "NATIONAL_HOLIDAY") return "國定假日";
+    return "未分類";
+  }
+
+  function evalShiftLabel(row) {
+    const st = row && row.attendance_status;
+    if (st === "OFF" || (row && row.schedule_type === "OFF")) return "排休";
+    if (st === "NO_SCHEDULE" || (row && row.schedule_source === "NONE")) return "未排班";
+    return (row && row.shift_name) || "—";
+  }
+
+  function evalScheduledTime(row) {
+    if (!row || row.schedule_type === "OFF" || row.attendance_status === "NO_SCHEDULE" || !row.scheduled_start) return "—";
+    return String(row.scheduled_start) + "–" + String(row.scheduled_end || "—");
+  }
+
   async function generateMonthlyReport() {
     if (!isAdmin()) {
       showMsg($("attReportMsg"), "只有管理員可以產生出勤表。", true);
@@ -1419,28 +1648,19 @@
       showMsg($("attReportMsg"), "請選擇員工。", true);
       return;
     }
+    if (!global.DK || typeof global.DK.evaluateAttendanceMonth !== "function") {
+      showMsg($("attReportMsg"), "出勤判定尚未就緒。", true);
+      return;
+    }
     busy = true;
     showMsg($("attReportMsg"), "產生中…", false);
     try {
+      const monthYmd = year + "-" + String(month).padStart(2, "0") + "-01";
+      const evalRes = await global.DK.evaluateAttendanceMonth(empId, monthYmd);
+      const days = evalRes && Array.isArray(evalRes.days) ? evalRes.days : [];
       const range = monthRangeYmd(year, month);
       const startIso = taipeiDayStartIso(range.start);
       const endIso = taipeiDayStartIso(range.nextStart);
-      const shifts = await fetchRows("attendance_shifts", {
-        select: SHIFT_SELECT,
-        apply: function (q) {
-          return q.eq("employee_id", empId).gte("clock_in_at", startIso).lt("clock_in_at", endIso).order("clock_in_at", { ascending: true }).limit(500);
-        },
-      });
-      const ids = shifts.map(function (s) { return s.id; });
-      let breaks = [];
-      if (ids.length) {
-        breaks = await fetchRows("attendance_breaks", {
-          select: BREAK_SELECT,
-          apply: function (q) {
-            return q.eq("employee_id", empId).in("shift_id", ids).order("break_start_at", { ascending: true }).limit(1000);
-          },
-        });
-      }
       const audits = await fetchRows("attendance_audit_logs", {
         select: AUDIT_SELECT,
         apply: function (q) {
@@ -1452,74 +1672,63 @@
             .limit(500);
         },
       });
-      const correctedDays = {};
       let deletedAuditCount = 0;
       audits.forEach(function (a) {
-        if (!a) return;
-        if (a.action === "ADMIN_DELETE") deletedAuditCount += 1;
-        if (a.action === "ADMIN_CORRECTION" && a.created_at) correctedDays[taipeiYmd(a.created_at)] = true;
-      });
-      const byDay = {};
-      shifts.forEach(function (s) {
-        const ymd = taipeiYmd(s.clock_in_at);
-        if (!byDay[ymd]) byDay[ymd] = [];
-        byDay[ymd].push(s);
+        if (a && a.action === "ADMIN_DELETE") deletedAuditCount += 1;
       });
 
       let workDays = 0;
-      let totalWorkMs = 0;
-      let totalBreakMs = 0;
+      let totalWorkMin = 0;
+      let totalBreakMin = 0;
+      let totalLateMin = 0;
+      let totalEarlyMin = 0;
+      let totalOtMin = 0;
       let incomplete = 0;
-      const dayCount = daysInMonth(year, month);
+      let absentDays = 0;
+      let offDays = 0;
+      let restDays = 0;
+      let holidayDays = 0;
+      let nationalDays = 0;
       const rowsHtml = [];
-      for (let d = 1; d <= dayCount; d++) {
-        const ymd = year + "-" + String(month).padStart(2, "0") + "-" + String(d).padStart(2, "0");
-        const dayShifts = byDay[ymd] || [];
-        if (!dayShifts.length) {
-          rowsHtml.push(
-            "<tr><td>" + esc(ymd.replace(/-/g, "/")) + "</td><td>" + esc(weekdayZh(ymd)) +
-            "</td><td>—</td><td>—</td><td>—</td><td>—</td><td>未出勤</td></tr>"
-          );
-          continue;
+      days.forEach(function (row) {
+        if (!row) return;
+        const ymd = ymdKey(row.work_date);
+        const status = String(row.attendance_status || "");
+        if (status === "OFF") offDays += 1;
+        if (status === "ABSENT") absentDays += 1;
+        if (status === "INCOMPLETE") incomplete += 1;
+        if (row.day_type === "REST_DAY") restDays += 1;
+        if (row.day_type === "REGULAR_HOLIDAY") holidayDays += 1;
+        if (row.day_type === "NATIONAL_HOLIDAY") nationalDays += 1;
+        if (status === "NORMAL" || status === "LATE" || status === "EARLY_LEAVE" || status === "LATE_AND_EARLY" || status === "INCOMPLETE") {
+          workDays += 1;
         }
-        workDays += 1;
-        let cinText = [];
-        let coutText = [];
-        let dayBreakMs = 0;
-        let dayWorkMs = 0;
-        let statuses = [];
-        let hasOpen = false;
-        dayShifts.forEach(function (s) {
-          const br = breaksForShift(s.id, breaks);
-          cinText.push(formatTaipeiClock(s.clock_in_at));
-          if (s.clock_out_at) {
-            coutText.push(formatTaipeiClock(s.clock_out_at));
-            dayWorkMs += workedMsForShift(s, br, null, true);
-            dayBreakMs += completedBreakMs(br, null, true);
-            statuses.push("正常");
-          } else {
-            coutText.push("未完成");
-            hasOpen = true;
-            incomplete += 1;
-            statuses.push("未完成");
-          }
-        });
-        totalWorkMs += dayWorkMs;
-        totalBreakMs += dayBreakMs;
-        let status = hasOpen ? "未完成" : "正常";
-        if (correctedDays[ymd]) status = status === "未完成" ? "未完成／已修正" : "已修正";
+        totalWorkMin += Number(row.work_minutes) || 0;
+        totalBreakMin += Number(row.break_minutes) || 0;
+        totalLateMin += Number(row.late_minutes) || 0;
+        totalEarlyMin += Number(row.early_leave_minutes) || 0;
+        totalOtMin += Number(row.potential_overtime_minutes) || 0;
+        const workText = status === "INCOMPLETE"
+          ? (Number(row.work_minutes) > 0 ? minutesToDuration(row.work_minutes) : "—")
+          : minutesToDuration(row.work_minutes);
         rowsHtml.push(
           "<tr>" +
           "<td>" + esc(ymd.replace(/-/g, "/")) + "</td>" +
           "<td>" + esc(weekdayZh(ymd)) + "</td>" +
-          "<td>" + esc(cinText.join(" / ")) + "</td>" +
-          "<td>" + esc(coutText.join(" / ")) + "</td>" +
-          "<td>" + esc(formatDuration(dayBreakMs)) + "</td>" +
-          "<td>" + esc(hasOpen ? "—" : formatDuration(dayWorkMs)) + "</td>" +
-          "<td>" + esc(status) + "</td>" +
+          "<td>" + esc(evalShiftLabel(row)) + "</td>" +
+          "<td>" + esc(evalScheduledTime(row)) + "</td>" +
+          "<td>" + esc(evalDayTypeLabel(row.day_type)) + "</td>" +
+          "<td>" + esc(evalLeaveLabel(row.leave_type)) + "</td>" +
+          "<td>" + esc(row.actual_clock_in ? formatTaipeiClock(row.actual_clock_in) : "—") + "</td>" +
+          "<td>" + esc(row.actual_clock_out ? formatTaipeiClock(row.actual_clock_out) : (status === "INCOMPLETE" ? "未完成" : "—")) + "</td>" +
+          "<td>" + esc(minutesToDuration(row.break_minutes)) + "</td>" +
+          "<td>" + esc(workText) + "</td>" +
+          "<td>" + esc(minutesToDuration(row.late_minutes)) + "</td>" +
+          "<td>" + esc(minutesToDuration(row.early_leave_minutes)) + "</td>" +
+          "<td>" + esc(evalStatusText(row)) + "</td>" +
           "</tr>"
         );
-      }
+      });
 
       const empName = personName(empId);
       const printDate = formatTaipeiDate(new Date());
@@ -1534,13 +1743,19 @@
           ? '<div class="att-print-meta">本期間存在已刪除出勤紀錄（' + deletedAuditCount + " 筆 ADMIN_DELETE；不計入工時）。</div>"
           : "") +
         '<table class="att-print-table"><thead><tr>' +
-        "<th>日期</th><th>星期</th><th>上班時間</th><th>下班時間</th><th>休息總時間</th><th>實際工時</th><th>狀態</th>" +
+        "<th>日期</th><th>星期</th><th>預定班別</th><th>預定時間</th><th>日別</th><th>請假</th><th>實際上班</th><th>實際下班</th><th>休息</th><th>實際工時</th><th>遲到</th><th>早退</th><th>狀態</th>" +
         "</tr></thead><tbody>" + rowsHtml.join("") + "</tbody></table>" +
         '<div class="att-print-summary">' +
         "<div>出勤天數：" + workDays + "</div>" +
-        "<div>總實際工時：" + esc(formatDurationHours(totalWorkMs)) + "（" + esc(formatDuration(totalWorkMs)) + "）</div>" +
-        "<div>總休息時間：" + esc(formatDurationHours(totalBreakMs)) + "（" + esc(formatDuration(totalBreakMs)) + "）</div>" +
-        "<div>未完成班次數：" + incomplete + "</div>" +
+        "<div>本月排休總天數：" + offDays + "（公司目標月休 8 天，營運提醒，非法規判定）</div>" +
+        "<div>休息日：" + restDays + "　　例假：" + holidayDays + "　　國定假日：" + nationalDays + "</div>" +
+        "<div>未出勤天數：" + absentDays + "</div>" +
+        "<div>總實際工時：" + esc(formatDurationHours(totalWorkMin * 60000)) + "（" + esc(formatDuration(totalWorkMin * 60000)) + "）</div>" +
+        "<div>總休息時間：" + esc(formatDurationHours(totalBreakMin * 60000)) + "（" + esc(formatDuration(totalBreakMin * 60000)) + "）</div>" +
+        "<div>遲到合計：" + esc(totalLateMin > 0 ? minutesToDuration(totalLateMin) : "0 分") + "</div>" +
+        "<div>早退合計：" + esc(totalEarlyMin > 0 ? minutesToDuration(totalEarlyMin) : "0 分") + "</div>" +
+        "<div>可能加班分鐘（未核准、不計薪）：" + esc(String(totalOtMin)) + "</div>" +
+        "<div>未完成天數：" + incomplete + "</div>" +
         "<div>管理員更正次數：" + correctionCount + "</div>" +
         "</div>" +
         '<div class="att-print-sign">' +
@@ -1598,6 +1813,1734 @@
     const m = Number(now.ymd.slice(5, 7));
     if ($("attReportYear") && !$("attReportYear").value) $("attReportYear").value = String(y);
     if ($("attReportMonth")) $("attReportMonth").value = String(m);
+    if ($("attSchedYear") && !$("attSchedYear").value) $("attSchedYear").value = String(y);
+    if ($("attSchedMonth")) $("attSchedMonth").value = String(m);
+    if ($("attDefFrom") && !$("attDefFrom").value) $("attDefFrom").value = now.ymd;
+    const tomorrow = addDaysYmd(now.ymd, 1);
+    if ($("attLeaveDate") && !$("attLeaveDate").value) $("attLeaveDate").value = tomorrow;
+    if ($("attLeaveDirectDate") && !$("attLeaveDirectDate").value) $("attLeaveDirectDate").value = tomorrow;
+    if ($("attCompProbFrom") && !$("attCompProbFrom").value) $("attCompProbFrom").value = now.ymd;
+    if ($("attCompRaiseFrom") && !$("attCompRaiseFrom").value) $("attCompRaiseFrom").value = now.ymd;
+    if ($("attPayrollYear") && !$("attPayrollYear").value) $("attPayrollYear").value = String(y);
+    if ($("attPayrollMonth")) $("attPayrollMonth").value = String(m);
+  }
+
+  function scheduleApi() {
+    const d = global.DK || {};
+    if (typeof d.fetchAttendanceShiftTemplates !== "function"
+        || typeof d.fetchEmployeeSchedules !== "function"
+        || typeof d.createAttendanceShiftTemplate !== "function"
+        || typeof d.updateAttendanceShiftTemplate !== "function"
+        || typeof d.upsertEmployeeSchedule !== "function"
+        || typeof d.deleteEmployeeSchedule !== "function"
+        || typeof d.fetchEmployeeDefaultShiftPeriods !== "function"
+        || typeof d.setEmployeeDefaultShift !== "function") {
+      throw new Error("排班功能尚未就緒");
+    }
+    return d;
+  }
+
+  function leaveApi() {
+    const d = global.DK || {};
+    if (typeof d.fetchAttendanceLeaveRequests !== "function"
+        || typeof d.requestAttendanceLeave !== "function"
+        || typeof d.cancelAttendanceLeaveRequest !== "function"
+        || typeof d.approveAttendanceLeaveRequest !== "function"
+        || typeof d.rejectAttendanceLeaveRequest !== "function"
+        || typeof d.revokeAttendanceLeaveRequest !== "function"
+        || typeof d.setEmployeeRestDay !== "function") {
+      throw new Error("排休功能尚未就緒");
+    }
+    return d;
+  }
+
+  function compensationApi() {
+    const d = global.DK || {};
+    if (typeof d.fetchEmployeeCompensationPeriods !== "function"
+        || typeof d.setEmployeeCompensationPlan !== "function"
+        || typeof d.setEmployeeCompensationRaise !== "function") {
+      throw new Error("薪資設定尚未就緒");
+    }
+    return d;
+  }
+
+  function payrollApi() {
+    const d = global.DK || {};
+    if (typeof d.previewPayrollMonth !== "function"
+        || typeof d.fetchOvertimeCandidates !== "function"
+        || typeof d.setOvertimeApproval !== "function"
+        || typeof d.getPayrollSettlement !== "function"
+        || typeof d.settlePayrollMonth !== "function") {
+      throw new Error("薪資預覽尚未就緒");
+    }
+    return d;
+  }
+
+  function formatTimeHm(t) {
+    if (t == null || t === "") return "—";
+    const s = String(t).trim();
+    const m = s.match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return s.length >= 5 ? s.slice(0, 5) : s;
+    return pad2(Number(m[1])) + ":" + m[2];
+  }
+
+  function timeInputValue(t) {
+    const hm = formatTimeHm(t);
+    if (!hm || hm === "—") return "09:00";
+    return hm;
+  }
+
+  function ensureTime24Selects() {
+    function fill(sel, max, step) {
+      if (!sel || sel.options.length) return;
+      for (let i = 0; i < max; i += step) {
+        const v = pad2(i);
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        sel.appendChild(opt);
+      }
+    }
+    fill($("attTplStartH"), 24, 1);
+    fill($("attTplEndH"), 24, 1);
+    fill($("attTplStartM"), 60, 1);
+    fill($("attTplEndM"), 60, 1);
+  }
+
+  function setTime24(hId, mId, hm) {
+    ensureTime24Selects();
+    const t = timeInputValue(hm);
+    if ($(hId)) $(hId).value = t.slice(0, 2);
+    if ($(mId)) $(mId).value = t.slice(3, 5);
+  }
+
+  function readTime24(hId, mId) {
+    ensureTime24Selects();
+    const h = String(($(hId) && $(hId).value) || "");
+    const mi = String(($(mId) && $(mId).value) || "");
+    if (!h || !mi) return "";
+    return h + ":" + mi;
+  }
+
+  function ymdKey(v) {
+    return String(v || "").slice(0, 10);
+  }
+
+  function addDaysYmd(ymd, days) {
+    const d = new Date(String(ymd || taipeiYmd(new Date())) + "T12:00:00+08:00");
+    d.setTime(d.getTime() + (Number(days) || 0) * 24 * 60 * 60 * 1000);
+    return taipeiYmd(d);
+  }
+
+  function weekdayZhYmd(ymd) {
+    const d = new Date(String(ymd) + "T12:00:00+08:00");
+    return WEEKDAY_ZH[d.getUTCDay()] || "";
+  }
+
+  function daysInMonthNum(year, month) {
+    return new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate();
+  }
+
+  function pad2(n) {
+    return String(n).padStart(2, "0");
+  }
+
+  function enabledTemplates() {
+    return (shiftTemplates || []).filter(function (t) { return t && t.enabled === true; });
+  }
+
+  function findTemplate(id) {
+    return (shiftTemplates || []).find(function (t) { return t && String(t.id) === String(id); }) || null;
+  }
+
+  function scheduleMode(ymd, row) {
+    const today = taipeiYmd(new Date());
+    if (ymd < today) return "past";
+    if (ymd === today) return row ? "today-frozen" : "today-open";
+    return "future";
+  }
+
+  function templatePayloadFromForm(id) {
+    const name = String(($("attTplName") && $("attTplName").value) || "").trim();
+    const payload = {
+      name: name,
+      start_time: readTime24("attTplStartH", "attTplStartM"),
+      end_time: readTime24("attTplEndH", "attTplEndM"),
+      break_minutes: Number(($("attTplBreak") && $("attTplBreak").value) || 0),
+      cross_midnight: ($("attTplCross") && $("attTplCross").value) === "1",
+      late_grace_minutes: Number(($("attTplLate") && $("attTplLate").value) || 0),
+      early_leave_grace_minutes: Number(($("attTplEarly") && $("attTplEarly").value) || 0),
+      enabled: ($("attTplEnabled") && $("attTplEnabled").value) !== "0",
+    };
+    if (id) payload.id = id;
+    return payload;
+  }
+
+  function resetTemplateForm() {
+    if ($("attTplEditId")) $("attTplEditId").value = "";
+    if ($("attTplFormTitle")) $("attTplFormTitle").textContent = "新增班別";
+    if ($("attTplName")) $("attTplName").value = "";
+    setTime24("attTplStartH", "attTplStartM", "09:00");
+    setTime24("attTplEndH", "attTplEndM", "18:00");
+    if ($("attTplBreak")) $("attTplBreak").value = "0";
+    if ($("attTplCross")) $("attTplCross").value = "0";
+    if ($("attTplLate")) $("attTplLate").value = "0";
+    if ($("attTplEarly")) $("attTplEarly").value = "0";
+    if ($("attTplEnabled")) $("attTplEnabled").value = "1";
+    showMsg($("attTplFormMsg"), "", false);
+  }
+
+  function openTemplateForm(row) {
+    if (!isAdmin()) return;
+    const card = $("attTplFormCard");
+    if (!card) return;
+    resetTemplateForm();
+    if (row) {
+      if ($("attTplEditId")) $("attTplEditId").value = String(row.id || "");
+      if ($("attTplFormTitle")) $("attTplFormTitle").textContent = "編輯班別";
+      if ($("attTplName")) $("attTplName").value = row.name || "";
+      setTime24("attTplStartH", "attTplStartM", row.start_time);
+      setTime24("attTplEndH", "attTplEndM", row.end_time);
+      if ($("attTplBreak")) $("attTplBreak").value = String(row.break_minutes == null ? 0 : row.break_minutes);
+      if ($("attTplCross")) $("attTplCross").value = row.cross_midnight === true ? "1" : "0";
+      if ($("attTplLate")) $("attTplLate").value = String(row.late_grace_minutes == null ? 0 : row.late_grace_minutes);
+      if ($("attTplEarly")) $("attTplEarly").value = String(row.early_leave_grace_minutes == null ? 0 : row.early_leave_grace_minutes);
+      if ($("attTplEnabled")) $("attTplEnabled").value = row.enabled === false ? "0" : "1";
+    }
+    card.hidden = false;
+    if ($("attTplName")) $("attTplName").focus();
+  }
+
+  function closeTemplateForm() {
+    if ($("attTplFormCard")) $("attTplFormCard").hidden = true;
+    resetTemplateForm();
+  }
+
+  async function loadShiftTemplates() {
+    if (!isAdmin()) {
+      shiftTemplates = [];
+      return;
+    }
+    shiftTemplates = await scheduleApi().fetchAttendanceShiftTemplates();
+    fillDefTemplateSelect();
+  }
+
+  function renderShiftTemplates() {
+    const tbody = $("attTplTbody");
+    if (!tbody || !isAdmin()) return;
+    if (!shiftTemplates.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="muted">尚無班別</td></tr>';
+      return;
+    }
+    tbody.innerHTML = shiftTemplates.map(function (t) {
+      const on = t.enabled !== false;
+      return (
+        "<tr>" +
+        "<td class=\"table-primary\">" + esc(t.name || "") + "</td>" +
+        "<td class=\"nowrap\">" + esc(formatTimeHm(t.start_time)) + "</td>" +
+        "<td class=\"nowrap\">" + esc(formatTimeHm(t.end_time)) + "</td>" +
+        "<td class=\"table-number\">" + esc(String(t.break_minutes == null ? 0 : t.break_minutes)) + "</td>" +
+        "<td>" + (t.cross_midnight === true ? "是" : "否") + "</td>" +
+        "<td class=\"table-number\">" + esc(String(t.late_grace_minutes == null ? 0 : t.late_grace_minutes)) + "</td>" +
+        "<td class=\"table-number\">" + esc(String(t.early_leave_grace_minutes == null ? 0 : t.early_leave_grace_minutes)) + "</td>" +
+        "<td><span class=\"status-badge " + (on ? "status-success" : "status-muted") + "\">" + (on ? "啟用" : "停用") + "</span></td>" +
+        "<td class=\"table-actions\">" +
+        "<button type=\"button\" class=\"btn btn-ghost btn-sm tertiary-action att-tpl-edit\" data-id=\"" + esc(t.id) + "\">編輯</button> " +
+        "<button type=\"button\" class=\"btn btn-ghost btn-sm " + (on ? "danger-action" : "secondary-action") + " att-tpl-toggle\" data-id=\"" + esc(t.id) + "\" data-enabled=\"" + (on ? "0" : "1") + "\">" +
+        (on ? "停用" : "啟用") +
+        "</button>" +
+        "</td>" +
+        "</tr>"
+      );
+    }).join("");
+  }
+
+  async function saveTemplateForm() {
+    if (!isAdmin() || tplBusy) return;
+    const id = String(($("attTplEditId") && $("attTplEditId").value) || "").trim();
+    const payload = templatePayloadFromForm(id);
+    tplBusy = true;
+    showMsg($("attTplFormMsg"), "儲存中…", false);
+    try {
+      const api = scheduleApi();
+      if (id) await api.updateAttendanceShiftTemplate(payload);
+      else await api.createAttendanceShiftTemplate(payload);
+      closeTemplateForm();
+      await loadShiftTemplates();
+      renderShiftTemplates();
+      renderMonthlySchedule();
+      showMsg($("attTplMsg"), id ? "班別已更新。" : "班別已新增。", false);
+    } catch (e) {
+      showMsg($("attTplFormMsg"), mapRpcError(e), true);
+    } finally {
+      tplBusy = false;
+    }
+  }
+
+  async function toggleTemplateEnabled(id, enabled) {
+    if (!isAdmin() || tplBusy || !id) return;
+    tplBusy = true;
+    showMsg($("attTplMsg"), "更新中…", false);
+    try {
+      await scheduleApi().updateAttendanceShiftTemplate({ id: id, enabled: enabled === true });
+      await loadShiftTemplates();
+      renderShiftTemplates();
+      renderMonthlySchedule();
+      showMsg($("attTplMsg"), enabled ? "班別已啟用。" : "班別已停用。", false);
+    } catch (e) {
+      showMsg($("attTplMsg"), mapRpcError(e), true);
+    } finally {
+      tplBusy = false;
+    }
+  }
+
+  async function loadMonthlySchedule() {
+    monthSchedules = [];
+    monthDefaultPeriods = [];
+    monthLeaveRequests = [];
+    monthCompliance = null;
+    if (!isAdmin()) return;
+    const uid = String(($("attSchedEmployee") && $("attSchedEmployee").value) || "").trim();
+    const year = Number($("attSchedYear") && $("attSchedYear").value);
+    const month = Number($("attSchedMonth") && $("attSchedMonth").value);
+    if (!uid || !year || !month) return;
+    const last = daysInMonthNum(year, month);
+    const from = year + "-" + pad2(month) + "-01";
+    const to = year + "-" + pad2(month) + "-" + pad2(last);
+    monthSchedules = await scheduleApi().fetchEmployeeSchedules(uid, from, to);
+    try {
+      monthDefaultPeriods = await scheduleApi().fetchEmployeeDefaultShiftPeriods(uid);
+    } catch (_) {
+      monthDefaultPeriods = [];
+    }
+    try {
+      monthLeaveRequests = await leaveApi().fetchAttendanceLeaveRequests({ userId: uid });
+    } catch (_) {
+      monthLeaveRequests = [];
+    }
+    try {
+      if (global.DK && typeof global.DK.fetchAttendanceScheduleCompliance === "function") {
+        monthCompliance = await global.DK.fetchAttendanceScheduleCompliance(uid, from);
+      }
+    } catch (_) {
+      monthCompliance = null;
+    }
+  }
+
+  function approvedLeaveForDate(ymd) {
+    const key = ymdKey(ymd);
+    return (monthLeaveRequests || []).find(function (r) {
+      return r && ymdKey(r.leave_date) === key && r.status === "APPROVED" && r.leave_type === "REST_DAY";
+    }) || null;
+  }
+
+  function defaultShiftForDate(ymd) {
+    const key = ymdKey(ymd);
+    return (monthDefaultPeriods || []).find(function (p) {
+      const from = ymdKey(p.effective_from);
+      const to = p.effective_to ? ymdKey(p.effective_to) : "";
+      return from && from <= key && (!to || to >= key);
+    }) || null;
+  }
+
+  function fillDefTemplateSelect() {
+    const sel = $("attDefTemplate");
+    if (!sel || !isAdmin()) return;
+    const keep = sel.value;
+    const opts = ['<option value="">請選擇班別</option>'];
+    const seen = {};
+    enabledTemplates().forEach(function (t) {
+      if (!t || !t.id || seen[t.id]) return;
+      seen[t.id] = true;
+      opts.push('<option value="' + esc(t.id) + '">' + esc(t.name || "") + "</option>");
+    });
+    sel.innerHTML = opts.join("");
+    if (keep && seen[keep]) sel.value = keep;
+  }
+
+  function currentOpenDefaultPeriod() {
+    return (defaultShiftPeriods || []).find(function (p) {
+      return p && (p.effective_to == null || p.effective_to === "");
+    }) || null;
+  }
+
+  async function loadDefaultShiftPeriods() {
+    defaultShiftPeriods = [];
+    if (!isAdmin()) return;
+    const uid = String(($("attDefEmployee") && $("attDefEmployee").value) || "").trim();
+    if (!uid) return;
+    defaultShiftPeriods = await scheduleApi().fetchEmployeeDefaultShiftPeriods(uid);
+  }
+
+  function renderDefaultShift() {
+    if (!isAdmin()) return;
+    const uid = String(($("attDefEmployee") && $("attDefEmployee").value) || "").trim();
+    const open = uid ? currentOpenDefaultPeriod() : null;
+    if ($("attDefCurrentName")) $("attDefCurrentName").textContent = open ? (open.shift_name_snapshot || "—") : "—";
+    if ($("attDefCurrentStart")) $("attDefCurrentStart").textContent = open ? formatTimeHm(open.scheduled_start_time) : "—";
+    if ($("attDefCurrentEnd")) $("attDefCurrentEnd").textContent = open ? formatTimeHm(open.scheduled_end_time) : "—";
+    if ($("attDefCurrentBreak")) $("attDefCurrentBreak").textContent = open && open.scheduled_break_minutes != null ? String(open.scheduled_break_minutes) : "—";
+    if ($("attDefCurrentFrom")) $("attDefCurrentFrom").textContent = open ? ymdKey(open.effective_from).replace(/-/g, "/") : "—";
+    if (open && $("attDefTemplate") && open.shift_template_id) {
+      $("attDefTemplate").value = String(open.shift_template_id);
+    }
+    const tbody = $("attDefHistTbody");
+    if (!tbody) return;
+    if (!uid) {
+      tbody.innerHTML = '<tr><td colspan="5" class="muted">請選擇員工</td></tr>';
+      return;
+    }
+    if (!defaultShiftPeriods.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="muted">尚未設定預設班別</td></tr>';
+      return;
+    }
+    tbody.innerHTML = defaultShiftPeriods.map(function (p) {
+      const to = p.effective_to ? ymdKey(p.effective_to).replace(/-/g, "/") : "迄今";
+      return (
+        "<tr>" +
+        "<td>" + esc(p.shift_name_snapshot || "") + "</td>" +
+        "<td class=\"nowrap\">" + esc(formatTimeHm(p.scheduled_start_time)) + "</td>" +
+        "<td class=\"nowrap\">" + esc(formatTimeHm(p.scheduled_end_time)) + "</td>" +
+        "<td class=\"nowrap\">" + esc(ymdKey(p.effective_from).replace(/-/g, "/")) + "</td>" +
+        "<td class=\"nowrap\">" + esc(to) + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+  }
+
+  async function refreshDefaultShiftUi(opts) {
+    const silent = !!(opts && opts.silent);
+    if (!isAdmin()) return;
+    try {
+      fillDefTemplateSelect();
+      await loadDefaultShiftPeriods();
+      renderDefaultShift();
+      if (!silent) showMsg($("attDefMsg"), "", false);
+    } catch (e) {
+      renderDefaultShift();
+      showMsg($("attDefMsg"), mapRpcError(e), true);
+    }
+  }
+
+  async function saveDefaultShift() {
+    if (!isAdmin() || defBusy) return;
+    const uid = String(($("attDefEmployee") && $("attDefEmployee").value) || "").trim();
+    const tplId = String(($("attDefTemplate") && $("attDefTemplate").value) || "").trim();
+    const from = String(($("attDefFrom") && $("attDefFrom").value) || "").trim();
+    if (!uid) {
+      showMsg($("attDefMsg"), "請選擇員工。", true);
+      return;
+    }
+    if (!tplId) {
+      showMsg($("attDefMsg"), "請選擇班別。", true);
+      return;
+    }
+    if (!from) {
+      showMsg($("attDefMsg"), "請選擇生效日期。", true);
+      return;
+    }
+    defBusy = true;
+    showMsg($("attDefMsg"), "儲存中…", false);
+    try {
+      await scheduleApi().setEmployeeDefaultShift({
+        user_id: uid,
+        shift_template_id: tplId,
+        effective_from: from,
+      });
+      await refreshDefaultShiftUi({ silent: true });
+      if (String(($("attSchedEmployee") && $("attSchedEmployee").value) || "") === uid) {
+        await refreshMonthlyScheduleUi({ silent: true });
+      }
+      showMsg($("attDefMsg"), "已儲存預設班別。", false);
+    } catch (e) {
+      showMsg($("attDefMsg"), mapRpcError(e), true);
+    } finally {
+      defBusy = false;
+    }
+  }
+
+  function formatNtd(n) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return "—";
+    return "NT$ " + Math.round(x).toLocaleString("zh-TW");
+  }
+
+  function parseMonthlySalary(raw) {
+    const s = String(raw == null ? "" : raw).trim().replace(/,/g, "");
+    if (!s) return null;
+    if (!/^\d+$/.test(s)) return null;
+    const n = Number(s);
+    if (!Number.isFinite(n) || n < 1 || n > 99999999) return null;
+    return n;
+  }
+
+  function compensationStageLabel(stage) {
+    if (stage === "PROBATION") return "試用期";
+    if (stage === "REGULAR") return "正式";
+    return stage || "—";
+  }
+
+  function compensationPayTypeLabel(t) {
+    if (t === "MONTHLY") return "月薪";
+    if (t === "HOURLY") return "時薪";
+    return t || "—";
+  }
+
+  function compensationPeriodStatus(p) {
+    const today = taipeiYmd(new Date());
+    const from = ymdKey(p.effective_from);
+    const to = p.effective_to ? ymdKey(p.effective_to) : "";
+    if (from && from > today) return "未來";
+    if (to && to < today) return "歷史";
+    return "目前";
+  }
+
+  function currentCompensationPeriod() {
+    const today = taipeiYmd(new Date());
+    return (compensationPeriods || []).find(function (p) {
+      const from = ymdKey(p.effective_from);
+      const to = p.effective_to ? ymdKey(p.effective_to) : "";
+      return from && from <= today && (!to || to >= today);
+    }) || null;
+  }
+
+  function hasCompensationProbation() {
+    return ($("attCompHasProbation") && $("attCompHasProbation").value) !== "0";
+  }
+
+  function syncCompensationProbationFields() {
+    const wrap = $("attCompProbFields");
+    if (wrap) wrap.hidden = !hasCompensationProbation();
+  }
+
+  function fillRegularFromProbationEnd() {
+    if (!hasCompensationProbation()) return;
+    const to = String(($("attCompProbTo") && $("attCompProbTo").value) || "").trim();
+    if (!to) return;
+    if ($("attCompRegFrom")) $("attCompRegFrom").value = addDaysYmd(to, 1);
+  }
+
+  async function loadCompensationPeriods() {
+    compensationPeriods = [];
+    if (!isAdmin()) return;
+    const uid = String(($("attCompEmployee") && $("attCompEmployee").value) || "").trim();
+    if (!uid) return;
+    compensationPeriods = await compensationApi().fetchEmployeeCompensationPeriods(uid);
+  }
+
+  function renderCompensation() {
+    if (!isAdmin()) return;
+    const uid = String(($("attCompEmployee") && $("attCompEmployee").value) || "").trim();
+    const cur = uid ? currentCompensationPeriod() : null;
+    if ($("attCompCurrentStage")) $("attCompCurrentStage").textContent = cur ? compensationStageLabel(cur.employment_stage) : "—";
+    if ($("attCompCurrentPay")) $("attCompCurrentPay").textContent = cur ? formatNtd(cur.monthly_salary) : "—";
+    if ($("attCompCurrentFrom")) $("attCompCurrentFrom").textContent = cur ? ymdKey(cur.effective_from).replace(/-/g, "/") : "—";
+    const tbody = $("attCompHistTbody");
+    if (!tbody) return;
+    if (!uid) {
+      tbody.innerHTML = '<tr><td colspan="6" class="muted">請選擇員工</td></tr>';
+      return;
+    }
+    if (!compensationPeriods.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="muted">尚未設定約定薪資</td></tr>';
+      return;
+    }
+    tbody.innerHTML = compensationPeriods.map(function (p) {
+      const to = p.effective_to ? ymdKey(p.effective_to).replace(/-/g, "/") : "迄今";
+      const st = compensationPeriodStatus(p);
+      return (
+        "<tr>" +
+        "<td>" + esc(compensationStageLabel(p.employment_stage)) + "</td>" +
+        "<td>" + esc(compensationPayTypeLabel(p.pay_type)) + "</td>" +
+        "<td class=\"nowrap\">" + esc(formatNtd(p.monthly_salary)) + "</td>" +
+        "<td class=\"nowrap\">" + esc(ymdKey(p.effective_from).replace(/-/g, "/")) + "</td>" +
+        "<td class=\"nowrap\">" + esc(to) + "</td>" +
+        "<td><span class=\"status-badge " + (st === "目前" ? "status-success" : st === "未來" ? "status-info" : "status-muted") + "\">" + esc(st) + "</span></td>" +
+        "</tr>"
+      );
+    }).join("");
+  }
+
+  async function refreshCompensationUi(opts) {
+    const silent = !!(opts && opts.silent);
+    if (!isAdmin()) return;
+    try {
+      await loadCompensationPeriods();
+      renderCompensation();
+      syncCompensationProbationFields();
+      if (!silent) showMsg($("attCompMsg"), "", false);
+    } catch (e) {
+      renderCompensation();
+      showMsg($("attCompMsg"), mapRpcError(e), true);
+    }
+  }
+
+  async function saveCompensationPlan() {
+    if (!isAdmin() || compBusy) return;
+    const uid = String(($("attCompEmployee") && $("attCompEmployee").value) || "").trim();
+    if (!uid) {
+      showMsg($("attCompMsg"), "請選擇員工。", true);
+      return;
+    }
+    const hasProb = hasCompensationProbation();
+    const regFrom = String(($("attCompRegFrom") && $("attCompRegFrom").value) || "").trim();
+    const regPay = parseMonthlySalary($("attCompRegSalary") && $("attCompRegSalary").value);
+    if (!regFrom) {
+      showMsg($("attCompMsg"), "請選擇正式生效日。", true);
+      return;
+    }
+    if (!regPay) {
+      showMsg($("attCompMsg"), "請輸入有效的正式月薪（整數 NT$）。", true);
+      return;
+    }
+    const payload = {
+      user_id: uid,
+      has_probation: hasProb,
+      regular_from: regFrom,
+      regular_monthly_salary: String(regPay),
+    };
+    if (hasProb) {
+      const probFrom = String(($("attCompProbFrom") && $("attCompProbFrom").value) || "").trim();
+      const probTo = String(($("attCompProbTo") && $("attCompProbTo").value) || "").trim();
+      const probPay = parseMonthlySalary($("attCompProbSalary") && $("attCompProbSalary").value);
+      if (!probFrom) {
+        showMsg($("attCompMsg"), "請選擇試用開始日。", true);
+        return;
+      }
+      if (!probTo) {
+        showMsg($("attCompMsg"), "請選擇試用結束日。", true);
+        return;
+      }
+      if (probTo < probFrom) {
+        showMsg($("attCompMsg"), "試用結束日不可早於開始日。", true);
+        return;
+      }
+      if (regFrom <= probTo) {
+        showMsg($("attCompMsg"), "正式生效日必須晚於試用結束日。", true);
+        return;
+      }
+      if (!probPay) {
+        showMsg($("attCompMsg"), "請輸入有效的試用期月薪（整數 NT$）。", true);
+        return;
+      }
+      payload.probation_from = probFrom;
+      payload.probation_to = probTo;
+      payload.probation_monthly_salary = String(probPay);
+    }
+    compBusy = true;
+    showMsg($("attCompMsg"), "儲存中…", false);
+    try {
+      await compensationApi().setEmployeeCompensationPlan(payload);
+      await refreshCompensationUi({ silent: true });
+      showMsg($("attCompMsg"), "已儲存約定薪資。", false);
+    } catch (e) {
+      showMsg($("attCompMsg"), mapRpcError(e), true);
+    } finally {
+      compBusy = false;
+    }
+  }
+
+  async function saveCompensationRaise() {
+    if (!isAdmin() || compBusy) return;
+    const uid = String(($("attCompEmployee") && $("attCompEmployee").value) || "").trim();
+    const from = String(($("attCompRaiseFrom") && $("attCompRaiseFrom").value) || "").trim();
+    const pay = parseMonthlySalary($("attCompRaiseSalary") && $("attCompRaiseSalary").value);
+    if (!uid) {
+      showMsg($("attCompMsg"), "請選擇員工。", true);
+      return;
+    }
+    if (!from) {
+      showMsg($("attCompMsg"), "請選擇調薪生效日。", true);
+      return;
+    }
+    if (!pay) {
+      showMsg($("attCompMsg"), "請輸入有效的調薪後月薪（整數 NT$）。", true);
+      return;
+    }
+    compBusy = true;
+    showMsg($("attCompMsg"), "調薪中…", false);
+    try {
+      await compensationApi().setEmployeeCompensationRaise({
+        user_id: uid,
+        effective_from: from,
+        employment_stage: "REGULAR",
+        monthly_salary: String(pay),
+      });
+      await refreshCompensationUi({ silent: true });
+      showMsg($("attCompMsg"), "已新增調薪期間，歷史月薪未覆蓋。", false);
+    } catch (e) {
+      showMsg($("attCompMsg"), mapRpcError(e), true);
+    } finally {
+      compBusy = false;
+    }
+  }
+
+  function payrollPersonLabel(id) {
+    if (!id) return "員工";
+    const me = currentUser();
+    if (me && String(me.userId) === String(id)) return me.displayName || me.username || "員工";
+    const p = profileMap[String(id)];
+    if (p) return p.displayName || p.username || "員工";
+    return "員工";
+  }
+
+  function payrollMd(ymd) {
+    const s = ymdKey(ymd);
+    if (!s || s.length < 10) return "—";
+    return s.slice(5, 7) + "/" + s.slice(8, 10);
+  }
+
+  function payrollClipRange(seg, monthStart, monthEnd) {
+    const from = ymdKey(seg && seg.effective_from) || monthStart;
+    const toRaw = seg && seg.effective_to ? ymdKey(seg.effective_to) : monthEnd;
+    const start = from > monthStart ? from : monthStart;
+    const end = toRaw && toRaw < monthEnd ? toRaw : monthEnd;
+    return payrollMd(start) + "～" + payrollMd(end);
+  }
+
+  function payrollSegmentsHtml(segs, monthStart, monthEnd) {
+    const list = Array.isArray(segs) ? segs : [];
+    if (!list.length) return "<div>—</div>";
+    const multi = list.length > 1;
+    return (multi ? "<div>本月含多個薪資期間</div>" : "") +
+      list.map(function (s) {
+        return "<div>" + esc(payrollClipRange(s, monthStart, monthEnd)) + "　" +
+          esc(compensationStageLabel(s.employment_stage)) + "　" +
+          esc(formatNtd(s.monthly_salary)) + "</div>";
+      }).join("");
+  }
+
+  function payrollGrossNote() {
+    return '<p class="muted att-payroll-note">目前未包含勞健保、所得稅及其他代扣項目。</p>';
+  }
+
+  function setPayrollStatus(text, settled) {
+    const el = $("attPayrollStatus");
+    if (!el) return;
+    if (!text) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.className = "att-payroll-status" + (settled ? " is-settled" : "");
+    el.textContent = text;
+  }
+
+  function setPayrollActions(mode) {
+    const wrap = $("attPayrollActions");
+    const settle = $("attPayrollSettle");
+    const view = $("attPayrollViewDaily");
+    const print = $("attPayrollPrint");
+    if (!wrap) return;
+    if (mode === "none") {
+      wrap.hidden = true;
+      return;
+    }
+    wrap.hidden = false;
+    if (settle) settle.hidden = mode !== "ready";
+    if (view) view.hidden = mode !== "settled";
+    if (print) print.hidden = mode !== "settled";
+  }
+
+  function payrollSnapshotOf(settlement) {
+    const snap = settlement && settlement.snapshot_json;
+    return snap && typeof snap === "object" ? snap : {};
+  }
+
+  function payrollMonthBoundsFromData(data, fallbackMonth) {
+    const monthRaw = (data && data.month) || fallbackMonth || "";
+    const start = ymdKey(monthRaw) || String(monthRaw || "").slice(0, 10);
+    if (!start || start.length < 10) return { start: "", end: "" };
+    const y = Number(start.slice(0, 4));
+    const m = Number(start.slice(5, 7));
+    const range = monthRangeYmd(y, m);
+    return { start: range.start, end: range.end };
+  }
+
+  function payrollPairText(pair) {
+    if (!pair || typeof pair !== "object") return formatNtd(0);
+    if (pair.display != null && pair.display !== "") return formatNtd(pair.display);
+    return formatNtd(pair.raw);
+  }
+
+  function payrollOtTypeLabel(t) {
+    if (t === "WEEKDAY") return "平日加班";
+    if (t === "REST_DAY") return "休息日出勤";
+    if (t === "NATIONAL_HOLIDAY") return "國定假日出勤";
+    if (t === "REGULAR_HOLIDAY") return "例假出勤";
+    return t || "—";
+  }
+
+  function payrollOtStatusLabel(s) {
+    if (s === "APPROVED") return "已核准";
+    if (s === "REJECTED") return "不認列";
+    if (s === "PENDING") return "待確認";
+    return "待確認";
+  }
+
+  function payrollReviewItems(flags) {
+    const f = flags || {};
+    const items = [];
+    if (f.overtime_review_required) items.push({ text: "有待確認加班", code: "overtime_review_required" });
+    if (f.incomplete_attendance) items.push({ text: "出勤資料未完成", code: "incomplete_attendance" });
+    if (f.regular_holiday_work) items.push({ text: "例假出勤", code: "regular_holiday_work" });
+    if (f.sick_leave_over_30) items.push({ text: "病假超過30日需人工確認", code: "sick_leave_over_30" });
+    if (f.personal_leave_over_14) items.push({ text: "事假超過14日需人工確認", code: "personal_leave_over_14" });
+    if (f.compensation_missing) items.push({ text: "缺少薪資設定", code: "compensation_missing" });
+    if (f.holiday_work_review_required) items.push({ text: "國定假日出勤待確認", code: "holiday_work_review_required" });
+    if (f.overtime_limit_review_required) items.push({ text: "加班超過可安全判斷範圍需人工確認", code: "overtime_limit_review_required" });
+    return items;
+  }
+
+  function payrollDayMoney(obj) {
+    if (!obj || typeof obj !== "object") return 0;
+    let n = 0;
+    Object.keys(obj).forEach(function (k) {
+      n += Number(obj[k]) || 0;
+    });
+    return n;
+  }
+
+  function renderPayrollAmounts(data, extraCardsHtml) {
+    const summary = $("attPayrollSummary");
+    const dedEl = $("attPayrollDeductions");
+    const addEl = $("attPayrollAdditional");
+    if (!data) {
+      if (summary) { summary.hidden = true; summary.innerHTML = ""; }
+      if (dedEl) { dedEl.hidden = true; dedEl.innerHTML = ""; }
+      if (addEl) { addEl.hidden = true; addEl.innerHTML = ""; }
+      return;
+    }
+    const bounds = payrollMonthBoundsFromData(data);
+    const segs = Array.isArray(data.compensation_segments) ? data.compensation_segments : [];
+    const ctr = data.counters || {};
+    const deds = data.deductions || {};
+    const adds = data.additional_pay || {};
+    const gross = payrollPairText(data.totals && data.totals.gross_pay_before_other_items);
+    if (summary) {
+      summary.hidden = false;
+      summary.innerHTML =
+        '<div class="att-payroll-grid">' +
+        '<div class="att-payroll-card"><div class="muted small">薪資階段</div>' + payrollSegmentsHtml(segs, bounds.start, bounds.end) + "</div>" +
+        '<div class="att-payroll-card"><div class="muted small">基本薪資</div><div>' + esc(payrollPairText(data.base_salary)) + "</div></div>" +
+        '<div class="att-payroll-card"><div class="muted small">扣款</div><div>' + esc(payrollPairText(data.totals && data.totals.total_deductions)) + "</div></div>" +
+        '<div class="att-payroll-card"><div class="muted small">加給</div><div>' + esc(payrollPairText(data.totals && data.totals.total_additional_pay)) + "</div></div>" +
+        '<div class="att-payroll-card"><div class="muted small">本系統計算應發薪資</div><div>' + esc(gross) + "</div>" + payrollGrossNote() + "</div>" +
+        (extraCardsHtml || "") +
+        "</div>";
+    }
+    if (dedEl) {
+      dedEl.hidden = false;
+      dedEl.innerHTML =
+        "<h4 class=\"h4\" style=\"margin-top:16px\">扣款</h4>" +
+        '<div class="table-wrap att-admin-table-wrap"><table class="table table-compact"><thead><tr><th>項目</th><th>天數／分鐘</th><th>金額</th></tr></thead><tbody>' +
+        "<tr><td>病假</td><td>" + esc(String(ctr.sick_leave_days || 0) + " 天") + "</td><td>" + esc(payrollPairText(deds.sick_leave)) + "</td></tr>" +
+        "<tr><td>事假</td><td>" + esc(String(ctr.personal_leave_days || 0) + " 天") + "</td><td>" + esc(payrollPairText(deds.personal_leave)) + "</td></tr>" +
+        "<tr><td>遲到</td><td>" + esc(minutesToDuration(ctr.late_minutes)) + "</td><td>" + esc(payrollPairText(deds.late)) + "</td></tr>" +
+        "<tr><td>早退</td><td>" + esc(minutesToDuration(ctr.early_leave_minutes)) + "</td><td>" + esc(payrollPairText(deds.early_leave)) + "</td></tr>" +
+        "<tr><td>曠職</td><td>—</td><td>" + esc(payrollPairText(deds.absence)) + "</td></tr>" +
+        "</tbody></table></div>";
+    }
+    if (addEl) {
+      addEl.hidden = false;
+      addEl.innerHTML =
+        "<h4 class=\"h4\" style=\"margin-top:16px\">加給</h4>" +
+        '<div class="table-wrap att-admin-table-wrap"><table class="table table-compact"><thead><tr><th>項目</th><th>核准分鐘／天數</th><th>金額</th></tr></thead><tbody>' +
+        "<tr><td>平日加班</td><td>" + esc(String(ctr.approved_weekday_overtime_minutes || 0) + " 分") + "</td><td>" + esc(payrollPairText(adds.weekday_overtime)) + "</td></tr>" +
+        "<tr><td>休息日出勤</td><td>" + esc(String(ctr.approved_rest_day_minutes || 0) + " 分") + "</td><td>" + esc(payrollPairText(adds.rest_day_work)) + "</td></tr>" +
+        "<tr><td>國定假日出勤</td><td>" + esc(String(ctr.approved_national_holiday_days || 0) + " 天") + "</td><td>" + esc(payrollPairText(adds.national_holiday_work)) + "</td></tr>" +
+        "</tbody></table></div>";
+    }
+  }
+
+  function renderPayrollPreview(data, candidates) {
+    if (!isAdmin()) return;
+    lastPayrollPreview = data || null;
+    lastPayrollSettlement = null;
+    lastPayslipHtml = "";
+    lastOtCandidates = (candidates && Array.isArray(candidates.rows)) ? candidates.rows : (Array.isArray(candidates) ? candidates : []);
+    const review = $("attPayrollReview");
+    const otWrap = $("attPayrollOt");
+    const dailyWrap = $("attPayrollDailyWrap");
+    if (!data) {
+      setPayrollStatus("", false);
+      setPayrollActions("none");
+      if (review) review.hidden = true;
+      renderPayrollAmounts(null);
+      if (otWrap) otWrap.hidden = true;
+      if (dailyWrap) dailyWrap.hidden = true;
+      return;
+    }
+    const flags = data.review_flags || {};
+    const ready = data.payroll_ready === true;
+    const reasons = payrollReviewItems(flags);
+    setPayrollStatus("未結算", false);
+    setPayrollActions(ready ? "ready" : "none");
+    if (review) {
+      review.hidden = false;
+      review.className = "att-payroll-review" + (ready ? " is-ready" : "");
+      if (ready) {
+        review.innerHTML = "<strong>Payroll Ready</strong>：本月預覽已無阻擋結算的待確認項目（尚未結算）。";
+      } else {
+        review.innerHTML = "<strong>本月尚不可結算</strong><ul>" + reasons.map(function (r) {
+          return "<li>" + esc(r.text) + '<span class="att-payroll-code">' + esc(r.code) + "</span></li>";
+        }).join("") + "</ul>";
+      }
+    }
+    renderPayrollAmounts(data, '<div class="att-payroll-card"><div class="muted small">Payroll Ready</div><div>' + (ready ? "是" : "否") + "</div></div>");
+    renderPayrollOtTable(lastOtCandidates, false);
+    const dailyEl = $("attPayrollDailyWrap");
+    if (dailyEl) {
+      const sum = dailyEl.querySelector("summary");
+      if (sum) sum.textContent = "每日明細";
+    }
+    renderPayrollDaily(Array.isArray(data.daily_breakdown) ? data.daily_breakdown : []);
+  }
+
+  function renderPayrollSettled(settlement) {
+    if (!isAdmin()) return;
+    lastPayrollSettlement = settlement || null;
+    lastPayrollPreview = null;
+    lastOtCandidates = [];
+    const review = $("attPayrollReview");
+    const snap = payrollSnapshotOf(settlement);
+    const preview = (snap.preview && typeof snap.preview === "object") ? snap.preview : snap;
+    const empId = String(($("attPayrollEmployee") && $("attPayrollEmployee").value) || settlement.user_id || "");
+    setPayrollStatus("已結算", true);
+    setPayrollActions("settled");
+    if (review) {
+      review.hidden = false;
+      review.className = "att-payroll-review is-settled";
+      review.innerHTML =
+        "<strong>本月份已結算</strong>。如需修正請使用後續薪資更正流程。" +
+        "<div class=\"muted att-payroll-note\">結算時間：" + esc(formatTaipeiDateTime(settlement.settled_at)) +
+        "　結算人員：" + esc(payrollPersonLabel(settlement.settled_by)) + "</div>";
+    }
+    const extra =
+      '<div class="att-payroll-card"><div class="muted small">結算時間</div><div>' + esc(formatTaipeiDateTime(settlement.settled_at)) + "</div></div>" +
+      '<div class="att-payroll-card"><div class="muted small">結算人員</div><div>' + esc(payrollPersonLabel(settlement.settled_by)) + "</div></div>";
+    const displayPreview = {
+      month: snap.month || preview.month || settlement.payroll_month,
+      compensation_segments: snap.compensation_segments || preview.compensation_segments || [],
+      base_salary: { display: settlement.display_base_salary, raw: settlement.base_salary },
+      deductions: snap.deductions || preview.deductions || {},
+      additional_pay: snap.additional_pay || preview.additional_pay || {},
+      totals: {
+        total_deductions: { display: settlement.display_total_deductions, raw: settlement.total_deductions },
+        total_additional_pay: { display: settlement.display_total_additional_pay, raw: settlement.total_additional_pay },
+        gross_pay_before_other_items: { display: settlement.display_gross_pay_before_other_items, raw: settlement.gross_pay_before_other_items }
+      },
+      counters: snap.counters || preview.counters || {}
+    };
+    renderPayrollAmounts(displayPreview, extra);
+    const otRows = Array.isArray(snap.overtime_approvals) ? snap.overtime_approvals : [];
+    renderPayrollOtTable(otRows, true);
+    const dailyEl = $("attPayrollDailyWrap");
+    if (dailyEl) {
+      const sum = dailyEl.querySelector("summary");
+      if (sum) sum.textContent = "出勤與薪資明細";
+    }
+    renderPayrollDaily(Array.isArray(snap.daily_breakdown) ? snap.daily_breakdown : []);
+    lastPayslipHtml = buildPayslipHtml(settlement, empId);
+  }
+
+  function renderPayrollOtTable(rows, readOnly) {
+    const wrap = $("attPayrollOt");
+    const tbody = $("attPayrollOtTbody");
+    if (!wrap || !tbody) return;
+    wrap.hidden = false;
+    const list = rows || [];
+    const title = wrap.querySelector("h4");
+    if (title) title.textContent = readOnly ? "加班確認（結算快照）" : "待確認加班";
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="muted">' + (readOnly ? "本月沒有加班紀錄" : "本月沒有加班候選") + "</td></tr>";
+      return;
+    }
+    tbody.innerHTML = list.map(function (r) {
+      const ymd = ymdKey(r.work_date);
+      const type = r.overtime_type;
+      const cand = Number(r.candidate_minutes) || 0;
+      const status = r.status || "";
+      if (readOnly || !r.actionable) {
+        const reason = !r.actionable && type === "REGULAR_HOLIDAY"
+          ? "例假出勤－需人工確認"
+          : payrollOtStatusLabel(status);
+        return "<tr>" +
+          "<td class=\"nowrap\">" + esc(ymd.replace(/-/g, "/")) + "</td>" +
+          "<td>" + esc(payrollOtTypeLabel(type)) + "</td>" +
+          "<td>" + esc(r.scheduled_end || "—") + "</td>" +
+          "<td>" + esc(r.actual_clock_out ? formatTaipeiClock(r.actual_clock_out) : "—") + "</td>" +
+          "<td>" + esc(String(cand)) + "</td>" +
+          "<td>" + esc(r.approved_minutes != null ? String(r.approved_minutes) : "—") + "</td>" +
+          "<td>" + esc(reason) + "</td>" +
+          "<td class=\"muted\">" + (readOnly ? "已結算" : "本 Stage 不提供一鍵核准") + "</td>" +
+          "</tr>";
+      }
+      const pending = !status || status === "PENDING";
+      const defaultMin = (r.approved_minutes != null && status === "APPROVED")
+        ? r.approved_minutes
+        : cand;
+      const ops =
+        '<button type="button" class="btn btn-primary btn-sm att-ot-approve" data-date="' + esc(ymd) + '" data-type="' + esc(type) + '">核准</button> ' +
+        '<button type="button" class="btn btn-ghost btn-sm danger-action att-ot-reject" data-date="' + esc(ymd) + '" data-type="' + esc(type) + '">不認列</button>';
+      return "<tr>" +
+        "<td class=\"nowrap\">" + esc(ymd.replace(/-/g, "/")) + "</td>" +
+        "<td>" + esc(payrollOtTypeLabel(type)) + "</td>" +
+        "<td>" + esc(r.scheduled_end || "—") + "</td>" +
+        "<td>" + esc(r.actual_clock_out ? formatTaipeiClock(r.actual_clock_out) : "—") + "</td>" +
+        "<td>" + esc(String(cand)) + "</td>" +
+        "<td><input class=\"att-ot-minutes\" type=\"number\" min=\"0\" step=\"1\" value=\"" + esc(String(defaultMin)) + "\"></td>" +
+        "<td>" + esc(pending ? "待確認" : payrollOtStatusLabel(status)) + "</td>" +
+        "<td class=\"table-actions\">" + ops + "</td>" +
+        "</tr>";
+    }).join("");
+  }
+
+  function renderPayrollDaily(days) {
+    const wrap = $("attPayrollDailyWrap");
+    const tbody = $("attPayrollDailyTbody");
+    if (!wrap || !tbody) return;
+    wrap.hidden = false;
+    if (!days.length) {
+      tbody.innerHTML = '<tr><td colspan="13" class="muted">無資料</td></tr>';
+      return;
+    }
+    tbody.innerHTML = days.map(function (row) {
+      const ymd = ymdKey(row.work_date);
+      const ot = row.overtime_approval || {};
+      const cand = ot.candidate_minutes != null ? ot.candidate_minutes : row.potential_overtime_minutes;
+      const approved = ot.status === "APPROVED" ? ot.approved_minutes : (ot.status === "REJECTED" ? 0 : null);
+      const inOut = (row.actual_clock_in ? formatTaipeiClock(row.actual_clock_in) : "—") +
+        " / " + (row.actual_clock_out ? formatTaipeiClock(row.actual_clock_out) : "—");
+      const shift = row.shift_name || evalShiftLabel(row);
+      const ded = payrollDayMoney(row.deductions);
+      const add = payrollDayMoney(row.additional_pay);
+      return "<tr>" +
+        "<td class=\"nowrap\">" + esc(ymd.replace(/-/g, "/")) + "</td>" +
+        "<td>" + esc(evalDayTypeLabel(row.day_type)) + "</td>" +
+        "<td>" + esc(shift) + "</td>" +
+        "<td class=\"nowrap\">" + esc(inOut) + "</td>" +
+        "<td>" + esc(minutesToDuration(row.actual_work_minutes)) + "</td>" +
+        "<td>" + esc(evalLeaveLabel(row.leave_type)) + "</td>" +
+        "<td>" + esc(minutesToDuration(row.late_minutes)) + "</td>" +
+        "<td>" + esc(minutesToDuration(row.early_leave_minutes)) + "</td>" +
+        "<td>" + esc(cand ? String(cand) + " 分" : "—") + "</td>" +
+        "<td>" + esc(approved == null ? "—" : String(approved) + " 分") + "</td>" +
+        "<td>" + esc(formatNtd(ded)) + "</td>" +
+        "<td>" + esc(formatNtd(add)) + "</td>" +
+        "<td>" + esc(evalStatusText(row)) + "</td>" +
+        "</tr>";
+    }).join("");
+  }
+
+  async function runPayrollPreview() {
+    if (!isAdmin() || payrollBusy) return;
+    const year = Number($("attPayrollYear") && $("attPayrollYear").value);
+    const month = Number($("attPayrollMonth") && $("attPayrollMonth").value);
+    const empId = String(($("attPayrollEmployee") && $("attPayrollEmployee").value) || "").trim();
+    if (!Number.isFinite(year) || year < 2020 || !Number.isFinite(month) || month < 1 || month > 12) {
+      showMsg($("attPayrollMsg"), "請選擇有效的年份與月份。", true);
+      return;
+    }
+    if (!empId) {
+      showMsg($("attPayrollMsg"), "請選擇員工。", true);
+      return;
+    }
+    payrollBusy = true;
+    showMsg($("attPayrollMsg"), "載入中…", false);
+    try {
+      const monthYmd = year + "-" + String(month).padStart(2, "0") + "-01";
+      let settled = null;
+      try {
+        settled = await payrollApi().getPayrollSettlement(empId, monthYmd);
+      } catch (e) {
+        const raw = String((e && (e.message || e.code || e.error)) || e || "");
+        if (!/pgrst202|could not find the function|backoffice_get_payroll_settlement|payroll_settlements/i.test(raw)) {
+          throw e;
+        }
+      }
+      if (settled && settled.found) {
+        renderPayrollSettled(settled);
+        showMsg($("attPayrollMsg"), "已載入已結算薪資。", false);
+        return;
+      }
+      const preview = await payrollApi().previewPayrollMonth(empId, monthYmd);
+      const cands = await payrollApi().fetchOvertimeCandidates(empId, monthYmd);
+      renderPayrollPreview(preview, cands);
+      showMsg($("attPayrollMsg"), "已更新薪資預覽。", false);
+    } catch (e) {
+      showMsg($("attPayrollMsg"), mapRpcError(e), true);
+    } finally {
+      payrollBusy = false;
+    }
+  }
+
+  async function settlePayrollMonthUi() {
+    if (!isAdmin() || payrollBusy) return;
+    if (lastPayrollSettlement && lastPayrollSettlement.found) {
+      showMsg($("attPayrollMsg"), "本月份已結算，如需修正請使用後續薪資更正流程。", true);
+      return;
+    }
+    if (!lastPayrollPreview || lastPayrollPreview.payroll_ready !== true) {
+      showMsg($("attPayrollMsg"), "本月尚不可結算。", true);
+      return;
+    }
+    const empId = String(($("attPayrollEmployee") && $("attPayrollEmployee").value) || "").trim();
+    const year = Number($("attPayrollYear") && $("attPayrollYear").value);
+    const month = Number($("attPayrollMonth") && $("attPayrollMonth").value);
+    if (!empId || !Number.isFinite(year) || !Number.isFinite(month)) {
+      showMsg($("attPayrollMsg"), "請選擇員工與月份。", true);
+      return;
+    }
+    const previewEmp = lastPayrollPreview && lastPayrollPreview.employee && lastPayrollPreview.employee.user_id;
+    if (String(previewEmp || "") !== empId) {
+      showMsg($("attPayrollMsg"), "請先重新計算目前選擇員工的薪資預覽。", true);
+      return;
+    }
+    const ok = global.confirm("結算後，本月份薪資將凍結，不會因後續打卡、班表或薪資設定修改而自動變更。確定結算？");
+    if (!ok) return;
+    payrollBusy = true;
+    showMsg($("attPayrollMsg"), "月結中…", false);
+    try {
+      const monthYmd = year + "-" + String(month).padStart(2, "0") + "-01";
+      const result = await payrollApi().settlePayrollMonth(empId, monthYmd);
+      renderPayrollSettled(result);
+      showMsg($("attPayrollMsg"), "本月份已結算。", false);
+    } catch (e) {
+      showMsg($("attPayrollMsg"), mapRpcError(e), true);
+    } finally {
+      payrollBusy = false;
+    }
+  }
+
+  function viewPayrollDaily() {
+    const wrap = $("attPayrollDailyWrap");
+    if (!wrap) return;
+    wrap.hidden = false;
+    wrap.open = true;
+    try { wrap.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (_) {}
+  }
+
+  function buildPayslipHtml(settlement, empId) {
+    const snap = payrollSnapshotOf(settlement);
+    const preview = (snap.preview && typeof snap.preview === "object") ? snap.preview : snap;
+    const bounds = payrollMonthBoundsFromData({ month: snap.month || preview.month || settlement.payroll_month });
+    const monthLabel = bounds.start ? bounds.start.slice(0, 4) + " / " + bounds.start.slice(5, 7) : "—";
+    const empName = payrollPersonLabel(empId);
+    const segs = Array.isArray(snap.compensation_segments) ? snap.compensation_segments : [];
+    const ctr = snap.counters || preview.counters || {};
+    const leave = snap.leave_summary || {};
+    const att = snap.attendance_summary || {};
+    const deds = snap.deductions || preview.deductions || {};
+    const adds = snap.additional_pay || preview.additional_pay || {};
+    const days = Array.isArray(snap.daily_breakdown) ? snap.daily_breakdown : [];
+    const approvedOt =
+      (Number(att.approved_weekday_overtime_minutes) || 0) +
+      (Number(att.approved_rest_day_minutes) || 0);
+    const settleDate = formatTaipeiDate(settlement.settled_at ? new Date(settlement.settled_at) : new Date());
+    const dailyRows = days.map(function (row) {
+      const ymd = ymdKey(row.work_date);
+      const ot = row.overtime_approval || {};
+      const approved = ot.status === "APPROVED" ? ot.approved_minutes : (ot.status === "REJECTED" ? 0 : null);
+      const shift = row.shift_name || evalShiftLabel(row);
+      return "<tr>" +
+        "<td class=\"nowrap\">" + esc(ymd.replace(/-/g, "/")) + "</td>" +
+        "<td>" + esc(evalDayTypeLabel(row.day_type)) + "</td>" +
+        "<td>" + esc(shift) + "</td>" +
+        "<td>" + esc(evalLeaveLabel(row.leave_type)) + "</td>" +
+        "<td>" + esc(minutesToDuration(row.actual_work_minutes)) + "</td>" +
+        "<td>" + esc(minutesToDuration(row.late_minutes)) + "</td>" +
+        "<td>" + esc(minutesToDuration(row.early_leave_minutes)) + "</td>" +
+        "<td>" + esc(approved == null ? "—" : String(approved) + " 分") + "</td>" +
+        "<td>" + esc(formatNtd(payrollDayMoney(row.deductions))) + "</td>" +
+        "<td>" + esc(formatNtd(payrollDayMoney(row.additional_pay))) + "</td>" +
+        "</tr>";
+    }).join("");
+    return '<div class="att-print-doc att-payslip-doc">' +
+      "<h1>DK Computer</h1>" +
+      "<h2>薪資單</h2>" +
+      '<div class="att-print-meta">薪資月份：' + esc(monthLabel) +
+      "　　員工：" + esc(empName) + "</div>" +
+      '<div class="att-print-meta">薪資階段：' + (segs.length > 1 ? "本月含多個薪資期間" : esc(compensationStageLabel(settlement.employment_stage || (segs[0] && segs[0].employment_stage)))) + "</div>" +
+      (segs.length ? ('<div class="att-print-summary">' + segs.map(function (s) {
+        return esc(payrollClipRange(s, bounds.start, bounds.end)) + "　" +
+          esc(compensationStageLabel(s.employment_stage)) + "　" +
+          "約定月薪 " + esc(formatNtd(s.monthly_salary));
+      }).join("<br>") + "</div>") : "") +
+      '<div class="att-print-summary">' +
+      "基本薪資：" + esc(formatNtd(settlement.display_base_salary)) + "<br>" +
+      "扣款：<br>" +
+      "　病假 " + esc(payrollPairText(deds.sick_leave)) + "<br>" +
+      "　事假 " + esc(payrollPairText(deds.personal_leave)) + "<br>" +
+      "　遲到 " + esc(payrollPairText(deds.late)) + "<br>" +
+      "　早退 " + esc(payrollPairText(deds.early_leave)) + "<br>" +
+      "　曠職 " + esc(payrollPairText(deds.absence)) + "<br>" +
+      "加給：<br>" +
+      "　平日加班 " + esc(payrollPairText(adds.weekday_overtime)) + "<br>" +
+      "　休息日出勤 " + esc(payrollPairText(adds.rest_day_work)) + "<br>" +
+      "　國定假日出勤 " + esc(payrollPairText(adds.national_holiday_work)) +
+      "</div>" +
+      '<div class="att-print-summary">' +
+      "總扣款：" + esc(formatNtd(settlement.display_total_deductions)) + "<br>" +
+      "總加給：" + esc(formatNtd(settlement.display_total_additional_pay)) + "<br>" +
+      "<strong>本系統計算應發薪資：" + esc(formatNtd(settlement.display_gross_pay_before_other_items)) + "</strong><br>" +
+      '<span class="att-payslip-note">目前未包含勞健保、所得稅及其他代扣項目。</span>' +
+      "</div>" +
+      '<div class="att-print-summary">' +
+      "出勤摘要：<br>" +
+      "出勤天數 " + esc(String(att.work_days != null ? att.work_days : 0)) +
+      "　排休天數 " + esc(String(att.off_days != null ? att.off_days : 0)) +
+      "　病假天數 " + esc(String(leave.sick_leave_days != null ? leave.sick_leave_days : (ctr.sick_leave_days || 0))) +
+      "　事假天數 " + esc(String(leave.personal_leave_days != null ? leave.personal_leave_days : (ctr.personal_leave_days || 0))) +
+      "　特休天數 " + esc(String(leave.annual_leave_days != null ? leave.annual_leave_days : (ctr.annual_leave_days || 0))) + "<br>" +
+      "遲到分鐘 " + esc(String(att.late_minutes != null ? att.late_minutes : (ctr.late_minutes || 0))) +
+      "　早退分鐘 " + esc(String(att.early_leave_minutes != null ? att.early_leave_minutes : (ctr.early_leave_minutes || 0))) +
+      "　核准加班分鐘 " + esc(String(approvedOt)) + "<br>" +
+      "結算日期：" + esc(settleDate) +
+      "</div>" +
+      '<div class="att-payslip-daily">' +
+      "<h2>出勤與薪資明細</h2>" +
+      '<table class="att-print-table"><thead><tr>' +
+      "<th>日期</th><th>日別</th><th>班別</th><th>請假</th><th>實際工時</th><th>遲到</th><th>早退</th><th>核准加班</th><th>扣款</th><th>加給</th>" +
+      "</tr></thead><tbody>" +
+      (dailyRows || '<tr><td colspan="10">無資料</td></tr>') +
+      "</tbody></table></div></div>";
+  }
+
+  function printPayrollPayslip() {
+    if (!isAdmin()) {
+      showMsg($("attPayrollMsg"), "只有管理員可以列印薪資單。", true);
+      return;
+    }
+    if (!lastPayrollSettlement || !lastPayrollSettlement.found) {
+      showMsg($("attPayrollMsg"), "請先完成月結後再列印薪資單。", true);
+      return;
+    }
+    const empId = String(($("attPayrollEmployee") && $("attPayrollEmployee").value) || "").trim();
+    if (!empId || String(lastPayrollSettlement.user_id) !== empId) {
+      showMsg($("attPayrollMsg"), "請先載入目前選擇員工的已結算薪資。", true);
+      return;
+    }
+    lastPayslipHtml = buildPayslipHtml(lastPayrollSettlement, empId);
+    const root = $("attPrintRoot");
+    const sheet = $("attPrintSheet");
+    if (sheet) sheet.innerHTML = lastPayslipHtml;
+    if (root) {
+      root.hidden = false;
+      root.setAttribute("aria-hidden", "false");
+    }
+    document.body.classList.add("att-printing");
+    const cleanup = function () {
+      document.body.classList.remove("att-printing");
+      global.removeEventListener("afterprint", cleanup);
+    };
+    global.addEventListener("afterprint", cleanup);
+    setTimeout(function () {
+      try { global.print(); } catch (_) { cleanup(); }
+    }, 50);
+  }
+
+  async function decideOvertime(ymd, type, status, minutes) {
+    if (!isAdmin() || payrollBusy || !ymd || !type) return;
+    if (lastPayrollSettlement && lastPayrollSettlement.found) {
+      showMsg($("attPayrollMsg"), "本月份已結算，無法再修改加班確認。", true);
+      return;
+    }
+    const empId = String(($("attPayrollEmployee") && $("attPayrollEmployee").value) || "").trim();
+    if (!empId) {
+      showMsg($("attPayrollMsg"), "請選擇員工。", true);
+      return;
+    }
+    payrollBusy = true;
+    showMsg($("attPayrollMsg"), status === "REJECTED" ? "不認列中…" : "核准中…", false);
+    try {
+      const payload = { user_id: empId, work_date: ymd, overtime_type: type, status: status };
+      if (status === "APPROVED") payload.approved_minutes = minutes;
+      await payrollApi().setOvertimeApproval(payload);
+      payrollBusy = false;
+      await runPayrollPreview();
+    } catch (e) {
+      showMsg($("attPayrollMsg"), mapRpcError(e), true);
+      payrollBusy = false;
+    }
+  }
+
+  function scheduleByDate() {
+    const map = {};
+    (monthSchedules || []).forEach(function (row) {
+      if (!row) return;
+      map[ymdKey(row.work_date)] = row;
+    });
+    return map;
+  }
+
+  function templateSelectHtml(ymd, selectedId) {
+    const opts = ['<option value="">選擇班別</option>'];
+    enabledTemplates().forEach(function (t) {
+      const sel = selectedId && String(t.id) === String(selectedId) ? " selected" : "";
+      opts.push('<option value="' + esc(t.id) + '"' + sel + ">" + esc(t.name || "") + "</option>");
+    });
+    return '<select class="att-sched-tpl" data-date="' + esc(ymd) + '">' + opts.join("") + "</select>";
+  }
+
+  function renderMonthlySchedule() {
+    const tbody = $("attSchedTbody");
+    if (!tbody || !isAdmin()) return;
+    const uid = String(($("attSchedEmployee") && $("attSchedEmployee").value) || "").trim();
+    const year = Number($("attSchedYear") && $("attSchedYear").value);
+    const month = Number($("attSchedMonth") && $("attSchedMonth").value);
+    if (!uid) {
+      tbody.innerHTML = '<tr><td colspan="7" class="muted">請選擇員工</td></tr>';
+      renderScheduleCompliance();
+      return;
+    }
+    if (!year || !month) {
+      tbody.innerHTML = '<tr><td colspan="7" class="muted">請選擇年月</td></tr>';
+      renderScheduleCompliance();
+      return;
+    }
+    const last = daysInMonthNum(year, month);
+    const byDate = scheduleByDate();
+    const rows = [];
+    for (let day = 1; day <= last; day++) {
+      const ymd = year + "-" + pad2(month) + "-" + pad2(day);
+      const row = byDate[ymd] || null;
+      const def = row ? null : defaultShiftForDate(ymd);
+      const mode = scheduleMode(ymd, row);
+      const readonly = mode === "past" || mode === "today-frozen";
+      let nameLabel = "未設定";
+      let srcLabel = "—";
+      let srcClass = "status-muted";
+      let startLabel = "—";
+      let endLabel = "—";
+      if (row && row.schedule_type === "WORK") {
+        nameLabel = row.shift_name_snapshot || "WORK";
+        srcLabel = "例外";
+        srcClass = "status-info";
+        startLabel = formatTimeHm(row.scheduled_start_time);
+        endLabel = formatTimeHm(row.scheduled_end_time);
+      } else if (row && row.schedule_type === "OFF") {
+        nameLabel = evalDayTypeLabel(row.day_type);
+        srcLabel = row.day_type ? evalDayTypeLabel(row.day_type) : "未分類";
+        srcClass = row.day_type ? "status-muted" : "status-warning";
+      } else if (def) {
+        nameLabel = def.shift_name_snapshot || "預設";
+        srcLabel = "預設";
+        srcClass = "status-success";
+        startLabel = formatTimeHm(def.scheduled_start_time);
+        endLabel = formatTimeHm(def.scheduled_end_time);
+      }
+      let ops = "";
+      if (readonly) {
+        ops = '<span class="muted small att-sched-readonly">唯讀</span>';
+      } else if (row && row.schedule_type === "OFF") {
+        const leave = approvedLeaveForDate(ymd);
+        if (leave && mode === "future") {
+          ops = '<button type="button" class="btn btn-ghost btn-sm danger-action att-sched-revoke" data-leave-id="' + esc(leave.id) + '">撤銷排休</button>';
+        } else if (row && mode === "future") {
+          ops = ' <button type="button" class="btn btn-ghost btn-sm danger-action att-sched-clear" data-id="' + esc(row.id) + '" data-date="' + esc(ymd) + '">清除例外</button>';
+        }
+      } else {
+        const currentTpl = row && row.schedule_type === "WORK"
+          ? row.shift_template_id
+          : (def ? def.shift_template_id : "");
+        ops = '<div class="att-sched-ops">' +
+          templateSelectHtml(ymd, currentTpl) +
+          '<button type="button" class="btn btn-ghost btn-sm att-sched-assign" data-date="' + esc(ymd) + '">指定例外</button>';
+        if (row && mode === "future") {
+          ops += ' <button type="button" class="btn btn-ghost btn-sm danger-action att-sched-clear" data-id="' + esc(row.id) + '" data-date="' + esc(ymd) + '">清除例外</button>';
+        }
+        ops += "</div>";
+      }
+      rows.push(
+        "<tr>" +
+        "<td class=\"nowrap\">" + esc(ymd.replace(/-/g, "/")) + "</td>" +
+        "<td>" + esc(weekdayZhYmd(ymd)) + "</td>" +
+        "<td>" + esc(nameLabel) + "</td>" +
+        "<td><span class=\"status-badge " + srcClass + " att-src-" + (srcLabel === "例外" ? "exception" : srcLabel === "預設" ? "default" : "leave") + "\">" + esc(srcLabel) + "</span></td>" +
+        "<td class=\"nowrap\">" + esc(startLabel) + "</td>" +
+        "<td class=\"nowrap\">" + esc(endLabel) + "</td>" +
+        "<td class=\"table-actions\">" + ops + "</td>" +
+        "</tr>"
+      );
+    }
+    tbody.innerHTML = rows.join("");
+    renderScheduleCompliance();
+  }
+
+  function renderScheduleCompliance() {
+    const box = $("attSchedCompliance");
+    if (!box || !isAdmin()) return;
+    const uid = String(($("attSchedEmployee") && $("attSchedEmployee").value) || "").trim();
+    if (!uid || !monthCompliance) {
+      box.hidden = true;
+      box.innerHTML = "";
+      return;
+    }
+    const c = monthCompliance;
+    const alerts = Array.isArray(c.alerts) ? c.alerts : [];
+    let html = '<div class="muted small">排班提醒（STANDARD_WEEK 檢查，非正式法規證明）</div>';
+    html += '<div class="att-sched-counts">' +
+      "本月排休總天數：" + esc(String(c.off_days == null ? 0 : c.off_days)) +
+      "　　休息日：" + esc(String(c.rest_day_count || 0)) +
+      "　　例假：" + esc(String(c.regular_holiday_count || 0)) +
+      "　　國定假日：" + esc(String(c.national_holiday_count || 0)) +
+      "　　公司目標月休 " + esc(String(c.company_month_rest_target || 8)) + " 天（營運提醒）" +
+      "</div>";
+    if (!alerts.length) {
+      html += '<div class="status-badge status-success">正常</div>';
+    } else {
+      html += '<ul class="att-sched-alerts">';
+      alerts.forEach(function (a) {
+        html += "<li>⚠ " + esc((a && a.message) || "") + "</li>";
+      });
+      html += "</ul>";
+    }
+    box.innerHTML = html;
+    box.hidden = false;
+  }
+
+  async function refreshMonthlyScheduleUi(opts) {
+    const silent = !!(opts && opts.silent);
+    if (!isAdmin()) return;
+    try {
+      await loadMonthlySchedule();
+      renderMonthlySchedule();
+      if (!silent) showMsg($("attSchedMsg"), "", false);
+    } catch (e) {
+      renderMonthlySchedule();
+      showMsg($("attSchedMsg"), mapRpcError(e), true);
+    }
+  }
+
+  async function assignWorkSchedule(ymd, templateId) {
+    if (!isAdmin() || schedBusy) return;
+    const uid = String(($("attSchedEmployee") && $("attSchedEmployee").value) || "").trim();
+    const tplId = String(templateId || "").trim();
+    if (!uid) {
+      showMsg($("attSchedMsg"), "請選擇員工。", true);
+      return;
+    }
+    if (!tplId) {
+      showMsg($("attSchedMsg"), "請選擇班別。", true);
+      return;
+    }
+    const existing = scheduleByDate()[ymd];
+    if (existing && existing.schedule_type === "OFF") {
+      showMsg($("attSchedMsg"), "該日已是排休，不可直接改成例外上班。請先撤銷排休。", true);
+      return;
+    }
+    schedBusy = true;
+    showMsg($("attSchedMsg"), "儲存排班中…", false);
+    try {
+      await scheduleApi().upsertEmployeeSchedule({
+        user_id: uid,
+        work_date: ymd,
+        schedule_type: "WORK",
+        shift_template_id: tplId,
+      });
+      await refreshMonthlyScheduleUi({ silent: true });
+      showMsg($("attSchedMsg"), "已指定班別。", false);
+    } catch (e) {
+      showMsg($("attSchedMsg"), mapRpcError(e), true);
+    } finally {
+      schedBusy = false;
+    }
+  }
+
+  async function clearWorkSchedule(id) {
+    if (!isAdmin() || schedBusy || !id) return;
+    schedBusy = true;
+    showMsg($("attSchedMsg"), "清除中…", false);
+    try {
+      await scheduleApi().deleteEmployeeSchedule(id);
+      await refreshMonthlyScheduleUi({ silent: true });
+      showMsg($("attSchedMsg"), "已清除排班。", false);
+    } catch (e) {
+      showMsg($("attSchedMsg"), mapRpcError(e), true);
+    } finally {
+      schedBusy = false;
+    }
+  }
+
+  function leaveTypeLabel(t) {
+    if (t === "REST_DAY") return "排休";
+    if (t === "SICK_LEAVE") return "病假";
+    if (t === "PERSONAL_LEAVE") return "事假";
+    if (t === "ANNUAL_LEAVE") return "特休";
+    return t || "—";
+  }
+
+  function isWorkdayLeaveType(t) {
+    return t === "SICK_LEAVE" || t === "PERSONAL_LEAVE" || t === "ANNUAL_LEAVE";
+  }
+
+  function leaveReasonText(r) {
+    const s = r && r.reason != null ? String(r.reason).trim() : "";
+    return s || "—";
+  }
+
+  function syncLeaveQuotaHint() {
+    const hint = $("attLeaveQuotaHint");
+    if (!hint) return;
+    const type = String(($("attLeaveType") && $("attLeaveType").value) || "");
+    hint.hidden = type !== "ANNUAL_LEAVE";
+  }
+
+  function leaveStatusLabel(s) {
+    if (s === "PENDING") return "待核准";
+    if (s === "APPROVED") return "已核准";
+    if (s === "REJECTED") return "已駁回";
+    if (s === "CANCELLED") return "已取消";
+    return s || "—";
+  }
+
+  function leaveStatusClass(s) {
+    if (s === "PENDING") return "status-warning";
+    if (s === "APPROVED") return "status-success";
+    if (s === "REJECTED") return "status-danger";
+    return "status-muted";
+  }
+
+  function sortLeaveRows(rows) {
+    const rank = { PENDING: 0, APPROVED: 1, REJECTED: 2, CANCELLED: 3 };
+    return (rows || []).slice().sort(function (a, b) {
+      const ra = rank[a.status] != null ? rank[a.status] : 9;
+      const rb = rank[b.status] != null ? rank[b.status] : 9;
+      if (ra !== rb) return ra - rb;
+      const da = ymdKey(b.leave_date).localeCompare(ymdKey(a.leave_date));
+      if (da) return da;
+      return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+    });
+  }
+
+  async function loadMyLeaveRequests() {
+    myLeaveRequests = [];
+    const me = currentUser();
+    const uid = String((me && me.userId) || "").trim();
+    if (!uid) return;
+    myLeaveRequests = await leaveApi().fetchAttendanceLeaveRequests({ userId: uid });
+  }
+
+  async function loadAdminLeaveRequests() {
+    adminLeaveRequests = [];
+    if (!isAdmin()) return;
+    adminLeaveRequests = await leaveApi().fetchAttendanceLeaveRequests();
+  }
+
+  function renderMyLeave() {
+    const tbody = $("attLeaveTbody");
+    if (!tbody) return;
+    const rows = sortLeaveRows(myLeaveRequests);
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="muted">尚無申請</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function (r) {
+      const canCancel = r.status === "PENDING";
+      const op = canCancel
+        ? '<button type="button" class="btn btn-ghost btn-sm att-leave-cancel" data-id="' + esc(r.id) + '">取消</button>'
+        : "—";
+      return (
+        "<tr>" +
+        "<td class=\"nowrap\">" + esc(ymdKey(r.leave_date).replace(/-/g, "/")) + "</td>" +
+        "<td>" + esc(leaveTypeLabel(r.leave_type)) + "</td>" +
+        "<td><span class=\"status-badge " + leaveStatusClass(r.status) + "\">" + esc(leaveStatusLabel(r.status)) + "</span></td>" +
+        "<td class=\"nowrap\">" + esc(formatTaipeiDateTime(r.created_at)) + "</td>" +
+        "<td class=\"table-actions\">" + op + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+  }
+
+  function renderAdminLeave() {
+    const tbody = $("attLeaveAdminTbody");
+    if (!tbody || !isAdmin()) return;
+    const rows = sortLeaveRows(adminLeaveRequests);
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="muted">尚無申請</td></tr>';
+      return;
+    }
+    const today = taipeiYmd(new Date());
+    tbody.innerHTML = rows.map(function (r) {
+      let ops = "—";
+      if (r.status === "PENDING") {
+        const daySel = r.leave_type === "REST_DAY"
+          ? '<select class="att-leave-daytype" aria-label="日別">' +
+            '<option value="REST_DAY">休息日</option>' +
+            '<option value="REGULAR_HOLIDAY">例假</option>' +
+            "</select> "
+          : "";
+        ops = daySel +
+          '<button type="button" class="btn btn-primary btn-sm att-leave-approve" data-id="' + esc(r.id) + '">核准</button>' +
+          ' <button type="button" class="btn btn-ghost btn-sm danger-action att-leave-reject" data-id="' + esc(r.id) + '">駁回</button>';
+      } else if (r.status === "APPROVED" && ymdKey(r.leave_date) > today) {
+        ops = '<button type="button" class="btn btn-ghost btn-sm danger-action att-leave-revoke" data-id="' + esc(r.id) + '">撤銷</button>';
+      }
+      return (
+        "<tr>" +
+        "<td>" + esc(personName(r.user_id)) + "</td>" +
+        "<td class=\"nowrap\">" + esc(ymdKey(r.leave_date).replace(/-/g, "/")) + "</td>" +
+        "<td>" + esc(leaveTypeLabel(r.leave_type)) + "</td>" +
+        "<td><span class=\"status-badge " + leaveStatusClass(r.status) + "\">" + esc(leaveStatusLabel(r.status)) + "</span></td>" +
+        "<td>" + esc(leaveReasonText(r)) + "</td>" +
+        "<td class=\"nowrap\">" + esc(formatTaipeiDateTime(r.created_at)) + "</td>" +
+        "<td class=\"table-actions\">" + ops + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+  }
+
+  async function refreshAfterLeaveChange(userId) {
+    try {
+      await loadMyLeaveRequests();
+      renderMyLeave();
+    } catch (e) {
+      showMsg($("attLeaveMsg"), mapRpcError(e), true);
+    }
+    if (isAdmin()) {
+      try {
+        await loadAdminLeaveRequests();
+        renderAdminLeave();
+      } catch (e) {
+        showMsg($("attLeaveAdminMsg"), mapRpcError(e), true);
+      }
+      const schedUid = String(($("attSchedEmployee") && $("attSchedEmployee").value) || "").trim();
+      if (userId && schedUid === String(userId)) {
+        await refreshMonthlyScheduleUi({ silent: true });
+      }
+    }
+  }
+
+  async function submitMyLeave() {
+    if (leaveBusy) return;
+    const ymd = String(($("attLeaveDate") && $("attLeaveDate").value) || "").trim();
+    const type = String(($("attLeaveType") && $("attLeaveType").value) || "").trim() || "REST_DAY";
+    const reason = String(($("attLeaveReason") && $("attLeaveReason").value) || "").trim();
+    if (!ymd) {
+      showMsg($("attLeaveMsg"), "請選擇日期。", true);
+      return;
+    }
+    if (type !== "REST_DAY" && !isWorkdayLeaveType(type)) {
+      showMsg($("attLeaveMsg"), "請假類型無效。", true);
+      return;
+    }
+    leaveBusy = true;
+    showMsg($("attLeaveMsg"), "送出中…", false);
+    try {
+      const payload = { leave_date: ymd, leave_type: type };
+      if (reason) payload.reason = reason;
+      await leaveApi().requestAttendanceLeave(payload);
+      await refreshAfterLeaveChange();
+      if ($("attLeaveReason")) $("attLeaveReason").value = "";
+      showMsg($("attLeaveMsg"), "已送出申請。", false);
+    } catch (e) {
+      showMsg($("attLeaveMsg"), mapRpcError(e), true);
+    } finally {
+      leaveBusy = false;
+    }
+  }
+
+  async function cancelMyLeave(id) {
+    if (leaveBusy || !id) return;
+    leaveBusy = true;
+    showMsg($("attLeaveMsg"), "取消中…", false);
+    try {
+      await leaveApi().cancelAttendanceLeaveRequest(id);
+      await refreshAfterLeaveChange();
+      showMsg($("attLeaveMsg"), "已取消申請。", false);
+    } catch (e) {
+      showMsg($("attLeaveMsg"), mapRpcError(e), true);
+    } finally {
+      leaveBusy = false;
+    }
+  }
+
+  async function approveLeave(id, dayType) {
+    if (!isAdmin() || leaveBusy || !id) return;
+    const row = (adminLeaveRequests || []).find(function (r) { return r && String(r.id) === String(id); });
+    const type = row && row.leave_type;
+    const day = String(dayType || "").trim();
+    if (type === "REST_DAY" && !day) {
+      showMsg($("attLeaveAdminMsg"), "請選擇日別（休息日或例假）。", true);
+      return;
+    }
+    leaveBusy = true;
+    showMsg($("attLeaveAdminMsg"), "核准中…", false);
+    try {
+      await leaveApi().approveAttendanceLeaveRequest(id, type === "REST_DAY" ? day : "");
+      await refreshAfterLeaveChange(row && row.user_id);
+      showMsg($("attLeaveAdminMsg"), "已核准申請。", false);
+    } catch (e) {
+      showMsg($("attLeaveAdminMsg"), mapRpcError(e), true);
+    } finally {
+      leaveBusy = false;
+    }
+  }
+
+  async function rejectLeave(id) {
+    if (!isAdmin() || leaveBusy || !id) return;
+    leaveBusy = true;
+    showMsg($("attLeaveAdminMsg"), "駁回中…", false);
+    try {
+      await leaveApi().rejectAttendanceLeaveRequest(id);
+      await refreshAfterLeaveChange();
+      showMsg($("attLeaveAdminMsg"), "已駁回申請。", false);
+    } catch (e) {
+      showMsg($("attLeaveAdminMsg"), mapRpcError(e), true);
+    } finally {
+      leaveBusy = false;
+    }
+  }
+
+  async function revokeLeave(id) {
+    if (!isAdmin() || leaveBusy || !id) return;
+    const row = (adminLeaveRequests || []).find(function (r) { return r && String(r.id) === String(id); })
+      || (monthLeaveRequests || []).find(function (r) { return r && String(r.id) === String(id); });
+    leaveBusy = true;
+    showMsg($("attLeaveAdminMsg") || $("attSchedMsg"), "撤銷中…", false);
+    try {
+      await leaveApi().revokeAttendanceLeaveRequest(id);
+      await refreshAfterLeaveChange(row && row.user_id);
+      showMsg($("attLeaveAdminMsg"), "已撤銷申請。", false);
+      showMsg($("attSchedMsg"), "已撤銷排休。", false);
+    } catch (e) {
+      showMsg($("attLeaveAdminMsg"), mapRpcError(e), true);
+      showMsg($("attSchedMsg"), mapRpcError(e), true);
+    } finally {
+      leaveBusy = false;
+    }
+  }
+
+  async function setDirectRestDay() {
+    if (!isAdmin() || leaveBusy) return;
+    const uid = String(($("attLeaveDirectEmployee") && $("attLeaveDirectEmployee").value) || "").trim();
+    const ymd = String(($("attLeaveDirectDate") && $("attLeaveDirectDate").value) || "").trim();
+    const dayType = String(($("attLeaveDirectDayType") && $("attLeaveDirectDayType").value) || "").trim();
+    if (!uid) {
+      showMsg($("attLeaveAdminMsg"), "請選擇員工。", true);
+      return;
+    }
+    if (!ymd) {
+      showMsg($("attLeaveAdminMsg"), "請選擇日期。", true);
+      return;
+    }
+    if (!dayType) {
+      showMsg($("attLeaveAdminMsg"), "請選擇日別（休息日或例假）。", true);
+      return;
+    }
+    leaveBusy = true;
+    showMsg($("attLeaveAdminMsg"), "設定排休中…", false);
+    try {
+      await leaveApi().setEmployeeRestDay({ user_id: uid, leave_date: ymd, day_type: dayType });
+      await refreshAfterLeaveChange(uid);
+      showMsg($("attLeaveAdminMsg"), "已直接設定排休。", false);
+    } catch (e) {
+      showMsg($("attLeaveAdminMsg"), mapRpcError(e), true);
+    } finally {
+      leaveBusy = false;
+    }
   }
 
   function bind() {
@@ -1687,6 +3630,156 @@
     if (gen) gen.addEventListener("click", function () { generateMonthlyReport(); });
     const printBtn = $("attReportPrint");
     if (printBtn) printBtn.addEventListener("click", function () { printMonthlyReport(); });
+
+    ensureTime24Selects();
+    const tplNew = $("attTplNew");
+    if (tplNew) tplNew.addEventListener("click", function () { openTemplateForm(null); });
+    const tplSave = $("attTplSave");
+    if (tplSave) tplSave.addEventListener("click", function () { saveTemplateForm(); });
+    const tplCancel = $("attTplCancel");
+    if (tplCancel) tplCancel.addEventListener("click", function () { closeTemplateForm(); });
+    const tplBody = $("attTplTbody");
+    if (tplBody) {
+      tplBody.addEventListener("click", function (ev) {
+        const edit = ev.target && ev.target.closest ? ev.target.closest(".att-tpl-edit") : null;
+        if (edit) {
+          openTemplateForm(findTemplate(edit.getAttribute("data-id")));
+          return;
+        }
+        const tog = ev.target && ev.target.closest ? ev.target.closest(".att-tpl-toggle") : null;
+        if (!tog) return;
+        toggleTemplateEnabled(tog.getAttribute("data-id"), tog.getAttribute("data-enabled") === "1");
+      });
+    }
+
+    const schedRefresh = $("attSchedRefresh");
+    if (schedRefresh) {
+      schedRefresh.addEventListener("click", function () { refreshMonthlyScheduleUi(); });
+    }
+    const schedYear = $("attSchedYear");
+    if (schedYear) schedYear.addEventListener("change", function () { if (isAdmin()) refreshMonthlyScheduleUi(); });
+    const schedMonth = $("attSchedMonth");
+    if (schedMonth) schedMonth.addEventListener("change", function () { if (isAdmin()) refreshMonthlyScheduleUi(); });
+    const schedEmp = $("attSchedEmployee");
+    if (schedEmp) schedEmp.addEventListener("change", function () { if (isAdmin()) refreshMonthlyScheduleUi(); });
+    const schedBody = $("attSchedTbody");
+    if (schedBody) {
+      schedBody.addEventListener("click", function (ev) {
+        const assign = ev.target && ev.target.closest ? ev.target.closest(".att-sched-assign") : null;
+        if (assign) {
+          const ymd = assign.getAttribute("data-date") || "";
+          const row = assign.closest("tr");
+          const sel = row ? row.querySelector(".att-sched-tpl") : null;
+          assignWorkSchedule(ymd, sel && sel.value);
+          return;
+        }
+        const revoke = ev.target && ev.target.closest ? ev.target.closest(".att-sched-revoke") : null;
+        if (revoke) {
+          revokeLeave(revoke.getAttribute("data-leave-id"));
+          return;
+        }
+        const clear = ev.target && ev.target.closest ? ev.target.closest(".att-sched-clear") : null;
+        if (!clear) return;
+        clearWorkSchedule(clear.getAttribute("data-id"));
+      });
+    }
+
+    const defEmp = $("attDefEmployee");
+    if (defEmp) defEmp.addEventListener("change", function () { if (isAdmin()) refreshDefaultShiftUi(); });
+    const defSave = $("attDefSave");
+    if (defSave) defSave.addEventListener("click", function () { saveDefaultShift(); });
+
+    const compEmp = $("attCompEmployee");
+    if (compEmp) compEmp.addEventListener("change", function () { if (isAdmin()) refreshCompensationUi(); });
+    const compHas = $("attCompHasProbation");
+    if (compHas) {
+      compHas.addEventListener("change", function () {
+        syncCompensationProbationFields();
+        if (hasCompensationProbation()) fillRegularFromProbationEnd();
+      });
+    }
+    const compProbTo = $("attCompProbTo");
+    if (compProbTo) {
+      compProbTo.addEventListener("change", function () { fillRegularFromProbationEnd(); });
+    }
+    const compSave = $("attCompSave");
+    if (compSave) compSave.addEventListener("click", function () { saveCompensationPlan(); });
+    const compRaise = $("attCompRaise");
+    if (compRaise) compRaise.addEventListener("click", function () { saveCompensationRaise(); });
+
+    const payrollCalc = $("attPayrollCalc");
+    if (payrollCalc) payrollCalc.addEventListener("click", function () { runPayrollPreview(); });
+    const payrollSettle = $("attPayrollSettle");
+    if (payrollSettle) payrollSettle.addEventListener("click", function () { settlePayrollMonthUi(); });
+    const payrollView = $("attPayrollViewDaily");
+    if (payrollView) payrollView.addEventListener("click", function () { viewPayrollDaily(); });
+    const payrollPrint = $("attPayrollPrint");
+    if (payrollPrint) payrollPrint.addEventListener("click", function () { printPayrollPayslip(); });
+    const payrollOtBody = $("attPayrollOtTbody");
+    if (payrollOtBody) {
+      payrollOtBody.addEventListener("click", function (ev) {
+        const ap = ev.target && ev.target.closest ? ev.target.closest(".att-ot-approve") : null;
+        if (ap) {
+          const rowEl = ap.closest("tr");
+          const inp = rowEl ? rowEl.querySelector(".att-ot-minutes") : null;
+          const mins = inp ? Number(inp.value) : NaN;
+          if (!Number.isFinite(mins) || mins < 0 || Math.floor(mins) !== mins) {
+            showMsg($("attPayrollMsg"), "請輸入有效的核准分鐘。", true);
+            return;
+          }
+          decideOvertime(ap.getAttribute("data-date"), ap.getAttribute("data-type"), "APPROVED", mins);
+          return;
+        }
+        const rj = ev.target && ev.target.closest ? ev.target.closest(".att-ot-reject") : null;
+        if (!rj) return;
+        decideOvertime(rj.getAttribute("data-date"), rj.getAttribute("data-type"), "REJECTED", 0);
+      });
+    }
+
+    const leaveSubmit = $("attLeaveSubmit");
+    if (leaveSubmit) leaveSubmit.addEventListener("click", function () { submitMyLeave(); });
+    const leaveType = $("attLeaveType");
+    if (leaveType) {
+      leaveType.addEventListener("change", function () { syncLeaveQuotaHint(); });
+      syncLeaveQuotaHint();
+    }
+    const leaveBody = $("attLeaveTbody");
+    if (leaveBody) {
+      leaveBody.addEventListener("click", function (ev) {
+        const btn = ev.target && ev.target.closest ? ev.target.closest(".att-leave-cancel") : null;
+        if (!btn) return;
+        cancelMyLeave(btn.getAttribute("data-id"));
+      });
+    }
+    const leaveAdminRefresh = $("attLeaveAdminRefresh");
+    if (leaveAdminRefresh) {
+      leaveAdminRefresh.addEventListener("click", function () {
+        if (!isAdmin()) return;
+        refreshAfterLeaveChange();
+      });
+    }
+    const leaveDirect = $("attLeaveDirectBtn");
+    if (leaveDirect) leaveDirect.addEventListener("click", function () { setDirectRestDay(); });
+    const leaveAdminBody = $("attLeaveAdminTbody");
+    if (leaveAdminBody) {
+      leaveAdminBody.addEventListener("click", function (ev) {
+        const ap = ev.target && ev.target.closest ? ev.target.closest(".att-leave-approve") : null;
+        if (ap) {
+          const rowEl = ap.closest("tr");
+          const sel = rowEl ? rowEl.querySelector(".att-leave-daytype") : null;
+          approveLeave(ap.getAttribute("data-id"), sel && sel.value);
+          return;
+        }
+        const rj = ev.target && ev.target.closest ? ev.target.closest(".att-leave-reject") : null;
+        if (rj) {
+          rejectLeave(rj.getAttribute("data-id"));
+          return;
+        }
+        const rv = ev.target && ev.target.closest ? ev.target.closest(".att-leave-revoke") : null;
+        if (!rv) return;
+        revokeLeave(rv.getAttribute("data-id"));
+      });
+    }
   }
 
   function startClock() {
@@ -1705,6 +3798,12 @@
     if ($("attAdminAudit")) $("attAdminAudit").hidden = !admin;
     if ($("attLocationSettings")) $("attLocationSettings").hidden = !admin;
     if ($("attNetworkSettings")) $("attNetworkSettings").hidden = !admin;
+    if ($("attShiftTemplates")) $("attShiftTemplates").hidden = !admin;
+    if ($("attMonthlySchedule")) $("attMonthlySchedule").hidden = !admin;
+    if ($("attDefaultShift")) $("attDefaultShift").hidden = !admin;
+    if ($("attLeaveAdmin")) $("attLeaveAdmin").hidden = !admin;
+    if ($("attComp")) $("attComp").hidden = !admin;
+    if ($("attPayroll")) $("attPayroll").hidden = !admin;
     startClock();
     renderClockFace();
     setLocStatus("按下打卡：先驗證公司網路，必要時再請求 GPS。", null);

@@ -4658,6 +4658,312 @@ async function getSupabaseAuthProfile() {
   }
 }
 
+const DK_SHIFT_TEMPLATE_SELECT =
+  "id,name,start_time,end_time,break_minutes,cross_midnight,late_grace_minutes,early_leave_grace_minutes,enabled,updated_at";
+const DK_EMPLOYEE_SCHEDULE_SELECT =
+  "id,user_id,work_date,shift_template_id,schedule_type,leave_type,day_type,note,shift_name_snapshot,scheduled_start_time,scheduled_end_time,scheduled_break_minutes,scheduled_cross_midnight";
+const DK_EMPLOYEE_DEFAULT_SHIFT_SELECT =
+  "id,user_id,shift_template_id,effective_from,effective_to,shift_name_snapshot,scheduled_start_time,scheduled_end_time,scheduled_break_minutes,scheduled_cross_midnight,scheduled_late_grace_minutes,scheduled_early_leave_grace_minutes,updated_at";
+const DK_LEAVE_REQUEST_SELECT =
+  "id,user_id,leave_date,leave_type,status,reason,created_at,updated_at,approved_by,approved_at,rejected_by,rejected_at,cancelled_by,cancelled_at";
+
+function dkScheduleGateBackoffice() {
+  if (typeof requireVerifiedBackofficeCloudAccess === "function") {
+    const gate = requireVerifiedBackofficeCloudAccess();
+    if (!gate || gate.ok !== true) {
+      throw new Error((gate && gate.error) || "請先登入後台");
+    }
+  }
+}
+
+async function dkScheduleAuthClient() {
+  dkScheduleGateBackoffice();
+  const client = await getSupabaseAuthClient();
+  if (!client) throw new Error("Supabase 未設定");
+  return client;
+}
+
+function dkScheduleRpcData(res) {
+  if (res && res.error) throw res.error;
+  return res ? res.data : null;
+}
+
+async function fetchAttendanceShiftTemplates() {
+  const client = await dkScheduleAuthClient();
+  const res = await client
+    .from("attendance_shift_templates")
+    .select(DK_SHIFT_TEMPLATE_SELECT)
+    .order("name", { ascending: true });
+  if (res && res.error) throw res.error;
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+async function fetchEmployeeSchedules(userId, fromYmd, toYmd) {
+  const uid = String(userId || "").trim();
+  const from = String(fromYmd || "").trim();
+  const to = String(toYmd || "").trim();
+  if (!uid || !from || !to) return [];
+  const client = await dkScheduleAuthClient();
+  const res = await client
+    .from("employee_schedules")
+    .select(DK_EMPLOYEE_SCHEDULE_SELECT)
+    .eq("user_id", uid)
+    .gte("work_date", from)
+    .lte("work_date", to)
+    .order("work_date", { ascending: true });
+  if (res && res.error) throw res.error;
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+async function fetchEmployeeDefaultShiftPeriods(userId) {
+  const uid = String(userId || "").trim();
+  if (!uid) return [];
+  const client = await dkScheduleAuthClient();
+  const res = await client
+    .from("employee_default_shift_periods")
+    .select(DK_EMPLOYEE_DEFAULT_SHIFT_SELECT)
+    .eq("user_id", uid)
+    .order("effective_from", { ascending: false });
+  if (res && res.error) throw res.error;
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+async function setEmployeeDefaultShift(payload) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_set_employee_default_shift", { p_payload: payload || {} })
+  );
+}
+
+async function createAttendanceShiftTemplate(payload) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_create_attendance_shift_template", { p_payload: payload || {} })
+  );
+}
+
+async function updateAttendanceShiftTemplate(payload) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_update_attendance_shift_template", { p_payload: payload || {} })
+  );
+}
+
+async function upsertEmployeeSchedule(payload) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_upsert_employee_schedule", { p_payload: payload || {} })
+  );
+}
+
+async function deleteEmployeeSchedule(id) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_delete_employee_schedule", { p_id: id })
+  );
+}
+
+async function fetchAttendanceLeaveRequests(opts) {
+  const client = await dkScheduleAuthClient();
+  let q = client
+    .from("attendance_leave_requests")
+    .select(DK_LEAVE_REQUEST_SELECT)
+    .order("leave_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(200);
+  const uid = opts && opts.userId ? String(opts.userId).trim() : "";
+  if (uid) q = q.eq("user_id", uid);
+  const status = opts && opts.status ? String(opts.status).trim() : "";
+  if (status) q = q.eq("status", status);
+  const res = await q;
+  if (res && res.error) throw res.error;
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+async function requestAttendanceLeave(payload) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_request_leave", { p_payload: payload || {} })
+  );
+}
+
+async function cancelAttendanceLeaveRequest(id) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_cancel_leave_request", { p_id: id })
+  );
+}
+
+async function approveAttendanceLeaveRequest(id, dayType) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_approve_leave_request", {
+      p_id: id,
+      p_day_type: String(dayType || "").trim(),
+    })
+  );
+}
+
+async function rejectAttendanceLeaveRequest(id) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_reject_leave_request", { p_id: id })
+  );
+}
+
+async function revokeAttendanceLeaveRequest(id) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_revoke_leave_request", { p_id: id })
+  );
+}
+
+async function setEmployeeRestDay(payload) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_set_employee_rest_day", { p_payload: payload || {} })
+  );
+}
+
+async function evaluateAttendanceMonth(userId, monthYmd) {
+  const uid = String(userId || "").trim();
+  const month = String(monthYmd || "").trim();
+  if (!uid || !month) throw new Error("請選擇員工與月份。");
+  const client = await dkScheduleAuthClient();
+  let data = dkScheduleRpcData(
+    await client.rpc("backoffice_attendance_evaluate_month", {
+      p_user_id: uid,
+      p_month: month,
+    })
+  );
+  if (typeof data === "string") {
+    try { data = JSON.parse(data); } catch (_) {}
+  }
+  return data;
+}
+
+async function previewPayrollMonth(userId, monthYmd) {
+  const uid = String(userId || "").trim();
+  const month = String(monthYmd || "").trim();
+  if (!uid || !month) throw new Error("請選擇員工與月份。");
+  const client = await dkScheduleAuthClient();
+  let data = dkScheduleRpcData(
+    await client.rpc("backoffice_payroll_preview_month", {
+      p_user_id: uid,
+      p_month: month,
+    })
+  );
+  if (typeof data === "string") {
+    try { data = JSON.parse(data); } catch (_) {}
+  }
+  return data;
+}
+
+async function fetchOvertimeCandidates(userId, monthYmd) {
+  const uid = String(userId || "").trim();
+  const month = String(monthYmd || "").trim();
+  if (!uid || !month) throw new Error("請選擇員工與月份。");
+  const client = await dkScheduleAuthClient();
+  let data = dkScheduleRpcData(
+    await client.rpc("backoffice_get_overtime_candidates", {
+      p_user_id: uid,
+      p_month: month,
+    })
+  );
+  if (typeof data === "string") {
+    try { data = JSON.parse(data); } catch (_) {}
+  }
+  return data;
+}
+
+async function setOvertimeApproval(payload) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_set_overtime_approval", { p_payload: payload || {} })
+  );
+}
+
+async function getPayrollSettlement(userId, monthYmd) {
+  const uid = String(userId || "").trim();
+  const month = String(monthYmd || "").trim();
+  if (!uid || !month) throw new Error("請選擇員工與月份。");
+  const client = await dkScheduleAuthClient();
+  let data = dkScheduleRpcData(
+    await client.rpc("backoffice_get_payroll_settlement", {
+      p_user_id: uid,
+      p_month: month,
+    })
+  );
+  if (typeof data === "string") {
+    try { data = JSON.parse(data); } catch (_) {}
+  }
+  return data;
+}
+
+async function settlePayrollMonth(userId, monthYmd) {
+  const uid = String(userId || "").trim();
+  const month = String(monthYmd || "").trim();
+  if (!uid || !month) throw new Error("請選擇員工與月份。");
+  const client = await dkScheduleAuthClient();
+  let data = dkScheduleRpcData(
+    await client.rpc("backoffice_settle_payroll_month", {
+      p_user_id: uid,
+      p_month: month,
+    })
+  );
+  if (typeof data === "string") {
+    try { data = JSON.parse(data); } catch (_) {}
+  }
+  return data;
+}
+
+async function fetchAttendanceScheduleCompliance(userId, monthYmd) {
+  const uid = String(userId || "").trim();
+  const month = String(monthYmd || "").trim();
+  if (!uid || !month) return null;
+  const client = await dkScheduleAuthClient();
+  let data = dkScheduleRpcData(
+    await client.rpc("backoffice_attendance_schedule_compliance", {
+      p_user_id: uid,
+      p_month: month,
+    })
+  );
+  if (typeof data === "string") {
+    try { data = JSON.parse(data); } catch (_) {}
+  }
+  return data;
+}
+
+const DK_COMPENSATION_SELECT =
+  "id,user_id,employment_stage,pay_type,monthly_salary,hourly_rate,effective_from,effective_to,note,updated_at";
+
+async function fetchEmployeeCompensationPeriods(userId) {
+  const uid = String(userId || "").trim();
+  if (!uid) return [];
+  const client = await dkScheduleAuthClient();
+  const res = await client
+    .from("employee_compensation_periods")
+    .select(DK_COMPENSATION_SELECT)
+    .eq("user_id", uid)
+    .order("effective_from", { ascending: false });
+  if (res && res.error) throw res.error;
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+async function setEmployeeCompensationPlan(payload) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_set_employee_compensation_plan", { p_payload: payload || {} })
+  );
+}
+
+async function setEmployeeCompensationRaise(payload) {
+  const client = await dkScheduleAuthClient();
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_set_employee_compensation_raise", { p_payload: payload || {} })
+  );
+}
+
 window.DK = {
   STORAGE_KEYS,
   DEFAULT_CONFIG,
@@ -4766,6 +5072,31 @@ window.DK = {
   getSupabaseRestAuthHeaders,
   requireVerifiedAdminCloudAccess,
   requireVerifiedBackofficeCloudAccess,
+  fetchAttendanceShiftTemplates,
+  fetchEmployeeSchedules,
+  fetchEmployeeDefaultShiftPeriods,
+  setEmployeeDefaultShift,
+  createAttendanceShiftTemplate,
+  updateAttendanceShiftTemplate,
+  upsertEmployeeSchedule,
+  deleteEmployeeSchedule,
+  fetchAttendanceLeaveRequests,
+  requestAttendanceLeave,
+  cancelAttendanceLeaveRequest,
+  approveAttendanceLeaveRequest,
+  rejectAttendanceLeaveRequest,
+  revokeAttendanceLeaveRequest,
+  setEmployeeRestDay,
+  evaluateAttendanceMonth,
+  previewPayrollMonth,
+  fetchOvertimeCandidates,
+  setOvertimeApproval,
+  getPayrollSettlement,
+  settlePayrollMonth,
+  fetchAttendanceScheduleCompliance,
+  fetchEmployeeCompensationPeriods,
+  setEmployeeCompensationPlan,
+  setEmployeeCompensationRaise,
   gateBackofficeToolPage,
   revealBackofficeToolRoot,
   // 廠商報價＋叫貨單同步 1.0

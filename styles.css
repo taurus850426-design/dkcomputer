@@ -4854,7 +4854,7 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
 .att-print-table{
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 11px;
 }
 .att-print-table th,
 .att-print-table td{
@@ -5923,6 +5923,117 @@ body.admin-page .att-loc-busy{
 }
 body.admin-page .att-admin-table-wrap{
   overflow-x: auto;
+}
+body.admin-page .att-sched-ops{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+body.admin-page .att-src-default,
+body.admin-page .att-src-exception,
+body.admin-page .att-src-leave{
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 12px;
+}
+body.admin-page #attCompProbFields[hidden]{
+  display: none !important;
+}
+body.admin-page .att-sched-compliance{
+  padding: 10px 12px;
+  border: 1px solid rgba(17,24,39,0.12);
+  border-radius: 8px;
+  background: #fff;
+}
+body.admin-page .att-sched-counts{
+  margin: 6px 0 8px;
+  font-size: 13px;
+}
+body.admin-page .att-sched-alerts{
+  margin: 6px 0 0;
+  padding-left: 1.2em;
+  color: #8a5a00;
+}
+body.admin-page .att-leave-daytype{
+  min-width: 6.5em;
+  margin-right: 6px;
+}
+body.admin-page .att-payroll-review{
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #f0c36a;
+  border-radius: 8px;
+  background: #fff8e8;
+  color: #8a5a00;
+}
+body.admin-page .att-payroll-review.is-ready{
+  border-color: #9ad0a8;
+  background: #f3faf5;
+  color: #1f6b3a;
+}
+body.admin-page .att-payroll-review ul{
+  margin: 6px 0 0;
+  padding-left: 1.2em;
+}
+body.admin-page .att-payroll-code{
+  margin-left: 6px;
+  font-size: 12px;
+  color: #6b7280;
+}
+body.admin-page .att-payroll-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+body.admin-page .att-payroll-card{
+  padding: 10px 12px;
+  border: 1px solid rgba(17,24,39,0.12);
+  border-radius: 8px;
+  background: #fff;
+}
+body.admin-page .att-payroll-daily{
+  margin-top: 16px;
+}
+body.admin-page .att-ot-minutes{
+  width: 5.5em;
+}
+body.admin-page .att-payroll-status{
+  margin-top: 10px;
+  font-weight: 600;
+}
+body.admin-page .att-payroll-status.is-settled{
+  color: #1f6b3a;
+}
+body.admin-page .att-payroll-note{
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.att-payslip-note{
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+body.admin-page .att-payroll-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+@media print{
+  body.att-printing .att-payslip-daily{
+    page-break-before: always;
+  }
+}
+body.admin-page .att-time-24{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+body.admin-page .att-time-24 select{
+  min-width: 4.5em;
 }
 @media (hover: hover) and (pointer: fine){
   body.admin-page .customers-table tbody tr:hover td,

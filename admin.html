@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260903s17" />
+            <link rel="stylesheet" href="./styles.css?v=20260908s18final" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -1661,6 +1661,55 @@
               </div>
             </div>
 
+            <div id="attMyLeave" class="section-card-soft surface-neutral admin-stack-gap">
+              <div class="section-head">
+                <div>
+                  <h3 class="h3 section-title">我的請假 / 排休</h3>
+                  <p class="form-hint">只能申請自己今天之後的日期。待核准可自行取消；已核准需由管理員撤銷。目前僅整日請假。</p>
+                </div>
+              </div>
+              <div class="form-grid" style="margin-top:12px">
+                <div class="field">
+                  <label for="attLeaveDate">日期</label>
+                  <input id="attLeaveDate" type="date" />
+                </div>
+                <div class="field">
+                  <label for="attLeaveType">類型</label>
+                  <select id="attLeaveType">
+                    <option value="REST_DAY">排休</option>
+                    <option value="SICK_LEAVE">病假</option>
+                    <option value="PERSONAL_LEAVE">事假</option>
+                    <option value="ANNUAL_LEAVE">特休</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="attLeaveReason">原因 / 備註（選填）</label>
+                  <input id="attLeaveReason" type="text" maxlength="200" placeholder="選填" />
+                </div>
+                <div class="field" style="display:flex;align-items:flex-end">
+                  <button id="attLeaveSubmit" class="btn btn-primary" type="button">送出申請</button>
+                </div>
+              </div>
+              <p id="attLeaveQuotaHint" class="form-hint" hidden>特休額度尚未自動核算</p>
+              <div id="attLeaveMsg" class="muted" style="margin-top:8px" hidden></div>
+              <div class="table-wrap att-admin-table-wrap" style="margin-top:12px">
+                <table class="table table-compact">
+                  <thead>
+                    <tr>
+                      <th>日期</th>
+                      <th>類型</th>
+                      <th>狀態</th>
+                      <th>申請時間</th>
+                      <th class="table-actions">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attLeaveTbody">
+                    <tr><td colspan="5" class="muted">尚無申請</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <div id="attLocationSettings" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
@@ -1734,6 +1783,472 @@
               <div id="attNetMsg" class="muted" style="margin-top:8px" hidden></div>
             </div>
 
+            <div id="attShiftTemplates" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+              <div class="section-head">
+                <div>
+                  <h3 class="h3 section-title">班別管理</h3>
+                  <p class="form-hint">定義可指定的上班班別。停用後不可再排入新班；不刪除班別。</p>
+                </div>
+                <button id="attTplNew" class="btn btn-primary" type="button">新增班別</button>
+              </div>
+              <div id="attTplMsg" class="muted" style="margin-top:8px" hidden></div>
+              <div class="table-wrap att-admin-table-wrap" style="margin-top:12px">
+                <table class="table table-compact">
+                  <thead>
+                    <tr>
+                      <th>班別名稱</th>
+                      <th>上班時間</th>
+                      <th>下班時間</th>
+                      <th class="table-number">休息（分）</th>
+                      <th>跨午夜</th>
+                      <th class="table-number">遲到寬限</th>
+                      <th class="table-number">早退寬限</th>
+                      <th>狀態</th>
+                      <th class="table-actions">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attTplTbody">
+                    <tr><td colspan="9" class="muted">尚無班別</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="attTplFormCard" class="card" style="margin-top:14px" hidden>
+                <h3 class="h3" id="attTplFormTitle">新增班別</h3>
+                <input type="hidden" id="attTplEditId" value="" />
+                <div class="form-grid" style="margin-top:12px">
+                  <div class="field">
+                    <label for="attTplName">班別名稱</label>
+                    <input id="attTplName" type="text" maxlength="80" autocomplete="off" />
+                  </div>
+                  <div class="field">
+                    <label for="attTplStartH">上班時間（24小時）</label>
+                    <div class="att-time-24">
+                      <select id="attTplStartH" aria-label="上班時"></select>
+                      <span>:</span>
+                      <select id="attTplStartM" aria-label="上班分"></select>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label for="attTplEndH">下班時間（24小時）</label>
+                    <div class="att-time-24">
+                      <select id="attTplEndH" aria-label="下班時"></select>
+                      <span>:</span>
+                      <select id="attTplEndM" aria-label="下班分"></select>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label for="attTplBreak">預計休息分鐘</label>
+                    <input id="attTplBreak" type="number" min="0" max="480" step="1" value="0" />
+                  </div>
+                  <div class="field">
+                    <label for="attTplCross">跨午夜</label>
+                    <select id="attTplCross">
+                      <option value="0">否</option>
+                      <option value="1">是</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="attTplLate">遲到寬限分鐘</label>
+                    <input id="attTplLate" type="number" min="0" max="180" step="1" value="0" />
+                  </div>
+                  <div class="field">
+                    <label for="attTplEarly">早退寬限分鐘</label>
+                    <input id="attTplEarly" type="number" min="0" max="180" step="1" value="0" />
+                  </div>
+                  <div class="field">
+                    <label for="attTplEnabled">啟用</label>
+                    <select id="attTplEnabled">
+                      <option value="1">啟用</option>
+                      <option value="0">停用</option>
+                    </select>
+                  </div>
+                  <div class="field full actions" style="display:flex;flex-wrap:wrap;gap:8px">
+                    <button id="attTplSave" class="btn btn-primary" type="button">儲存班別</button>
+                    <button id="attTplCancel" class="btn btn-ghost" type="button">取消</button>
+                  </div>
+                </div>
+                <div id="attTplFormMsg" class="muted" style="margin-top:8px" hidden></div>
+              </div>
+            </div>
+
+            <div id="attDefaultShift" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+              <div class="section-head">
+                <div>
+                  <h3 class="h3 section-title">員工預設班別</h3>
+                  <p class="form-hint">設定一次即可。沒有單日例外時，系統視為預設上班班別。改新班別會結束前一段，不覆蓋歷史。</p>
+                </div>
+              </div>
+              <div class="form-grid" style="margin-top:12px">
+                <div class="field">
+                  <label for="attDefEmployee">員工</label>
+                  <select id="attDefEmployee">
+                    <option value="">請選擇員工</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="attDefTemplate">預設班別</label>
+                  <select id="attDefTemplate">
+                    <option value="">請選擇班別</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="attDefFrom">生效日期</label>
+                  <input id="attDefFrom" type="date" />
+                </div>
+                <div class="field" style="display:flex;align-items:flex-end">
+                  <button id="attDefSave" class="btn btn-primary" type="button">儲存預設班別</button>
+                </div>
+              </div>
+              <div id="attDefMsg" class="muted" style="margin-top:8px" hidden></div>
+              <div class="att-def-current" style="margin-top:12px">
+                <div class="muted small">目前預設班別</div>
+                <div id="attDefCurrentName" class="att-stat-value">—</div>
+                <div class="att-stat-grid" style="margin-top:8px">
+                  <div class="att-stat">
+                    <div class="muted small">上班時間</div>
+                    <div id="attDefCurrentStart">—</div>
+                  </div>
+                  <div class="att-stat">
+                    <div class="muted small">下班時間</div>
+                    <div id="attDefCurrentEnd">—</div>
+                  </div>
+                  <div class="att-stat">
+                    <div class="muted small">休息分鐘</div>
+                    <div id="attDefCurrentBreak">—</div>
+                  </div>
+                  <div class="att-stat">
+                    <div class="muted small">生效日期</div>
+                    <div id="attDefCurrentFrom">—</div>
+                  </div>
+                </div>
+              </div>
+              <div class="table-wrap att-admin-table-wrap" style="margin-top:12px">
+                <table class="table table-compact">
+                  <thead>
+                    <tr>
+                      <th>班別</th>
+                      <th>上班</th>
+                      <th>下班</th>
+                      <th>起</th>
+                      <th>迄</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attDefHistTbody">
+                    <tr><td colspan="5" class="muted">請選擇員工</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="attMonthlySchedule" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+              <div class="section-head">
+                <div>
+                  <h3 class="h3 section-title">例外排班</h3>
+                  <p class="form-hint">優先順序：單日 OFF／例外上班 &gt; 預設班別。Admin 顯示休息日／例假／國定假日；這是排班檢查，不是薪資計算。</p>
+                </div>
+              </div>
+              <div class="form-grid" style="margin-top:12px">
+                <div class="field">
+                  <label for="attSchedYear">年份</label>
+                  <input id="attSchedYear" type="number" min="2020" max="2100" step="1" />
+                </div>
+                <div class="field">
+                  <label for="attSchedMonth">月份</label>
+                  <select id="attSchedMonth">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                    <option value="11">11</option>
+                    <option value="12">12</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="attSchedEmployee">員工</label>
+                  <select id="attSchedEmployee">
+                    <option value="">請選擇員工</option>
+                  </select>
+                </div>
+                <div class="field" style="display:flex;align-items:flex-end">
+                  <button id="attSchedRefresh" class="btn btn-ghost" type="button">重新整理</button>
+                </div>
+              </div>
+              <div id="attSchedMsg" class="muted" style="margin-top:8px" hidden></div>
+              <div id="attSchedCompliance" class="att-sched-compliance" style="margin-top:10px" hidden></div>
+              <div class="table-wrap att-admin-table-wrap" style="margin-top:12px">
+                <table class="table table-compact">
+                  <thead>
+                    <tr>
+                      <th>日期</th>
+                      <th>星期</th>
+                      <th>目前班別</th>
+                      <th>來源</th>
+                      <th>上班</th>
+                      <th>下班</th>
+                      <th class="table-actions">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attSchedTbody">
+                    <tr><td colspan="7" class="muted">請選擇員工</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="attLeaveAdmin" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+              <div class="section-head">
+                <div>
+                  <h3 class="h3 section-title">請假 / 排休管理</h3>
+                  <p class="form-hint">排休核准時需指定休息日或例假。病假／事假／特休是工作日 overlay，不會改成排休。特休額度尚未自動核算。</p>
+                </div>
+                <button id="attLeaveAdminRefresh" class="btn btn-ghost" type="button">重新整理</button>
+              </div>
+              <div class="form-grid" style="margin-top:12px">
+                <div class="field">
+                  <label for="attLeaveDirectEmployee">員工</label>
+                  <select id="attLeaveDirectEmployee">
+                    <option value="">請選擇員工</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="attLeaveDirectDate">日期</label>
+                  <input id="attLeaveDirectDate" type="date" />
+                </div>
+                <div class="field">
+                  <label for="attLeaveDirectDayType">日別</label>
+                  <select id="attLeaveDirectDayType">
+                    <option value="REST_DAY">休息日</option>
+                    <option value="REGULAR_HOLIDAY">例假</option>
+                  </select>
+                </div>
+                <div class="field" style="display:flex;align-items:flex-end">
+                  <button id="attLeaveDirectBtn" class="btn btn-primary" type="button">直接排休</button>
+                </div>
+              </div>
+              <div id="attLeaveAdminMsg" class="muted" style="margin-top:8px" hidden></div>
+              <div class="table-wrap att-admin-table-wrap" style="margin-top:12px">
+                <table class="table table-compact">
+                  <thead>
+                    <tr>
+                      <th>員工</th>
+                      <th>日期</th>
+                      <th>類型</th>
+                      <th>狀態</th>
+                      <th>原因</th>
+                      <th>申請時間</th>
+                      <th class="table-actions">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attLeaveAdminTbody">
+                    <tr><td colspan="7" class="muted">尚無申請</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="attComp" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+              <div class="section-head">
+                <div>
+                  <h3 class="h3 section-title">薪資設定</h3>
+                  <p class="form-hint">約定薪資（試用期／正式），依生效期間保存歷史。此處不做薪資計算、扣款或加班費。</p>
+                </div>
+              </div>
+              <div class="form-grid" style="margin-top:12px">
+                <div class="field">
+                  <label for="attCompEmployee">員工</label>
+                  <select id="attCompEmployee">
+                    <option value="">請選擇員工</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="attCompHasProbation">是否有試用期</label>
+                  <select id="attCompHasProbation">
+                    <option value="1">有試用期</option>
+                    <option value="0">無試用期，直接正式</option>
+                  </select>
+                </div>
+              </div>
+              <div id="attCompProbFields" class="form-grid" style="margin-top:12px">
+                <div class="field">
+                  <label for="attCompProbFrom">試用開始日</label>
+                  <input id="attCompProbFrom" type="date" />
+                </div>
+                <div class="field">
+                  <label for="attCompProbTo">試用結束日</label>
+                  <input id="attCompProbTo" type="date" />
+                </div>
+                <div class="field">
+                  <label for="attCompProbSalary">試用期月薪（NT$）</label>
+                  <input id="attCompProbSalary" type="number" min="1" step="1" inputmode="numeric" placeholder="例如 30000" />
+                </div>
+              </div>
+              <div class="form-grid" style="margin-top:12px">
+                <div class="field">
+                  <label for="attCompRegFrom">正式生效日</label>
+                  <input id="attCompRegFrom" type="date" />
+                </div>
+                <div class="field">
+                  <label for="attCompRegSalary">正式月薪（NT$）</label>
+                  <input id="attCompRegSalary" type="number" min="1" step="1" inputmode="numeric" placeholder="例如 33000" />
+                </div>
+                <div class="field" style="display:flex;align-items:flex-end">
+                  <button id="attCompSave" class="btn btn-primary" type="button">設定薪資</button>
+                </div>
+              </div>
+              <div class="form-grid" style="margin-top:12px">
+                <div class="field">
+                  <label for="attCompRaiseFrom">調薪生效日</label>
+                  <input id="attCompRaiseFrom" type="date" />
+                </div>
+                <div class="field">
+                  <label for="attCompRaiseSalary">調薪後月薪（NT$）</label>
+                  <input id="attCompRaiseSalary" type="number" min="1" step="1" inputmode="numeric" placeholder="例如 35000" />
+                </div>
+                <div class="field" style="display:flex;align-items:flex-end">
+                  <button id="attCompRaise" class="btn btn-ghost" type="button">調薪</button>
+                </div>
+              </div>
+              <div id="attCompMsg" class="muted" style="margin-top:8px" hidden></div>
+              <div class="att-def-current" style="margin-top:12px">
+                <div class="muted small">目前約定薪資</div>
+                <div id="attCompCurrentStage" class="att-stat-value">—</div>
+                <div class="att-stat-grid" style="margin-top:8px">
+                  <div class="att-stat">
+                    <div class="muted small">目前月薪</div>
+                    <div id="attCompCurrentPay">—</div>
+                  </div>
+                  <div class="att-stat">
+                    <div class="muted small">目前生效日</div>
+                    <div id="attCompCurrentFrom">—</div>
+                  </div>
+                </div>
+              </div>
+              <div class="table-wrap att-admin-table-wrap" style="margin-top:12px">
+                <table class="table table-compact">
+                  <thead>
+                    <tr>
+                      <th>階段</th>
+                      <th>薪資類型</th>
+                      <th>月薪</th>
+                      <th>生效日</th>
+                      <th>結束日</th>
+                      <th>狀態</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attCompHistTbody">
+                    <tr><td colspan="6" class="muted">請選擇員工</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="attPayroll" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+              <div class="section-head">
+                <div>
+                  <h3 class="h3 section-title">薪資預覽</h3>
+                  <p class="form-hint">未結算為即時預覽；已結算為凍結快照。應發薪資尚未扣除勞健保與所得稅。Staff 看不到本區。</p>
+                </div>
+              </div>
+              <div class="form-grid" style="margin-top:12px">
+                <div class="field">
+                  <label for="attPayrollYear">年份</label>
+                  <input id="attPayrollYear" type="number" min="2020" max="2100" step="1" />
+                </div>
+                <div class="field">
+                  <label for="attPayrollMonth">月份</label>
+                  <select id="attPayrollMonth">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                    <option value="11">11</option>
+                    <option value="12">12</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="attPayrollEmployee">員工</label>
+                  <select id="attPayrollEmployee">
+                    <option value="">請選擇員工</option>
+                  </select>
+                </div>
+                <div class="field" style="display:flex;align-items:flex-end">
+                  <button id="attPayrollCalc" class="btn btn-primary" type="button">計算薪資</button>
+                </div>
+              </div>
+              <div id="attPayrollMsg" class="muted" style="margin-top:8px" hidden></div>
+              <div id="attPayrollStatus" class="att-payroll-status" hidden></div>
+              <div id="attPayrollReview" class="att-payroll-review" hidden></div>
+              <div id="attPayrollSummary" hidden></div>
+              <div id="attPayrollActions" class="att-payroll-actions" hidden>
+                <button id="attPayrollSettle" class="btn btn-primary" type="button">確認月結</button>
+                <button id="attPayrollViewDaily" class="btn btn-ghost" type="button">查看薪資明細</button>
+                <button id="attPayrollPrint" class="btn btn-ghost" type="button">列印薪資單</button>
+              </div>
+              <div id="attPayrollDeductions" hidden></div>
+              <div id="attPayrollAdditional" hidden></div>
+              <div id="attPayrollOt" hidden>
+                <h4 class="h4" style="margin-top:16px">待確認加班</h4>
+                <div class="table-wrap att-admin-table-wrap">
+                  <table class="table table-compact">
+                    <thead>
+                      <tr>
+                        <th>日期</th>
+                        <th>類型</th>
+                        <th>預定下班</th>
+                        <th>實際下班</th>
+                        <th>候選分鐘</th>
+                        <th>核准分鐘</th>
+                        <th>狀態</th>
+                        <th class="table-actions">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="attPayrollOtTbody">
+                      <tr><td colspan="8" class="muted">請先計算薪資</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <details id="attPayrollDailyWrap" class="att-payroll-daily" hidden>
+                <summary>每日明細</summary>
+                <div class="table-wrap att-admin-table-wrap" style="margin-top:8px">
+                  <table class="table table-compact">
+                    <thead>
+                      <tr>
+                        <th>日期</th>
+                        <th>日別</th>
+                        <th>預定班別</th>
+                        <th>實際上下班</th>
+                        <th>實際工時</th>
+                        <th>請假</th>
+                        <th>遲到</th>
+                        <th>早退</th>
+                        <th>候選加班</th>
+                        <th>核准加班</th>
+                        <th>扣款</th>
+                        <th>加給</th>
+                        <th>狀態</th>
+                      </tr>
+                    </thead>
+                    <tbody id="attPayrollDailyTbody">
+                      <tr><td colspan="13" class="muted">請先計算薪資</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            </div>
+
             <div id="attAdminManage" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
@@ -1758,7 +2273,7 @@
               </div>
               <div class="card" style="margin-top:14px">
                 <h3 class="h3">月出勤報表</h3>
-                <p class="muted small">A4 友善列印，供薪資袋夾附。不含薪資／時薪／加班費。</p>
+                  <p class="muted small">依預定班表、核准排休與實際打卡判定每日狀態。不含薪資／扣款／加班費。</p>
                 <div class="form-grid" style="margin-top:12px">
                   <div class="field">
                     <label for="attReportYear">年份</label>
@@ -2202,7 +2717,7 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260903s17"></script>
+    <script src="./shared.js?v=20260908s18final"></script>
     <script src="./inventory-ledger.js?v=20260903s17"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
@@ -2210,7 +2725,7 @@
     <script src="./admin3.js?v=20260903s17"></script>
     <script src="./purchase-orders.js?v=20260827po1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./attendance.js?v=20260826ds7"></script>
+    <script src="./attendance.js?v=20260908s18final"></script>
   </body>
 </html>
 
