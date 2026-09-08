@@ -64,6 +64,7 @@
   let lastOtCandidates = [];
   let lastPayrollSettlement = null;
   let lastPayslipHtml = "";
+  let lastAttPane = "clock";
 
   function $(id) {
     return document.getElementById(id);
@@ -1017,8 +1018,12 @@
         return new Date(a.break_start_at) - new Date(b.break_start_at);
       });
       if (!uniq.length) {
-        tbody.innerHTML = '<tr><td colspan="3" class="muted">尚無休息紀錄</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3" class="muted">今日尚無休息紀錄</td></tr>';
+        if ($("attBreakEmpty")) $("attBreakEmpty").hidden = false;
+        if ($("attBreakTableWrap")) $("attBreakTableWrap").hidden = true;
       } else {
+        if ($("attBreakEmpty")) $("attBreakEmpty").hidden = true;
+        if ($("attBreakTableWrap")) $("attBreakTableWrap").hidden = false;
         tbody.innerHTML = uniq.map(function (b) {
           const end = b.break_end_at ? formatTaipeiClock(b.break_end_at) : "進行中";
           const dur = formatDuration(completedBreakMs([b], nowMs, false));
@@ -1229,6 +1234,7 @@
         if ($("attComp")) $("attComp").hidden = true;
         if ($("attPayroll")) $("attPayroll").hidden = true;
       }
+      syncAttendanceChrome();
       try {
         await loadMyLeaveRequests();
         renderMyLeave();
@@ -3543,7 +3549,45 @@
     }
   }
 
+  function applyAttendancePane(name) {
+    const admin = isAdmin();
+    let pane = String(name || "clock");
+    if (!admin && pane !== "clock" && pane !== "leave") pane = "clock";
+    lastAttPane = pane;
+    const panes = document.querySelectorAll("#tab-attendance .att-pane");
+    panes.forEach(function (el) {
+      const match = el.getAttribute("data-att-pane") === pane;
+      const adminOnly = el.hasAttribute("data-admin-only");
+      el.hidden = !match || (adminOnly && !admin);
+    });
+    document.querySelectorAll("#tab-attendance .att-subnav-btn").forEach(function (btn) {
+      btn.classList.toggle("is-active", btn.getAttribute("data-att-pane") === pane);
+    });
+    const page = $("tab-attendance");
+    if (page) {
+      page.classList.toggle("att-role-staff", !admin);
+      page.classList.toggle("att-role-admin", admin);
+    }
+  }
+
+  function syncAttendanceChrome() {
+    const admin = isAdmin();
+    const navAdmin = $("attSubnavAdmin");
+    const navStaff = $("attSubnavStaff");
+    if (navAdmin) navAdmin.hidden = !admin;
+    if (navStaff) navStaff.hidden = admin;
+    applyAttendancePane(lastAttPane || "clock");
+  }
+
   function bind() {
+    const subnav = $("tab-attendance");
+    if (subnav) {
+      subnav.addEventListener("click", function (ev) {
+        const btn = ev.target && ev.target.closest ? ev.target.closest(".att-subnav-btn") : null;
+        if (!btn || !subnav.contains(btn)) return;
+        applyAttendancePane(btn.getAttribute("data-att-pane"));
+      });
+    }
     const cin = $("attBtnClockIn");
     const bs = $("attBtnBreakStart");
     const be = $("attBtnBreakEnd");
@@ -3804,6 +3848,7 @@
     if ($("attLeaveAdmin")) $("attLeaveAdmin").hidden = !admin;
     if ($("attComp")) $("attComp").hidden = !admin;
     if ($("attPayroll")) $("attPayroll").hidden = !admin;
+    syncAttendanceChrome();
     startClock();
     renderClockFace();
     setLocStatus("按下打卡：先驗證公司網路，必要時再請求 GPS。", null);

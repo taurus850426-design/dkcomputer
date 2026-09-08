@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260908s18final" />
+            <link rel="stylesheet" href="./styles.css?v=20260908s18ui1" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -1595,26 +1595,43 @@
           </section>
 
           <!-- Stage 11：員工打卡（admin / staff 皆可；出勤管理與稽核僅 admin） -->
-          <section id="tab-attendance" class="card" hidden>
-            <div class="section-head inv-items-head">
+          <section id="tab-attendance" class="card att-page" hidden>
+            <div class="section-head att-page-head">
               <div>
                 <h2 class="h2 section-title">員工打卡</h2>
-                <p class="form-hint">時間以 Asia/Taipei 顯示。打卡時刻由伺服器決定。</p>
+                <p class="form-hint">管理上下班、排班、請假、出勤與薪資。</p>
               </div>
             </div>
 
-            <div class="section-card att-clock-card ui-enter">
+            <nav id="attSubnavAdmin" class="att-subnav" data-admin-only hidden aria-label="員工打卡管理分頁">
+              <button type="button" class="att-subnav-btn is-active" data-att-pane="clock">打卡總覽</button>
+              <button type="button" class="att-subnav-btn" data-att-pane="schedule">班別排班</button>
+              <button type="button" class="att-subnav-btn" data-att-pane="leave">請假管理</button>
+              <button type="button" class="att-subnav-btn" data-att-pane="report">出勤月報</button>
+              <button type="button" class="att-subnav-btn" data-att-pane="payroll">薪資管理</button>
+            </nav>
+            <nav id="attSubnavStaff" class="att-subnav" hidden aria-label="我的打卡分頁">
+              <button type="button" class="att-subnav-btn is-active" data-att-pane="clock">我的打卡</button>
+              <button type="button" class="att-subnav-btn" data-att-pane="leave">我的請假 / 排休</button>
+            </nav>
+
+            <div id="attPaneClock" class="att-pane" data-att-pane="clock">
+            <div class="section-card att-clock-card attendance-card ui-enter">
+              <div class="attendance-card-header">
+                <h3 class="h3 section-title">今日打卡</h3>
+                <p class="form-hint">時間以 Asia/Taipei 顯示。打卡時刻由伺服器決定。</p>
+              </div>
               <div class="att-clock-head">
                 <div>
-                  <div class="muted small">今日日期</div>
+                  <div class="att-meta-label">今日日期</div>
                   <div id="attTodayDate" class="att-clock-date">—</div>
                 </div>
                 <div>
-                  <div class="muted small">現在時間</div>
+                  <div class="att-meta-label">現在時間</div>
                   <div id="attNowTime" class="att-clock-now">—</div>
                 </div>
                 <div>
-                  <div class="muted small">登入者</div>
+                  <div class="att-meta-label">登入者</div>
                   <div id="attUserName" class="att-clock-user">—</div>
                 </div>
               </div>
@@ -1628,24 +1645,25 @@
               <div id="attMsg" class="muted form-hint" hidden></div>
               <div class="att-stat-grid">
                 <div class="att-stat">
-                  <div class="muted small">今日上班時間</div>
+                  <div class="att-meta-label">今日上班時間</div>
                   <div id="attClockIn" class="att-stat-value">—</div>
                 </div>
                 <div class="att-stat">
-                  <div class="muted small">今日下班時間</div>
+                  <div class="att-meta-label">今日下班時間</div>
                   <div id="attClockOut" class="att-stat-value">—</div>
                 </div>
                 <div class="att-stat">
-                  <div class="muted small">目前狀態</div>
+                  <div class="att-meta-label">目前狀態</div>
                   <div id="attStatus" class="att-stat-value">—</div>
                 </div>
-                <div class="att-stat att-work-kpi">
-                  <div class="muted small">今日實際工作時間</div>
-                  <div id="attWorked" class="att-stat-value text-strong kpi-value">—</div>
+                <div class="att-stat">
+                  <div class="att-meta-label">今日實際工作時間</div>
+                  <div id="attWorked" class="att-stat-value">—</div>
                 </div>
               </div>
-              <h3 class="h3 section-title" style="margin-top:16px">今日休息紀錄</h3>
-              <div class="table-wrap" style="margin-top:8px">
+              <h3 class="h3 section-title att-subhead">今日休息紀錄</h3>
+              <div id="attBreakEmpty" class="att-empty-state">今日尚無休息紀錄</div>
+              <div id="attBreakTableWrap" class="table-wrap att-admin-table-wrap" hidden>
                 <table class="table table-compact">
                   <thead>
                     <tr>
@@ -1655,20 +1673,22 @@
                     </tr>
                   </thead>
                   <tbody id="attBreakTbody">
-                    <tr><td colspan="3" class="muted">尚無休息紀錄</td></tr>
+                    <tr><td colspan="3" class="muted">今日尚無休息紀錄</td></tr>
                   </tbody>
                 </table>
               </div>
             </div>
+            </div>
 
-            <div id="attMyLeave" class="section-card-soft surface-neutral admin-stack-gap">
+            <div id="attPaneLeave" class="att-pane" data-att-pane="leave" hidden>
+            <div id="attMyLeave" class="section-card-soft attendance-card admin-stack-gap">
               <div class="section-head">
                 <div>
                   <h3 class="h3 section-title">我的請假 / 排休</h3>
-                  <p class="form-hint">只能申請自己今天之後的日期。待核准可自行取消；已核准需由管理員撤銷。目前僅整日請假。</p>
+                  <p class="form-hint">申請未來的排休、病假、事假或特休。</p>
                 </div>
               </div>
-              <div class="form-grid" style="margin-top:12px">
+              <div class="form-grid att-leave-form" style="margin-top:12px">
                 <div class="field">
                   <label for="attLeaveDate">日期</label>
                   <input id="attLeaveDate" type="date" />
@@ -1692,6 +1712,7 @@
               </div>
               <p id="attLeaveQuotaHint" class="form-hint" hidden>特休額度尚未自動核算</p>
               <div id="attLeaveMsg" class="muted" style="margin-top:8px" hidden></div>
+              <h4 class="att-card-subtitle">我的申請紀錄</h4>
               <div class="table-wrap att-admin-table-wrap" style="margin-top:12px">
                 <table class="table table-compact">
                   <thead>
@@ -1709,8 +1730,10 @@
                 </table>
               </div>
             </div>
+            </div>
 
-            <div id="attLocationSettings" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+            <div id="attPaneSchedule" class="att-pane" data-att-pane="schedule" hidden data-admin-only>
+            <div id="attLocationSettings" class="section-card-soft attendance-card admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
                   <h3 class="h3 section-title">打卡地點設定</h3>
@@ -1750,7 +1773,7 @@
               <div id="attLocMsg" class="muted" style="margin-top:8px" hidden></div>
             </div>
 
-            <div id="attNetworkSettings" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+            <div id="attNetworkSettings" class="section-card-soft attendance-card admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
                   <h3 class="h3 section-title">公司網路打卡</h3>
@@ -1783,7 +1806,7 @@
               <div id="attNetMsg" class="muted" style="margin-top:8px" hidden></div>
             </div>
 
-            <div id="attShiftTemplates" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+            <div id="attShiftTemplates" class="section-card-soft attendance-card admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
                   <h3 class="h3 section-title">班別管理</h3>
@@ -1871,7 +1894,7 @@
               </div>
             </div>
 
-            <div id="attDefaultShift" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+            <div id="attDefaultShift" class="section-card-soft attendance-card admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
                   <h3 class="h3 section-title">員工預設班別</h3>
@@ -1940,7 +1963,7 @@
               </div>
             </div>
 
-            <div id="attMonthlySchedule" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+            <div id="attMonthlySchedule" class="section-card-soft attendance-card admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
                   <h3 class="h3 section-title">例外排班</h3>
@@ -1980,8 +2003,7 @@
                 </div>
               </div>
               <div id="attSchedMsg" class="muted" style="margin-top:8px" hidden></div>
-              <div id="attSchedCompliance" class="att-sched-compliance" style="margin-top:10px" hidden></div>
-              <div class="table-wrap att-admin-table-wrap" style="margin-top:12px">
+              <div class="table-wrap att-admin-table-wrap att-wide-table" style="margin-top:12px">
                 <table class="table table-compact">
                   <thead>
                     <tr>
@@ -2000,8 +2022,10 @@
                 </table>
               </div>
             </div>
+            </div>
 
-            <div id="attLeaveAdmin" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+            <div id="attPaneLeaveAdmin" class="att-pane" data-att-pane="leave" hidden data-admin-only>
+            <div id="attLeaveAdmin" class="section-card-soft attendance-card admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
                   <h3 class="h3 section-title">請假 / 排休管理</h3>
@@ -2051,8 +2075,10 @@
                 </table>
               </div>
             </div>
+            </div>
 
-            <div id="attComp" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+            <div id="attPanePayroll" class="att-pane" data-att-pane="payroll" hidden data-admin-only>
+            <div id="attComp" class="section-card-soft attendance-card admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
                   <h3 class="h3 section-title">薪資設定</h3>
@@ -2148,7 +2174,7 @@
               </div>
             </div>
 
-            <div id="attPayroll" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+            <div id="attPayroll" class="section-card-soft attendance-card admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
                   <h3 class="h3 section-title">薪資預覽</h3>
@@ -2199,7 +2225,7 @@
               <div id="attPayrollDeductions" hidden></div>
               <div id="attPayrollAdditional" hidden></div>
               <div id="attPayrollOt" hidden>
-                <h4 class="h4" style="margin-top:16px">待確認加班</h4>
+                <h4 class="h4 att-block-title">待確認加班</h4>
                 <div class="table-wrap att-admin-table-wrap">
                   <table class="table table-compact">
                     <thead>
@@ -2248,8 +2274,11 @@
                 </div>
               </details>
             </div>
+            </div>
 
-            <div id="attAdminManage" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+            <div id="attPaneReport" class="att-pane" data-att-pane="report" hidden data-admin-only>
+            <div id="attSchedCompliance" class="att-sched-compliance attendance-card" hidden></div>
+            <div id="attAdminManage" class="section-card-soft attendance-card admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
                   <h3 class="h3 section-title">出勤管理</h3>
@@ -2272,7 +2301,7 @@
                 </div>
               </div>
               <div class="card" style="margin-top:14px">
-                <h3 class="h3">月出勤報表</h3>
+                <h3 class="h3 section-title">出勤月報</h3>
                   <p class="muted small">依預定班表、核准排休與實際打卡判定每日狀態。不含薪資／扣款／加班費。</p>
                 <div class="form-grid" style="margin-top:12px">
                   <div class="field">
@@ -2309,13 +2338,7 @@
                 </div>
                 <div id="attReportMsg" class="muted" style="margin-top:8px" hidden></div>
               </div>
-              <div class="table-wrap att-admin-table-wrap" style="margin-top:12px">
-                <table class="table table-compact">
-                  <thead>
-                    <tr>
-                      <th>員工</th>
-                      <th>日期</th>
-                      <th>上班時間</th>
+              <div class="table-wrap att-admin-table-wrap att-wide-table" style="margin-top:12px">
                       <th>下班時間</th>
                       <th class="table-number">休息時間</th>
                       <th class="table-number">實際工時</th>
@@ -2375,7 +2398,7 @@
               </div>
             </div>
 
-            <div id="attAdminAudit" class="section-card-soft surface-neutral admin-stack-gap" data-admin-only>
+            <div id="attAdminAudit" class="section-card-soft attendance-card admin-stack-gap" data-admin-only>
               <div class="section-head">
                 <div>
                   <h3 class="h3 section-title">出勤稽核</h3>
@@ -2398,6 +2421,7 @@
                   </tbody>
                 </table>
               </div>
+            </div>
             </div>
 
             <div id="attPrintRoot" class="att-print-root" hidden aria-hidden="true">
@@ -2725,7 +2749,7 @@
     <script src="./admin3.js?v=20260903s17"></script>
     <script src="./purchase-orders.js?v=20260827po1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./attendance.js?v=20260908s18final"></script>
+    <script src="./attendance.js?v=20260908s18ui1"></script>
   </body>
 </html>
 
