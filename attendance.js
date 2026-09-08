@@ -65,6 +65,9 @@
   let lastPayrollSettlement = null;
   let lastPayslipHtml = "";
   let lastAttPane = "clock";
+  let leaveCalYear = 0;
+  let leaveCalMonth = 0;
+  let leaveSelectedDates = {};
 
   function $(id) {
     return document.getElementById(id);
@@ -345,6 +348,11 @@
     if (/schedule_conflict|employee_schedules_user_date_uidx/.test(m)) return "該日已有不同類型的排班（例外上班／排休），不可直接覆蓋。";
     if (/cannot request leave for another employee/.test(m)) return "只能替自己提出申請。";
     if (/leave_date must be after today/.test(m)) return "只能申請今天之後的日期。";
+    if (/LEAVE_BATCH_CONFLICT/i.test(raw) || /LEAVE_BATCH_CONFLICT/i.test(m)) {
+      const conflictYmd = leaveBatchConflictYmd(err, raw);
+      if (conflictYmd) return formatLeaveChip(conflictYmd) + " 已有待處理或已核准申請，請取消選取後再送出。";
+      return "所選日期中已有待處理或已核准申請，請取消選取後再送出。";
+    }
     if (/duplicate leave request|attendance_leave_requests_active_uidx/.test(m)) return "同一天已有待核准或已核准的請假／排休。";
     if (/cannot cancel another employee leave/.test(m)) return "只能取消自己的申請。";
     if (/only PENDING leave can be cancelled by staff/.test(m)) return "只能取消待核准的申請。";
@@ -355,7 +363,8 @@
     if (/LEAVE_CONFLICT/.test(m)) return "該日已有衝突的請假或排休，請先處理後再操作。";
     if (/invalid leave_unit/.test(m)) return "目前僅支援整日請假。";
     if (/invalid leave_type/.test(m)) return "請假類型無效。";
-    if (/leave_date required/.test(m)) return "請選擇休假日期。";
+    if (/dates required/.test(m)) return "請先在月曆選擇日期。";
+    if (/too many leave dates/.test(m)) return "一次申請天數過多，請分批送出。";
     if (/id required/.test(m)) return "缺少申請編號。";
     if (/month required/.test(m)) return "請選擇月份。";
     if (/eval arguments required/.test(m)) return "出勤判定參數不完整。";
@@ -371,6 +380,9 @@
     if (/invalid day_type/.test(m)) return "日別無效。請選擇休息日或例假。";
     if (/duplicate key|unique constraint|name_ci_uidx/.test(m)) return "班別名稱已存在。";
     if (/not authenticated|請先登入/.test(m)) return "請先登入後台。";
+    if (/backoffice_request_leave_batch/.test(m)) {
+      return "批次請假尚未就緒，請先執行 supabase-stage18-leave-batch.sql。";
+    }
     if (/attendance_leave_requests|backoffice_request_leave|backoffice_cancel_leave|backoffice_approve_leave|backoffice_reject_leave|backoffice_revoke_leave|backoffice_set_employee_rest/.test(m)) {
       return "排休功能尚未就緒，請先執行 Stage 18-3 SQL。";
     }
@@ -1823,7 +1835,7 @@
     if ($("attSchedMonth")) $("attSchedMonth").value = String(m);
     if ($("attDefFrom") && !$("attDefFrom").value) $("attDefFrom").value = now.ymd;
     const tomorrow = addDaysYmd(now.ymd, 1);
-    if ($("attLeaveDate") && !$("attLeaveDate").value) $("attLeaveDate").value = tomorrow;
+    ensureLeaveCalCursor();
     if ($("attLeaveDirectDate") && !$("attLeaveDirectDate").value) $("attLeaveDirectDate").value = tomorrow;
     if ($("attCompProbFrom") && !$("attCompProbFrom").value) $("attCompProbFrom").value = now.ymd;
     if ($("attCompRaiseFrom") && !$("attCompRaiseFrom").value) $("attCompRaiseFrom").value = now.ymd;
@@ -1850,6 +1862,7 @@
     const d = global.DK || {};
     if (typeof d.fetchAttendanceLeaveRequests !== "function"
         || typeof d.requestAttendanceLeave !== "function"
+        || typeof d.requestAttendanceLeaveBatch !== "function"
         || typeof d.cancelAttendanceLeaveRequest !== "function"
         || typeof d.approveAttendanceLeaveRequest !== "function"
         || typeof d.rejectAttendanceLeaveRequest !== "function"
@@ -3335,7 +3348,133 @@
     adminLeaveRequests = await leaveApi().fetchAttendanceLeaveRequests();
   }
 
+  function leaveBatchConflictYmd(err, raw) {
+    const fromDetails = err && err.details != null ? String(err.details) : "";
+    const blob = fromDetails + " " + String(raw || "");
+    const m = blob.match(/(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : "";
+  }
+
+  function formatLeaveChip(ymd) {
+    const s = ymdKey(ymd);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    return String(Number(s.slice(5, 7))) + "/" + String(Number(s.slice(8, 10)));
+  }
+
+  function ensureLeaveCalCursor() {
+    if (leaveCalYear && leaveCalMonth) return;
+    const now = taipeiYmd(new Date());
+    leaveCalYear = Number(now.slice(0, 4));
+    leaveCalMonth = Number(now.slice(5, 7));
+  }
+
+  function shiftLeaveCalMonth(delta) {
+    ensureLeaveCalCursor();
+    let y = leaveCalYear;
+    let m = leaveCalMonth + Number(delta || 0);
+    while (m < 1) { m += 12; y -= 1; }
+    while (m > 12) { m -= 12; y += 1; }
+    leaveCalYear = y;
+    leaveCalMonth = m;
+    renderLeaveCalendar();
+  }
+
+  function selectedLeaveDates() {
+    return Object.keys(leaveSelectedDates).filter(function (k) {
+      return leaveSelectedDates[k];
+    }).sort();
+  }
+
+  function activeLeaveStatusByDate() {
+    const map = {};
+    (myLeaveRequests || []).forEach(function (r) {
+      if (!r) return;
+      const key = ymdKey(r.leave_date);
+      if (!key) return;
+      if (r.status === "PENDING" || r.status === "APPROVED") map[key] = r.status;
+    });
+    return map;
+  }
+
+  function toggleLeaveDate(ymd) {
+    const key = ymdKey(ymd);
+    if (!key) return;
+    const today = taipeiYmd(new Date());
+    if (key <= today) return;
+    const blocked = activeLeaveStatusByDate();
+    if (blocked[key] === "PENDING" || blocked[key] === "APPROVED") return;
+    if (leaveSelectedDates[key]) delete leaveSelectedDates[key];
+    else leaveSelectedDates[key] = true;
+    renderLeaveCalendar();
+  }
+
+  function syncLeaveSelectionUi() {
+    const dates = selectedLeaveDates();
+    const summary = $("attLeaveSelectedSummary");
+    if (summary) summary.textContent = "已選 " + dates.length + " 天";
+    const chips = $("attLeaveSelectedChips");
+    if (chips) {
+      chips.innerHTML = dates.map(function (ymd) {
+        return '<button type="button" class="att-leave-chip" data-ymd="' + esc(ymd) + '">' +
+          esc(formatLeaveChip(ymd)) + " ×</button>";
+      }).join("");
+    }
+    const btn = $("attLeaveSubmit");
+    if (btn) {
+      btn.textContent = dates.length ? ("送出 " + dates.length + " 天申請") : "送出申請";
+      btn.disabled = dates.length === 0;
+    }
+  }
+
+  function renderLeaveCalendar() {
+    ensureLeaveCalCursor();
+    const title = $("attLeaveCalTitle");
+    if (title) title.textContent = leaveCalYear + "/" + pad2(leaveCalMonth);
+    const grid = $("attLeaveCalGrid");
+    if (!grid) {
+      syncLeaveSelectionUi();
+      return;
+    }
+    const today = taipeiYmd(new Date());
+    const blocked = activeLeaveStatusByDate();
+    const first = leaveCalYear + "-" + pad2(leaveCalMonth) + "-01";
+    const lead = new Date(first + "T12:00:00+08:00").getUTCDay();
+    const dim = daysInMonthNum(leaveCalYear, leaveCalMonth);
+    const cells = [];
+    let i;
+    for (i = 0; i < lead; i += 1) cells.push('<div class="att-leave-cal-blank"></div>');
+    for (i = 1; i <= dim; i += 1) {
+      const ymd = leaveCalYear + "-" + pad2(leaveCalMonth) + "-" + pad2(i);
+      const status = blocked[ymd] || "";
+      const isPastOrToday = ymd <= today;
+      const isBlocked = status === "PENDING" || status === "APPROVED";
+      const selectable = !isPastOrToday && !isBlocked;
+      const selected = !!leaveSelectedDates[ymd];
+      const cls = ["att-leave-cal-cell"];
+      if (ymd === today) cls.push("is-today");
+      if (isPastOrToday) cls.push("is-disabled");
+      if (isBlocked) cls.push("is-blocked");
+      if (selected && selectable) cls.push("is-selected");
+      let dot = "";
+      if (status === "PENDING") dot = '<span class="att-leave-cal-dot is-pending" aria-hidden="true"></span>';
+      else if (status === "APPROVED") dot = '<span class="att-leave-cal-dot is-approved" aria-hidden="true"></span>';
+      const label = isBlocked
+        ? (status === "PENDING" ? "已有待核准申請" : "已核准")
+        : (isPastOrToday ? "不可申請" : (selected ? "已選取" : "可申請"));
+      cells.push(
+        '<button type="button" class="' + cls.join(" ") + '" data-ymd="' + esc(ymd) + '"' +
+        (selectable ? "" : " disabled") +
+        ' aria-pressed="' + (selected && selectable ? "true" : "false") + '"' +
+        ' aria-label="' + esc(ymd.replace(/-/g, "/") + " " + label) + '">' +
+        i + dot + "</button>"
+      );
+    }
+    grid.innerHTML = cells.join("");
+    syncLeaveSelectionUi();
+  }
+
   function renderMyLeave() {
+    renderLeaveCalendar();
     const tbody = $("attLeaveTbody");
     if (!tbody) return;
     const rows = sortLeaveRows(myLeaveRequests);
@@ -3421,11 +3560,11 @@
 
   async function submitMyLeave() {
     if (leaveBusy) return;
-    const ymd = String(($("attLeaveDate") && $("attLeaveDate").value) || "").trim();
+    const dates = selectedLeaveDates();
     const type = String(($("attLeaveType") && $("attLeaveType").value) || "").trim() || "REST_DAY";
     const reason = String(($("attLeaveReason") && $("attLeaveReason").value) || "").trim();
-    if (!ymd) {
-      showMsg($("attLeaveMsg"), "請選擇日期。", true);
+    if (!dates.length) {
+      showMsg($("attLeaveMsg"), "請先在月曆選擇日期。", true);
       return;
     }
     if (type !== "REST_DAY" && !isWorkdayLeaveType(type)) {
@@ -3435,12 +3574,14 @@
     leaveBusy = true;
     showMsg($("attLeaveMsg"), "送出中…", false);
     try {
-      const payload = { leave_date: ymd, leave_type: type };
+      const payload = { dates: dates, leave_type: type };
       if (reason) payload.reason = reason;
-      await leaveApi().requestAttendanceLeave(payload);
-      await refreshAfterLeaveChange();
+      await leaveApi().requestAttendanceLeaveBatch(payload);
+      leaveSelectedDates = {};
       if ($("attLeaveReason")) $("attLeaveReason").value = "";
-      showMsg($("attLeaveMsg"), "已送出申請。", false);
+      await refreshAfterLeaveChange();
+      renderLeaveCalendar();
+      showMsg($("attLeaveMsg"), "已送出 " + dates.length + " 天申請", false);
     } catch (e) {
       showMsg($("attLeaveMsg"), mapRpcError(e), true);
     } finally {
@@ -3782,6 +3923,26 @@
 
     const leaveSubmit = $("attLeaveSubmit");
     if (leaveSubmit) leaveSubmit.addEventListener("click", function () { submitMyLeave(); });
+    const leaveCalPrev = $("attLeaveCalPrev");
+    if (leaveCalPrev) leaveCalPrev.addEventListener("click", function () { shiftLeaveCalMonth(-1); });
+    const leaveCalNext = $("attLeaveCalNext");
+    if (leaveCalNext) leaveCalNext.addEventListener("click", function () { shiftLeaveCalMonth(1); });
+    const leaveCalGrid = $("attLeaveCalGrid");
+    if (leaveCalGrid) {
+      leaveCalGrid.addEventListener("click", function (ev) {
+        const cell = ev.target && ev.target.closest ? ev.target.closest(".att-leave-cal-cell") : null;
+        if (!cell || cell.disabled || !leaveCalGrid.contains(cell)) return;
+        toggleLeaveDate(cell.getAttribute("data-ymd"));
+      });
+    }
+    const leaveChips = $("attLeaveSelectedChips");
+    if (leaveChips) {
+      leaveChips.addEventListener("click", function (ev) {
+        const chip = ev.target && ev.target.closest ? ev.target.closest(".att-leave-chip") : null;
+        if (!chip || !leaveChips.contains(chip)) return;
+        toggleLeaveDate(chip.getAttribute("data-ymd"));
+      });
+    }
     const leaveType = $("attLeaveType");
     if (leaveType) {
       leaveType.addEventListener("change", function () { syncLeaveQuotaHint(); });

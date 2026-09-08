@@ -4787,6 +4787,20 @@ async function requestAttendanceLeave(payload) {
   );
 }
 
+async function requestAttendanceLeaveBatch(payload) {
+  const client = await dkScheduleAuthClient();
+  const body = payload && typeof payload === "object" ? payload : {};
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_request_leave_batch", {
+      p_payload: {
+        dates: Array.isArray(body.dates) ? body.dates : [],
+        leave_type: body.leave_type,
+        reason: body.reason,
+      },
+    })
+  );
+}
+
 async function cancelAttendanceLeaveRequest(id) {
   const client = await dkScheduleAuthClient();
   return dkScheduleRpcData(
@@ -5082,6 +5096,7 @@ window.DK = {
   deleteEmployeeSchedule,
   fetchAttendanceLeaveRequests,
   requestAttendanceLeave,
+  requestAttendanceLeaveBatch,
   cancelAttendanceLeaveRequest,
   approveAttendanceLeaveRequest,
   rejectAttendanceLeaveRequest,

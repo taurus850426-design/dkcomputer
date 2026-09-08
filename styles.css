@@ -7149,6 +7149,169 @@ body.admin-page #tab-accounts .table-actions{
   #tab-attendance .att-leave-form{
     grid-template-columns: 1fr;
   }
+  #tab-attendance .att-leave-submit-field{
+    align-items: stretch;
+  }
+  #tab-attendance .att-leave-submit-field .btn{
+    width: 100%;
+  }
+}
+
+/* Admin 請假管理：操作欄不可被 table overflow:hidden / 100% width 裁切 */
+#tab-attendance #attLeaveAdmin,
+#tab-attendance #attPaneLeaveAdmin{
+  overflow: visible;
+}
+#tab-attendance #attLeaveAdmin .att-leave-admin-wrap{
+  overflow-x: auto;
+  overflow-y: visible;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+#tab-attendance #attLeaveAdmin .att-leave-admin-table{
+  width: 100%;
+  min-width: 980px;
+  overflow: visible;
+  table-layout: auto;
+}
+#tab-attendance #attLeaveAdmin .att-leave-admin-table th.table-actions,
+#tab-attendance #attLeaveAdmin .att-leave-admin-table td.table-actions{
+  white-space: nowrap;
+  min-width: 268px;
+  width: 1%;
+  vertical-align: middle;
+  text-align: right;
+}
+#tab-attendance #attLeaveAdmin .att-leave-admin-table td.table-actions .btn,
+#tab-attendance #attLeaveAdmin .att-leave-admin-table td.table-actions .att-leave-daytype{
+  display: inline-flex;
+  vertical-align: middle;
+  overflow: visible;
+}
+
+/* Staff 請假月曆（僅 #tab-attendance） */
+#tab-attendance .att-leave-cal-wrap{
+  background: #fff;
+  border: 1px solid rgba(17,24,39,0.10);
+  border-radius: 12px;
+  padding: 12px;
+}
+#tab-attendance .att-leave-cal-nav{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+#tab-attendance .att-leave-cal-title{
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+#tab-attendance .att-leave-cal-weekdays,
+#tab-attendance .att-leave-cal-grid{
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+#tab-attendance .att-leave-cal-weekdays{
+  margin-bottom: 6px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b7280;
+}
+#tab-attendance .att-leave-cal-cell,
+#tab-attendance .att-leave-cal-blank{
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+}
+#tab-attendance .att-leave-cal-cell{
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  padding: 0 0 8px;
+}
+#tab-attendance .att-leave-cal-cell:hover:not(:disabled){
+  background: #f3f4f6;
+}
+#tab-attendance .att-leave-cal-cell.is-today{
+  box-shadow: inset 0 0 0 1.5px rgba(29,78,216,0.45);
+}
+#tab-attendance .att-leave-cal-cell.is-selected{
+  background: #1d4ed8;
+  color: #fff;
+}
+#tab-attendance .att-leave-cal-cell.is-selected:hover:not(:disabled){
+  background: #1e40af;
+}
+#tab-attendance .att-leave-cal-cell:disabled,
+#tab-attendance .att-leave-cal-cell.is-disabled{
+  color: #9ca3af;
+  cursor: not-allowed;
+  background: transparent;
+}
+#tab-attendance .att-leave-cal-cell.is-blocked{
+  cursor: not-allowed;
+  color: #6b7280;
+}
+#tab-attendance .att-leave-cal-dot{
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+#tab-attendance .att-leave-cal-dot.is-pending{ background: #f59e0b; }
+#tab-attendance .att-leave-cal-dot.is-approved{ background: #16a34a; }
+#tab-attendance .att-leave-selected{
+  margin: 10px 0 4px;
+}
+#tab-attendance .att-leave-selected-summary{
+  font-size: 13px;
+  font-weight: 650;
+  color: #374151;
+  margin-bottom: 6px;
+}
+#tab-attendance .att-leave-chips{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+#tab-attendance .att-leave-chip{
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 4px 8px 4px 10px;
+  border: 1px solid rgba(17,24,39,0.12);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+}
+#tab-attendance .att-leave-chip:hover{
+  background: #f8fafc;
+}
+#tab-attendance .att-leave-form{
+  margin-top: 12px;
+  align-items: end;
+}
+#tab-attendance .att-leave-submit-field{
+  display: flex;
+  align-items: flex-end;
 }
 
 

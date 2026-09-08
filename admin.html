@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260908s18ui1" />
+            <link rel="stylesheet" href="./styles.css?v=20260908s18ui2" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -1685,16 +1685,27 @@
               <div class="section-head">
                 <div>
                   <h3 class="h3 section-title">我的請假 / 排休</h3>
-                  <p class="form-hint">申請未來的排休、病假、事假或特休。</p>
+                  <p class="form-hint">在月曆點選多個未來日期，同一假別一次送出。今天與過去日期不可申請。</p>
                 </div>
               </div>
-              <div class="form-grid att-leave-form" style="margin-top:12px">
-                <div class="field">
-                  <label for="attLeaveDate">日期</label>
-                  <input id="attLeaveDate" type="date" />
+              <div class="att-leave-cal-wrap" style="margin-top:12px">
+                <div class="att-leave-cal-nav">
+                  <button id="attLeaveCalPrev" class="btn btn-ghost btn-sm" type="button">上個月</button>
+                  <div id="attLeaveCalTitle" class="att-leave-cal-title">—</div>
+                  <button id="attLeaveCalNext" class="btn btn-ghost btn-sm" type="button">下個月</button>
                 </div>
+                <div class="att-leave-cal-weekdays" aria-hidden="true">
+                  <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+                </div>
+                <div id="attLeaveCalGrid" class="att-leave-cal-grid" role="grid" aria-label="請假日期月曆"></div>
+              </div>
+              <div class="att-leave-selected">
+                <div id="attLeaveSelectedSummary" class="att-leave-selected-summary">已選 0 天</div>
+                <div id="attLeaveSelectedChips" class="att-leave-chips"></div>
+              </div>
+              <div class="form-grid att-leave-form">
                 <div class="field">
-                  <label for="attLeaveType">類型</label>
+                  <label for="attLeaveType">假別</label>
                   <select id="attLeaveType">
                     <option value="REST_DAY">排休</option>
                     <option value="SICK_LEAVE">病假</option>
@@ -1706,7 +1717,7 @@
                   <label for="attLeaveReason">原因 / 備註（選填）</label>
                   <input id="attLeaveReason" type="text" maxlength="200" placeholder="選填" />
                 </div>
-                <div class="field" style="display:flex;align-items:flex-end">
+                <div class="field att-leave-submit-field">
                   <button id="attLeaveSubmit" class="btn btn-primary" type="button">送出申請</button>
                 </div>
               </div>
@@ -2056,8 +2067,8 @@
                 </div>
               </div>
               <div id="attLeaveAdminMsg" class="muted" style="margin-top:8px" hidden></div>
-              <div class="table-wrap att-admin-table-wrap" style="margin-top:12px">
-                <table class="table table-compact">
+              <div class="table-wrap att-admin-table-wrap att-leave-admin-wrap" style="margin-top:12px">
+                <table class="table table-compact att-leave-admin-table">
                   <thead>
                     <tr>
                       <th>員工</th>
@@ -2741,7 +2752,7 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260908s18final"></script>
+    <script src="./shared.js?v=20260908s18ui2"></script>
     <script src="./inventory-ledger.js?v=20260903s17"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
@@ -2749,7 +2760,7 @@
     <script src="./admin3.js?v=20260903s17"></script>
     <script src="./purchase-orders.js?v=20260827po1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./attendance.js?v=20260908s18ui1"></script>
+    <script src="./attendance.js?v=20260908s18ui2"></script>
   </body>
 </html>
 
