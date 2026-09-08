@@ -7313,5 +7313,144 @@ body.admin-page #tab-accounts .table-actions{
   display: flex;
   align-items: flex-end;
 }
+#tab-attendance .att-leave-hist-badge{
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+#tab-attendance .att-hist-leave-form{
+  align-items: end;
+}
+@media (max-width: 640px){
+  #tab-attendance .att-hist-leave-form{
+    grid-template-columns: 1fr;
+  }
+}
+
+#tab-attendance.att-emp-open #attSubnavAdmin .att-subnav-btn{
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+#tab-attendance .att-people-card{
+  padding-bottom: 12px;
+}
+#tab-attendance .att-people-table{
+  min-width: 880px;
+}
+#tab-attendance .att-emp-chrome{
+  background: #fff;
+  border: 1px solid rgba(17,24,39,0.10);
+  border-radius: 12px;
+  padding: 14px 16px 12px;
+}
+#tab-attendance .att-people-toolbar{
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 200px;
+  gap: 12px;
+  margin: 12px 0;
+  align-items: end;
+}
+#tab-attendance .att-people-table-wrap{
+  overflow-x: auto;
+}
+#tab-attendance .att-people-table td,
+#tab-attendance .att-people-table th{
+  white-space: nowrap;
+}
+#tab-attendance .att-emp-chrome{
+  margin-bottom: 12px;
+}
+#tab-attendance .att-emp-back{
+  margin-bottom: 10px;
+}
+#tab-attendance .att-emp-head{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-bottom: 12px;
+}
+#tab-attendance .att-emp-head .section-title{
+  margin: 0 8px 0 0;
+}
+#tab-attendance .att-emp-shift-meta{
+  font-size: 13px;
+}
+#tab-attendance .att-emp-subnav{
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+#tab-attendance .att-emp-tab-btn{
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid rgba(17,24,39,0.12);
+  border-radius: 10px;
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#tab-attendance .att-emp-tab-btn.is-active{
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+#tab-attendance .att-emp-ov-today{
+  margin-top: 12px;
+}
+@media (max-width: 800px){
+  #tab-attendance .att-people-toolbar{
+    grid-template-columns: 1fr;
+  }
+  #tab-attendance .att-people-table{
+    min-width: 0;
+  }
+  #tab-attendance .att-people-table thead{
+    display: none;
+  }
+  #tab-attendance .att-people-table,
+  #tab-attendance .att-people-table tbody,
+  #tab-attendance .att-people-table tr,
+  #tab-attendance .att-people-table td{
+    display: block;
+    width: 100%;
+  }
+  #tab-attendance .att-people-table tr{
+    background: #fff;
+    border: 1px solid rgba(17,24,39,0.10);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+  #tab-attendance .att-people-table td{
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    white-space: normal;
+    padding: 6px 0;
+    border: 0;
+  }
+  #tab-attendance .att-people-table td::before{
+    content: attr(data-label);
+    color: #6b7280;
+    font-size: 12px;
+    font-weight: 600;
+    flex: 0 0 auto;
+  }
+  #tab-attendance .att-people-table td.table-actions{
+    justify-content: flex-end;
+  }
+}
 
 

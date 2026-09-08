@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260908s18ui2" />
+            <link rel="stylesheet" href="./styles.css?v=20260909s19a1" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -1599,21 +1599,109 @@
             <div class="section-head att-page-head">
               <div>
                 <h2 class="h2 section-title">員工打卡</h2>
-                <p class="form-hint">管理上下班、排班、請假、出勤與薪資。</p>
+                <p class="form-hint">查看員工今日狀態、班別、出勤與請假。</p>
               </div>
             </div>
 
             <nav id="attSubnavAdmin" class="att-subnav" data-admin-only hidden aria-label="員工打卡管理分頁">
-              <button type="button" class="att-subnav-btn is-active" data-att-pane="clock">打卡總覽</button>
-              <button type="button" class="att-subnav-btn" data-att-pane="schedule">班別排班</button>
+              <button type="button" class="att-subnav-btn is-active" data-att-pane="people">員工總覽</button>
+              <button type="button" class="att-subnav-btn" data-att-pane="schedule">班別設定</button>
               <button type="button" class="att-subnav-btn" data-att-pane="leave">請假管理</button>
               <button type="button" class="att-subnav-btn" data-att-pane="report">出勤月報</button>
-              <button type="button" class="att-subnav-btn" data-att-pane="payroll">薪資管理</button>
             </nav>
             <nav id="attSubnavStaff" class="att-subnav" hidden aria-label="我的打卡分頁">
               <button type="button" class="att-subnav-btn is-active" data-att-pane="clock">我的打卡</button>
               <button type="button" class="att-subnav-btn" data-att-pane="leave">我的請假 / 排休</button>
             </nav>
+
+            <div id="attPanePeople" class="att-pane" data-att-pane="people" hidden data-admin-only>
+              <div id="attPeopleHome">
+                <div class="section-card-soft attendance-card att-people-card">
+                  <div class="section-head">
+                    <div>
+                      <h3 class="h3 section-title">員工管理</h3>
+                      <p class="form-hint">查看員工今日狀態、班別、出勤與請假。</p>
+                    </div>
+                  </div>
+                  <div class="att-people-toolbar">
+                    <label class="field att-people-search-field">
+                      <span class="att-meta-label">搜尋</span>
+                      <input id="attPeopleSearch" type="search" placeholder="搜尋姓名" autocomplete="off" />
+                    </label>
+                    <label class="field">
+                      <span class="att-meta-label">狀態</span>
+                      <select id="attPeopleStatusFilter">
+                        <option value="">全部狀態</option>
+                        <option value="尚未上班">尚未上班</option>
+                        <option value="上班中">上班中</option>
+                        <option value="休息中">休息中</option>
+                        <option value="已下班">已下班</option>
+                        <option value="今日排休">今日排休</option>
+                        <option value="今日請假">今日請假</option>
+                        <option value="未排班">未排班</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="table-wrap att-admin-table-wrap att-people-table-wrap">
+                    <table class="table table-compact att-people-table">
+                      <thead>
+                        <tr>
+                          <th>員工</th>
+                          <th>今日狀態</th>
+                          <th>今日班別</th>
+                          <th>上班時間</th>
+                          <th>下班時間</th>
+                          <th>本月狀態</th>
+                          <th>待處理請假</th>
+                          <th class="table-actions">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody id="attPeopleTbody">
+                        <tr><td colspan="8" class="muted">載入中…</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <div id="attEmpDetail" hidden>
+                <div class="att-emp-chrome attendance-card">
+                  <button id="attEmpBack" class="btn btn-ghost btn-sm att-emp-back" type="button">← 返回員工總覽</button>
+                  <div class="att-emp-head">
+                    <h3 id="attEmpName" class="h3 section-title">—</h3>
+                    <span id="attEmpEnabledBadge" class="status-badge status-success">在職</span>
+                    <span id="attEmpTodayBadge" class="status-badge status-muted">—</span>
+                    <span id="attEmpShiftMeta" class="att-emp-shift-meta muted">—</span>
+                  </div>
+                  <nav id="attEmpSubnav" class="att-emp-subnav" aria-label="員工資料分頁">
+                    <button type="button" class="att-emp-tab-btn is-active" data-att-emp-tab="overview">概況</button>
+                    <button type="button" class="att-emp-tab-btn" data-att-emp-tab="attendance">出勤</button>
+                    <button type="button" class="att-emp-tab-btn" data-att-emp-tab="leave">請假</button>
+                    <button type="button" class="att-emp-tab-btn" data-att-emp-tab="payroll">薪資</button>
+                  </nav>
+                </div>
+                <div id="attEmpOverview" class="section-card-soft attendance-card">
+                  <h3 class="h3 section-title">概況</h3>
+                  <div class="att-stat-grid att-emp-ov-today">
+                    <div class="att-stat"><div class="att-meta-label">今日狀態</div><div id="attEmpOvStatus">—</div></div>
+                    <div class="att-stat"><div class="att-meta-label">今日班別</div><div id="attEmpOvShift">—</div></div>
+                    <div class="att-stat"><div class="att-meta-label">今日上班</div><div id="attEmpOvIn">—</div></div>
+                    <div class="att-stat"><div class="att-meta-label">今日下班</div><div id="attEmpOvOut">—</div></div>
+                  </div>
+                  <h4 class="att-card-subtitle">本月</h4>
+                  <div class="att-stat-grid">
+                    <div class="att-stat"><div class="att-meta-label">出勤天數</div><div id="attEmpOvWorkDays">—</div></div>
+                    <div class="att-stat"><div class="att-meta-label">排休天數</div><div id="attEmpOvRest">—</div></div>
+                    <div class="att-stat"><div class="att-meta-label">病假</div><div id="attEmpOvSick">—</div></div>
+                    <div class="att-stat"><div class="att-meta-label">事假</div><div id="attEmpOvPersonal">—</div></div>
+                    <div class="att-stat"><div class="att-meta-label">特休</div><div id="attEmpOvAnnual">—</div></div>
+                    <div class="att-stat"><div class="att-meta-label">遲到分鐘</div><div id="attEmpOvLate">—</div></div>
+                    <div class="att-stat"><div class="att-meta-label">早退分鐘</div><div id="attEmpOvEarly">—</div></div>
+                  </div>
+                  <h4 class="att-card-subtitle">目前預設班別</h4>
+                  <div id="attEmpOvDefaultShift" class="att-stat-value">—</div>
+                </div>
+              </div>
+            </div>
 
             <div id="attPaneClock" class="att-pane" data-att-pane="clock">
             <div class="section-card att-clock-card attendance-card ui-enter">
@@ -2086,6 +2174,47 @@
                 </table>
               </div>
             </div>
+
+            <div id="attHistoricalLeave" class="section-card-soft attendance-card admin-stack-gap" data-admin-only>
+              <div class="section-head">
+                <div>
+                  <h3 class="h3 section-title">補登歷史請假</h3>
+                  <p class="form-hint">補登今天以前的病假／事假／特休。不會改班表，也不會刪除打卡。已月結月份不可補登。</p>
+                </div>
+              </div>
+              <div class="form-grid att-hist-leave-form" style="margin-top:12px">
+                <div class="field">
+                  <label for="attHistoricalLeaveEmployee">員工</label>
+                  <select id="attHistoricalLeaveEmployee">
+                    <option value="">請選擇員工</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="attHistoricalLeaveDate">日期</label>
+                  <input id="attHistoricalLeaveDate" type="date" />
+                </div>
+                <div class="field">
+                  <label for="attHistoricalLeaveType">假別</label>
+                  <select id="attHistoricalLeaveType">
+                    <option value="SICK_LEAVE">病假</option>
+                    <option value="PERSONAL_LEAVE">事假</option>
+                    <option value="ANNUAL_LEAVE">特休</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="attHistoricalLeaveReason">原因 / 備註（選填）</label>
+                  <input id="attHistoricalLeaveReason" type="text" maxlength="200" placeholder="員工原始請假原因，選填" />
+                </div>
+                <div class="field full">
+                  <label for="attHistoricalLeaveNote">補登原因</label>
+                  <input id="attHistoricalLeaveNote" type="text" maxlength="200" placeholder="例如：員工 9/7 臨時病假，9/9 補登" />
+                </div>
+                <div class="field att-leave-submit-field">
+                  <button id="attHistoricalLeaveBtn" class="btn btn-primary" type="button">確認補登</button>
+                </div>
+              </div>
+              <div id="attHistoricalLeaveMsg" class="muted" style="margin-top:8px" hidden></div>
+            </div>
             </div>
 
             <div id="attPanePayroll" class="att-pane" data-att-pane="payroll" hidden data-admin-only>
@@ -2311,7 +2440,7 @@
                   <button id="attAdminRefresh" class="btn btn-ghost" type="button">重新整理</button>
                 </div>
               </div>
-              <div class="card" style="margin-top:14px">
+              <div class="card att-global-report-block" style="margin-top:14px">
                 <h3 class="h3 section-title">出勤月報</h3>
                   <p class="muted small">依預定班表、核准排休與實際打卡判定每日狀態。不含薪資／扣款／加班費。</p>
                 <div class="form-grid" style="margin-top:12px">
@@ -2350,6 +2479,12 @@
                 <div id="attReportMsg" class="muted" style="margin-top:8px" hidden></div>
               </div>
               <div class="table-wrap att-admin-table-wrap att-wide-table" style="margin-top:12px">
+                <table class="table table-compact">
+                  <thead>
+                    <tr>
+                      <th>員工</th>
+                      <th>日期</th>
+                      <th>上班時間</th>
                       <th>下班時間</th>
                       <th class="table-number">休息時間</th>
                       <th class="table-number">實際工時</th>
@@ -2752,7 +2887,7 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260908s18ui2"></script>
+    <script src="./shared.js?v=20260909s19a1"></script>
     <script src="./inventory-ledger.js?v=20260903s17"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
@@ -2760,7 +2895,7 @@
     <script src="./admin3.js?v=20260903s17"></script>
     <script src="./purchase-orders.js?v=20260827po1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./attendance.js?v=20260908s18ui2"></script>
+    <script src="./attendance.js?v=20260909s19a1"></script>
   </body>
 </html>
 

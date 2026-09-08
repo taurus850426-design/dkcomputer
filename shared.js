@@ -4665,7 +4665,7 @@ const DK_EMPLOYEE_SCHEDULE_SELECT =
 const DK_EMPLOYEE_DEFAULT_SHIFT_SELECT =
   "id,user_id,shift_template_id,effective_from,effective_to,shift_name_snapshot,scheduled_start_time,scheduled_end_time,scheduled_break_minutes,scheduled_cross_midnight,scheduled_late_grace_minutes,scheduled_early_leave_grace_minutes,updated_at";
 const DK_LEAVE_REQUEST_SELECT =
-  "id,user_id,leave_date,leave_type,status,reason,created_at,updated_at,approved_by,approved_at,rejected_by,rejected_at,cancelled_by,cancelled_at";
+  "id,user_id,leave_date,leave_type,status,reason,created_at,updated_at,approved_by,approved_at,rejected_by,rejected_at,cancelled_by,cancelled_at,entry_source,historical_entry_reason,created_by";
 
 function dkScheduleGateBackoffice() {
   if (typeof requireVerifiedBackofficeCloudAccess === "function") {
@@ -4836,6 +4836,22 @@ async function setEmployeeRestDay(payload) {
   const client = await dkScheduleAuthClient();
   return dkScheduleRpcData(
     await client.rpc("backoffice_set_employee_rest_day", { p_payload: payload || {} })
+  );
+}
+
+async function createHistoricalLeave(payload) {
+  const client = await dkScheduleAuthClient();
+  const body = payload && typeof payload === "object" ? payload : {};
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_create_historical_leave", {
+      p_payload: {
+        user_id: body.user_id,
+        leave_date: body.leave_date,
+        leave_type: body.leave_type,
+        reason: body.reason,
+        historical_reason: body.historical_reason,
+      },
+    })
   );
 }
 
@@ -5102,6 +5118,7 @@ window.DK = {
   rejectAttendanceLeaveRequest,
   revokeAttendanceLeaveRequest,
   setEmployeeRestDay,
+  createHistoricalLeave,
   evaluateAttendanceMonth,
   previewPayrollMonth,
   fetchOvertimeCandidates,
