@@ -4855,6 +4855,25 @@ async function createHistoricalLeave(payload) {
   );
 }
 
+async function createHistoricalSchedules(payload) {
+  const client = await dkScheduleAuthClient();
+  const body = payload && typeof payload === "object" ? payload : {};
+  const dates = Array.isArray(body.dates) ? body.dates : [];
+  const out = {
+    user_id: body.user_id,
+    dates: dates,
+    mode: body.mode,
+    historical_reason: body.historical_reason,
+  };
+  if (body.mode === "WORK") out.shift_template_id = body.shift_template_id;
+  if (body.mode === "OFF") out.day_type = body.day_type;
+  return dkScheduleRpcData(
+    await client.rpc("backoffice_create_historical_schedules", {
+      p_payload: out,
+    })
+  );
+}
+
 async function evaluateAttendanceMonth(userId, monthYmd) {
   const uid = String(userId || "").trim();
   const month = String(monthYmd || "").trim();
@@ -5119,6 +5138,7 @@ window.DK = {
   revokeAttendanceLeaveRequest,
   setEmployeeRestDay,
   createHistoricalLeave,
+  createHistoricalSchedules,
   evaluateAttendanceMonth,
   previewPayrollMonth,
   fetchOvertimeCandidates,

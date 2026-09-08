@@ -7333,6 +7333,40 @@ body.admin-page #tab-accounts .table-actions{
   }
 }
 
+#tab-attendance .att-hist-sched-form{
+  align-items: end;
+}
+#tab-attendance .att-hist-sched-legend{
+  margin: 8px 0 0;
+}
+#tab-attendance .att-hist-sched-reason-row{
+  align-items: end;
+  margin-top: 8px;
+}
+#tab-attendance .att-hist-sched-cell.is-open{
+  background: #f8fafc;
+}
+#tab-attendance .att-hist-sched-cell.is-exists{
+  color: #1e3a8a;
+  background: #eff6ff;
+}
+#tab-attendance .att-hist-sched-cell.is-resolved{
+  color: #166534;
+  background: #ecfdf3;
+}
+#tab-attendance .att-hist-sched-cell.is-rest{
+  color: #6b7280;
+  background: #f3f4f6;
+}
+#tab-attendance .att-hist-sched-cell.is-holiday{
+  color: #9a3412;
+  background: #fff7ed;
+}
+#tab-attendance .att-hist-sched-cell.is-selected{
+  background: #1d4ed8;
+  color: #fff;
+}
+
 #tab-attendance.att-emp-open #attSubnavAdmin .att-subnav-btn{
   min-height: 32px;
   padding: 4px 10px;

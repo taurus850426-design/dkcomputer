@@ -74,6 +74,7 @@
   let leaveCalYear = 0;
   let leaveCalMonth = 0;
   let leaveSelectedDates = {};
+  let histSchedSelectedDates = {};
 
   function $(id) {
     return document.getElementById(id);
@@ -365,6 +366,27 @@
     if (/leave request is not PENDING/.test(m)) return "此申請不是待核准狀態。";
     if (/only APPROVED leave can be revoked/.test(m)) return "只能撤銷已核准的請假／排休。";
     if (/leave request not found/.test(m)) return "找不到該筆申請。";
+    if (/HISTORICAL_SCHEDULE_ALREADY_RESOLVED/i.test(raw) || /HISTORICAL_SCHEDULE_ALREADY_RESOLVED/i.test(m)) {
+      const ymd = leaveBatchConflictYmd(err, raw);
+      if (ymd) return formatLeaveChip(ymd) + " 已可由預設班別解析，不必再補建。請取消該日期後再送。";
+      return "所選日期已可由預設班別解析，不必再補建。請取消該日期後再送。";
+    }
+    if (/HISTORICAL_SCHEDULE_ALREADY_EXISTS/i.test(raw) || /HISTORICAL_SCHEDULE_ALREADY_EXISTS/i.test(m)) {
+      const ymd = leaveBatchConflictYmd(err, raw);
+      if (ymd) return formatLeaveChip(ymd) + " 已有班表，不可覆蓋。請取消該日期後再送。";
+      return "所選日期已有班表，不可覆蓋。請取消該日期後再送。";
+    }
+    if (/HISTORICAL_SCHEDULE_BATCH_CONFLICT/i.test(raw) || /HISTORICAL_SCHEDULE_BATCH_CONFLICT/i.test(m)) {
+      const ymd = leaveBatchConflictYmd(err, raw);
+      if (ymd) return formatLeaveChip(ymd) + " 已有排班，請取消該日期後再送。";
+      return "所選日期中已有排班，請取消後再送。";
+    }
+    if (/work_date must be before today/.test(m)) return "只能補建今天以前的日期。";
+    if (/duplicate dates/.test(m)) return "選取日期重複，請重新選擇。";
+    if (/too many dates/.test(m)) return "一次補建天數過多，請分批送出。";
+    if (/mode must be WORK or OFF/.test(m)) return "請選擇補建工作日或休息日。";
+    if (/WORK cannot have day_type/.test(m)) return "補建工作日請選擇班別，不要指定休息日／例假。";
+    if (/OFF cannot have shift_template_id/.test(m)) return "補建休息日／例假時不可選擇班別。";
     if (/HISTORICAL_LEAVE_REQUIRES_WORKDAY/i.test(raw) || /HISTORICAL_LEAVE_REQUIRES_WORKDAY/i.test(m)) {
       return "該日不是預定工作日，無法補登病假／事假／特休。";
     }
@@ -1271,6 +1293,7 @@
         if ($("attDefaultShift")) $("attDefaultShift").hidden = true;
         if ($("attLeaveAdmin")) $("attLeaveAdmin").hidden = true;
         if ($("attHistoricalLeave")) $("attHistoricalLeave").hidden = true;
+        if ($("attHistoricalSchedule")) $("attHistoricalSchedule").hidden = true;
         if ($("attPanePeople")) $("attPanePeople").hidden = true;
         if ($("attEmpDetail")) $("attEmpDetail").hidden = true;
         if ($("attComp")) $("attComp").hidden = true;
@@ -2211,6 +2234,25 @@
     });
     sel.innerHTML = opts.join("");
     if (keep && seen[keep]) sel.value = keep;
+    fillHistSchedTemplateSelect();
+  }
+
+  function fillHistSchedTemplateSelect() {
+    const sel = $("attHistSchedTemplate");
+    if (!sel || !isAdmin()) return;
+    const keep = sel.value;
+    const opts = ['<option value="">請選擇班別</option>'];
+    const seen = {};
+    enabledTemplates().forEach(function (t) {
+      if (!t || !t.id || seen[t.id]) return;
+      seen[t.id] = true;
+      const span = formatTimeHm(t.start_time) && formatTimeHm(t.end_time)
+        ? " " + formatTimeHm(t.start_time) + "–" + formatTimeHm(t.end_time)
+        : "";
+      opts.push('<option value="' + esc(t.id) + '">' + esc((t.name || "") + span) + "</option>");
+    });
+    sel.innerHTML = opts.join("");
+    if (keep && seen[keep]) sel.value = keep;
   }
 
   function currentOpenDefaultPeriod() {
@@ -3148,11 +3190,13 @@
     if (!uid) {
       tbody.innerHTML = '<tr><td colspan="7" class="muted">請選擇員工</td></tr>';
       renderScheduleCompliance();
+      renderHistSchedCalendar();
       return;
     }
     if (!year || !month) {
       tbody.innerHTML = '<tr><td colspan="7" class="muted">請選擇年月</td></tr>';
       renderScheduleCompliance();
+      renderHistSchedCalendar();
       return;
     }
     const last = daysInMonthNum(year, month);
@@ -3222,6 +3266,7 @@
     }
     tbody.innerHTML = rows.join("");
     renderScheduleCompliance();
+    renderHistSchedCalendar();
   }
 
   function renderScheduleCompliance() {
@@ -3266,6 +3311,207 @@
     } catch (e) {
       renderMonthlySchedule();
       showMsg($("attSchedMsg"), mapRpcError(e), true);
+    }
+  }
+
+  function histSchedMode() {
+    return String(($("attHistSchedMode") && $("attHistSchedMode").value) || "WORK") === "OFF" ? "OFF" : "WORK";
+  }
+
+  function selectedHistSchedDates() {
+    return Object.keys(histSchedSelectedDates || {}).filter(function (k) {
+      return !!histSchedSelectedDates[k];
+    }).sort();
+  }
+
+  function histSchedCellState(ymd) {
+    const today = taipeiYmd(new Date());
+    const row = scheduleByDate()[ymd] || null;
+    const def = row ? null : defaultShiftForDate(ymd);
+    if (ymd >= today) return { kind: ymd === today ? "today" : "future", selectable: false };
+    if (row && row.schedule_type === "OFF") {
+      const day = row.day_type || "";
+      return { kind: day === "REGULAR_HOLIDAY" ? "holiday" : "rest", selectable: false };
+    }
+    if (row) return { kind: "exists", selectable: false };
+    if (def) return { kind: "resolved", selectable: false };
+    return { kind: "open", selectable: true };
+  }
+
+  function syncHistSchedModeFields() {
+    const off = histSchedMode() === "OFF";
+    if ($("attHistSchedTplField")) $("attHistSchedTplField").hidden = off;
+    if ($("attHistSchedDayTypeField")) $("attHistSchedDayTypeField").hidden = !off;
+    syncHistSchedSelectionUi();
+  }
+
+  function syncHistSchedSelectionUi() {
+    const dates = selectedHistSchedDates();
+    const mode = histSchedMode();
+    const summary = $("attHistSchedSelectedSummary");
+    if (summary) summary.textContent = "已選 " + dates.length + " 天";
+    const chips = $("attHistSchedSelectedChips");
+    if (chips) {
+      chips.innerHTML = dates.map(function (ymd) {
+        return '<button type="button" class="att-leave-chip att-hist-sched-chip" data-ymd="' + esc(ymd) + '">' +
+          esc(formatLeaveChip(ymd)) + " ×</button>";
+      }).join("");
+    }
+    const btn = $("attHistSchedBtn");
+    if (btn) {
+      if (mode === "OFF") {
+        const day = String(($("attHistSchedDayType") && $("attHistSchedDayType").value) || "REST_DAY");
+        const label = day === "REGULAR_HOLIDAY" ? "例假" : "休息日";
+        btn.textContent = dates.length ? ("補建 " + dates.length + " 個" + label) : "補建休息日";
+      } else {
+        btn.textContent = dates.length ? ("補建 " + dates.length + " 個工作日") : "補建工作日";
+      }
+      btn.disabled = dates.length === 0;
+    }
+    const nameEl = $("attHistSchedEmployeeLabel");
+    if (nameEl) {
+      const uid = selectedEmpId || String(($("attSchedEmployee") && $("attSchedEmployee").value) || "");
+      nameEl.textContent = uid ? personName(uid) : "—";
+    }
+  }
+
+  function toggleHistSchedDate(ymd) {
+    const key = ymdKey(ymd);
+    if (!key) return;
+    const st = histSchedCellState(key);
+    if (!st.selectable) return;
+    if (histSchedSelectedDates[key]) delete histSchedSelectedDates[key];
+    else histSchedSelectedDates[key] = true;
+    renderHistSchedCalendar();
+  }
+
+  function shiftHistSchedMonth(delta) {
+    const yEl = $("attSchedYear");
+    const mEl = $("attSchedMonth");
+    let y = Number(yEl && yEl.value) || Number(taipeiYmd(new Date()).slice(0, 4));
+    let m = Number(mEl && mEl.value) || Number(taipeiYmd(new Date()).slice(5, 7));
+    m += Number(delta || 0);
+    while (m < 1) { m += 12; y -= 1; }
+    while (m > 12) { m -= 12; y += 1; }
+    if (yEl) yEl.value = String(y);
+    if (mEl) mEl.value = String(m);
+    refreshMonthlyScheduleUi({ silent: true });
+  }
+
+  function renderHistSchedCalendar() {
+    fillHistSchedTemplateSelect();
+    const year = Number($("attSchedYear") && $("attSchedYear").value);
+    const month = Number($("attSchedMonth") && $("attSchedMonth").value);
+    const title = $("attHistSchedCalTitle");
+    if (title) title.textContent = (year && month) ? (year + "/" + pad2(month)) : "—";
+    const grid = $("attHistSchedCalGrid");
+    if (!grid || !year || !month) {
+      syncHistSchedSelectionUi();
+      return;
+    }
+    const first = year + "-" + pad2(month) + "-01";
+    const lead = new Date(first + "T12:00:00+08:00").getUTCDay();
+    const dim = daysInMonthNum(year, month);
+    const cells = [];
+    let i;
+    for (i = 0; i < lead; i += 1) cells.push('<div class="att-leave-cal-blank"></div>');
+    for (i = 1; i <= dim; i += 1) {
+      const ymd = year + "-" + pad2(month) + "-" + pad2(i);
+      const st = histSchedCellState(ymd);
+      const selected = st.selectable && !!histSchedSelectedDates[ymd];
+      const cls = ["att-leave-cal-cell", "att-hist-sched-cell"];
+      if (st.kind === "today") cls.push("is-today", "is-disabled");
+      if (st.kind === "future") cls.push("is-disabled");
+      if (st.kind === "exists") cls.push("is-exists", "is-disabled");
+      if (st.kind === "resolved") cls.push("is-resolved", "is-disabled");
+      if (st.kind === "rest") cls.push("is-rest", "is-disabled");
+      if (st.kind === "holiday") cls.push("is-holiday", "is-disabled");
+      if (st.kind === "open") cls.push("is-open");
+      if (selected) cls.push("is-selected");
+      const labelMap = {
+        open: selected ? "已選取，可補建" : "未設定，可補建",
+        exists: "已有班表",
+        resolved: "預設班別已解析",
+        rest: "休息日",
+        holiday: "例假",
+        today: "今天不可補建",
+        future: "未來日期不可補建",
+      };
+      cells.push(
+        '<button type="button" class="' + cls.join(" ") + '" data-ymd="' + esc(ymd) + '"' +
+        (st.selectable ? "" : " disabled") +
+        ' aria-pressed="' + (selected ? "true" : "false") + '"' +
+        ' aria-label="' + esc(ymd.replace(/-/g, "/") + " " + (labelMap[st.kind] || "")) + '">' +
+        i + "</button>"
+      );
+    }
+    grid.innerHTML = cells.join("");
+    syncHistSchedModeFields();
+  }
+
+  async function submitHistoricalSchedules() {
+    if (!isAdmin() || schedBusy) return;
+    const uid = selectedEmpId || String(($("attSchedEmployee") && $("attSchedEmployee").value) || "").trim();
+    const dates = selectedHistSchedDates();
+    const mode = histSchedMode();
+    const reason = String(($("attHistSchedReason") && $("attHistSchedReason").value) || "").trim();
+    if (!uid) {
+      showMsg($("attHistSchedMsg"), "請先選擇員工。", true);
+      return;
+    }
+    if (!dates.length) {
+      showMsg($("attHistSchedMsg"), "請先在月曆選擇日期。", true);
+      return;
+    }
+    if (!reason) {
+      showMsg($("attHistSchedMsg"), "請填補建原因。", true);
+      return;
+    }
+    const payload = {
+      user_id: uid,
+      dates: dates,
+      mode: mode,
+      historical_reason: reason,
+    };
+    if (mode === "WORK") {
+      const tplId = String(($("attHistSchedTemplate") && $("attHistSchedTemplate").value) || "").trim();
+      if (!tplId) {
+        showMsg($("attHistSchedMsg"), "請選擇班別。", true);
+        return;
+      }
+      payload.shift_template_id = tplId;
+    } else {
+      payload.day_type = String(($("attHistSchedDayType") && $("attHistSchedDayType").value) || "").trim();
+      if (payload.day_type !== "REST_DAY" && payload.day_type !== "REGULAR_HOLIDAY") {
+        showMsg($("attHistSchedMsg"), "請選擇休息日或例假。", true);
+        return;
+      }
+    }
+    const dk = global.DK || {};
+    if (typeof dk.createHistoricalSchedules !== "function") {
+      showMsg($("attHistSchedMsg"), "歷史班表補建尚未就緒。", true);
+      return;
+    }
+    schedBusy = true;
+    showMsg($("attHistSchedMsg"), "補建中…", false);
+    try {
+      const res = await dk.createHistoricalSchedules(payload);
+      histSchedSelectedDates = {};
+      await refreshMonthlyScheduleUi({ silent: true });
+      const n = res && res.count != null ? Number(res.count) : dates.length;
+      const okText = mode === "OFF"
+        ? ("已補建 " + n + " 個歷史" + (payload.day_type === "REGULAR_HOLIDAY" ? "例假" : "休息日"))
+        : ("已補建 " + n + " 個歷史工作日");
+      showMsg($("attHistSchedMsg"), okText, false);
+    } catch (e) {
+      const raw = String((e && (e.message || e.details || e.hint)) || e || "");
+      if (/PAYROLL_ALREADY_SETTLED_HISTORY_LOCKED/i.test(raw)) {
+        showMsg($("attHistSchedMsg"), "該月份薪資已完成月結，不能直接補建歷史班表。請使用後續薪資更正流程。", true);
+      } else {
+        showMsg($("attHistSchedMsg"), mapRpcError(e), true);
+      }
+    } finally {
+      schedBusy = false;
     }
   }
 
@@ -4072,6 +4318,7 @@
     selectedEmpId = "";
     empDetailTab = "overview";
     lastAttPane = "people";
+    histSchedSelectedDates = {};
     renderAdminLeave();
     renderAdminTable();
     renderPeopleOverview();
@@ -4131,6 +4378,7 @@
     setHiddenEl($("attNetworkSettings"), ws !== "schedule");
     setHiddenEl($("attDefaultShift"), !(empOpen && empTab === "attendance"));
     setHiddenEl($("attMonthlySchedule"), !(empOpen && empTab === "attendance"));
+    setHiddenEl($("attHistoricalSchedule"), !(empOpen && empTab === "attendance"));
 
     const showLeavePane = ws === "leave" || (empOpen && empTab === "leave");
     setHiddenEl($("attPaneLeaveAdmin"), !showLeavePane);
@@ -4441,6 +4689,32 @@
     if (leaveDirect) leaveDirect.addEventListener("click", function () { setDirectRestDay(); });
     const histLeaveBtn = $("attHistoricalLeaveBtn");
     if (histLeaveBtn) histLeaveBtn.addEventListener("click", function () { submitHistoricalLeave(); });
+    const histSchedPrev = $("attHistSchedCalPrev");
+    if (histSchedPrev) histSchedPrev.addEventListener("click", function () { if (isAdmin()) shiftHistSchedMonth(-1); });
+    const histSchedNext = $("attHistSchedCalNext");
+    if (histSchedNext) histSchedNext.addEventListener("click", function () { if (isAdmin()) shiftHistSchedMonth(1); });
+    const histSchedGrid = $("attHistSchedCalGrid");
+    if (histSchedGrid) {
+      histSchedGrid.addEventListener("click", function (ev) {
+        const cell = ev.target && ev.target.closest ? ev.target.closest(".att-hist-sched-cell") : null;
+        if (!cell || cell.disabled) return;
+        toggleHistSchedDate(cell.getAttribute("data-ymd"));
+      });
+    }
+    const histSchedChips = $("attHistSchedSelectedChips");
+    if (histSchedChips) {
+      histSchedChips.addEventListener("click", function (ev) {
+        const chip = ev.target && ev.target.closest ? ev.target.closest(".att-hist-sched-chip") : null;
+        if (!chip) return;
+        toggleHistSchedDate(chip.getAttribute("data-ymd"));
+      });
+    }
+    const histSchedModeEl = $("attHistSchedMode");
+    if (histSchedModeEl) histSchedModeEl.addEventListener("change", function () { syncHistSchedModeFields(); });
+    const histSchedDayEl = $("attHistSchedDayType");
+    if (histSchedDayEl) histSchedDayEl.addEventListener("change", function () { syncHistSchedSelectionUi(); });
+    const histSchedBtn = $("attHistSchedBtn");
+    if (histSchedBtn) histSchedBtn.addEventListener("click", function () { submitHistoricalSchedules(); });
     const peopleSearchEl = $("attPeopleSearch");
     if (peopleSearchEl) {
       peopleSearchEl.addEventListener("input", function () {
@@ -4505,6 +4779,7 @@
     if ($("attNetworkSettings")) $("attNetworkSettings").hidden = !admin;
     if ($("attShiftTemplates")) $("attShiftTemplates").hidden = !admin;
     if ($("attMonthlySchedule")) $("attMonthlySchedule").hidden = !admin;
+    if ($("attHistoricalSchedule")) $("attHistoricalSchedule").hidden = !admin;
     if ($("attDefaultShift")) $("attDefaultShift").hidden = !admin;
     if ($("attLeaveAdmin")) $("attLeaveAdmin").hidden = !admin;
     if ($("attHistoricalLeave")) $("attHistoricalLeave").hidden = !admin;

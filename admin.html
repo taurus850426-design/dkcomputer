@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260909s19a1" />
+            <link rel="stylesheet" href="./styles.css?v=20260909s19a2" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -2121,6 +2121,67 @@
                 </table>
               </div>
             </div>
+
+            <div id="attHistoricalSchedule" class="section-card-soft attendance-card admin-stack-gap" data-admin-only>
+              <div class="section-head">
+                <div>
+                  <h3 class="h3 section-title">補建歷史班表</h3>
+                  <p class="form-hint">只補系統上線前、目前沒有排班的過去日期。不可覆蓋已有班表或已可由預設班別解析的日期。已月結月份不可補建。國定假日仍走公司日曆。</p>
+                </div>
+              </div>
+              <div class="form-grid att-hist-sched-form" style="margin-top:12px">
+                <div class="field">
+                  <span class="att-meta-label">員工</span>
+                  <div id="attHistSchedEmployeeLabel" class="att-stat-value">—</div>
+                </div>
+                <div class="field">
+                  <label for="attHistSchedMode">模式</label>
+                  <select id="attHistSchedMode">
+                    <option value="WORK">補建工作日</option>
+                    <option value="OFF">補建休息日</option>
+                  </select>
+                </div>
+                <div class="field" id="attHistSchedTplField">
+                  <label for="attHistSchedTemplate">班別</label>
+                  <select id="attHistSchedTemplate">
+                    <option value="">請選擇班別</option>
+                  </select>
+                </div>
+                <div class="field" id="attHistSchedDayTypeField" hidden>
+                  <label for="attHistSchedDayType">日別</label>
+                  <select id="attHistSchedDayType">
+                    <option value="REST_DAY">休息日</option>
+                    <option value="REGULAR_HOLIDAY">例假</option>
+                  </select>
+                </div>
+              </div>
+              <div class="att-leave-cal-wrap att-hist-sched-cal-wrap" style="margin-top:12px">
+                <div class="att-leave-cal-nav">
+                  <button id="attHistSchedCalPrev" class="btn btn-ghost btn-sm" type="button">上個月</button>
+                  <div id="attHistSchedCalTitle" class="att-leave-cal-title">—</div>
+                  <button id="attHistSchedCalNext" class="btn btn-ghost btn-sm" type="button">下個月</button>
+                </div>
+                <div class="att-leave-cal-weekdays" aria-hidden="true">
+                  <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+                </div>
+                <div id="attHistSchedCalGrid" class="att-leave-cal-grid" role="grid" aria-label="歷史班表補建月曆"></div>
+              </div>
+              <div class="att-hist-sched-legend muted small">可選＝空白歷史日期。已有班表／預設班／今天與未來不可選。</div>
+              <div class="att-leave-selected">
+                <div id="attHistSchedSelectedSummary" class="att-leave-selected-summary">已選 0 天</div>
+                <div id="attHistSchedSelectedChips" class="att-leave-chips"></div>
+              </div>
+              <div class="form-grid att-hist-sched-reason-row">
+                <div class="field full">
+                  <label for="attHistSchedReason">補建原因</label>
+                  <input id="attHistSchedReason" type="text" maxlength="200" placeholder="例如：Stage 18 上線前歷史班表補建" />
+                </div>
+                <div class="field att-leave-submit-field">
+                  <button id="attHistSchedBtn" class="btn btn-primary" type="button">補建工作日</button>
+                </div>
+              </div>
+              <div id="attHistSchedMsg" class="muted" style="margin-top:8px" hidden></div>
+            </div>
             </div>
 
             <div id="attPaneLeaveAdmin" class="att-pane" data-att-pane="leave" hidden data-admin-only>
@@ -2887,7 +2948,7 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260909s19a1"></script>
+    <script src="./shared.js?v=20260909s19a2"></script>
     <script src="./inventory-ledger.js?v=20260903s17"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
@@ -2895,7 +2956,7 @@
     <script src="./admin3.js?v=20260903s17"></script>
     <script src="./purchase-orders.js?v=20260827po1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./attendance.js?v=20260909s19a1"></script>
+    <script src="./attendance.js?v=20260909s19a2"></script>
   </body>
 </html>
 
