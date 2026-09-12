@@ -7487,4 +7487,99 @@ body.admin-page #tab-accounts .table-actions{
   }
 }
 
+/* Stage 03 used valuation market admin */
+#tab-used-market .uv-msg-error{
+  color: #9b1238;
+  font-weight: 600;
+}
+#tab-used-market .uv-active-grid{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+#tab-used-market .uv-strong{
+  font-weight: 800;
+}
+#tab-used-market .uv-batch-list{
+  display: grid;
+  gap: 8px;
+}
+#tab-used-market .uv-batch-card{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--dk-border);
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+}
+#tab-used-market .uv-batch-card.is-selected{
+  border-color: var(--dk-blue);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+#tab-used-market .uv-batch-title{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+#tab-used-market .uv-batch-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+#tab-used-market .uv-price-head{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+#tab-used-market .uv-price-toolbar{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+#tab-used-market .uv-price-toolbar input,
+#tab-used-market .uv-price-toolbar select{
+  min-width: 140px;
+}
+#tab-used-market .uv-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 80;
+  padding: 16px;
+}
+#tab-used-market .uv-overlay[hidden]{
+  display: none !important;
+}
+#tab-used-market .uv-dialog{
+  width: min(480px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 16px 40px rgba(17, 24, 39, 0.18);
+}
+@media (max-width: 800px){
+  #tab-used-market .uv-active-grid{
+    grid-template-columns: 1fr 1fr;
+  }
+  #tab-used-market .uv-batch-card{
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  #tab-used-market .uv-price-table-wrap{
+    overflow-x: auto;
+  }
+}
+
 
