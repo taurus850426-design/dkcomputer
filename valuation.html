@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>二手電腦免費估價｜DK Computer</title>
+    <meta name="description" content="輸入電腦零件規格，取得目前二手市場參考估值。" />
+    <link rel="canonical" href="https://taurus850426-design.github.io/dkcomputer/valuation.html" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./site.webmanifest" />
+    <meta property="og:site_name" content="DK Computer" />
+    <meta property="og:title" content="二手電腦免費估價｜DK Computer" />
+    <meta property="og:description" content="輸入電腦零件規格，取得目前二手市場參考估值。" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_TW" />
+    <meta property="og:url" content="https://taurus850426-design.github.io/dkcomputer/valuation.html" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css?v=20260912uv1" />
+  </head>
+  <body class="theme-apple uv-page">
+    <a class="skip-link" href="#uvForm">跳到估價表單</a>
+    <header class="site-header">
+      <div class="container header-inner">
+        <div class="brand">
+          <div id="brandMark" class="brand-mark" aria-hidden="true">DK</div>
+          <div class="brand-text">
+            <div id="brandTitle" class="brand-title">二手電腦・實測交付</div>
+            <div id="brandSubtitle" class="brand-subtitle">依用途配機，不亂賣、不踩雷</div>
+          </div>
+        </div>
+        <button id="mobileMenuBtn" class="btn btn-ghost btn-sm mobile-menu-btn" type="button" aria-controls="siteNav" aria-expanded="false">選單</button>
+        <nav id="siteNav" class="nav" aria-label="主選單">
+          <a href="./index.html">首頁</a>
+          <a href="./machine.html">整機販售</a>
+          <a href="./form.html?type=repair">電腦維修</a>
+          <a href="./valuation.html" aria-current="page">免費二手估價</a>
+          <a href="./form.html">需求表單</a>
+          <a href="./faq.html">常見問題</a>
+          <a href="./warranty.html">保固</a>
+          <a id="navLineBtn" class="nav-cta" href="https://lin.ee/p58Bkqp" target="_blank" rel="noreferrer">加 LINE</a>
+          <a class="nav-admin" href="./admin.html">管理員</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="section uv-section">
+        <div class="container uv-wrap">
+          <header class="uv-head">
+            <p class="uv-kicker">DK 二手估價</p>
+            <h1 class="h1">DK 二手電腦免費估價</h1>
+            <p class="lead muted">輸入你的電腦零件規格，取得目前市場參考估值。估價階段不需要填姓名或電話。</p>
+          </header>
+
+          <aside class="uv-disclaimer" role="note">
+            <p>此為市場行情估算，不等於 DK 最終收購報價。</p>
+            <p>實際收購價格仍需依外觀、功能、完整度、保固、檢測結果等確認。</p>
+          </aside>
+
+          <form id="uvForm" class="uv-form" novalidate>
+            <div id="uvRows" class="uv-rows"></div>
+            <div class="uv-form-actions">
+              <button id="uvAddBtn" class="btn btn-ghost" type="button">＋ 新增零件</button>
+              <button id="uvSubmitBtn" class="btn btn-primary uv-submit" type="submit">立即免費估價</button>
+            </div>
+            <p id="uvFormError" class="uv-form-error" role="alert" hidden></p>
+          </form>
+
+          <p id="uvLoading" class="uv-loading" hidden>估價中…</p>
+
+          <section id="uvResult" class="uv-result" hidden aria-live="polite">
+            <h2 class="uv-result-title">市場參考估值</h2>
+            <p id="uvRange" class="uv-range"></p>
+            <dl class="uv-stats">
+              <div>
+                <dt>市場參考中位</dt>
+                <dd id="uvMid"></dd>
+              </div>
+              <div>
+                <dt>DK VALUE</dt>
+                <dd id="uvScore"></dd>
+              </div>
+              <div>
+                <dt>行情覆蓋</dt>
+                <dd id="uvCoverage"></dd>
+              </div>
+              <div>
+                <dt>已找到行情</dt>
+                <dd id="uvMatched"></dd>
+              </div>
+              <div>
+                <dt>行情更新</dt>
+                <dd id="uvUpdated"></dd>
+              </div>
+            </dl>
+            <p class="uv-value-note">DK VALUE 反映目前可取得的市場行情完整度與可信度，不代表電腦硬體健康狀況。</p>
+            <ul id="uvReasons" class="uv-reasons"></ul>
+            <aside class="uv-disclaimer uv-disclaimer-result" role="note">
+              <p>此結果為目前市場行情估算，不代表 DK 最終收購價格。</p>
+              <p>實際價格會依外觀、功能、保固、完整度及實機檢測結果調整。</p>
+            </aside>
+            <div class="uv-cta-row">
+              <a id="uvSellBtn" class="btn btn-primary uv-submit" href="https://lin.ee/p58Bkqp" target="_blank" rel="noreferrer">想出售給 DK</a>
+              <button id="uvResetBtn" class="btn btn-ghost" type="button">重新估價</button>
+            </div>
+          </section>
+
+          <section id="uvSoftError" class="uv-soft-error" hidden>
+            <p id="uvSoftErrorText"></p>
+            <div class="uv-cta-row">
+              <a id="uvSoftLineBtn" class="btn btn-primary uv-submit" href="https://lin.ee/p58Bkqp" target="_blank" rel="noreferrer">聯絡 DK 人工估價</a>
+              <button id="uvSoftResetBtn" class="btn btn-ghost" type="button">重新估價</button>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <div class="footer-col">
+          <div class="muted">© <span id="copyrightYear"></span> DK電腦・實測交付</div>
+          <p id="footerLineSentence" class="muted" style="margin-top:8px;max-width:420px;"></p>
+        </div>
+        <div class="footer-links muted">
+          <a href="./index.html">首頁</a>
+          <a href="./valuation.html">免費二手估價</a>
+          <a href="./machine.html">整機販售</a>
+          <a href="./form.html">需求表單</a>
+          <a href="./faq.html">常見問題</a>
+          <a href="./warranty.html">售後保固</a>
+        </div>
+      </div>
+    </footer>
+
+    <script src="./shared.js?v=20260825oh1"></script>
+    <script src="./analytics.js?v=20260726c"></script>
+    <script src="./valuation.js?v=20260912uv1"></script>
+  </body>
+</html>

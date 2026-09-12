@@ -16,3 +16,6 @@ verify_jwt = true
 
 [functions.reset-backoffice-user-password]
 verify_jwt = true
+
+[functions.used-valuation-estimate]
+verify_jwt = false
