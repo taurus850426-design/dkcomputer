@@ -72,24 +72,26 @@
   function friendlyError(res) {
     const raw = String((res && res.error) || "");
     const low = raw.toLowerCase();
-    if (res && (res.permissionDenied || res.forbidden || low.indexOf("admin only") >= 0 || low.indexOf("42501") >= 0)) {
-      return "你沒有此操作權限";
+    if (res && (res.permissionDenied || res.forbidden || low.indexOf("admin only") >= 0 || low.indexOf("42501") >= 0 || low.indexOf("permission denied") >= 0)) {
+      return "你沒有執行此操作的權限。";
     }
-    if (res && res.notAuthenticated) return "請先登入後台";
-    if (low.indexOf("batch not found") >= 0) return "找不到行情批次";
-    if (low.indexOf("price not found") >= 0) return "找不到行情資料";
-    if (low.indexOf("batch not draft") >= 0) return "只有草稿批次可以修改";
-    if (low.indexOf("batch empty") >= 0) return "請先新增至少一筆行情再啟用";
-    if (low.indexOf("duplicate batch") >= 0) return "批次代碼已存在";
-    if (low.indexOf("duplicate market") >= 0) return "同一批次已有相同品牌／型號／規格";
-    if (low.indexOf("invalid price") >= 0) return "價格區間不正確（低價 ≥ 0，中價 ≥ 低價，高價 ≥ 中價）";
-    if (low.indexOf("invalid confidence") >= 0) return "信心值必須是 0 到 100";
-    if (low.indexOf("reason required") >= 0) return "請填寫原因";
-    if (low.indexOf("batch_code required") >= 0) return "請填寫批次代碼";
-    if (low.indexOf("market_batch_id is immutable") >= 0) return "不能把行情移到其他批次";
-    if (low.indexOf("network") >= 0 || low.indexOf("failed to fetch") >= 0) return "網路連線失敗，請稍後再試";
-    if (raw) return raw.slice(0, 120);
-    return "操作失敗";
+    if (res && res.notAuthenticated) return "請先登入後台。";
+    if (low.indexOf("batch not found") >= 0) return "找不到行情批次。";
+    if (low.indexOf("price not found") >= 0) return "找不到行情資料。";
+    if (low.indexOf("batch not draft") >= 0) return "此行情批次已不是草稿，無法修改。";
+    if (low.indexOf("batch empty") >= 0) return "此批次目前沒有行情資料，無法啟用。";
+    if (low.indexOf("duplicate batch") >= 0) return "批次代碼已存在。";
+    if (low.indexOf("duplicate market") >= 0) return "此批次已存在相同分類／品牌／型號／規格的行情資料。";
+    if (low.indexOf("invalid price") >= 0) return "行情價格設定有誤，請確認低價 ≤ 中間價 ≤ 高價。";
+    if (low.indexOf("invalid confidence") >= 0) return "行情可信度請填 0～100。";
+    if (low.indexOf("invalid sample") >= 0) return "參考樣本數不可小於 0。";
+    if (low.indexOf("reason required") >= 0) return "請填寫操作原因。";
+    if (low.indexOf("batch_code required") >= 0) return "請填寫批次代碼。";
+    if (low.indexOf("market_batch_id is immutable") >= 0) return "不能把行情移到其他批次。";
+    if (low.indexOf("active batch conflict") >= 0) return "目前已有其他批次正在啟用，請稍後再試。";
+    if (low.indexOf("payload required") >= 0 || low.indexOf("invalid payload") >= 0) return "請填寫完整資料後再儲存。";
+    if (low.indexOf("network") >= 0 || low.indexOf("failed to fetch") >= 0) return "網路連線失敗，請稍後再試。";
+    return "操作失敗，請稍後再試。";
   }
 
   function selectedBatch() {
@@ -151,7 +153,7 @@
     host.innerHTML =
       '<div class="uv-active-grid">' +
         '<div><div class="muted small">批次代碼</div><div class="uv-strong">' + esc(active.batch_code) + "</div></div>" +
-        '<div><div class="muted small">生效日</div><div>' + esc(fmtDate(active.effective_date)) + "</div></div>" +
+        '<div><div class="muted small">生效日期</div><div>' + esc(fmtDate(active.effective_date)) + "</div></div>" +
         '<div><div class="muted small">啟用時間</div><div>' + esc(fmtTime(active.published_at)) + "</div></div>" +
         '<div><div class="muted small">行情筆數</div><div>' + esc(String(countPrices(active.id))) + "</div></div>" +
       "</div>";
@@ -174,7 +176,7 @@
         '<article class="uv-batch-card' + on + '" data-uv-select-batch="' + esc(b.id) + '">' +
           '<div class="uv-batch-card-main">' +
             '<div class="uv-batch-title">' + esc(b.batch_code) + " " + statusBadge(b.status) + "</div>" +
-            '<div class="muted small">生效日 ' + esc(fmtDate(b.effective_date)) + " ｜ " + esc(b.source_summary || "無來源摘要") + " ｜ " + esc(String(countPrices(b.id))) + " 筆</div>" +
+            '<div class="muted small">生效日期 ' + esc(fmtDate(b.effective_date)) + " ｜ " + esc(b.source_summary || "無資料來源摘要") + " ｜ " + esc(String(countPrices(b.id))) + " 筆</div>" +
           "</div>" +
           '<div class="uv-batch-actions">' + draftBtns + "</div>" +
         "</article>"
@@ -313,10 +315,10 @@
     const high = Number($("uvPriceHigh").value);
     const sample = Number($("uvPriceSample").value);
     const conf = Number($("uvPriceConfidence").value);
-    if (!Number.isFinite(low) || !Number.isFinite(mid) || !Number.isFinite(high)) return "請填寫低／中／高價";
-    if (low < 0 || mid < low || high < mid) return "價格區間不正確（低價 ≥ 0，中價 ≥ 低價，高價 ≥ 中價）";
-    if (!Number.isFinite(sample) || sample < 0) return "樣本數必須 ≥ 0";
-    if (!Number.isFinite(conf) || conf < 0 || conf > 100) return "信心值必須是 0 到 100";
+    if (!Number.isFinite(low) || !Number.isFinite(mid) || !Number.isFinite(high)) return "請填寫市場低價、中間價與高價。";
+    if (low < 0 || mid < low || high < mid) return "行情價格設定有誤，請確認低價 ≤ 中間價 ≤ 高價。";
+    if (!Number.isFinite(sample) || sample < 0) return "參考樣本數不可小於 0。";
+    if (!Number.isFinite(conf) || conf < 0 || conf > 100) return "行情可信度請填 0～100。";
     return "";
   }
 
@@ -406,7 +408,7 @@
   async function submitConfirm() {
     const reason = $("uvConfirmReason").value;
     if (!String(reason || "").trim()) {
-      showMsg("請填寫原因", true);
+      showMsg("請填寫操作原因。", true);
       return;
     }
     let res;
@@ -450,14 +452,14 @@
 
     $("uvBtnNewBatch") && $("uvBtnNewBatch").addEventListener("click", function () { openBatchForm(null); });
     $("uvBatchCancel") && $("uvBatchCancel").addEventListener("click", closeBatchForm);
-    $("uvBatchSave") && $("uvBatchSave").addEventListener("click", function () { saveBatch().catch(function (e) { showMsg(String(e && e.message || e), true); }); });
+    $("uvBatchSave") && $("uvBatchSave").addEventListener("click", function () { saveBatch().catch(function () { showMsg("操作失敗，請稍後再試。", true); }); });
     $("uvBtnNewPrice") && $("uvBtnNewPrice").addEventListener("click", function () { openPriceForm(null); });
     $("uvPriceCancel") && $("uvPriceCancel").addEventListener("click", closePriceForm);
-    $("uvPriceSave") && $("uvPriceSave").addEventListener("click", function () { savePrice().catch(function (e) { showMsg(String(e && e.message || e), true); }); });
+    $("uvPriceSave") && $("uvPriceSave").addEventListener("click", function () { savePrice().catch(function () { showMsg("操作失敗，請稍後再試。", true); }); });
     $("uvPriceSearch") && $("uvPriceSearch").addEventListener("input", renderPrices);
     $("uvPriceCategoryFilter") && $("uvPriceCategoryFilter").addEventListener("change", renderPrices);
     $("uvConfirmCancel") && $("uvConfirmCancel").addEventListener("click", closeConfirm);
-    $("uvConfirmOk") && $("uvConfirmOk").addEventListener("click", function () { submitConfirm().catch(function (e) { showMsg(String(e && e.message || e), true); }); });
+    $("uvConfirmOk") && $("uvConfirmOk").addEventListener("click", function () { submitConfirm().catch(function () { showMsg("操作失敗，請稍後再試。", true); }); });
 
     root.addEventListener("click", function (ev) {
       const t = ev.target && ev.target.closest ? ev.target.closest("[data-uv-select-batch],[data-uv-edit-batch],[data-uv-activate],[data-uv-edit-price],[data-uv-del-price]") : null;
@@ -479,7 +481,7 @@
           "activate",
           activate,
           "啟用正式行情",
-          "啟用後此批次將成為正式行情，目前 ACTIVE 批次會封存，ACTIVE 批次不可再直接修改。"
+          "啟用後目前使用中的批次會封存，本批次將成為使用中，使用中批次不可再直接修改。"
         );
         return;
       }
@@ -491,7 +493,7 @@
       }
       if (delPrice) {
         ev.preventDefault();
-        openConfirm("delete", delPrice, "刪除草稿行情", "刪除後無法還原此筆行情，請輸入刪除原因。");
+        openConfirm("delete", delPrice, "刪除草稿行情", "刪除後無法還原此筆行情，請輸入操作原因。");
         return;
       }
       if (selectId) {

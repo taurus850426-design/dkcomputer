@@ -1636,7 +1636,7 @@
               <div class="inv-section-head uv-price-head">
                 <h3 class="h3 section-title" id="uvSelectedBatchTitle">行情資料</h3>
                 <div class="uv-price-toolbar">
-                  <input id="uvPriceSearch" type="search" placeholder="搜尋品牌 / 型號" />
+                  <input id="uvPriceSearch" type="search" placeholder="搜尋品牌或型號" />
                   <select id="uvPriceCategoryFilter">
                     <option value="">全部分類</option>
                   </select>
@@ -1649,17 +1649,17 @@
                 <table class="table table-compact" id="uvPriceTable">
                   <thead>
                     <tr>
-                      <th>Category</th>
-                      <th>Brand</th>
-                      <th>Model</th>
-                      <th>Variant</th>
-                      <th class="table-number">Low</th>
-                      <th class="table-number">Mid</th>
-                      <th class="table-number">High</th>
-                      <th class="table-number">Sample</th>
-                      <th class="table-number">Confidence</th>
-                      <th>Effective Date</th>
-                      <th class="table-actions">Actions</th>
+                      <th>分類</th>
+                      <th>品牌</th>
+                      <th>型號</th>
+                      <th>規格／版本</th>
+                      <th class="table-number">低價</th>
+                      <th class="table-number">中間價</th>
+                      <th class="table-number">高價</th>
+                      <th class="table-number">樣本數</th>
+                      <th class="table-number">可信度</th>
+                      <th>生效日期</th>
+                      <th class="table-actions">操作</th>
                     </tr>
                   </thead>
                   <tbody id="uvPriceTbody"></tbody>
@@ -1671,18 +1671,22 @@
               <h3 class="h3 section-title" id="uvPriceFormTitle">新增行情</h3>
               <datalist id="uvCategoryList"></datalist>
               <div class="form-grid">
-                <div class="field"><label for="uvPriceCategory">Category</label><input id="uvPriceCategory" type="text" list="uvCategoryList" maxlength="80" /></div>
-                <div class="field"><label for="uvPriceBrand">Brand</label><input id="uvPriceBrand" type="text" maxlength="80" /></div>
-                <div class="field"><label for="uvPriceModel">Model</label><input id="uvPriceModel" type="text" maxlength="120" /></div>
-                <div class="field"><label for="uvPriceVariant">Variant</label><input id="uvPriceVariant" type="text" maxlength="120" /></div>
-                <div class="field"><label for="uvPriceLow">Market Low</label><input id="uvPriceLow" type="number" min="0" step="1" /></div>
-                <div class="field"><label for="uvPriceMid">Market Mid</label><input id="uvPriceMid" type="number" min="0" step="1" /></div>
-                <div class="field"><label for="uvPriceHigh">Market High</label><input id="uvPriceHigh" type="number" min="0" step="1" /></div>
-                <div class="field"><label for="uvPriceSample">Sample Count</label><input id="uvPriceSample" type="number" min="0" step="1" value="0" /></div>
-                <div class="field"><label for="uvPriceConfidence">Confidence 0–100</label><input id="uvPriceConfidence" type="number" min="0" max="100" step="1" value="0" /></div>
-                <div class="field"><label for="uvPriceSource">Source Type</label><input id="uvPriceSource" type="text" maxlength="80" /></div>
-                <div class="field"><label for="uvPriceEffectiveDate">Effective Date</label><input id="uvPriceEffectiveDate" type="date" /></div>
-                <div class="field full"><label for="uvPriceNote">Note</label><input id="uvPriceNote" type="text" maxlength="2000" /></div>
+                <div class="field"><label for="uvPriceCategory">分類</label><input id="uvPriceCategory" type="text" list="uvCategoryList" maxlength="80" /></div>
+                <div class="field"><label for="uvPriceBrand">品牌</label><input id="uvPriceBrand" type="text" maxlength="80" /></div>
+                <div class="field"><label for="uvPriceModel">型號</label><input id="uvPriceModel" type="text" maxlength="120" /></div>
+                <div class="field"><label for="uvPriceVariant">規格／版本</label><input id="uvPriceVariant" type="text" maxlength="120" /></div>
+                <div class="field"><label for="uvPriceLow">市場低價</label><input id="uvPriceLow" type="number" min="0" step="1" /></div>
+                <div class="field"><label for="uvPriceMid">市場中間價</label><input id="uvPriceMid" type="number" min="0" step="1" /></div>
+                <div class="field"><label for="uvPriceHigh">市場高價</label><input id="uvPriceHigh" type="number" min="0" step="1" /></div>
+                <div class="field"><label for="uvPriceSample">參考樣本數</label><input id="uvPriceSample" type="number" min="0" step="1" value="0" /></div>
+                <div class="field">
+                  <label for="uvPriceConfidence">行情可信度（0–100）</label>
+                  <input id="uvPriceConfidence" type="number" min="0" max="100" step="1" value="0" />
+                  <div class="form-hint">數字越高，代表這筆行情資料的參考可信度越高。</div>
+                </div>
+                <div class="field"><label for="uvPriceSource">資料來源</label><input id="uvPriceSource" type="text" maxlength="80" /></div>
+                <div class="field"><label for="uvPriceEffectiveDate">生效日期</label><input id="uvPriceEffectiveDate" type="date" /></div>
+                <div class="field full"><label for="uvPriceNote">備註</label><input id="uvPriceNote" type="text" maxlength="2000" /></div>
                 <div class="full actions">
                   <button id="uvPriceSave" class="btn btn-primary" type="button">儲存</button>
                   <button id="uvPriceCancel" class="btn btn-ghost" type="button">取消</button>
@@ -1695,7 +1699,7 @@
                 <h3 class="h3" id="uvConfirmTitle">確認</h3>
                 <p id="uvConfirmText" class="muted"></p>
                 <div class="field">
-                  <label for="uvConfirmReason">原因</label>
+                  <label for="uvConfirmReason">操作原因</label>
                   <textarea id="uvConfirmReason" rows="3" maxlength="2000"></textarea>
                 </div>
                 <div class="actions">
@@ -3066,7 +3070,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script src="./admin3.js?v=20260912s03"></script>
-    <script src="./used-valuation-admin.js?v=20260912s03"></script>
+    <script src="./used-valuation-admin.js?v=20260912s03zh"></script>
     <script src="./purchase-orders.js?v=20260827po1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260909s19a2"></script>
