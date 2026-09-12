@@ -7582,4 +7582,123 @@ body.admin-page #tab-accounts .table-actions{
   }
 }
 
+/* Stage 04 used valuation engine admin */
+#tab-used-engine .ue-msg-error{
+  color: #9b1238;
+  font-weight: 600;
+}
+#tab-used-engine .ue-active-grid,
+#tab-used-engine .ue-preview-grid{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+#tab-used-engine .ue-strong{
+  font-weight: 800;
+}
+#tab-used-engine .ue-rule-list{
+  display: grid;
+  gap: 8px;
+}
+#tab-used-engine .ue-rule-card{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--dk-border);
+  border-radius: 12px;
+  background: #fff;
+}
+#tab-used-engine .ue-rule-title{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+#tab-used-engine .ue-rule-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+#tab-used-engine .ue-policy-text{
+  margin: 0;
+  font-weight: 600;
+}
+#tab-used-engine .ue-condition-rows,
+#tab-used-engine .ue-preview-rows{
+  display: grid;
+  gap: 10px;
+}
+#tab-used-engine .ue-condition-row{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+#tab-used-engine .ue-comp-row{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: 8px;
+  align-items: end;
+}
+#tab-used-engine .ue-comp-del-wrap{
+  display: flex;
+  align-items: flex-end;
+}
+#tab-used-engine .ue-preview-result{
+  margin-top: 16px;
+}
+#tab-used-engine .ue-diag-cols{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 12px;
+}
+#tab-used-engine .ue-diag-cols h4{
+  margin: 0;
+  font-size: 14px;
+}
+#tab-used-engine .ue-diag-list{
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+#tab-used-engine .ue-overlay{
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+}
+#tab-used-engine .ue-overlay[hidden]{
+  display: none !important;
+}
+#tab-used-engine .ue-dialog{
+  width: min(480px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 16px 40px rgba(17, 24, 39, 0.18);
+}
+@media (max-width: 800px){
+  #tab-used-engine .ue-active-grid,
+  #tab-used-engine .ue-preview-grid,
+  #tab-used-engine .ue-diag-cols{
+    grid-template-columns: 1fr 1fr;
+  }
+  #tab-used-engine .ue-rule-card{
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  #tab-used-engine .ue-comp-row,
+  #tab-used-engine .ue-condition-row{
+    grid-template-columns: 1fr;
+  }
+}
+
 
