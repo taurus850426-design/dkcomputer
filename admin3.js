@@ -227,6 +227,7 @@
   const tabAccounts = document.getElementById("tab-accounts");
   const tabUsedMarket = document.getElementById("tab-used-market");
   const tabUsedEngine = document.getElementById("tab-used-engine");
+  const tabUsedAcquisition = document.getElementById("tab-used-acquisition");
 
   // publish
   const publishSubmitBtn = document.getElementById("publishSubmitBtn");
@@ -444,7 +445,7 @@
   const ADMIN_TAB_KEY = "dk_admin_tab";
   const ADMIN_V2_KEY = "dk_admin_active_v2";
   const ADMIN_NAV_LAST_KEY = "dk_admin_nav_last_child";
-  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "ap", "customers", "used-market", "used-engine", "attendance", "accounts"];
+  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "ap", "customers", "used-market", "used-engine", "used-acquisition", "attendance", "accounts"];
   const VALID_V2 = ["items", "ledger", "orders", "expenses", "reports"];
   const NAV_CHILD_PERM = {
     items: "items",
@@ -452,6 +453,7 @@
     customers: "customers",
     "used-market": "used-market",
     "used-engine": "used-engine",
+    "used-acquisition": "used-acquisition",
     vendors: "vendors",
     purchase: "purchase",
     ap: "ap",
@@ -502,7 +504,7 @@
   }
   function navGroupForFeature(tabName, v2Name) {
     if (tabName === "customers") return "ops";
-    if (tabName === "used-market" || tabName === "used-engine") return "used";
+    if (tabName === "used-market" || tabName === "used-engine" || tabName === "used-acquisition") return "used";
     if (tabName === "vendors" || tabName === "purchase" || tabName === "ap") return "purchase";
     if (tabName === "publish" || tabName === "frontend") return "site";
     if (tabName === "attendance" || tabName === "accounts") return "system";
@@ -521,6 +523,7 @@
     if (tabCustomers && !tabCustomers.hidden) return "customers";
     if (tabUsedMarket && !tabUsedMarket.hidden) return "used-market";
     if (tabUsedEngine && !tabUsedEngine.hidden) return "used-engine";
+    if (tabUsedAcquisition && !tabUsedAcquisition.hidden) return "used-acquisition";
     if (tabAttendance && !tabAttendance.hidden) return "attendance";
     if (tabAccounts && !tabAccounts.hidden) return "accounts";
     return "inv";
@@ -646,6 +649,7 @@
     if (tabCustomers) tabCustomers.hidden = name !== "customers";
     if (tabUsedMarket) tabUsedMarket.hidden = name !== "used-market";
     if (tabUsedEngine) tabUsedEngine.hidden = name !== "used-engine";
+    if (tabUsedAcquisition) tabUsedAcquisition.hidden = name !== "used-acquisition";
     if (tabAttendance) tabAttendance.hidden = name !== "attendance";
     if (tabAccounts) tabAccounts.hidden = name !== "accounts";
     if (name === "inv") {
@@ -697,6 +701,11 @@
     if (name === "used-engine") {
       try {
         if (typeof window.__dkUsedEngineOnShow === "function") window.__dkUsedEngineOnShow();
+      } catch (_) {}
+    }
+    if (name === "used-acquisition") {
+      try {
+        if (typeof window.__dkUsedAcquisitionOnShow === "function") window.__dkUsedAcquisitionOnShow();
       } catch (_) {}
     }
     if (name === "attendance") {
@@ -1158,6 +1167,7 @@
       (name === "customers" && tabCustomers) ||
       (name === "used-market" && tabUsedMarket) ||
       (name === "used-engine" && tabUsedEngine) ||
+      (name === "used-acquisition" && tabUsedAcquisition) ||
       (name === "attendance" && tabAttendance) ||
       (name === "accounts" && tabAccounts);
     function restoreV2ForInv() {

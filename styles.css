@@ -7701,6 +7701,91 @@ body.admin-page #tab-accounts .table-actions{
   }
 }
 
+/* Stage 06 internal acquisition cases */
+#tab-used-acquisition .ua-msg-error{
+  color: #9b1238;
+  font-weight: 600;
+}
+#tab-used-acquisition .ua-case-list{
+  display: grid;
+  gap: 8px;
+}
+#tab-used-acquisition .ua-case-card{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--dk-border);
+  border-radius: 12px;
+  background: #fff;
+}
+#tab-used-acquisition .ua-case-title{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+#tab-used-acquisition .ua-case-actions{
+  flex-shrink: 0;
+}
+#tab-used-acquisition .ua-strong{
+  font-weight: 800;
+}
+#tab-used-acquisition .ua-detail-meta{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+#tab-used-acquisition .ua-comp-list{
+  display: grid;
+  gap: 10px;
+}
+#tab-used-acquisition .ua-comp-row{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--dk-border);
+  border-radius: 12px;
+  background: #fff;
+}
+#tab-used-acquisition .ua-fin-grid{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 10px 0;
+}
+#tab-used-acquisition .ua-preview-box,
+#tab-used-acquisition .ua-fin-saved{
+  margin-top: 12px;
+}
+#tab-used-acquisition .ua-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+#tab-used-acquisition .form-hint{
+  margin: 0 0 8px;
+}
+@media (max-width: 800px){
+  #tab-used-acquisition .ua-case-card{
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #tab-used-acquisition .ua-comp-row,
+  #tab-used-acquisition .ua-fin-grid{
+    grid-template-columns: 1fr;
+  }
+  #tab-used-acquisition .ua-actions .btn{
+    width: 100%;
+    min-height: 44px;
+  }
+}
+
 /* Stage 05 public used valuation */
 .uv-wrap{
   max-width: 720px;
