@@ -91,7 +91,7 @@
     if (raw.indexOf("NO_COMPONENTS") >= 0) return "此案件沒有可估價的零件。";
     if (raw.indexOf("NO_VALUATION_RESULT") >= 0) return "請先完成市場估值。";
     if (raw.indexOf("INVALID_TARGET_MARGIN") >= 0) return "目標毛利率設定有誤。";
-    if (raw.indexOf("INVALID_REFURBISHMENT_COST") >= 0) return "翻新／維修成本設定有誤。";
+    if (raw.indexOf("INVALID_REFURBISHMENT_COST") >= 0) return "整理／維修成本格式不正確。";
     if (raw.indexOf("UNECONOMIC_ACQUISITION") >= 0) return "依目前轉售價、翻新成本與目標毛利，此案件暫不適合收購。";
     if (raw.indexOf("OFFER_EXCEEDS_MAXIMUM") >= 0) return "本次出價超過系統計算的最高收購價。";
     if (raw.indexOf("INVALID_STATUS_TRANSITION") >= 0) return "此案件目前不能執行這個狀態操作。";
@@ -100,6 +100,11 @@
     if (raw.indexOf("INVALID_DECISION_PAYLOAD") >= 0) return "收購評估資料不完整或超出限制，請縮短備註後再試。";
     if (raw.indexOf("INVALID_OFFER_DECISION") >= 0) return "找不到有效的收購評估或報價紀錄，無法完成此操作。";
     if (raw.indexOf("INSUFFICIENT_MARKET_DATA") >= 0) return "目前可參考的市場行情不足，暫時無法完成估值。";
+    if (raw.indexOf("CASE_NOT_ACQUIRED") >= 0) return "此案件尚未完成收購，不能登記出售。";
+    if (raw.indexOf("RESALE_ALREADY_EXISTS") >= 0) return "此案件已登記出售結果。";
+    if (raw.indexOf("INVALID_RESALE_PRICE") >= 0) return "實際售價格式不正確。";
+    if (raw.indexOf("INVALID_SOLD_AT") >= 0) return "出售日期不正確。";
+    if (raw.indexOf("ACQUISITION_NOT_FOUND") >= 0) return "找不到此案件的正式收購紀錄。";
     return "操作失敗，請稍後再試。";
   }
   async function callRpc(name, args) {
@@ -116,7 +121,7 @@
   function statusBadge(st) {
     var cls = "status-badge status-muted";
     if (st === "OFFERED" || st === "INSPECTION_PENDING") cls = "status-badge status-warning";
-    if (st === "ACCEPTED" || st === "ACQUIRED") cls = "status-badge status-success";
+    if (st === "ACCEPTED" || st === "ACQUIRED" || st === "RESOLD") cls = "status-badge status-success";
     if (st === "DECLINED" || st === "EXPIRED") cls = "status-badge status-danger";
     return '<span class="' + cls + '">' + esc(STATUS_LABEL[st] || st) + "</span>";
   }
@@ -235,6 +240,17 @@
     current = unwrap(res);
     currentId = id;
     preview = null;
+    current.resale = null;
+    var st = current.case && current.case.status;
+    if (st === "ACQUIRED" || st === "RESOLD") {
+      var fb = await callRpc("backoffice_used_valuation_get_feedback", { p_case_id: id });
+      if (!fb || fb.ok === false) {
+        showMsg(friendlyError(fb), true);
+        return false;
+      }
+      var fdata = unwrap(fb);
+      current.resale = (fdata && fdata.resale) || null;
+    }
     return true;
   }
 
@@ -306,6 +322,7 @@
     renderDecisionBlock();
     renderOfferBlock();
     renderAcquireBlock();
+    renderResaleBlock();
   }
 
   function riskSelect(id, val) {
@@ -595,6 +612,154 @@
       return;
     }
     showMsg("已完成收購。", false);
+    await loadCase(currentId);
+    renderDetail();
+  }
+
+  function fmtPct(n) {
+    if (n == null || n === "") return "—";
+    var x = Number(n);
+    if (!Number.isFinite(x)) return "—";
+    return x.toLocaleString("zh-TW", { maximumFractionDigits: 2 }) + "%";
+  }
+  function fmtDays(n) {
+    if (n == null || n === "") return "—";
+    var x = Number(n);
+    if (!Number.isFinite(x)) return "—";
+    return x.toLocaleString("zh-TW") + " 天";
+  }
+  function moneyClass(n) {
+    var x = Number(n);
+    return Number.isFinite(x) && x < 0 ? "ua-strong ua-fin-neg" : "ua-strong";
+  }
+  function comparePair(estLabel, estHtml, actLabel, actHtml) {
+    return (
+      '<div class="ua-compare-pair">' +
+        '<div><div class="muted small">' + esc(estLabel) + '</div><div class="ua-strong">' + estHtml + "</div></div>" +
+        '<div><div class="muted small">' + esc(actLabel) + '</div>' + actHtml + "</div>" +
+      "</div>"
+    );
+  }
+
+  function renderResaleBlock() {
+    var host = $("uaResaleCard");
+    if (!host || !current || !current.case) return;
+    var st = current.case.status;
+    var row = current.resale;
+    var title = $("uaResaleTitle");
+    if (title) {
+      title.textContent = ((row && row.id) || st === "RESOLD") ? "成交回饋" : "出售結果";
+    }
+    if (row && row.id) {
+      var hasEst =
+        row.estimated_market_mid != null ||
+        row.estimated_recommended_acquisition != null ||
+        row.estimated_maximum_acquisition != null ||
+        row.estimated_gross_profit != null ||
+        row.estimated_margin_pct != null;
+      var html = "";
+      if (hasEst) {
+        html += '<div class="ua-compare-head">當時預估　vs　實際結果</div>';
+        html += '<div class="ua-compare">';
+        html += comparePair(
+          "估值中位",
+          esc(fmtMoney(row.estimated_market_mid)),
+          "實際售價",
+          '<div class="ua-strong">' + esc(fmtMoney(row.actual_resale_price)) + "</div>"
+        );
+        html += comparePair(
+          "最高收購",
+          esc(fmtMoney(row.estimated_maximum_acquisition)),
+          "實際收購價",
+          '<div class="ua-strong">' + esc(fmtMoney(row.actual_acquisition_price)) + "</div>"
+        );
+        html += comparePair(
+          "預估毛利",
+          esc(fmtMoney(row.estimated_gross_profit)),
+          "實際毛利",
+          '<div class="' + moneyClass(row.actual_gross_profit) + '">' + esc(fmtMoney(row.actual_gross_profit)) + "</div>"
+        );
+        html += comparePair(
+          "預估毛利率",
+          esc(fmtPct(row.estimated_margin_pct)),
+          "實際毛利率",
+          '<div class="' + moneyClass(row.actual_margin_pct) + '">' + esc(fmtPct(row.actual_margin_pct)) + "</div>"
+        );
+        html += "</div>";
+        html +=
+          '<div class="ua-fin-grid ua-fin-saved">' +
+            '<div><div class="muted small">建議收購</div><div class="ua-strong">' + esc(fmtMoney(row.estimated_recommended_acquisition)) + "</div></div>" +
+            '<div><div class="muted small">實際整理／維修成本</div><div class="ua-strong">' + esc(fmtMoney(row.actual_refurbishment_cost)) + "</div></div>" +
+            '<div><div class="muted small">庫存天數</div><div class="ua-strong">' + esc(fmtDays(row.inventory_days)) + "</div></div>" +
+            '<div><div class="muted small">出售日期</div><div>' + esc(fmtTime(row.sold_at)) + "</div></div>" +
+            '<div class="full"><div class="muted small">備註</div><div>' + esc(row.note || "—") + "</div></div>" +
+          "</div>";
+      } else {
+        html +=
+          '<div class="ua-fin-grid">' +
+            '<div><div class="muted small">實際收購價</div><div class="ua-strong">' + esc(fmtMoney(row.actual_acquisition_price)) + "</div></div>" +
+            '<div><div class="muted small">實際整理／維修成本</div><div class="ua-strong">' + esc(fmtMoney(row.actual_refurbishment_cost)) + "</div></div>" +
+            '<div><div class="muted small">實際售價</div><div class="ua-strong">' + esc(fmtMoney(row.actual_resale_price)) + "</div></div>" +
+            '<div><div class="muted small">實際毛利</div><div class="' + moneyClass(row.actual_gross_profit) + '">' + esc(fmtMoney(row.actual_gross_profit)) + "</div></div>" +
+            '<div><div class="muted small">實際毛利率</div><div class="' + moneyClass(row.actual_margin_pct) + '">' + esc(fmtPct(row.actual_margin_pct)) + "</div></div>" +
+            '<div><div class="muted small">庫存天數</div><div class="ua-strong">' + esc(fmtDays(row.inventory_days)) + "</div></div>" +
+            '<div><div class="muted small">出售日期</div><div>' + esc(fmtTime(row.sold_at)) + "</div></div>" +
+            '<div class="full"><div class="muted small">備註</div><div>' + esc(row.note || "—") + "</div></div>" +
+          "</div>";
+      }
+      host.innerHTML = html;
+      return;
+    }
+    if (st !== "ACQUIRED") {
+      host.innerHTML = '<p class="muted">完成收購後，才能登記出售結果。</p>';
+      return;
+    }
+    host.innerHTML =
+      '<p class="form-hint">毛利、毛利率與庫存天數由系統依收購紀錄與出售資料計算，建立後不可修改。</p>' +
+      '<div class="form-grid">' +
+        '<div class="field"><label for="uaResalePrice">實際售價</label><input id="uaResalePrice" type="number" min="0" step="1" /></div>' +
+        '<div class="field"><label for="uaResaleRefurb">實際整理／維修成本</label><input id="uaResaleRefurb" type="number" min="0" step="1" /></div>' +
+        '<div class="field"><label for="uaSoldAt">出售日期</label><input id="uaSoldAt" type="datetime-local" /></div>' +
+        '<div class="field full"><label for="uaResaleNote">備註</label><input id="uaResaleNote" type="text" maxlength="1000" /></div>' +
+      "</div>" +
+      '<div class="actions ua-actions"><button id="uaBtnResale" class="btn btn-primary" type="button">登記出售結果</button></div>';
+    if ($("uaBtnResale")) $("uaBtnResale").addEventListener("click", onCreateResale);
+  }
+
+  async function onCreateResale() {
+    if (submitting) return;
+    var price = toNumOrNull(($("uaResalePrice") || {}).value);
+    var refurb = toNumOrNull(($("uaResaleRefurb") || {}).value);
+    var at = ($("uaSoldAt") || {}).value;
+    if (price == null) {
+      showMsg("實際售價格式不正確。", true);
+      return;
+    }
+    if (refurb == null) {
+      showMsg("整理／維修成本格式不正確。", true);
+      return;
+    }
+    if (!at) {
+      showMsg("出售日期不正確。", true);
+      return;
+    }
+    if (!window.confirm("確認登記出售結果？此紀錄建立後不可修改。")) return;
+    submitting = true;
+    var res = await callRpc("backoffice_used_valuation_create_resale", {
+      p_case_id: currentId,
+      p_payload: {
+        actual_resale_price: price,
+        actual_refurbishment_cost: refurb,
+        sold_at: new Date(at).toISOString(),
+        note: ($("uaResaleNote") || {}).value || ""
+      }
+    });
+    submitting = false;
+    if (!res || res.ok === false) {
+      showMsg(friendlyError(res), true);
+      return;
+    }
+    showMsg("已登記出售結果。", false);
     await loadCase(currentId);
     renderDetail();
   }
