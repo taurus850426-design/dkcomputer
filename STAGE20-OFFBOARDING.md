@@ -11,7 +11,7 @@
 
 1. 在 Supabase SQL Editor 執行 `supabase-stage20-employee-offboarding.sql` 全文。
 2. 確認最下方四個驗證欄位均為 `true`。
-3. 部署本次 `admin.html`、`attendance.js`、`shared.js`。
+3. 部署本次 `admin.html`、`attendance.js`。
 4. 以管理員登入，進入「員工打卡 → 員工總覽」。
 
 ## 實際操作順序
