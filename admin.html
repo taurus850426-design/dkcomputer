@@ -1945,6 +1945,8 @@
                         <option value="今日排休">今日排休</option>
                         <option value="今日請假">今日請假</option>
                         <option value="未排班">未排班</option>
+                        <option value="已離職">已離職</option>
+                        <option value="帳號停用">帳號停用</option>
                       </select>
                     </label>
                   </div>
@@ -2005,6 +2007,51 @@
                   </div>
                   <h4 class="att-card-subtitle">目前預設班別</h4>
                   <div id="attEmpOvDefaultShift" class="att-stat-value">—</div>
+                  <div id="attOffboardingCard" class="section-card-soft attendance-card" style="margin-top:16px" data-admin-only>
+                    <div class="section-head">
+                      <div>
+                        <h4 class="h4 section-title">離職處理</h4>
+                        <p class="form-hint">先準備離職，再補齊出勤並完成最後薪資月結，最後才停用登入。員工與歷史資料不會刪除。</p>
+                      </div>
+                      <span id="attOffboardingStatus" class="status-badge status-muted">尚未開始</span>
+                    </div>
+                    <div id="attOffboardingForm" class="form-grid" style="margin-top:12px">
+                      <div class="field">
+                        <label for="attOffboardingLastDay">最後工作日</label>
+                        <input id="attOffboardingLastDay" type="date" />
+                      </div>
+                      <div class="field">
+                        <label for="attOffboardingType">離職方式</label>
+                        <select id="attOffboardingType">
+                          <option value="VOLUNTARY_RESIGNATION">員工自願離職</option>
+                          <option value="INVOLUNTARY_TERMINATION">公司終止契約</option>
+                          <option value="FIXED_TERM_END">定期契約屆滿</option>
+                          <option value="OTHER">其他</option>
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label for="attOffboardingReason">原因分類</label>
+                        <select id="attOffboardingReason">
+                          <option value="HEALTH">健康因素</option>
+                          <option value="PERSONAL">個人生涯／家庭因素</option>
+                          <option value="CAREER">職涯規劃</option>
+                          <option value="PERFORMANCE">工作表現</option>
+                          <option value="BUSINESS">營運因素</option>
+                          <option value="OTHER">其他</option>
+                        </select>
+                      </div>
+                      <div class="field full">
+                        <label for="attOffboardingNote">備註（選填）</label>
+                        <input id="attOffboardingNote" type="text" maxlength="300" placeholder="只記錄必要事實，不填疾病名稱或詳細病歷" />
+                      </div>
+                    </div>
+                    <div id="attOffboardingSteps" class="muted small" style="margin-top:10px">流程：準備離職 → 補卡／確認請假 → 薪資頁確認月結 → 完成離職。</div>
+                    <div class="actions" style="margin-top:12px">
+                      <button id="attOffboardingPrepare" class="btn btn-ghost" type="button">準備離職結算</button>
+                      <button id="attOffboardingFinalize" class="btn btn-primary" type="button" hidden>完成離職並停用登入</button>
+                    </div>
+                    <div id="attOffboardingMsg" class="muted" style="margin-top:8px" hidden></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2807,6 +2854,36 @@
                   <button id="attAdminRefresh" class="btn btn-ghost" type="button">重新整理</button>
                 </div>
               </div>
+              <div id="attManualShiftCard" class="card" style="margin-top:14px">
+                <div class="section-head">
+                  <div>
+                    <h3 class="h3 section-title">補建漏打卡</h3>
+                    <p class="form-hint">適用整天忘記打卡、目前完全沒有班次的情況。必須填真實上下班時間與理由，系統會永久保留管理員更正紀錄。</p>
+                  </div>
+                </div>
+                <div class="form-grid" style="margin-top:12px">
+                  <div class="field">
+                    <label for="attManualEmployee">員工</label>
+                    <select id="attManualEmployee"><option value="">請選擇員工</option></select>
+                  </div>
+                  <div class="field"><label for="attManualClockIn">上班時間（台北）</label><input id="attManualClockIn" type="datetime-local" step="60" /></div>
+                  <div class="field"><label for="attManualClockOut">下班時間（台北）</label><input id="attManualClockOut" type="datetime-local" step="60" /></div>
+                  <div class="field"><label for="attManualBreakStart">休息開始（選填）</label><input id="attManualBreakStart" type="datetime-local" step="60" /></div>
+                  <div class="field"><label for="attManualBreakEnd">休息結束（選填）</label><input id="attManualBreakEnd" type="datetime-local" step="60" /></div>
+                  <div class="field full">
+                    <label for="attManualReason">補建理由（必填）</label>
+                    <input id="attManualReason" type="text" maxlength="200" placeholder="例如：員工忘記打卡，管理員確認當日確實出勤" />
+                  </div>
+                  <label class="field full" style="display:flex;flex-direction:row;align-items:center;gap:8px">
+                    <input id="attManualConfirmed" type="checkbox" />
+                    <span>我已確認員工當天確實出勤，所填時間與事實相符。</span>
+                  </label>
+                  <div class="full actions">
+                    <button id="attManualSubmit" class="btn btn-primary" type="button">確認補建出勤</button>
+                  </div>
+                </div>
+                <div id="attManualMsg" class="muted" style="margin-top:8px" hidden></div>
+              </div>
               <div class="card att-global-report-block" style="margin-top:14px">
                 <h3 class="h3 section-title">出勤月報</h3>
                   <p class="muted small">依預定班表、核准排休與實際打卡判定每日狀態。不含薪資／扣款／加班費。</p>
@@ -3265,7 +3342,6 @@
     <script src="./used-acquisition-admin.js?v=20260912s07"></script>
     <script src="./purchase-orders.js?v=20260827po1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./attendance.js?v=20260909s19a2"></script>
+    <script src="./attendance.js?v=20260913s20"></script>
   </body>
 </html>
-
