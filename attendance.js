@@ -41,6 +41,9 @@
   let adminBreaks = [];
   let adminAuditRows = [];
   let profileMap = {};
+  let offboardingMap = {};
+  let offboardingAvailable = false;
+  let offboardingBusy = false;
   let locationSettings = null;
   let lastFetchError = "";
   let lastReportHtml = "";
@@ -347,6 +350,25 @@
     if (/server fields are not client-writable/.test(m)) return "不可傳送伺服器欄位。";
     if (/employee not found/.test(m)) return "找不到該員工。";
     if (/employee disabled or not a backoffice user/.test(m)) return "該員工已停用或不是後台使用者。";
+    if (/clock times required/.test(m)) return "請填完整的上下班時間。";
+    if (/manager confirmation required/.test(m)) return "請先確認員工當天確實出勤。";
+    if (/manual shift cannot be future/.test(m)) return "補建出勤不能填未來時間。";
+    if (/manual shift after last work date/.test(m)) return "補建日期超過員工的最後工作日。";
+    if (/manual shift staff only/.test(m)) return "只能補建員工帳號的出勤。";
+    if (/both break times required/.test(m)) return "休息開始與結束時間必須同時填寫。";
+    if (/attendance_shift_overlap/.test(m)) return "這段時間已有出勤紀錄，請確認日期與時間。";
+    if (/offboarding_already_exists/.test(m)) return "這位員工已經開始離職流程。";
+    if (/offboarding_open_shift_exists/.test(m)) return "員工目前仍有未下班的班次，請先處理下班紀錄。";
+    if (/offboarding_attendance_after_last_day/.test(m)) return "最後工作日之後仍有出勤紀錄，請先更正出勤或確認最後工作日。";
+    if (/offboarding_payroll_already_settled/.test(m)) return "最後工作月已先完成月結，無法再建立離職期間。";
+    if (/offboarding_future_period_exists/.test(m)) return "最後工作日之後仍有班別或薪資期間，請先確認日期。";
+    if (/offboarding_future_leave_exists/.test(m)) return "最後工作日之後仍有待處理或已核准請假，請先取消或撤銷。";
+    if (/offboarding_not_prepared/.test(m)) return "尚未準備離職結算。";
+    if (/offboarding_already_finalized/.test(m)) return "這位員工已完成離職。";
+    if (/offboarding_last_day_in_future/.test(m)) return "最後工作日尚未到，現在不能完成離職。";
+    if (/offboarding_payroll_not_settled/.test(m)) return "請先到薪資頁完成最後工作月份的月結。";
+    if (/only staff can be offboarded/.test(m)) return "只能替員工帳號辦理離職，不能停用管理員。";
+    if (/finalized_employee_cannot_be_reenabled/.test(m)) return "已完成離職的帳號不可直接重新啟用。";
     if (/user_id required/.test(m)) return "請選擇員工。";
     if (/work_date required/.test(m)) return "請選擇日期。";
     if (/shift_template_id required/.test(m)) return "請選擇班別。";
@@ -809,6 +831,26 @@
     } catch (_) {}
   }
 
+  async function loadOffboardingsIfAdmin() {
+    offboardingMap = {};
+    offboardingAvailable = false;
+    if (!isAdmin()) return;
+    try {
+      const rows = await fetchRows("employee_offboardings", {
+        select: "id,employee_id,status,separation_type,reason_category,last_work_date,payroll_month,note,final_payroll_settlement_id,prepared_by,prepared_at,finalized_by,finalized_at",
+        apply: function (q) { return q.order("prepared_at", { ascending: false }); },
+      });
+      rows.forEach(function (r) {
+        if (r && r.employee_id && !offboardingMap[String(r.employee_id)]) {
+          offboardingMap[String(r.employee_id)] = r;
+        }
+      });
+      offboardingAvailable = true;
+    } catch (_) {
+      offboardingAvailable = false;
+    }
+  }
+
   async function fetchLocationSettings() {
     if (!isAdmin()) {
       locationSettings = null;
@@ -1091,11 +1133,12 @@
   }
 
   function fillEmployeeSelect() {
-    const sels = [$("attAdminEmployee"), $("attReportEmployee"), $("attSchedEmployee"), $("attDefEmployee"), $("attLeaveDirectEmployee"), $("attHistoricalLeaveEmployee"), $("attCompEmployee"), $("attPayrollEmployee")];
+    const sels = [$("attAdminEmployee"), $("attReportEmployee"), $("attSchedEmployee"), $("attDefEmployee"), $("attLeaveDirectEmployee"), $("attHistoricalLeaveEmployee"), $("attCompEmployee"), $("attPayrollEmployee"), $("attManualEmployee")];
     sels.forEach(function (sel) {
       if (!sel || !isAdmin()) return;
       const keep = sel.value;
       const isAll = sel.id === "attAdminEmployee";
+      const includeInactive = sel.id === "attAdminEmployee" || sel.id === "attReportEmployee" || sel.id === "attPayrollEmployee" || sel.id === "attManualEmployee";
       const opts = [isAll ? '<option value="">全部員工</option>' : '<option value="">請選擇員工</option>'];
       const seenIds = {};
       Object.keys(profileMap).sort(function (a, b) {
@@ -1105,9 +1148,11 @@
         if (!p) return;
         const uid = String(p.id || mapKey);
         if (seenIds[uid]) return;
-        if (p.enabled === false) return;
+        if (p.enabled === false && !includeInactive) return;
         seenIds[uid] = true;
-        opts.push('<option value="' + esc(uid) + '">' + esc(personName(uid)) + "</option>");
+        const off = offboardingMap[uid];
+        const suffix = off && off.status === "FINALIZED" ? "（已離職）" : (p.enabled === false ? "（已停用）" : "");
+        opts.push('<option value="' + esc(uid) + '">' + esc(personName(uid) + suffix) + "</option>");
       });
       sel.innerHTML = opts.join("");
       if (keep && seenIds[keep]) sel.value = keep;
@@ -1222,6 +1267,7 @@
     try {
       gateBackoffice();
       await loadProfilesIfAdmin();
+      await loadOffboardingsIfAdmin();
       fillEmployeeSelect();
       await fetchMyAttendance();
       if (isAdmin()) {
@@ -1283,6 +1329,8 @@
         adminLeaveRequests = [];
         monthLeaveRequests = [];
         compensationPeriods = [];
+        offboardingMap = {};
+        offboardingAvailable = false;
         monthCompliance = null;
         if ($("attAdminManage")) $("attAdminManage").hidden = true;
         if ($("attAdminAudit")) $("attAdminAudit").hidden = true;
@@ -1635,6 +1683,51 @@
     } finally {
       busy = false;
       renderClockFace();
+    }
+  }
+
+  async function submitManualShift() {
+    if (!isAdmin() || busy) return;
+    const employeeId = String(($('attManualEmployee') && $('attManualEmployee').value) || "").trim();
+    const clockIn = datetimeLocalToIso($('attManualClockIn') && $('attManualClockIn').value);
+    const clockOut = datetimeLocalToIso($('attManualClockOut') && $('attManualClockOut').value);
+    const breakStartRaw = String(($('attManualBreakStart') && $('attManualBreakStart').value) || "").trim();
+    const breakEndRaw = String(($('attManualBreakEnd') && $('attManualBreakEnd').value) || "").trim();
+    const reason = String(($('attManualReason') && $('attManualReason').value) || "").trim();
+    const confirmed = !!($('attManualConfirmed') && $('attManualConfirmed').checked);
+    if (!employeeId) return showMsg($("attManualMsg"), "請選擇員工。", true);
+    if (!clockIn || !clockOut) return showMsg($("attManualMsg"), "請填完整的上下班時間。", true);
+    if (!!breakStartRaw !== !!breakEndRaw) return showMsg($("attManualMsg"), "休息開始與結束時間必須同時填寫。", true);
+    if (!reason) return showMsg($("attManualMsg"), "補建理由必填。", true);
+    if (!confirmed) return showMsg($("attManualMsg"), "請先勾選確認員工當天確實出勤。", true);
+    const employeeName = personName(employeeId);
+    if (!global.confirm("將替「" + employeeName + "」補建這筆出勤，並永久保留管理員更正紀錄。確定送出嗎？")) return;
+    const payload = {
+      p_employee_id: employeeId,
+      p_clock_in_at: clockIn,
+      p_clock_out_at: clockOut,
+      p_reason: reason,
+      p_manager_confirmed: true,
+      p_break_start_at: breakStartRaw ? datetimeLocalToIso(breakStartRaw) : null,
+      p_break_end_at: breakEndRaw ? datetimeLocalToIso(breakEndRaw) : null,
+    };
+    busy = true;
+    showMsg($("attManualMsg"), "正在補建出勤…", false);
+    try {
+      await rpcCall("attendance_admin_add_shift", payload);
+      if ($('attManualClockIn')) $('attManualClockIn').value = "";
+      if ($('attManualClockOut')) $('attManualClockOut').value = "";
+      if ($('attManualBreakStart')) $('attManualBreakStart').value = "";
+      if ($('attManualBreakEnd')) $('attManualBreakEnd').value = "";
+      if ($('attManualReason')) $('attManualReason').value = "";
+      if ($('attManualConfirmed')) $('attManualConfirmed').checked = false;
+      await refreshAll({ silent: true });
+      setSelectQuiet("attManualEmployee", employeeId);
+      showMsg($("attManualMsg"), "已補建出勤並留下管理員更正紀錄。", false);
+    } catch (e) {
+      showMsg($("attManualMsg"), mapRpcError(e), true);
+    } finally {
+      busy = false;
     }
   }
 
@@ -4113,6 +4206,10 @@
   }
 
   function employeeTodayStatus(uid) {
+    const prof = profileMap[String(uid)];
+    const off = offboardingMap[String(uid)];
+    if (off && off.status === "FINALIZED") return "已離職";
+    if (prof && prof.enabled === false) return "帳號停用";
     const today = taipeiYmd(new Date());
     const approved = (adminLeaveRequests || []).filter(function (r) {
       return r && String(r.user_id) === String(uid) && ymdKey(r.leave_date) === today && r.status === "APPROVED";
@@ -4200,7 +4297,9 @@
   function peopleRows() {
     const q = String(peopleSearch || "").trim().toLowerCase();
     const st = String(peopleStatusFilter || "").trim();
-    return enabledEmployeeIds().map(function (uid) {
+    return Object.keys(profileMap).sort(function (a, b) {
+      return String(personName(a)).localeCompare(String(personName(b)), "zh-Hant");
+    }).map(function (uid) {
       const status = employeeTodayStatus(uid);
       return {
         uid: uid,
@@ -4252,8 +4351,10 @@
     if ($("attEmpName")) $("attEmpName").textContent = personName(selectedEmpId);
     if ($("attEmpEnabledBadge")) {
       const on = p.enabled !== false;
-      $("attEmpEnabledBadge").textContent = on ? "在職" : "停用";
-      $("attEmpEnabledBadge").className = "status-badge " + (on ? "status-success" : "status-muted");
+      const off = offboardingMap[String(selectedEmpId)];
+      const label = off && off.status === "FINALIZED" ? "已離職" : (off && off.status === "PREPARED" ? "離職結算中" : (on ? "在職" : "停用"));
+      $("attEmpEnabledBadge").textContent = label;
+      $("attEmpEnabledBadge").className = "status-badge " + (on && !off ? "status-success" : (off && off.status === "PREPARED" ? "status-warning" : "status-muted"));
     }
     if ($("attEmpTodayBadge")) {
       $("attEmpTodayBadge").textContent = status;
@@ -4281,6 +4382,124 @@
         $("attEmpOvDefaultShift").textContent = (def.shift_name_snapshot || "預設班") + (span ? "　" + span : "");
       }
     }
+    renderOffboarding();
+  }
+
+  const OFFBOARDING_TYPE_LABEL = {
+    VOLUNTARY_RESIGNATION: "員工自願離職",
+    INVOLUNTARY_TERMINATION: "公司終止契約",
+    FIXED_TERM_END: "定期契約屆滿",
+    OTHER: "其他",
+  };
+  const OFFBOARDING_REASON_LABEL = {
+    HEALTH: "健康因素",
+    PERSONAL: "個人生涯／家庭因素",
+    CAREER: "職涯規劃",
+    PERFORMANCE: "工作表現",
+    BUSINESS: "營運因素",
+    OTHER: "其他",
+  };
+
+  function renderOffboarding() {
+    const card = $("attOffboardingCard");
+    if (!card || !isAdmin() || !selectedEmpId) return;
+    const statusEl = $("attOffboardingStatus");
+    const msgEl = $("attOffboardingMsg");
+    const prepareBtn = $("attOffboardingPrepare");
+    const finalizeBtn = $("attOffboardingFinalize");
+    const ids = ["attOffboardingLastDay", "attOffboardingType", "attOffboardingReason", "attOffboardingNote"];
+    const row = offboardingMap[String(selectedEmpId)] || null;
+    if (!offboardingAvailable) {
+      if (statusEl) { statusEl.textContent = "功能尚未部署"; statusEl.className = "status-badge status-warning"; }
+      if (prepareBtn) prepareBtn.disabled = true;
+      if (finalizeBtn) finalizeBtn.hidden = true;
+      ids.forEach(function (id) { if ($(id)) $(id).disabled = true; });
+      showMsg(msgEl, "需要先部署 Stage 20 資料庫更新，現有打卡與薪資功能不受影響。", true);
+      return;
+    }
+    if (!row) {
+      if (statusEl) { statusEl.textContent = "尚未開始"; statusEl.className = "status-badge status-muted"; }
+      const target = profileMap[String(selectedEmpId)] || {};
+      const canPrepare = target.role === "staff" && target.enabled !== false;
+      if (prepareBtn) { prepareBtn.disabled = offboardingBusy || !canPrepare; prepareBtn.hidden = false; }
+      if (finalizeBtn) finalizeBtn.hidden = true;
+      ids.forEach(function (id) { if ($(id)) $(id).disabled = !canPrepare; });
+      if ($("attOffboardingLastDay") && !$("attOffboardingLastDay").value) $("attOffboardingLastDay").value = taipeiYmd(new Date());
+      showMsg(msgEl, canPrepare ? "" : (target.role === "admin" ? "管理員帳號不能從這裡辦理離職。" : "這個帳號已停用，無法開始新的離職流程。"), !canPrepare);
+      return;
+    }
+    if ($("attOffboardingLastDay")) $("attOffboardingLastDay").value = ymdKey(row.last_work_date);
+    if ($("attOffboardingType")) $("attOffboardingType").value = row.separation_type || "VOLUNTARY_RESIGNATION";
+    if ($("attOffboardingReason")) $("attOffboardingReason").value = row.reason_category || "OTHER";
+    if ($("attOffboardingNote")) $("attOffboardingNote").value = row.note || "";
+    const payrollMonth = ymdKey(row.payroll_month);
+    if (payrollMonth) {
+      if ($("attPayrollYear")) $("attPayrollYear").value = payrollMonth.slice(0, 4);
+      if ($("attPayrollMonth")) $("attPayrollMonth").value = String(Number(payrollMonth.slice(5, 7)));
+      setSelectQuiet("attPayrollEmployee", selectedEmpId);
+    }
+    ids.forEach(function (id) { if ($(id)) $(id).disabled = true; });
+    if (prepareBtn) prepareBtn.hidden = true;
+    if (row.status === "FINALIZED") {
+      if (statusEl) { statusEl.textContent = "已完成離職"; statusEl.className = "status-badge status-muted"; }
+      if (finalizeBtn) finalizeBtn.hidden = true;
+      showMsg(msgEl, "最後工作日：" + ymdKey(row.last_work_date).replace(/-/g, "/") + "；最後薪資已凍結，登入已停用。", false);
+      return;
+    }
+    if (statusEl) { statusEl.textContent = "離職結算中"; statusEl.className = "status-badge status-warning"; }
+    if (finalizeBtn) { finalizeBtn.hidden = false; finalizeBtn.disabled = offboardingBusy; }
+    const why = OFFBOARDING_TYPE_LABEL[row.separation_type] || row.separation_type;
+    const cat = OFFBOARDING_REASON_LABEL[row.reason_category] || row.reason_category;
+    showMsg(msgEl, "已準備：" + why + "／" + cat + "。請先補卡並到薪資頁完成 " + ymdKey(row.payroll_month).slice(0, 7).replace("-", "/") + " 月結，再回來完成離職。", false);
+  }
+
+  async function prepareEmployeeOffboarding() {
+    if (!isAdmin() || !selectedEmpId || offboardingBusy) return;
+    const lastDay = String(($('attOffboardingLastDay') && $('attOffboardingLastDay').value) || "").trim();
+    const type = String(($('attOffboardingType') && $('attOffboardingType').value) || "").trim();
+    const reason = String(($('attOffboardingReason') && $('attOffboardingReason').value) || "").trim();
+    const note = String(($('attOffboardingNote') && $('attOffboardingNote').value) || "").trim();
+    if (!lastDay) return showMsg($("attOffboardingMsg"), "請選擇最後工作日。", true);
+    if (!type || !reason) return showMsg($("attOffboardingMsg"), "請選擇離職方式與原因分類。", true);
+    if (!global.confirm("準備離職後，系統會把班別與薪資期間結束在最後工作日，並移除該日之後尚未發生的排班。確定繼續嗎？")) return;
+    offboardingBusy = true;
+    renderOffboarding();
+    showMsg($("attOffboardingMsg"), "正在準備離職結算…", false);
+    try {
+      await rpcCall("backoffice_prepare_employee_offboarding", {
+        p_employee_id: selectedEmpId,
+        p_last_work_date: lastDay,
+        p_separation_type: type,
+        p_reason_category: reason,
+        p_note: note || null,
+      });
+      await refreshAll({ silent: true });
+      setSelectQuiet("attPayrollEmployee", selectedEmpId);
+      showMsg($("attOffboardingMsg"), "離職結算已準備完成。請補齊出勤，再到薪資頁計算並確認月結。", false);
+    } catch (e) {
+      showMsg($("attOffboardingMsg"), mapRpcError(e), true);
+    } finally {
+      offboardingBusy = false;
+      renderOffboarding();
+    }
+  }
+
+  async function finalizeEmployeeOffboarding() {
+    if (!isAdmin() || !selectedEmpId || offboardingBusy) return;
+    if (!global.confirm("完成後會立即停用這位員工的後台登入，歷史出勤與薪資仍會保留。確定完成離職嗎？")) return;
+    offboardingBusy = true;
+    renderOffboarding();
+    showMsg($("attOffboardingMsg"), "正在完成離職…", false);
+    try {
+      await rpcCall("backoffice_finalize_employee_offboarding", { p_employee_id: selectedEmpId });
+      await refreshAll({ silent: true });
+      showMsg($("attOffboardingMsg"), "離職已完成：登入已停用，歷史出勤與薪資已保留。", false);
+    } catch (e) {
+      showMsg($("attOffboardingMsg"), mapRpcError(e), true);
+    } finally {
+      offboardingBusy = false;
+      renderOffboarding();
+    }
   }
 
   function setSelectQuiet(id, value) {
@@ -4297,6 +4516,7 @@
     setSelectQuiet("attCompEmployee", uid);
     setSelectQuiet("attPayrollEmployee", uid);
     setSelectQuiet("attReportEmployee", uid);
+    setSelectQuiet("attManualEmployee", uid);
     try { await refreshDefaultShiftUi({ silent: true }); } catch (_) {}
     try { await refreshMonthlyScheduleUi({ silent: true }); } catch (_) {}
     try { await refreshCompensationUi({ silent: true }); } catch (_) {}
@@ -4503,6 +4723,8 @@
     if (brSel) brSel.addEventListener("change", fillBreakTimesFromSelect);
     const sub = $("attCorrectSubmit");
     if (sub) sub.addEventListener("click", function () { submitCorrection(); });
+    const manualSub = $("attManualSubmit");
+    if (manualSub) manualSub.addEventListener("click", function () { submitManualShift(); });
     const cancel = $("attCorrectCancel");
     if (cancel) {
       cancel.addEventListener("click", function () {
@@ -4622,6 +4844,10 @@
     if (payrollView) payrollView.addEventListener("click", function () { viewPayrollDaily(); });
     const payrollPrint = $("attPayrollPrint");
     if (payrollPrint) payrollPrint.addEventListener("click", function () { printPayrollPayslip(); });
+    const offPrepare = $("attOffboardingPrepare");
+    if (offPrepare) offPrepare.addEventListener("click", function () { prepareEmployeeOffboarding(); });
+    const offFinalize = $("attOffboardingFinalize");
+    if (offFinalize) offFinalize.addEventListener("click", function () { finalizeEmployeeOffboarding(); });
     const payrollOtBody = $("attPayrollOtTbody");
     if (payrollOtBody) {
       payrollOtBody.addEventListener("click", function (ev) {
