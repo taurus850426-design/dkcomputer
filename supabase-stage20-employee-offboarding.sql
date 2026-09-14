@@ -244,15 +244,9 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'OFFBOARDING_PAYROLL_ALREADY_SETTLED';
   END IF;
-  IF EXISTS (
-    SELECT 1 FROM public.employee_default_shift_periods d
-    WHERE d.user_id = p_employee_id AND d.effective_from > p_last_work_date
-  ) OR EXISTS (
-    SELECT 1 FROM public.employee_compensation_periods c
-    WHERE c.user_id = p_employee_id AND c.effective_from > p_last_work_date
-  ) THEN
-    RAISE EXCEPTION 'OFFBOARDING_FUTURE_PERIOD_EXISTS';
-  END IF;
+  -- Future shift/compensation periods are preserved in snapshot_json for audit.
+  -- They must not force a false last-work date. Active periods are closed below,
+  -- and finalization disables the employee account before a future period can apply.
   IF EXISTS (
     SELECT 1 FROM public.attendance_leave_requests l
     WHERE l.user_id = p_employee_id
@@ -481,4 +475,7 @@ SELECT
   to_regclass('public.employee_offboardings') IS NOT NULL AS table_ready,
   to_regprocedure('public.backoffice_prepare_employee_offboarding(uuid,date,text,text,text)') IS NOT NULL AS prepare_ready,
   to_regprocedure('public.backoffice_finalize_employee_offboarding(uuid)') IS NOT NULL AS finalize_ready,
-  to_regprocedure('public.attendance_admin_add_shift(uuid,timestamptz,timestamptz,text,boolean,timestamptz,timestamptz)') IS NOT NULL AS manual_shift_ready;
+  to_regprocedure('public.attendance_admin_add_shift(uuid,timestamptz,timestamptz,text,boolean,timestamptz,timestamptz)') IS NOT NULL AS manual_shift_ready,
+  pg_catalog.pg_get_functiondef(
+    to_regprocedure('public.backoffice_prepare_employee_offboarding(uuid,date,text,text,text)')
+  ) NOT LIKE '%OFFBOARDING_FUTURE_PERIOD_EXISTS%' AS future_period_fix_ready;
