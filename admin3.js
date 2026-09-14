@@ -2659,10 +2659,50 @@
     return brand + " " + spec;
   }
 
+  async function createVendorQuoteFromPurchase(payload) {
+    if (!requirePerm("vendors")) return { ok: false, error: "沒有廠商報價權限" };
+    const r = payload && typeof payload === "object" ? payload : {};
+    const q = vqStampNew({
+      date: String(r.date || vqNowISODate()).trim(),
+      vendor: String(r.vendor || "").trim(),
+      category: String(r.category || "").trim(),
+      brand: "",
+      spec: String(r.spec || "").trim(),
+      price: vqNum(r.price),
+      marketPrice: null,
+      taxIncluded: !!r.taxIncluded,
+      shippingIncluded: !!r.shippingIncluded,
+      warranty: String(r.warranty || "").trim(),
+      inStock: !!r.inStock,
+      note: String(r.note || "").trim(),
+    });
+    if (!q.vendor) return { ok: false, error: "請選擇廠商" };
+    if (!q.spec) return { ok: false, error: "請填完整規格" };
+    if (q.price == null || q.price < 0) return { ok: false, error: "請填正確報價" };
+
+    const list = loadVendorQuotes();
+    list.push(q);
+    saveVendorQuotes(list);
+    renderVendorQuotes();
+    renderVendorQuotesSyncPanel();
+
+    let cloud = null;
+    if (window.DK && typeof window.DK.upsertVendorQuoteToSupabase === "function" && !window.DK.isVpApplyingCloud?.()) {
+      try {
+        cloud = await window.DK.upsertVendorQuoteToSupabase(q);
+      } catch (e) {
+        cloud = { ok: false, error: String(e?.message || e || "雲端同步失敗") };
+      }
+      renderVendorQuotesSyncPanel();
+    }
+    return { ok: true, quote: q, cloud: cloud };
+  }
+
   // 供採購／叫貨單模組沿用（不複製另一套顯示規則）
   try {
     window.DKPurchaseBridge = {
       loadVendorQuotes: function () { return loadVendorQuotes(); },
+      createVendorQuote: createVendorQuoteFromPurchase,
       getVendorQuoteDisplayName: getVendorQuoteDisplayName,
       esc: v2Esc,
       getVendors: function () { return getVendorOptionsFromConfig(); },
