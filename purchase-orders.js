@@ -1076,7 +1076,7 @@
     }
     editingItemId = null;
     lastAddedItemId = item.id;
-    showMsg(editingItemId ? "已採用報價（記得儲存叫貨單）" : "已加入品項（記得儲存叫貨單）", 2500);
+    showMsg("已採用此廠商報價（記得儲存叫貨單）", 2500);
     renderCurrentPick(item);
     renderItems();
     renderVendorGroups();
