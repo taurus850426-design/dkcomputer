@@ -2669,7 +2669,7 @@
       brand: "",
       spec: String(r.spec || "").trim(),
       price: vqNum(r.price),
-      marketPrice: null,
+      marketPrice: vqNum(r.marketPrice),
       taxIncluded: !!r.taxIncluded,
       shippingIncluded: !!r.shippingIncluded,
       warranty: String(r.warranty || "").trim(),
