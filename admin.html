@@ -362,7 +362,7 @@
                   <div class="field"><label for="orderPayment">付款方式</label><select id="orderPayment"><option value="cash">現金</option><option value="transfer">轉帳</option><option value="card">刷卡</option></select></div>
                   <div class="field"><label for="orderStatus">狀態</label><select id="orderStatus"><option value="pending">待處理</option><option value="paid">已付款</option><option value="shipped">已出貨</option><option value="completed">已完成</option><option value="refunded">已退貨</option></select></div>
                   <div class="field full" data-admin-only><label>毛利（自動）</label><div id="orderGrossProfitDisplay" class="order-gross-preview">-</div></div>
-                  <div class="field full"><label for="orderQuoteNote">報價備註</label><input id="orderQuoteNote" type="text" placeholder="例如：價格有效 3 天、含組裝…" autocomplete="off" /><div class="form-hint">僅出現在報價單，不寫入訂單。</div></div>
+                  <div class="field full"><label for="orderQuoteNote">報價備註</label><input id="orderQuoteNote" type="text" placeholder="例如：價格有效 3 天、含組裝…" autocomplete="off" /><div class="form-hint">會隨訂單儲存，重新開啟仍會保留，並顯示在報價單。</div></div>
                   <div class="field full actions" style="flex-wrap:wrap;gap:8px">
                     <button id="orderSave" class="btn btn-primary primary-action" type="button">儲存</button>
                     <button id="orderCancel" class="btn btn-ghost tertiary-action" type="button">取消</button>
@@ -3331,12 +3331,12 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260909s19a2"></script>
+    <script src="./shared.js?v=20260914s21order1"></script>
     <script src="./inventory-ledger.js?v=20260903s17"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260912s06"></script>
+    <script src="./admin3.js?v=20260914s21order1"></script>
     <script src="./used-valuation-admin.js?v=20260912s03zh"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
     <script src="./used-acquisition-admin.js?v=20260912s07"></script>
