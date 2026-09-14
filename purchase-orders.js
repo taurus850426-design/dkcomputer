@@ -747,9 +747,7 @@
         "<td>" + esc(it.itemNote || "") + "</td>" +
         '<td style="text-align:right;white-space:nowrap">' +
         (canEdit
-          ? '<button type="button" class="btn btn-primary btn-sm" data-poi-act="quote" data-id="' + esc(it.id) + '">' +
-              (hasQuote ? "更新報價" : "填寫報價") + '</button> ' +
-            '<button type="button" class="btn btn-ghost btn-sm" data-poi-act="reprice" data-id="' + esc(it.id) + '">搜尋歷史</button> ' +
+          ? '<button type="button" class="btn btn-primary btn-sm" data-poi-act="quote" data-id="' + esc(it.id) + '">比價／新增報價</button> ' +
             '<button type="button" class="btn btn-ghost btn-sm" data-poi-act="rm" data-id="' + esc(it.id) + '">移除</button>'
           : "—") +
         "</td></tr>"
@@ -899,7 +897,7 @@
         const age = ageLabel(row.days);
         const added = isQuoteInCurrentCart(row.quote.id);
         const btnClass = added ? "btn btn-ghost btn-sm po-pick-added" : "btn btn-primary btn-sm";
-        const btnLabel = added ? "✓ 已加入" : "選擇";
+        const btnLabel = added ? "✓ 目前採用" : "採用此報價";
         html +=
           '<div class="po-quote-card">' +
           '<div class="po-quote-card-top">' +
@@ -1078,7 +1076,7 @@
     }
     editingItemId = null;
     lastAddedItemId = item.id;
-    showMsg("已加入品項（記得儲存叫貨單）", 2000);
+    showMsg("已採用此廠商報價（記得儲存叫貨單）", 2500);
     renderCurrentPick(item);
     renderItems();
     renderVendorGroups();
@@ -1120,6 +1118,14 @@
       selectedQuoteId = String(quoteResult.quote.id);
       quotedAt = String(quoteResult.quote.date || todayYMD()).slice(0, 10);
       if (quoteResult.cloud && !quoteResult.cloud.ok) quoteSyncWarning = "；報價已存本機但雲端同步失敗";
+
+      if (editingItemId) {
+        if (el("poManualBox")) el("poManualBox").hidden = true;
+        if (el("poConfirmManualBtn")) el("poConfirmManualBtn").textContent = "加入品項";
+        searchQuotes(spec);
+        showMsg("新報價已保存" + quoteSyncWarning + "；請在下方比價結果按「採用此報價」", 4500);
+        return;
+      }
     }
 
     const item = normalizeItem({
@@ -1348,13 +1354,14 @@
           if (el("poItemCategory")) el("poItemCategory").value = it.category || "";
           if (el("poManualVendor")) el("poManualVendor").value = itemVendor(it);
           if (el("poManualSpec")) el("poManualSpec").value = itemSpec(it);
-          if (el("poManualPrice")) el("poManualPrice").value = itemPrice(it) == null ? "" : String(itemPrice(it));
-          if (el("poConfirmManualBtn")) el("poConfirmManualBtn").textContent = "儲存報價並套用";
+          if (el("poManualPrice")) el("poManualPrice").value = "";
+          if (el("poConfirmManualBtn")) el("poConfirmManualBtn").textContent = "新增這筆報價";
+          searchQuotes(itemSpec(it) || it.requestText || "");
           if (el("poManualBox")) {
             el("poManualBox").hidden = false;
             try { el("poManualBox").scrollIntoView({ behavior: "smooth", block: "center" }); } catch (_) {}
           }
-          showMsg("在這裡填寫廠商最新報價，不必切換頁面", 2500);
+          showMsg("可新增不同廠商報價；新增後再從比價結果選擇採用", 3500);
         } else if (act === "rm") {
           currentOrder.items = currentOrder.items.filter(function (x) { return x.id !== id; });
           renderItems();
