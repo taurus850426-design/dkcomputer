@@ -6833,7 +6833,11 @@
         const costUnit = Number(line.cost_unit) || 0;
         const cogsSub = costUnit * (Number(line.qty) || 0);
         const spec = line.spec != null ? line.spec : (DK.findItemById(line.item_id)?.spec ?? "");
-        return `<tr><td class="table-primary">${v2Esc(line.name || "")}</td><td class="table-secondary">${v2Esc(spec)}</td><td class="table-number neutral-number">${line.qty}</td><td class="table-number neutral-number">${v2FmtNum(line.unit_price)}</td><td class="table-number neutral-number" data-admin-only>${v2FmtNum(costUnit)}</td><td class="table-number neutral-number" data-admin-only>${v2FmtNum(cogsSub)}</td><td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action order-line-remove" data-i="${i}">移除</button></td></tr>`;
+        const historicalBadge = line.historical_missing
+          ? ' <span class="badge warn" title="庫存主檔已不存在；保留原數量仍可儲存訂單">歷史品項</span>'
+          : "";
+        const removeDisabled = line.historical_missing ? ' disabled title="歷史品項不可移除或變更數量"' : "";
+        return `<tr><td class="table-primary">${v2Esc(line.name || "")}${historicalBadge}</td><td class="table-secondary">${v2Esc(spec)}</td><td class="table-number neutral-number">${line.qty}</td><td class="table-number neutral-number">${v2FmtNum(line.unit_price)}</td><td class="table-number neutral-number" data-admin-only>${v2FmtNum(costUnit)}</td><td class="table-number neutral-number" data-admin-only>${v2FmtNum(cogsSub)}</td><td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action order-line-remove" data-i="${i}"${removeDisabled}>移除</button></td></tr>`;
       }).join("");
       orderLineTbody.querySelectorAll(".order-line-remove").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -6861,6 +6865,7 @@
       const o = id ? DK.getOrders().find((x) => x.id === id) : null;
       orderLineItems = (Array.isArray(o?.items) ? o.items : []).map((l) => {
         const itemId = l.item_id ?? l.id;
+        const inventoryItem = itemId ? DK.findItemById(itemId) : null;
         let costUnit;
         if (canPerm("viewCost")) {
           const snap = l.cost_unit ?? l.costUnit;
@@ -6878,6 +6883,7 @@
           item_id: itemId,
           unit_price: l.unit_price ?? l.unitPrice ?? 0,
           cost_unit: costUnit,
+          historical_missing: !!itemId && !inventoryItem,
         };
       });
       fillOrderLineItemSelect();
@@ -6897,7 +6903,7 @@
       set("orderCogs", o ? o.cogs_total ?? 0 : 0);
       set("orderPayment", o ? o.payment_method ?? "transfer" : "transfer");
       set("orderStatus", o ? o.status ?? "pending" : "pending");
-      set("orderQuoteNote", "");
+      set("orderQuoteNote", o ? o.quote_note ?? "" : "");
       applyOrderStatusSelectClass();
       renderOrderLineTbody();
       updateOrderTotalsFromLines();
@@ -6995,6 +7001,7 @@
           discount: parseFloat(document.getElementById("orderDiscount")?.value) || 0,
           payment_method: document.getElementById("orderPayment")?.value || "transfer",
           status: document.getElementById("orderStatus")?.value || "pending",
+          quote_note: document.getElementById("orderQuoteNote")?.value || "",
           items: orderLineItems.map((l) => ({
             item_id: l.item_id || l.id,
             qty: Number(l.qty) || 0,
@@ -7053,7 +7060,8 @@
           v2Show(orderMsg, res.error || "訂單已寫入，但畫面重新載入失敗。請重新整理頁面，不要再按一次儲存。");
           return;
         }
-        v2Show(orderMsg, (editingV2OrderId ? "已更新（庫存已同步）。" : "已新增並已扣庫存。") + salesTypeHint);
+        const quoteNoteWarning = res.quoteNoteFailed ? (" " + (res.quoteNoteWarning || "報價備註尚未儲存。")) : "";
+        v2Show(orderMsg, (editingV2OrderId ? "已更新（庫存已同步）。" : "已新增並已扣庫存。") + salesTypeHint + quoteNoteWarning);
         if (!editingV2OrderId) tryMarkLinkedCustomerAsWon();
         else clearPendingCustomerOrderLink();
         showSyncToast({ ok: true }, "訂單");
@@ -9618,4 +9626,3 @@
 
   bootAuthUI();
 })();
-

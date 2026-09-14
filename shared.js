@@ -1498,7 +1498,7 @@ async function stage7DeleteItem(id) {
 }
 
 async function stage7CreateOrder(payload) {
-  return stage7Rpc("backoffice_create_order", {
+  const res = await stage7Rpc("backoffice_create_order", {
     p_order_no: payload.order_no,
     p_customer_name: payload.customer_name || "",
     p_sales_type: payload.salesType || payload.sales_type || "",
@@ -1508,10 +1508,11 @@ async function stage7CreateOrder(payload) {
     p_status: payload.status || "pending",
     p_lines: stage7OrderLinesPayload(payload.items || payload.lines || [], payload.total_sale),
   });
+  return stage7FinishOrderWrite(res, payload, null);
 }
 
 async function stage7UpdateOrder(payload) {
-  return stage7Rpc("backoffice_update_order", {
+  const res = await stage7Rpc("backoffice_update_order", {
     p_order_id: payload.id,
     p_order_no: payload.order_no,
     p_customer_name: payload.customer_name || "",
@@ -1522,6 +1523,51 @@ async function stage7UpdateOrder(payload) {
     p_status: payload.status || "pending",
     p_lines: stage7OrderLinesPayload(payload.items || payload.lines || [], payload.total_sale),
   });
+  return stage7FinishOrderWrite(res, payload, payload.id);
+}
+
+function stage7MapOrderWriteError(res) {
+  if (!res || res.ok) return res;
+  const message = String(res.error || (res.data && res.data.message) || "");
+  if (/item not found/i.test(message)) {
+    res.error = "訂單內有已不存在的庫存品項，請先套用訂單完整性修正";
+  } else if (/歷史品項已不存在庫存/.test(message)) {
+    res.error = "此訂單包含已不存在的歷史品項；可以修改資料，但不能變更該品項數量";
+  } else if (/insufficient stock/i.test(message)) {
+    res.error = "庫存不足，請重新確認訂單品項與數量";
+  }
+  return res;
+}
+
+function stage7OrderResultId(res, fallbackId) {
+  const data = res && res.data;
+  if (data && typeof data === "object" && !Array.isArray(data) && data.id) return String(data.id);
+  if (Array.isArray(data) && data[0] && data[0].id) return String(data[0].id);
+  return String(fallbackId || "");
+}
+
+async function stage7FinishOrderWrite(res, payload, fallbackId) {
+  if (!res || !res.ok) return stage7MapOrderWriteError(res);
+  const orderId = stage7OrderResultId(res, fallbackId);
+  if (!orderId) {
+    return {
+      ...res,
+      quoteNoteFailed: true,
+      quoteNoteWarning: "訂單已儲存，但無法取得訂單 ID，報價備註尚未儲存",
+    };
+  }
+  const noteRes = await stage7Rpc("backoffice_set_order_quote_note", {
+    p_order_id: orderId,
+    p_quote_note: payload && payload.quote_note != null ? String(payload.quote_note) : "",
+  });
+  if (!noteRes || !noteRes.ok) {
+    return {
+      ...res,
+      quoteNoteFailed: true,
+      quoteNoteWarning: "訂單已儲存，但報價備註儲存失敗；請勿重複建立訂單",
+    };
+  }
+  return res;
 }
 
 async function stage7SaveExpense(row) {
