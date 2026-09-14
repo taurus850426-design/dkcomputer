@@ -7576,20 +7576,11 @@
       } catch (_) {}
       return { canvas: draw(), filename: quoteFilename(data), data };
     }
-    async function downloadQuoteCanvas(canvas, filename) {
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-      if (!blob) return;
-      const file = new File([blob], filename, { type: "image/png" });
-      if (navigator.share && navigator.canShare) {
-        try {
-          if (navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file], title: filename });
-            return;
-          }
-        } catch (e) {
-          if (e && e.name === "AbortError") return;
-        }
-      }
+    function quoteCanvasToBlob(canvas) {
+      return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    }
+    function directDownloadQuoteBlob(blob, filename) {
+      if (!blob) return false;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -7598,9 +7589,35 @@
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2500);
+      return true;
+    }
+    async function downloadQuoteCanvas(canvas, filename) {
+      const blob = await quoteCanvasToBlob(canvas);
+      if (!blob) throw new Error("圖片產生失敗");
+      directDownloadQuoteBlob(blob, filename);
+    }
+    function isMobileQuoteDevice() {
+      const ua = String(navigator.userAgent || "");
+      return /Android|iPhone|iPad|iPod/i.test(ua)
+        || !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+    }
+    function sharePreparedQuote(file, blob, filename) {
+      if (file && navigator.share && navigator.canShare) {
+        try {
+          if (navigator.canShare({ files: [file] })) {
+            navigator.share({ files: [file], title: filename }).catch((e) => {
+              if (!e || e.name !== "AbortError") directDownloadQuoteBlob(blob, filename);
+            });
+            return;
+          }
+        } catch (_) {}
+      }
+      directDownloadQuoteBlob(blob, filename);
     }
     let lastQuoteCanvas = null;
     let lastQuoteFilename = "";
+    let lastQuoteBlob = null;
+    let lastQuoteFile = null;
     const quoteModal = document.getElementById("quotePreviewModal");
     const quoteImg = document.getElementById("quotePreviewImg");
     function closeQuoteModal() {
@@ -7608,12 +7625,22 @@
     }
     async function openQuotePreview() {
       const { canvas, filename } = await buildQuoteCanvas();
+      const blob = await quoteCanvasToBlob(canvas);
+      if (!blob) throw new Error("圖片產生失敗");
       lastQuoteCanvas = canvas;
       lastQuoteFilename = filename;
+      lastQuoteBlob = blob;
+      try {
+        lastQuoteFile = new File([blob], filename, { type: "image/png" });
+      } catch (_) {
+        lastQuoteFile = null;
+      }
       if (quoteImg) {
         quoteImg.src = canvas.toDataURL("image/png");
         quoteImg.alt = filename;
       }
+      const previewDownload = document.getElementById("quotePreviewDownload");
+      if (previewDownload) previewDownload.textContent = isMobileQuoteDevice() ? "分享／儲存圖片" : "下載圖片";
       if (quoteModal) quoteModal.hidden = false;
     }
     document.getElementById("orderQuotePreview")?.addEventListener("click", () => {
@@ -7622,17 +7649,26 @@
     });
     document.getElementById("orderQuoteDownload")?.addEventListener("click", () => {
       if (!requirePerm("quoteImage")) return;
+      if (isMobileQuoteDevice()) {
+        openQuotePreview().catch((e) => v2Show(orderMsg, "報價單圖片產生失敗：" + String(e?.message || e || "未知錯誤")));
+        return;
+      }
       buildQuoteCanvas()
         .then(({ canvas, filename }) => downloadQuoteCanvas(canvas, filename))
-        .catch(() => v2Show(orderMsg, "報價單下載失敗"));
+        .catch((e) => v2Show(orderMsg, "報價單下載失敗：" + String(e?.message || e || "未知錯誤")));
     });
     document.getElementById("quotePreviewDownload")?.addEventListener("click", () => {
-      if (lastQuoteCanvas) downloadQuoteCanvas(lastQuoteCanvas, lastQuoteFilename || "DK-報價單.png");
-      else {
-        buildQuoteCanvas()
-          .then(({ canvas, filename }) => downloadQuoteCanvas(canvas, filename))
-          .catch(() => {});
+      const filename = lastQuoteFilename || "DK-報價單.png";
+      if (isMobileQuoteDevice() && lastQuoteBlob) {
+        sharePreparedQuote(lastQuoteFile, lastQuoteBlob, filename);
+        return;
       }
+      if (lastQuoteBlob) {
+        directDownloadQuoteBlob(lastQuoteBlob, filename);
+        return;
+      }
+      if (lastQuoteCanvas) downloadQuoteCanvas(lastQuoteCanvas, filename).catch(() => {});
+      else openQuotePreview().catch(() => {});
     });
     document.getElementById("quotePreviewClose")?.addEventListener("click", closeQuoteModal);
     document.getElementById("quotePreviewClose2")?.addEventListener("click", closeQuoteModal);
