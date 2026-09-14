@@ -1090,12 +1090,14 @@
     }
     const vendor = String((el("poManualVendor") && el("poManualVendor").value) || "").trim();
     const price = toNum(el("poManualPrice") && el("poManualPrice").value);
+    const marketPrice = toNum(el("poManualMarketPrice") && el("poManualMarketPrice").value);
     const requestText = String((el("poRequestText") && el("poRequestText").value) || "").trim();
     const spec = String((el("poManualSpec") && el("poManualSpec").value) || "").trim() || requestText;
     const qty = Math.max(1, Math.floor(Number((el("poItemQty") && el("poItemQty").value) || 1)));
     if (!requestText && !spec) return showMsg("請填需求規格");
     if (!vendor) return showMsg("請選擇廠商");
     if (price != null && price < 0) return showMsg("請填正確報價");
+    if (marketPrice != null && marketPrice < 0) return showMsg("請填正確原價屋參考價");
 
     let selectedQuoteId = null;
     let quotedAt = "";
@@ -1109,6 +1111,7 @@
         category: String((el("poItemCategory") && el("poItemCategory").value) || ""),
         spec: spec,
         price: price,
+        marketPrice: marketPrice,
         note: String((el("poItemNote") && el("poItemNote").value) || "") +
           (currentOrder.orderNo ? "｜來源：" + currentOrder.orderNo : ""),
       });
@@ -1245,6 +1248,7 @@
       if (el("poManualBox")) el("poManualBox").hidden = false;
       if (el("poManualSpec") && el("poRequestText")) el("poManualSpec").value = el("poRequestText").value || "";
       if (el("poManualPrice")) el("poManualPrice").value = "";
+      if (el("poManualMarketPrice")) el("poManualMarketPrice").value = "";
       if (el("poConfirmManualBtn")) el("poConfirmManualBtn").textContent = "加入品項";
     });
     el("poCancelManualBtn") && el("poCancelManualBtn").addEventListener("click", function () {
@@ -1355,6 +1359,7 @@
           if (el("poManualVendor")) el("poManualVendor").value = itemVendor(it);
           if (el("poManualSpec")) el("poManualSpec").value = itemSpec(it);
           if (el("poManualPrice")) el("poManualPrice").value = "";
+          if (el("poManualMarketPrice")) el("poManualMarketPrice").value = "";
           if (el("poConfirmManualBtn")) el("poConfirmManualBtn").textContent = "新增這筆報價";
           searchQuotes(itemSpec(it) || it.requestText || "");
           if (el("poManualBox")) {
