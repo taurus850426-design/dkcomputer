@@ -25,6 +25,7 @@
   let lastSearchRows = [];
   let quotePage = 1;
   let lastAddedItemId = null;
+  let expandedOrderId = null;
 
   function bridge() {
     return window.DKPurchaseBridge || {};
@@ -467,6 +468,55 @@
     }).join("");
   }
 
+  function buildExpandedOrderHtml(order) {
+    const tot = orderTotals(order);
+    const items = order.items || [];
+    const itemRows = items.length
+      ? items.map(function (it) {
+          return (
+            "<tr>" +
+            '<td data-label="品項">' + esc(it.requestText || "—") + "</td>" +
+            '<td data-label="規格">' + esc(itemSpec(it) || "—") + "</td>" +
+            '<td data-label="廠商">' + esc(itemVendor(it) || "未指定") + "</td>" +
+            '<td data-label="單價" class="po-list-detail__number">' + esc(fmtNT(itemPrice(it))) + "</td>" +
+            '<td data-label="數量" class="po-list-detail__number">' + esc(String(Number(it.quantity) || 0)) + "</td>" +
+            '<td data-label="小計" class="po-list-detail__number">' + esc(fmtNT(itemSubtotal(it))) + "</td>" +
+            '<td data-label="報價日" class="nowrap">' + esc(fmtDate(it.quotedAt)) + "</td>" +
+            '<td data-label="備註">' + esc(it.itemNote || "—") + "</td>" +
+            "</tr>"
+          );
+        }).join("")
+      : '<tr class="po-list-detail__empty"><td colspan="8">此叫貨單尚無品項</td></tr>';
+
+    return (
+      '<tr class="po-list-detail-row" data-po-detail-for="' + esc(order.id) + '">' +
+      '<td colspan="9">' +
+      '<section class="po-list-detail" aria-label="' + esc(order.orderNo) + ' 叫貨單內容">' +
+      '<div class="po-list-detail__head">' +
+      '<div><div class="po-list-detail__eyebrow">叫貨單內容</div><div class="po-list-detail__title">' + esc(order.orderNo) + "</div></div>" +
+      '<span class="' + statusBadgeClass(order.status) + '">' + esc(STATUS_LABEL[order.status] || order.status) + "</span>" +
+      "</div>" +
+      '<div class="po-list-detail__meta">' +
+      '<div><span>建立日期</span><strong>' + esc(fmtDate(order.createdAt)) + "</strong></div>" +
+      '<div><span>叫貨日期</span><strong>' + esc(fmtDate(order.supplierOrderDate)) + "</strong></div>" +
+      '<div><span>預計到貨</span><strong>' + esc(fmtDate(order.expectedDate)) + "</strong></div>" +
+      '<div><span>廠商／品項</span><strong>' + esc(String(tot.vendorCount)) + " 間／" + esc(String(tot.itemCount)) + " 項</strong></div>" +
+      '<div><span>總數量</span><strong>' + esc(String(tot.totalQty)) + "</strong></div>" +
+      '<div><span>預計總額</span><strong>' + esc(fmtNT(tot.totalAmount)) + "</strong></div>" +
+      "</div>" +
+      '<div class="po-list-detail__items"><table class="po-list-detail__table">' +
+      "<thead><tr><th>品項</th><th>規格</th><th>廠商</th><th>單價</th><th>數量</th><th>小計</th><th>報價日</th><th>備註</th></tr></thead>" +
+      "<tbody>" + itemRows + "</tbody></table></div>" +
+      '<div class="po-list-detail__note"><span>整單備註</span><p>' + esc(order.note || "無") + "</p></div>" +
+      "</section></td></tr>"
+    );
+  }
+
+  function toggleExpandedOrder(id) {
+    expandedOrderId = String(expandedOrderId) === String(id) ? null : id;
+    renderList();
+  }
+
   function renderList() {
     const tbody = el("poListTbody");
     if (!tbody) return;
@@ -491,8 +541,9 @@
     }
     tbody.innerHTML = list.map(function (o) {
       const tot = orderTotals(o);
+      const expanded = String(expandedOrderId) === String(o.id);
       return (
-        "<tr>" +
+        '<tr class="po-list-row' + (expanded ? " is-expanded" : "") + '" data-po-row-id="' + esc(o.id) + '" tabindex="0" aria-expanded="' + (expanded ? "true" : "false") + '">' +
         "<td class=\"nowrap\">" + esc(o.orderNo) + "</td>" +
         "<td class=\"nowrap\">" + esc(fmtDate(o.createdAt)) + "</td>" +
         "<td><span class=\"" + statusBadgeClass(o.status) + "\">" + esc(STATUS_LABEL[o.status] || o.status) + "</span></td>" +
@@ -502,12 +553,13 @@
         "<td class=\"nowrap\">" + esc(fmtDate(o.expectedDate)) + "</td>" +
         "<td class=\"nowrap\">" + esc(fmtDate(o.updatedAt)) + "</td>" +
         '<td style="text-align:right;white-space:nowrap">' +
-        '<button type="button" class="btn btn-ghost btn-sm" data-po-act="view" data-id="' + esc(o.id) + '">查看</button> ' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-po-act="view" data-id="' + esc(o.id) + '" aria-expanded="' + (expanded ? "true" : "false") + '">' + (expanded ? "收合" : "查看") + "</button> " +
         '<button type="button" class="btn btn-ghost btn-sm" data-po-act="edit" data-id="' + esc(o.id) + '">編輯</button> ' +
         '<button type="button" class="btn btn-ghost btn-sm" data-po-act="copy" data-id="' + esc(o.id) + '">複製</button> ' +
         '<button type="button" class="btn btn-ghost btn-sm" data-po-act="print" data-id="' + esc(o.id) + '">列印</button> ' +
         '<button type="button" class="btn btn-ghost btn-sm" data-po-act="del" data-id="' + esc(o.id) + '">刪除</button>' +
-        "</td></tr>"
+        "</td></tr>" +
+        (expanded ? buildExpandedOrderHtml(o) : "")
       );
     }).join("");
   }
@@ -1165,7 +1217,7 @@
       if (listBtn) {
         const id = listBtn.getAttribute("data-id");
         const act = listBtn.getAttribute("data-po-act");
-        if (act === "view") openOrder(id, true);
+        if (act === "view") toggleExpandedOrder(id);
         else if (act === "edit") openOrder(id, false);
         else if (act === "copy") {
           const o = loadOrders().find(function (x) { return x.id === id; });
@@ -1179,6 +1231,7 @@
           const targetId = id;
           if (window.DK && typeof window.DK.softDeletePurchaseOrderToSupabase === "function") {
             window.DK.softDeletePurchaseOrderToSupabase(targetId).then(function (res) {
+              if (String(expandedOrderId) === String(targetId)) expandedOrderId = null;
               if (currentOrder && currentOrder.id === targetId) {
                 currentOrder = null;
                 setListVisible(true);
@@ -1208,9 +1261,16 @@
             currentOrder = null;
             setListVisible(true);
           }
+          if (String(expandedOrderId) === String(targetId)) expandedOrderId = null;
           renderList();
           showMsg("已刪除", 2000);
         }
+        return;
+      }
+
+      const listRow = t.closest("[data-po-row-id]");
+      if (listRow && !t.closest("button,a,input,select,textarea,label")) {
+        toggleExpandedOrder(listRow.getAttribute("data-po-row-id"));
         return;
       }
 
@@ -1266,6 +1326,16 @@
           printOrder(currentOrder, vendor);
         }
       }
+    });
+
+    root.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const t = e.target;
+      if (!t || !t.closest || t.closest("button,a,input,select,textarea,label")) return;
+      const listRow = t.closest("[data-po-row-id]");
+      if (!listRow) return;
+      e.preventDefault();
+      toggleExpandedOrder(listRow.getAttribute("data-po-row-id"));
     });
   }
 
