@@ -197,6 +197,9 @@
       quotedAt: String(r.quotedAt || ""),
       manualVendor: String(r.manualVendor || ""),
       manualUnitPrice: toNum(r.manualUnitPrice),
+      quoteStatus: String(r.quoteStatus || (
+        toNum(r.selectedUnitPrice) != null || toNum(r.manualUnitPrice) != null ? "quoted" : "pending"
+      )),
       itemNote: String(r.itemNote || ""),
     };
   }
@@ -341,6 +344,7 @@
     let amount = 0;
     let hasAmount = false;
     let unassigned = 0;
+    let unquoted = 0;
     let stale = 0;
     const vendors = new Set();
     items.forEach(function (it) {
@@ -349,6 +353,7 @@
       if (!v) unassigned += 1;
       else vendors.add(v);
       const sub = itemSubtotal(it);
+      if (itemPrice(it) == null) unquoted += 1;
       if (sub != null) {
         amount += sub;
         hasAmount = true;
@@ -361,6 +366,7 @@
       totalQty: qty,
       totalAmount: hasAmount ? amount : null,
       unassigned: unassigned,
+      unquoted: unquoted,
       stale: stale,
       vendorCount: vendors.size,
     };
@@ -658,6 +664,11 @@
         if (el("poStatus")) el("poStatus").value = currentOrder.status;
         return false;
       }
+      if (tot.unquoted > 0) {
+        showMsg("尚有 " + tot.unquoted + " 個品項等待報價，請先填寫報價再叫貨。");
+        if (el("poStatus")) el("poStatus").value = currentOrder.status;
+        return false;
+      }
       if (tot.stale > 0) {
         const ok = confirm("部分品項使用超過 30 天的歷史報價（" + tot.stale + " 項），請確認已向廠商重新詢價。是否繼續改為已叫貨？");
         if (!ok) {
@@ -713,11 +724,14 @@
     tbody.innerHTML = items.map(function (it) {
       const d = daysAgo(it.quotedAt);
       const age = ageLabel(d);
+      const hasQuote = itemPrice(it) != null;
       const tip = !itemVendor(it)
         ? '<span class="badge danger">未選廠商</span>'
-        : (d != null && d > 30
-          ? '<span class="badge warn">過期參考</span>'
-          : '<span class="badge ' + age.tone + '">' + esc(age.text) + "</span>");
+        : (!hasQuote
+          ? '<span class="badge warn">等待報價</span>'
+          : (d != null && d > 30
+            ? '<span class="badge warn">過期參考</span>'
+            : '<span class="badge ok">已報價／待確認</span>'));
       const canEdit = isEditable(currentOrder);
       const hl = highlightId && String(it.id) === String(highlightId) ? " ui-enter-soft" : "";
       return (
@@ -733,7 +747,9 @@
         "<td>" + esc(it.itemNote || "") + "</td>" +
         '<td style="text-align:right;white-space:nowrap">' +
         (canEdit
-          ? '<button type="button" class="btn btn-ghost btn-sm" data-poi-act="reprice" data-id="' + esc(it.id) + '">重新比價</button> ' +
+          ? '<button type="button" class="btn btn-primary btn-sm" data-poi-act="quote" data-id="' + esc(it.id) + '">' +
+              (hasQuote ? "更新報價" : "填寫報價") + '</button> ' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-poi-act="reprice" data-id="' + esc(it.id) + '">搜尋歷史</button> ' +
             '<button type="button" class="btn btn-ghost btn-sm" data-poi-act="rm" data-id="' + esc(it.id) + '">移除</button>'
           : "—") +
         "</td></tr>"
@@ -1069,7 +1085,7 @@
     refreshVisibleQuoteResults();
   }
 
-  function addManualItem() {
+  async function addManualItem() {
     if (!currentOrder || !isEditable(currentOrder)) {
       showMsg("僅編輯中可加入品項");
       return;
@@ -1079,30 +1095,46 @@
     const requestText = String((el("poRequestText") && el("poRequestText").value) || "").trim();
     const spec = String((el("poManualSpec") && el("poManualSpec").value) || "").trim() || requestText;
     const qty = Math.max(1, Math.floor(Number((el("poItemQty") && el("poItemQty").value) || 1)));
-    if (!requestText && !spec) {
-      showMsg("請填需求規格");
-      return;
+    if (!requestText && !spec) return showMsg("請填需求規格");
+    if (!vendor) return showMsg("請選擇廠商");
+    if (price != null && price < 0) return showMsg("請填正確報價");
+
+    let selectedQuoteId = null;
+    let quotedAt = "";
+    let quoteSyncWarning = "";
+    if (price != null) {
+      const createQuote = bridge().createVendorQuote;
+      if (typeof createQuote !== "function") return showMsg("廠商報價模組尚未載入，請重新整理後再試");
+      const quoteResult = await createQuote({
+        date: todayYMD(),
+        vendor: vendor,
+        category: String((el("poItemCategory") && el("poItemCategory").value) || ""),
+        spec: spec,
+        price: price,
+        note: String((el("poItemNote") && el("poItemNote").value) || "") +
+          (currentOrder.orderNo ? "｜來源：" + currentOrder.orderNo : ""),
+      });
+      if (!quoteResult || !quoteResult.ok || !quoteResult.quote) {
+        return showMsg("報價儲存失敗：" + String((quoteResult && quoteResult.error) || "未知錯誤"));
+      }
+      selectedQuoteId = String(quoteResult.quote.id);
+      quotedAt = String(quoteResult.quote.date || todayYMD()).slice(0, 10);
+      if (quoteResult.cloud && !quoteResult.cloud.ok) quoteSyncWarning = "；報價已存本機但雲端同步失敗";
     }
-    if (!vendor) {
-      showMsg("請選擇手動廠商");
-      return;
-    }
-    if (price == null || price < 0) {
-      showMsg("請填正確手動單價");
-      return;
-    }
+
     const item = normalizeItem({
       id: editingItemId || uid("poi"),
       requestText: requestText || spec,
       category: String((el("poItemCategory") && el("poItemCategory").value) || ""),
       quantity: qty,
       selectedVendor: vendor,
-      selectedQuoteId: null,
+      selectedQuoteId: selectedQuoteId,
       selectedSpec: spec,
       selectedUnitPrice: price,
-      quotedAt: todayYMD(),
+      quotedAt: quotedAt,
       manualVendor: vendor,
       manualUnitPrice: price,
+      quoteStatus: price == null ? "pending" : "quoted",
       itemNote: String((el("poItemNote") && el("poItemNote").value) || ""),
     });
     if (editingItemId) {
@@ -1113,7 +1145,10 @@
     editingItemId = null;
     lastAddedItemId = item.id;
     if (el("poManualBox")) el("poManualBox").hidden = true;
-    showMsg("已手動加入品項（記得儲存）", 2000);
+    if (el("poConfirmManualBtn")) el("poConfirmManualBtn").textContent = "加入品項";
+    showMsg(price == null
+      ? "已加入等待報價品項（記得儲存叫貨單）"
+      : "報價已保存並套用到叫貨品項" + quoteSyncWarning + "（記得儲存叫貨單）", 3500);
     renderCurrentPick(item);
     renderItems();
     renderVendorGroups();
@@ -1199,9 +1234,12 @@
     });
 
     el("poAddManualItemBtn") && el("poAddManualItemBtn").addEventListener("click", function () {
+      editingItemId = null;
       fillManualVendorSelect();
       if (el("poManualBox")) el("poManualBox").hidden = false;
       if (el("poManualSpec") && el("poRequestText")) el("poManualSpec").value = el("poRequestText").value || "";
+      if (el("poManualPrice")) el("poManualPrice").value = "";
+      if (el("poConfirmManualBtn")) el("poConfirmManualBtn").textContent = "加入品項";
     });
     el("poCancelManualBtn") && el("poCancelManualBtn").addEventListener("click", function () {
       if (el("poManualBox")) el("poManualBox").hidden = true;
@@ -1299,7 +1337,25 @@
       if (poi && currentOrder) {
         const id = poi.getAttribute("data-id");
         const act = poi.getAttribute("data-poi-act");
-        if (act === "rm") {
+        if (act === "quote") {
+          const it = currentOrder.items.find(function (x) { return x.id === id; });
+          if (!it) return;
+          editingItemId = id;
+          fillManualVendorSelect();
+          if (el("poRequestText")) el("poRequestText").value = it.requestText || "";
+          if (el("poItemQty")) el("poItemQty").value = String(it.quantity || 1);
+          if (el("poItemNote")) el("poItemNote").value = it.itemNote || "";
+          if (el("poItemCategory")) el("poItemCategory").value = it.category || "";
+          if (el("poManualVendor")) el("poManualVendor").value = itemVendor(it);
+          if (el("poManualSpec")) el("poManualSpec").value = itemSpec(it);
+          if (el("poManualPrice")) el("poManualPrice").value = itemPrice(it) == null ? "" : String(itemPrice(it));
+          if (el("poConfirmManualBtn")) el("poConfirmManualBtn").textContent = "儲存報價並套用";
+          if (el("poManualBox")) {
+            el("poManualBox").hidden = false;
+            try { el("poManualBox").scrollIntoView({ behavior: "smooth", block: "center" }); } catch (_) {}
+          }
+          showMsg("在這裡填寫廠商最新報價，不必切換頁面", 2500);
+        } else if (act === "rm") {
           currentOrder.items = currentOrder.items.filter(function (x) { return x.id !== id; });
           renderItems();
           renderVendorGroups();
