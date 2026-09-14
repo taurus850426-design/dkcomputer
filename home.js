@@ -522,6 +522,7 @@
   document.addEventListener("click", async function (e) {
     const btn = e.target && e.target.closest ? e.target.closest(".featured-line-btn") : null;
     if (!btn) return;
+    e.preventDefault();
     const DK = window.DK;
     const cfg = (DK && typeof DK.getConfig === "function") ? DK.getConfig() : {};
     const lineUrl = cfg?.line?.url || "";
@@ -541,8 +542,8 @@
         await DK.tryCopy(msg);
       }
     } catch (_) {}
-    if (lineUrl) {
-      window.open(lineUrl, "_blank", "noreferrer");
+    if (lineUrl && DK?.openLineContact) {
+      DK.openLineContact(lineUrl);
     }
   });
 

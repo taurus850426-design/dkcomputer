@@ -212,8 +212,8 @@
           }
         } catch (_) {}
 
-        if (lineUrl) {
-          window.open(lineUrl, "_blank", "noreferrer");
+        if (lineUrl && window.DK?.openLineContact) {
+          window.DK.openLineContact(lineUrl);
         } else {
           try {
             window.DK?.openLineOrder?.(item);

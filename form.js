@@ -154,11 +154,12 @@
     } catch (_) {}
 
     if (cfg?.line?.url) {
-      window.open(cfg.line.url, "_blank", "noreferrer");
+      if (DK?.openLineContact) DK.openLineContact(cfg.line.url);
+      else window.open(cfg.line.url, "_blank", "noreferrer");
       if (ok) {
-        alert("已複製你的需求內容！\n\n請到剛開啟的 LINE 對話框貼上（電腦：Ctrl+V／手機：長按→貼上）後傳送給我們。");
+        alert("已複製你的需求內容！\n\n請在 LINE 貼上後傳送；電腦版可使用 QR Code 或嘗試開啟 LINE。");
       } else {
-        alert("已為你開啟 LINE。請手動輸入或貼上你的需求內容後傳送。");
+        alert("已顯示 LINE 聯絡方式，請手動輸入需求內容後傳送。");
       }
     } else {
       alert(ok ? "已複製需求內容，請貼到 LINE 傳給我們。\n\n（請到管理員後台設定 LINE 連結）" : "請到管理員後台設定 LINE 連結。");

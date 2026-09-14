@@ -2470,6 +2470,113 @@ async function tryCopy(text) {
   }
 }
 
+const LINE_MODAL_QR_SRC = "./assets/line-qr.png";
+
+function isMobileLineDevice() {
+  const ua = String(navigator.userAgent || "");
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function isLineContactUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw || raw === "#") return false;
+  if (/^line:/i.test(raw)) return true;
+  try {
+    const host = new URL(raw, window.location.href).hostname.toLowerCase();
+    return host === "lin.ee" || host === "line.me" || host === "page.line.me" || host.endsWith(".line.me");
+  } catch (_) {
+    return false;
+  }
+}
+
+function ensureLineContactModal() {
+  let modal = document.getElementById("dkLineContactModal");
+  if (modal) return modal;
+
+  modal = document.createElement("div");
+  modal.id = "dkLineContactModal";
+  modal.className = "dk-line-modal";
+  modal.hidden = true;
+  modal.innerHTML = `
+    <div class="dk-line-modal__backdrop" data-line-modal-close></div>
+    <section class="dk-line-modal__panel" role="dialog" aria-modal="true" aria-labelledby="dkLineModalTitle" aria-describedby="dkLineModalDesc">
+      <button class="dk-line-modal__close" type="button" aria-label="關閉 LINE 聯絡視窗" data-line-modal-close>×</button>
+      <div class="dk-line-modal__brand" aria-hidden="true">LINE</div>
+      <h2 id="dkLineModalTitle">加入 DK 官方 LINE</h2>
+      <p id="dkLineModalDesc">請用手機 LINE 掃描 QR Code，或複製官方帳號搜尋加入。</p>
+      <img class="dk-line-modal__qr" src="${LINE_MODAL_QR_SRC}" alt="DK 官方 LINE QR Code" width="224" height="224" />
+      <div class="dk-line-modal__id-row">
+        <span>官方帳號</span>
+        <strong id="dkLineModalId">@315PEPPL</strong>
+      </div>
+      <div class="dk-line-modal__actions">
+        <button class="btn btn-primary" type="button" id="dkLineCopyIdBtn">複製 LINE ID</button>
+        <a class="btn btn-ghost" href="line://ti/p/%40315PEPPL" id="dkLineDesktopBtn">嘗試開啟電腦版 LINE</a>
+      </div>
+      <p class="dk-line-modal__hint" id="dkLineModalStatus" aria-live="polite">若電腦沒有安裝 LINE，請直接用手機掃描上方 QR Code。</p>
+    </section>`;
+  document.body.appendChild(modal);
+
+  const close = () => {
+    modal.hidden = true;
+    document.body.classList.remove("dk-line-modal-open");
+  };
+  modal.querySelectorAll("[data-line-modal-close]").forEach((el) => el.addEventListener("click", close));
+  modal.querySelector("#dkLineCopyIdBtn")?.addEventListener("click", async () => {
+    const lineId = modal.querySelector("#dkLineModalId")?.textContent || "@315PEPPL";
+    const ok = await tryCopy(lineId);
+    const status = modal.querySelector("#dkLineModalStatus");
+    if (status) status.textContent = ok ? `已複製 ${lineId}` : `請手動複製 ${lineId}`;
+  });
+  modal.querySelector("#dkLineDesktopBtn")?.addEventListener("click", () => {
+    const status = modal.querySelector("#dkLineModalStatus");
+    if (status) status.textContent = "已嘗試開啟電腦版 LINE；若沒有反應，請使用 QR Code。";
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.hidden) close();
+  });
+  return modal;
+}
+
+function showLineContactModal() {
+  const cfg = getConfig();
+  const modal = ensureLineContactModal();
+  const lineId = String(cfg?.line?.lineId || "@315PEPPL").trim() || "@315PEPPL";
+  const idEl = modal.querySelector("#dkLineModalId");
+  const desktopBtn = modal.querySelector("#dkLineDesktopBtn");
+  const status = modal.querySelector("#dkLineModalStatus");
+  if (idEl) idEl.textContent = lineId;
+  if (desktopBtn) desktopBtn.setAttribute("href", `line://ti/p/${encodeURIComponent(lineId)}`);
+  if (status) status.textContent = "若電腦沒有安裝 LINE，請直接用手機掃描上方 QR Code。";
+  modal.hidden = false;
+  document.body.classList.add("dk-line-modal-open");
+  modal.querySelector(".dk-line-modal__close")?.focus();
+}
+
+function openLineContact(url) {
+  const targetUrl = String(url || getConfig()?.line?.url || DEFAULT_CONFIG.line.url || "").trim();
+  if (!targetUrl) {
+    alert("尚未設定 LINE 連結。請到管理員後台填入 LINE URL。");
+    return false;
+  }
+  if (isMobileLineDevice()) {
+    window.open(targetUrl, "_blank", "noreferrer");
+    return true;
+  }
+  showLineContactModal();
+  return true;
+}
+
+document.addEventListener("click", (e) => {
+  if (e.defaultPrevented || isMobileLineDevice()) return;
+  const target = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+  if (target?.id === "dkLineDesktopBtn") return;
+  if (target?.classList?.contains("featured-line-btn")) return;
+  if (!target || !isLineContactUrl(target.getAttribute("href") || target.href)) return;
+  e.preventDefault();
+  showLineContactModal();
+});
+
 function buildOrderMessage(item) {
   const cfg = getConfig();
   const tpl = cfg.line.orderMessageTemplate || "你好，我想詢問：{name}";
@@ -2483,7 +2590,7 @@ async function openLineOrder(item) {
   if (cfg.line.url) {
     // 先嘗試複製訊息，使用者貼到 LINE 更快
     tryCopy(msg);
-    window.open(cfg.line.url, "_blank", "noreferrer");
+    openLineContact(cfg.line.url);
     return;
   }
 
@@ -5078,6 +5185,8 @@ window.DK = {
   applyHomeStyleToPage,
   getDefaultHomeStyle,
   openLineOrder,
+  openLineContact,
+  showLineContactModal,
   tryCopy,
   isAdminAuthed,
   setAdminAuthed,

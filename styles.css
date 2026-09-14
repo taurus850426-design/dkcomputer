@@ -7989,4 +7989,131 @@ body.admin-page #tab-accounts .table-actions{
   }
 }
 
-
+/* Desktop LINE contact modal. Mobile devices continue to open LINE directly. */
+body.dk-line-modal-open{
+  overflow: hidden;
+}
+.dk-line-modal[hidden]{
+  display: none !important;
+}
+.dk-line-modal{
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.dk-line-modal__backdrop{
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 8, 15, 0.72);
+  backdrop-filter: blur(4px);
+}
+.dk-line-modal__panel{
+  position: relative;
+  z-index: 1;
+  width: min(100%, 430px);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  background: #fff;
+  color: #111827;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.32);
+  text-align: center;
+}
+.dk-line-modal__close{
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: #f1f3f5;
+  color: #374151;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+.dk-line-modal__close:hover{
+  background: #e5e7eb;
+}
+.dk-line-modal__brand{
+  margin-bottom: 8px;
+  color: #06c755;
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+.dk-line-modal__panel h2{
+  margin: 0 0 8px;
+  color: #111827;
+  font-size: 26px;
+}
+.dk-line-modal__panel > p{
+  margin: 0 auto 18px;
+  color: #667085;
+  line-height: 1.65;
+}
+.dk-line-modal__qr{
+  display: block;
+  width: 224px;
+  height: 224px;
+  margin: 0 auto 18px;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #fff;
+}
+.dk-line-modal__id-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f4f6f8;
+  text-align: left;
+}
+.dk-line-modal__id-row span{
+  color: #667085;
+  font-size: 14px;
+}
+.dk-line-modal__id-row strong{
+  color: #111827;
+  font-size: 18px;
+}
+.dk-line-modal__actions{
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.dk-line-modal__actions .btn{
+  width: 100%;
+  justify-content: center;
+}
+.dk-line-modal__actions .btn-primary{
+  border-color: #06c755;
+  background: #06c755;
+  color: #fff;
+}
+.dk-line-modal__hint{
+  margin: 14px 0 0 !important;
+  font-size: 13px;
+}
+@media (max-width: 520px){
+  .dk-line-modal{
+    padding: 14px;
+  }
+  .dk-line-modal__panel{
+    padding: 26px 20px 22px;
+  }
+  .dk-line-modal__qr{
+    width: min(224px, 72vw);
+    height: auto;
+  }
+}
