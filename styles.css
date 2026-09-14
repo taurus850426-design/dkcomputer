@@ -4546,6 +4546,30 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
   background: rgba(37,99,235,0.075);
   box-shadow: inset 4px 0 0 #2563eb;
 }
+.po-list-vendors{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 96px;
+  max-width: 240px;
+}
+.po-list-vendor{
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(37,99,235,0.09);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.po-list-vendor.is-missing{
+  background: rgba(245,158,11,0.12);
+  color: #92400e;
+}
 .po-list-detail-row > td{
   padding: 0 10px 14px !important;
   background: rgba(15,23,42,0.025);
