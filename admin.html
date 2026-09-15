@@ -1111,7 +1111,15 @@
                   <input id="vqBrand" type="hidden" value="" />
                   <div class="field full"><label for="vqSpec">品牌／型號／規格</label><input id="vqSpec" type="text" placeholder="例如：ASUS RTX 4060 8GB／ADATA LEGEND 710 512GB" /></div>
                   <div class="field"><label for="vqPrice">報價</label><input id="vqPrice" type="number" min="0" step="1" /></div>
-                  <div class="field"><label for="vqMarketPrice">原價屋行情價</label><input id="vqMarketPrice" type="number" min="0" step="1" placeholder="可留空" /></div>
+                  <div class="field">
+                    <label for="vqMarketPrice">原價屋行情價</label>
+                    <div style="display:flex;gap:8px;align-items:center">
+                      <input id="vqMarketPrice" type="number" min="0" step="1" placeholder="可手動輸入" style="flex:1;min-width:0" />
+                      <button id="vqCoolpcLookupBtn" class="btn btn-ghost btn-sm secondary-action" type="button">查原價屋</button>
+                    </div>
+                    <div id="vqCoolpcLookupMsg" class="muted form-hint" hidden></div>
+                  </div>
+                  <div id="vqCoolpcLookupResults" class="field full" hidden aria-live="polite"></div>
                   <div class="field" style="display:flex; align-items:flex-end; gap:12px">
                     <label class="muted" style="display:flex; align-items:center; gap:8px; margin:0">
                       <input id="vqTaxIncluded" type="checkbox" /> 含稅
@@ -1301,10 +1309,6 @@
                     <div class="field">
                       <label for="poManualPrice">廠商報價（尚未報價可留空）</label>
                       <input id="poManualPrice" type="number" min="0" step="1" placeholder="等待報價請留空" />
-                    </div>
-                    <div class="field">
-                      <label for="poManualMarketPrice">原價屋參考價（可留空）</label>
-                      <input id="poManualMarketPrice" type="number" min="0" step="1" placeholder="請填正常單品含稅價" />
                     </div>
                     <div class="field">
                       <label for="poManualSpec">規格名稱</label>
