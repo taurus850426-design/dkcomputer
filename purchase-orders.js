@@ -377,6 +377,10 @@
     return !order || order.status === "draft";
   }
 
+  function canUpdateQuote(order) {
+    return !!order && (order.status === "draft" || order.status === "ordered");
+  }
+
   function el(id) {
     return document.getElementById(id);
   }
@@ -444,8 +448,9 @@
   function setListVisible(showList) {
     const list = el("poListView");
     const editor = el("poEditorView");
-    if (list) list.hidden = !showList;
+    if (list) list.hidden = false;
     if (editor) editor.hidden = showList;
+    document.body.classList.toggle("po-workspace-open", !showList);
     if (showList) {
       const sticky = el("poStickyCart");
       if (sticky) sticky.hidden = true;
@@ -630,7 +635,8 @@
     if (lock) {
       if (!editable) {
         lock.hidden = false;
-        lock.textContent = "此單狀態為「" + (STATUS_LABEL[o.status] || o.status) + "」，品項僅供查看。";
+        lock.textContent = "此單狀態為「" + (STATUS_LABEL[o.status] || o.status) + "」，品項與數量已鎖定。" +
+          (canUpdateQuote(o) ? "仍可使用「補廠商報價」更新報價與比價資料。" : "");
       } else {
         lock.hidden = true;
       }
@@ -681,9 +687,10 @@
     return true;
   }
 
-  function persistCurrent() {
+  function persistCurrent(options) {
     if (!currentOrder) return;
-    if (readEditorMetaIntoCurrent() === false) return;
+    const quoteOnly = !!(options && options.quoteOnly);
+    if (!quoteOnly && readEditorMetaIntoCurrent() === false) return;
     currentOrder.updatedAt = new Date().toISOString();
     const list = loadOrders();
     const idx = list.findIndex(function (o) { return o.id === currentOrder.id; });
@@ -730,6 +737,11 @@
             ? '<span class="badge warn">過期參考</span>'
             : '<span class="badge ok">已報價／待確認</span>'));
       const canEdit = isEditable(currentOrder);
+      const canQuote = canUpdateQuote(currentOrder);
+      const quoteLabel = currentOrder.status === "ordered" ? "補廠商報價" : "比價／新增報價";
+      const actions =
+        (canQuote ? '<button type="button" class="btn btn-primary btn-sm" data-poi-act="quote" data-id="' + esc(it.id) + '">' + quoteLabel + '</button> ' : "") +
+        (canEdit ? '<button type="button" class="btn btn-ghost btn-sm" data-poi-act="rm" data-id="' + esc(it.id) + '">移除</button>' : "");
       const hl = highlightId && String(it.id) === String(highlightId) ? " ui-enter-soft" : "";
       return (
         '<tr class="' + hl.trim() + '" data-poi-row="' + esc(it.id) + '">' +
@@ -743,10 +755,7 @@
         "<td>" + tip + "</td>" +
         "<td>" + esc(it.itemNote || "") + "</td>" +
         '<td style="text-align:right;white-space:nowrap">' +
-        (canEdit
-          ? '<button type="button" class="btn btn-primary btn-sm" data-poi-act="quote" data-id="' + esc(it.id) + '">比價／新增報價</button> ' +
-            '<button type="button" class="btn btn-ghost btn-sm" data-poi-act="rm" data-id="' + esc(it.id) + '">移除</button>'
-          : "—") +
+        (actions || "—") +
         "</td></tr>"
       );
     }).join("");
@@ -1198,7 +1207,7 @@
   }
 
   function openQuoteModal(itemId) {
-    if (!currentOrder || !isEditable(currentOrder)) return showMsg("僅編輯中可新增報價");
+    if (!currentOrder || !canUpdateQuote(currentOrder)) return showMsg("此訂單狀態不可補報價");
     const item = (currentOrder.items || []).find(function (x) { return String(x.id) === String(itemId); });
     if (!item) return showMsg("找不到叫貨品項");
     quoteModalItemId = String(item.id);
@@ -1295,7 +1304,7 @@
   }
 
   async function saveQuoteModal() {
-    if (!currentOrder || !quoteModalItemId || !isEditable(currentOrder)) {
+    if (!currentOrder || !quoteModalItemId || !canUpdateQuote(currentOrder)) {
       return quoteModalMessage("找不到可更新的叫貨品項", true);
     }
     const idx = currentOrder.items.findIndex(function (x) { return String(x.id) === String(quoteModalItemId); });
@@ -1359,7 +1368,7 @@
       renderItems();
       renderVendorGroups();
       searchQuotes(updated.selectedSpec || updated.requestText || "");
-      persistCurrent();
+      persistCurrent({ quoteOnly: true });
       const cloudWarning = result.cloud && !result.cloud.ok ? "；廠商報價雲端同步失敗，已保留本機資料" : "";
       showMsg("報價已同步到廠商比價，並更新叫貨品項" + cloudWarning, 5000);
     } catch (e) {
