@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260915poquotemodal2" />
+            <link rel="stylesheet" href="./styles.css?v=20260916ux1" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -1057,8 +1057,13 @@
                   <div>
                     <h2 class="h2">廠商</h2>
                   </div>
+                  <div class="section-actions">
+                    <button id="vendorFormToggleBtn" class="btn btn-primary primary-action" type="button">新增廠商</button>
+                  </div>
                 </div>
-                <div id="vendorQuotesSyncPanel" class="dk-sync-panel" data-sync="vendor-quotes">
+                <details class="admin-maintenance-panel">
+                  <summary>系統同步與資料維護</summary>
+                  <div id="vendorQuotesSyncPanel" class="dk-sync-panel" data-sync="vendor-quotes">
                   <div class="dk-sync-panel__head">
                     <span class="dk-sync-panel__title">廠商報價雲端同步 1.0</span>
                     <span id="vqSyncStatusBadge" class="dk-sync-badge">檢查中…</span>
@@ -1071,14 +1076,26 @@
                     <button type="button" class="btn btn-primary btn-sm" id="vqSyncUploadBtn" hidden>上傳本機資料</button>
                   </div>
                   <div id="vqSyncMsg" class="muted small" style="margin-top:8px" hidden></div>
-                </div>
-                <div class="form-grid" style="grid-template-columns: 1fr auto; margin-top: 12px">
-                  <div class="field">
-                    <label for="newVendorName">新增廠商</label>
-                    <input id="newVendorName" type="text" placeholder="輸入廠商名稱" autocomplete="off" />
                   </div>
-                  <div class="field" style="display:flex; align-items:flex-end">
-                    <button id="addVendorBtn" class="btn btn-primary" type="button">新增</button>
+                </details>
+                <div id="vendorFormModal" class="item-editor-modal" hidden>
+                  <div class="card item-editor-card admin-action-modal" role="dialog" aria-modal="true" aria-labelledby="vendorFormTitle">
+                    <div class="admin-action-modal__head">
+                      <div>
+                        <h3 id="vendorFormTitle" class="h3">新增廠商</h3>
+                        <p class="muted small">建立後會自動出現在叫貨單與報價選單。</p>
+                      </div>
+                      <button id="vendorFormCloseBtn" class="btn btn-ghost btn-sm" type="button" aria-label="關閉">✕</button>
+                    </div>
+                    <div class="field">
+                      <label for="newVendorName">廠商名稱</label>
+                      <input id="newVendorName" type="text" placeholder="輸入廠商名稱" autocomplete="off" />
+                    </div>
+                    <div id="vendorManageMsg" class="muted small" hidden></div>
+                    <div class="admin-action-modal__actions">
+                      <button id="addVendorBtn" class="btn btn-primary" type="button">新增廠商</button>
+                      <button id="vendorFormCancelBtn" class="btn btn-ghost" type="button">取消</button>
+                    </div>
                   </div>
                 </div>
                 <div id="vendorOptionsCards" class="vendor-card-grid"></div>
@@ -1094,7 +1111,6 @@
                   </thead>
                   <tbody id="vendorOptionsTbody"></tbody>
                 </table>
-                <div id="vendorManageMsg" class="muted small" style="margin-top: 8px" hidden></div>
               </div>
 
               <!-- 廠商報價紀錄（localStorage：dk_vendor_quotes_v1） -->
@@ -1103,41 +1119,53 @@
                 <div class="actions" style="margin-top:12px">
                   <button id="vqFormToggleBtn" class="btn btn-primary" type="button">新增報價</button>
                 </div>
-                <div id="vqFormWrap" class="form-grid" style="margin-top:12px" hidden>
-                  <div class="field"><label for="vqDate">日期</label><input id="vqDate" type="date" /></div>
-                  <div class="field"><label for="vqVendor">廠商</label><select id="vqVendor"></select></div>
-                  <div class="field"><label for="vqCategory">品類</label><select id="vqCategory"><option value="">請選擇品類</option></select></div>
-                  <!-- 舊 brand 欄位保留為隱藏，相容既有資料與 JS；新輸入統一寫入 vqSpec -->
-                  <input id="vqBrand" type="hidden" value="" />
-                  <div class="field full"><label for="vqSpec">品牌／型號／規格</label><input id="vqSpec" type="text" placeholder="例如：ASUS RTX 4060 8GB／ADATA LEGEND 710 512GB" /></div>
-                  <div class="field"><label for="vqPrice">報價</label><input id="vqPrice" type="number" min="1" step="1" placeholder="必須大於 0" /></div>
-                  <div class="field">
+                <div id="vqFormWrap" class="item-editor-modal" hidden>
+                  <div class="card item-editor-card admin-action-modal admin-action-modal--wide" role="dialog" aria-modal="true" aria-labelledby="vqFormTitle">
+                    <div class="admin-action-modal__head">
+                      <div><h3 id="vqFormTitle" class="h3">新增廠商報價</h3><p class="muted small">先填必要資料，其餘內容可在「更多資料」補充。</p></div>
+                      <button id="vqFormCloseBtn" class="btn btn-ghost btn-sm" type="button" aria-label="關閉">✕</button>
+                    </div>
+                    <div class="form-grid">
+                      <div class="field"><label for="vqDate">日期</label><input id="vqDate" type="date" /></div>
+                      <div class="field"><label for="vqVendor">廠商</label><select id="vqVendor"></select></div>
+                      <div class="field"><label for="vqCategory">品類</label><select id="vqCategory"><option value="">請選擇品類</option></select></div>
+                      <input id="vqBrand" type="hidden" value="" />
+                      <div class="field full"><label for="vqSpec">品牌／型號／規格</label><input id="vqSpec" type="text" placeholder="例如：ASUS RTX 4060 8GB" /></div>
+                      <div class="field full"><label for="vqPrice">廠商報價</label><input id="vqPrice" type="number" min="1" step="1" placeholder="必須大於 0" /></div>
+                      <details class="full admin-advanced-fields">
+                        <summary>更多資料（原價屋、稅運、保固、現貨、備註）</summary>
+                        <div class="form-grid">
+                          <div class="field full">
                     <label for="vqMarketPrice">原價屋行情價</label>
                     <div style="display:flex;gap:8px;align-items:center">
                       <input id="vqMarketPrice" type="number" min="0" step="1" placeholder="可手動輸入" style="flex:1;min-width:0" />
                       <button id="vqCoolpcLookupBtn" class="btn btn-ghost btn-sm secondary-action" type="button">查原價屋</button>
                     </div>
                     <div id="vqCoolpcLookupMsg" class="muted form-hint" hidden></div>
-                  </div>
-                  <div id="vqCoolpcLookupResults" class="field full" hidden aria-live="polite"></div>
-                  <div class="field" style="display:flex; align-items:flex-end; gap:12px">
+                          </div>
+                          <div id="vqCoolpcLookupResults" class="field full" hidden aria-live="polite"></div>
+                          <div class="field full" style="display:flex; align-items:flex-end; gap:12px">
                     <label class="muted" style="display:flex; align-items:center; gap:8px; margin:0">
                       <input id="vqTaxIncluded" type="checkbox" /> 含稅
                     </label>
                     <label class="muted" style="display:flex; align-items:center; gap:8px; margin:0">
                       <input id="vqShippingIncluded" type="checkbox" /> 含運
                     </label>
-                  </div>
-                  <div class="field"><label for="vqWarranty">保固</label><input id="vqWarranty" type="text" placeholder="例如：1年/店保" /></div>
-                  <div class="field" style="display:flex; align-items:flex-end">
+                          </div>
+                          <div class="field"><label for="vqWarranty">保固</label><input id="vqWarranty" type="text" placeholder="例如：1年/店保" /></div>
+                          <div class="field" style="display:flex; align-items:flex-end">
                     <label class="muted" style="display:flex; align-items:center; gap:8px; margin:0">
                       <input id="vqInStock" type="checkbox" /> 現貨
                     </label>
-                  </div>
-                  <div class="field full"><label for="vqNote">備註</label><input id="vqNote" type="text" placeholder="例如：限量/到貨日/最低幾顆" /></div>
-                  <div class="full actions">
-                    <button id="vqAddBtn" class="btn btn-primary" type="button">新增報價</button>
-                    <button id="vqCancelBtn" class="btn btn-ghost" type="button">取消</button>
+                          </div>
+                          <div class="field full"><label for="vqNote">備註</label><input id="vqNote" type="text" placeholder="例如：限量/到貨日/最低幾顆" /></div>
+                        </div>
+                      </details>
+                    </div>
+                    <div class="admin-action-modal__actions">
+                      <button id="vqAddBtn" class="btn btn-primary" type="button">新增報價</button>
+                      <button id="vqCancelBtn" class="btn btn-ghost" type="button">取消</button>
+                    </div>
                   </div>
                 </div>
                 <div id="vqMsg" class="muted small" style="margin-top:8px" hidden></div>
@@ -1175,6 +1203,10 @@
                 </div>
                 <div id="vendorQuotePagination" class="pagination"></div>
               </div>
+              <details id="vendorInsightsPanel" class="admin-insights-panel">
+                <summary>查看廠商比價與分析</summary>
+                <div id="vendorInsightsHost"></div>
+              </details>
             </div>
           </section>
 
@@ -1190,7 +1222,9 @@
                   <button id="poNewBtn" class="btn btn-primary primary-action" type="button">新增叫貨單</button>
                 </div>
               </div>
-              <div id="purchaseOrdersSyncPanel" class="dk-sync-panel" data-sync="purchase-orders">
+              <details class="admin-maintenance-panel">
+                <summary>系統同步與資料維護</summary>
+                <div id="purchaseOrdersSyncPanel" class="dk-sync-panel" data-sync="purchase-orders">
                 <div class="dk-sync-panel__head">
                   <span class="dk-sync-panel__title">叫貨單雲端同步 1.0</span>
                   <span id="poSyncStatusBadge" class="dk-sync-badge">檢查中…</span>
@@ -1203,7 +1237,8 @@
                   <button type="button" class="btn btn-primary btn-sm" id="poSyncUploadBtn" hidden>上傳本機資料</button>
                 </div>
                 <div id="poSyncExtraMsg" class="muted small" style="margin-top:8px" hidden></div>
-              </div>
+                </div>
+              </details>
               <div id="poMsg" class="muted small" style="margin-top:8px" hidden></div>
 
               <!-- 列表 -->
@@ -1249,7 +1284,7 @@
               <div id="poEditorView" hidden>
                 <div class="actions po-editor-actions" style="margin-top:8px;flex-wrap:wrap;gap:8px">
                   <button id="poSaveBtn" class="btn btn-primary primary-action" type="button">儲存叫貨單</button>
-                  <button id="poBackToListBtn" class="btn btn-ghost secondary-action" type="button">← 返回列表</button>
+                  <button id="poBackToListBtn" class="btn btn-ghost secondary-action" type="button">關閉</button>
                   <button id="poCopyAllBtn" class="btn btn-ghost tertiary-action" type="button">複製全部叫貨文字</button>
                   <button id="poPrintBtn" class="btn btn-ghost tertiary-action" type="button">列印叫貨單</button>
                 </div>
@@ -3373,16 +3408,16 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260914s21order1"></script>
+    <script src="./shared.js?v=20260916ux1"></script>
     <script src="./inventory-ledger.js?v=20260903s17"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260915poquotemodal2"></script>
+    <script src="./admin3.js?v=20260916ux1"></script>
     <script src="./used-valuation-admin.js?v=20260912s03zh"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
     <script src="./used-acquisition-admin.js?v=20260912s07"></script>
-    <script src="./purchase-orders.js?v=20260915poquotemodal2"></script>
+    <script src="./purchase-orders.js?v=20260916ux1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260913s20"></script>
   </body>
