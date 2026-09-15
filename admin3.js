@@ -2669,7 +2669,7 @@
       brand: "",
       spec: String(r.spec || "").trim(),
       price: vqNum(r.price),
-      marketPrice: vqNum(r.marketPrice),
+      marketPrice: null,
       taxIncluded: !!r.taxIncluded,
       shippingIncluded: !!r.shippingIncluded,
       warranty: String(r.warranty || "").trim(),
@@ -3541,11 +3541,115 @@
     if (specEl) specEl.value = "";
     if (priceEl) priceEl.value = "";
     if (mpEl) mpEl.value = "";
+    vqResetCoolpcLookup();
     if (taxEl) taxEl.checked = false;
     if (shipEl) shipEl.checked = false;
     if (warrantyEl) warrantyEl.value = "";
     if (stockEl) stockEl.checked = false;
     if (noteEl) noteEl.value = "";
+  }
+
+
+  function vqResetCoolpcLookup() {
+    const results = document.getElementById("vqCoolpcLookupResults");
+    const msg = document.getElementById("vqCoolpcLookupMsg");
+    if (results) {
+      results.hidden = true;
+      results.innerHTML = "";
+    }
+    if (msg) {
+      msg.hidden = true;
+      msg.textContent = "";
+    }
+  }
+
+  function vqRenderCoolpcCandidates(result) {
+    const results = document.getElementById("vqCoolpcLookupResults");
+    const msg = document.getElementById("vqCoolpcLookupMsg");
+    if (!results) return;
+    const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
+    if (!candidates.length) {
+      results.hidden = true;
+      results.innerHTML = "";
+      if (msg) {
+        msg.hidden = false;
+        msg.textContent = "找不到相近商品，請調整規格關鍵字或手動輸入行情價。";
+      }
+      return;
+    }
+    if (msg) {
+      msg.hidden = false;
+      msg.textContent = "找到 " + candidates.length + " 筆候選。請核對完整型號後再套用，系統不會自動覆蓋。";
+    }
+    const sourceUrl = String(result?.sourceUrl || "");
+    const checkedAt = String(result?.checkedAt || "");
+    const rows = candidates.map((c, index) => {
+      const price = Number(c?.price);
+      const eligible = c?.eligible === true && Number.isFinite(price) && price >= 0;
+      const reason = String(c?.reason || "");
+      const badge = eligible
+        ? '<span class="status-badge status-success">正常單品候選</span>'
+        : '<span class="status-badge status-warning">條件價，不可直接套用</span>';
+      const button = eligible
+        ? '<button type="button" class="btn btn-primary btn-sm" data-vq-coolpc-price="' + vqEsc(String(price)) + '" data-vq-coolpc-index="' + index + '">套用 NT$' + vqEsc(price.toLocaleString("zh-TW")) + '</button>'
+        : '<button type="button" class="btn btn-ghost btn-sm" disabled>不可套用</button>';
+      return '<div class="section-card-soft" style="padding:12px;margin-top:8px">'
+        + '<div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap">'
+        + '<div style="flex:1;min-width:220px"><div style="font-weight:700">' + vqEsc(String(c?.title || "未命名商品")) + '</div>'
+        + '<div class="muted small" style="margin-top:6px">原價屋含稅價：NT$' + vqEsc(Number.isFinite(price) ? price.toLocaleString("zh-TW") : "—")
+        + (reason ? "｜" + vqEsc(reason) : "") + '</div><div style="margin-top:6px">' + badge + '</div></div>'
+        + '<div>' + button + '</div></div></div>';
+    });
+    const source = sourceUrl
+      ? '<div class="muted small" style="margin-top:10px">來源：<a href="' + vqEsc(sourceUrl) + '" target="_blank" rel="noopener noreferrer">原價屋官方品類頁</a>'
+        + (checkedAt ? "｜查詢時間：" + vqEsc(checkedAt.replace("T", " ").slice(0, 19)) : "") + '</div>'
+      : "";
+    results.innerHTML = '<div style="font-weight:700">原價屋相近商品</div>' + rows.join("") + source;
+    results.hidden = false;
+  }
+
+  async function lookupCoolpcForVendorQuote() {
+    if (!requirePerm("vendors")) return;
+    const button = document.getElementById("vqCoolpcLookupBtn");
+    const spec = String(document.getElementById("vqSpec")?.value || "").trim();
+    const category = String(document.getElementById("vqCategory")?.value || "").trim();
+    const msg = document.getElementById("vqCoolpcLookupMsg");
+    if (!spec) return vqShowMsg("請先填品牌／型號／規格，再查原價屋");
+    if (!category) return vqShowMsg("請先選擇品類，再查原價屋");
+    if (!window.DK || typeof window.DK.lookupCoolpcPrices !== "function") {
+      return vqShowMsg("查價功能尚未載入，請重新整理後再試");
+    }
+    vqResetCoolpcLookup();
+    if (msg) {
+      msg.hidden = false;
+      msg.textContent = "正在查詢原價屋官方含稅價…";
+    }
+    const oldText = button?.textContent || "查原價屋";
+    if (button) {
+      button.disabled = true;
+      button.textContent = "查詢中…";
+    }
+    try {
+      const result = await window.DK.lookupCoolpcPrices({ query: spec, category: category });
+      if (!result?.ok) {
+        if (msg) {
+          msg.hidden = false;
+          msg.textContent = String(result?.error || "原價屋查價失敗");
+        }
+        return;
+      }
+      vqRenderCoolpcCandidates(result);
+    } catch (e) {
+      if (msg) {
+        msg.hidden = false;
+        msg.textContent = "原價屋查價失敗：" + String(e?.message || e || "未知錯誤");
+      }
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = oldText;
+      }
+    }
   }
 
   async function deleteVendorQuoteById(id) {
@@ -3646,6 +3750,21 @@
       cancelBtn?.addEventListener("click", () => setOpen(false));
     })();
     document.getElementById("vqAddBtn")?.addEventListener("click", addVendorQuoteFromForm);
+    document.getElementById("vqCoolpcLookupBtn")?.addEventListener("click", lookupCoolpcForVendorQuote);
+    document.getElementById("vqSpec")?.addEventListener("input", vqResetCoolpcLookup);
+    document.getElementById("vqCategory")?.addEventListener("change", vqResetCoolpcLookup);
+    document.getElementById("vqCoolpcLookupResults")?.addEventListener("click", (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest("[data-vq-coolpc-price]") : null;
+      if (!btn || btn.disabled) return;
+      const price = Number(btn.getAttribute("data-vq-coolpc-price"));
+      if (!Number.isFinite(price) || price < 0) return;
+      const target = document.getElementById("vqMarketPrice");
+      if (target) {
+        target.value = String(Math.round(price));
+        try { target.focus(); } catch (_) {}
+      }
+      vqShowMsg("已套用原價屋行情價 NT$" + Math.round(price).toLocaleString("zh-TW") + "；按「新增報價」後才會儲存。");
+    });
 
     function resetVendorQuotePageAndRender() {
       vqListPage = 1;
