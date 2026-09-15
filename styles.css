@@ -4570,6 +4570,19 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
   background: rgba(245,158,11,0.12);
   color: #92400e;
 }
+.po-list-note{
+  min-width: 140px;
+  max-width: 260px;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.po-list-note.is-missing{
+  color: var(--muted);
+  font-weight: 400;
+}
 .po-list-detail-row > td{
   padding: 0 10px 14px !important;
   background: rgba(15,23,42,0.025);
