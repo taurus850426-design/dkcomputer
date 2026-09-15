@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260914poexpand2" />
+            <link rel="stylesheet" href="./styles.css?v=20260915poquotemodal2" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -1110,7 +1110,7 @@
                   <!-- 舊 brand 欄位保留為隱藏，相容既有資料與 JS；新輸入統一寫入 vqSpec -->
                   <input id="vqBrand" type="hidden" value="" />
                   <div class="field full"><label for="vqSpec">品牌／型號／規格</label><input id="vqSpec" type="text" placeholder="例如：ASUS RTX 4060 8GB／ADATA LEGEND 710 512GB" /></div>
-                  <div class="field"><label for="vqPrice">報價</label><input id="vqPrice" type="number" min="0" step="1" /></div>
+                  <div class="field"><label for="vqPrice">報價</label><input id="vqPrice" type="number" min="1" step="1" placeholder="必須大於 0" /></div>
                   <div class="field">
                     <label for="vqMarketPrice">原價屋行情價</label>
                     <div style="display:flex;gap:8px;align-items:center">
@@ -1303,19 +1303,11 @@
 
                   <div id="poManualBox" class="form-grid po-manual-box" style="margin-top:10px" hidden>
                     <div class="field">
-                      <label for="poManualVendor">手動廠商</label>
+                      <label for="poManualVendor">指定詢價廠商</label>
                       <select id="poManualVendor"></select>
                     </div>
-                    <div class="field">
-                      <label for="poManualPrice">廠商報價（尚未報價可留空）</label>
-                      <input id="poManualPrice" type="number" min="0" step="1" placeholder="等待報價請留空" />
-                    </div>
-                    <div class="field">
-                      <label for="poManualSpec">規格名稱</label>
-                      <input id="poManualSpec" type="text" placeholder="預設使用需求規格" />
-                    </div>
                     <div class="full actions">
-                      <button id="poConfirmManualBtn" class="btn btn-primary" type="button">加入品項</button>
+                      <button id="poConfirmManualBtn" class="btn btn-primary" type="button">加入等待報價品項</button>
                       <button id="poCancelManualBtn" class="btn btn-ghost tertiary-action" type="button">取消</button>
                     </div>
                   </div>
@@ -3324,6 +3316,48 @@
       <div id="itemMsg" class="muted" hidden></div>
       </div>
     </div>
+    <div id="poQuoteModal" class="po-quote-modal" hidden>
+      <div class="po-quote-modal__card" role="dialog" aria-modal="true" aria-labelledby="poQuoteModalTitle">
+        <div class="po-quote-modal__head">
+          <div>
+            <h3 id="poQuoteModalTitle" class="h3">比價／新增報價</h3>
+            <div id="poQuoteItemSummary" class="muted small"></div>
+          </div>
+          <button id="poQuoteCloseBtn" class="btn btn-ghost btn-sm" type="button" aria-label="關閉報價視窗">關閉</button>
+        </div>
+        <div class="po-quote-modal__body">
+          <div id="poQuoteHistory" class="surface-info po-quote-modal__history" hidden></div>
+          <div class="form-grid">
+            <div class="field"><label for="poQuoteDate">日期</label><input id="poQuoteDate" type="date" /></div>
+            <div class="field"><label for="poQuoteVendor">廠商</label><select id="poQuoteVendor"></select></div>
+            <div class="field"><label for="poQuoteCategory">品類</label><select id="poQuoteCategory"><option value="">請選擇品類</option></select></div>
+            <div class="field full"><label for="poQuoteSpec">品牌／型號／規格</label><input id="poQuoteSpec" type="text" /></div>
+            <div class="field"><label for="poQuotePrice">廠商報價</label><input id="poQuotePrice" type="number" min="1" step="1" inputmode="numeric" /></div>
+            <div class="field">
+              <label for="poQuoteMarketPrice">原價屋行情價</label>
+              <div class="po-quote-market-row">
+                <input id="poQuoteMarketPrice" type="number" min="0" step="1" inputmode="numeric" placeholder="可手動輸入" />
+                <button id="poQuoteCoolpcBtn" class="btn btn-ghost btn-sm secondary-action" type="button">查原價屋</button>
+              </div>
+              <div id="poQuoteCoolpcMsg" class="muted form-hint" hidden></div>
+            </div>
+            <div id="poQuoteCoolpcResults" class="field full" hidden aria-live="polite"></div>
+            <div class="field po-quote-checks">
+              <label class="muted"><input id="poQuoteTaxIncluded" type="checkbox" /> 含稅</label>
+              <label class="muted"><input id="poQuoteShippingIncluded" type="checkbox" /> 含運</label>
+            </div>
+            <div class="field"><label for="poQuoteWarranty">保固</label><input id="poQuoteWarranty" type="text" placeholder="例如：1年／店保" /></div>
+            <div class="field po-quote-checks"><label class="muted"><input id="poQuoteInStock" type="checkbox" /> 現貨</label></div>
+            <div class="field full"><label for="poQuoteNote">備註</label><input id="poQuoteNote" type="text" placeholder="例如：限量／到貨日／最低幾顆" /></div>
+          </div>
+          <div id="poQuoteMsg" class="muted small" hidden></div>
+        </div>
+        <div class="po-quote-modal__actions">
+          <button id="poQuoteSaveBtn" class="btn btn-primary" type="button">儲存報價並更新叫貨品項</button>
+          <button id="poQuoteCancelBtn" class="btn btn-ghost" type="button">取消</button>
+        </div>
+      </div>
+    </div>
     <div id="quotePreviewModal" class="quote-preview-modal" hidden>
       <div class="quote-preview-card" role="dialog" aria-modal="true" aria-labelledby="quotePreviewTitle">
         <div class="quote-preview-head">
@@ -3344,11 +3378,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260914s22inlinequote1"></script>
+    <script src="./admin3.js?v=20260915poquotemodal2"></script>
     <script src="./used-valuation-admin.js?v=20260912s03zh"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
     <script src="./used-acquisition-admin.js?v=20260912s07"></script>
-    <script src="./purchase-orders.js?v=20260914s221multiquote1"></script>
+    <script src="./purchase-orders.js?v=20260915poquotemodal2"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260913s20"></script>
   </body>
