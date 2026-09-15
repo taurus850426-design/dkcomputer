@@ -804,6 +804,101 @@ body.theme-apple #home-entries .home-entry-sub{
   flex-shrink: 0;
 }
 
+body.admin-modal-open,
+body.po-workspace-open{
+  overflow: hidden;
+}
+.admin-maintenance-panel,
+.admin-insights-panel{
+  margin: 10px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.62);
+}
+.admin-maintenance-panel > summary,
+.admin-insights-panel > summary,
+.admin-advanced-fields > summary{
+  cursor: pointer;
+  padding: 12px 14px;
+  color: var(--text);
+  font-weight: 700;
+  list-style-position: inside;
+}
+.admin-maintenance-panel > .dk-sync-panel{
+  margin: 0 12px 12px;
+}
+.admin-insights-panel > #vendorInsightsHost{
+  padding: 0 12px 12px;
+}
+.admin-action-modal{
+  padding: 18px;
+}
+.admin-action-modal--wide{
+  max-width: 720px !important;
+}
+.admin-action-modal__head,
+.admin-action-modal__actions{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.admin-action-modal__head{
+  margin-bottom: 16px;
+}
+.admin-action-modal__head .h3,
+.admin-action-modal__head p{
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+.admin-action-modal__actions{
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+.admin-advanced-fields{
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(15,23,42,0.025);
+}
+.admin-advanced-fields > .form-grid{
+  padding: 0 12px 12px;
+}
+#poEditorView:not([hidden]){
+  position: fixed;
+  inset: 16px;
+  z-index: 120;
+  width: min(1120px, calc(100vw - 32px));
+  max-width: none;
+  margin: auto;
+  padding: 18px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel2, #fff);
+  box-shadow: 0 24px 72px rgba(15,23,42,0.32);
+}
+
+@media (max-width: 640px){
+  .admin-action-modal{
+    padding: 14px;
+  }
+  .admin-action-modal__actions{
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .admin-action-modal__actions .btn{
+    width: 100%;
+    min-height: 44px;
+  }
+  #poEditorView:not([hidden]){
+    inset: 0;
+    width: 100vw;
+    padding: 12px;
+    border: 0;
+    border-radius: 0;
+  }
+}
+
 /* ?????????? viewport??????? 1080 ?????????? */
 .quote-preview-modal{
   position: fixed;

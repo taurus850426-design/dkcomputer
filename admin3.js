@@ -2260,10 +2260,16 @@
   function addVendorOption() {
     const inp = document.getElementById("newVendorName");
     const raw = normalizeVendorName(inp?.value);
-    if (!raw) return showVendorManageMsg("廠商名稱不能為空");
+    if (!raw) {
+      showVendorManageMsg("廠商名稱不能為空");
+      return false;
+    }
     const list = getVendorOptionsFromConfig();
     const exists = list.some((x) => x.toLowerCase() === raw.toLowerCase());
-    if (exists) return showVendorManageMsg("已存在相同廠商（忽略空白與大小寫）");
+    if (exists) {
+      showVendorManageMsg("已存在相同廠商（忽略空白與大小寫）");
+      return false;
+    }
     const next = [...list, raw];
     saveVendorOptionsToConfig(next);
     if (inp) inp.value = "";
@@ -2271,6 +2277,7 @@
     renderVendorOptions();
     // 若目前正在編輯品項，同步更新 select（保留目前選擇）
     renderVendorSelect(document.getElementById("itemVendor")?.value || "");
+    return true;
   }
 
   function removeVendorOption(name) {
@@ -2521,12 +2528,32 @@
   (function initVendorManage() {
     renderVendorOptions();
     renderVendorSelect("");
-    document.getElementById("addVendorBtn")?.addEventListener("click", addVendorOption);
+    const modal = document.getElementById("vendorFormModal");
+    const input = document.getElementById("newVendorName");
+    function setVendorModalOpen(open) {
+      if (!modal) return;
+      modal.hidden = !open;
+      document.body.classList.toggle("admin-modal-open", !!open);
+      if (open) {
+        showVendorManageMsg("");
+        setTimeout(() => input?.focus(), 0);
+      }
+    }
+    document.getElementById("vendorFormToggleBtn")?.addEventListener("click", () => setVendorModalOpen(true));
+    document.getElementById("vendorFormCloseBtn")?.addEventListener("click", () => setVendorModalOpen(false));
+    document.getElementById("vendorFormCancelBtn")?.addEventListener("click", () => setVendorModalOpen(false));
+    modal?.addEventListener("click", (e) => { if (e.target === modal) setVendorModalOpen(false); });
+    document.getElementById("addVendorBtn")?.addEventListener("click", () => {
+      if (addVendorOption()) setVendorModalOpen(false);
+    });
     document.getElementById("newVendorName")?.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        addVendorOption();
+        if (addVendorOption()) setVendorModalOpen(false);
       }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && modal && !modal.hidden) setVendorModalOpen(false);
     });
   })();
 
@@ -3071,6 +3098,7 @@
     const analysis = document.getElementById("vendorAnalysisSection");
     const host = advantage?.parentElement
       || analysis?.parentElement
+      || document.getElementById("vendorInsightsHost")
       || document.getElementById("vendor-section")
       || document.getElementById("tab-vendors");
     if (!host) return;
@@ -3250,7 +3278,7 @@
     // 建立/取得容器
     let wrap = document.getElementById("vendorAnalysisSection");
     if (!wrap) {
-      const host = document.getElementById("vendor-section") || document.getElementById("tab-vendors");
+      const host = document.getElementById("vendorInsightsHost") || document.getElementById("vendor-section") || document.getElementById("tab-vendors");
       if (!host) return;
       wrap = document.createElement("div");
       wrap.id = "vendorAnalysisSection";
@@ -3394,7 +3422,7 @@
     let wrap = document.getElementById("vendorCategoryAdvantageSection");
     if (!wrap) {
       const anchor = document.getElementById("vendorAnalysisSection");
-      const host = anchor?.parentElement || document.getElementById("vendor-section") || document.getElementById("tab-vendors");
+      const host = anchor?.parentElement || document.getElementById("vendorInsightsHost") || document.getElementById("vendor-section") || document.getElementById("tab-vendors");
       if (!host) return;
       wrap = document.createElement("div");
       wrap.id = "vendorCategoryAdvantageSection";
@@ -3521,6 +3549,18 @@
     vqShowMsg("已新增報價（本機）");
     renderVendorQuotes();
     renderVendorQuotesSyncPanel();
+    const formModal = document.getElementById("vqFormWrap");
+    if (formModal) formModal.hidden = true;
+    document.body.classList.remove("admin-modal-open");
+    ["vqSpec", "vqPrice", "vqMarketPrice", "vqWarranty", "vqNote"].forEach((id) => {
+      const field = document.getElementById(id);
+      if (field) field.value = "";
+    });
+    ["vqTaxIncluded", "vqShippingIncluded", "vqInStock"].forEach((id) => {
+      const field = document.getElementById(id);
+      if (field) field.checked = false;
+    });
+    formModal?.querySelectorAll("details").forEach((details) => { details.open = false; });
     // 雲端 upsert（失敗不回滾本機）
     if (window.DK && typeof window.DK.upsertVendorQuoteToSupabase === "function" && !window.DK.isVpApplyingCloud?.()) {
       window.DK.upsertVendorQuoteToSupabase(q).then((res) => {
@@ -3749,12 +3789,18 @@
       if (!wrap || !toggleBtn) return;
       function setOpen(open) {
         wrap.hidden = !open;
+        document.body.classList.toggle("admin-modal-open", !!open);
         if (open) {
-          try { wrap.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (_) {}
+          setTimeout(() => document.getElementById("vqVendor")?.focus(), 0);
         }
       }
       toggleBtn.addEventListener("click", () => setOpen(wrap.hidden));
       cancelBtn?.addEventListener("click", () => setOpen(false));
+      document.getElementById("vqFormCloseBtn")?.addEventListener("click", () => setOpen(false));
+      wrap.addEventListener("click", (e) => { if (e.target === wrap) setOpen(false); });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !wrap.hidden) setOpen(false);
+      });
     })();
     document.getElementById("vqAddBtn")?.addEventListener("click", addVendorQuoteFromForm);
     document.getElementById("vqCoolpcLookupBtn")?.addEventListener("click", lookupCoolpcForVendorQuote);

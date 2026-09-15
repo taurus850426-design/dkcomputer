@@ -3422,7 +3422,7 @@ function vpEnsureTimestamps(rec, { forceUpdated } = {}) {
   return out;
 }
 
-/** 依 id 合併；較新 updatedAt 優先；時間相同取雲端並記警告；tombstone 視為一版 */
+/** 依 id 合併；較新 updatedAt 優先；時間相同取雲端（正常同步，不視為衝突）；tombstone 視為一版 */
 function vpMergeByUpdatedAt(localList, cloudList) {
   const map = new Map();
   const warnings = [];
@@ -3444,7 +3444,6 @@ function vpMergeByUpdatedAt(localList, cloudList) {
     if (ct > lt) {
       map.set(id, cloud);
     } else if (ct === lt) {
-      warnings.push({ id, reason: "equal_updated_at", kept: "cloud" });
       map.set(id, cloud);
     }
     // ct < lt：保留本機（含較新的 tombstone）
