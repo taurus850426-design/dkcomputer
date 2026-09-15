@@ -4436,6 +4436,40 @@ async function callBackofficeEdgeFunction(fnName, body) {
   }
 }
 
+async function lookupCoolpcPrices(input) {
+  const query = String((input && input.query) || "").trim();
+  const category = String((input && input.category) || "").trim();
+  if (!query) return { ok: false, code: "validation", error: "請先填品牌／型號／規格", candidates: [] };
+  if (!category) return { ok: false, code: "validation", error: "請先選擇品類", candidates: [] };
+  const called = await callBackofficeEdgeFunction("coolpc-price-lookup", {
+    query: query,
+    category: category,
+  });
+  if (called.ok && called.data) {
+    return {
+      ok: true,
+      query: String(called.data.query || query),
+      category: String(called.data.category || category),
+      sourceUrl: String(called.data.source_url || ""),
+      checkedAt: String(called.data.checked_at || ""),
+      cached: called.data.cached === true,
+      candidates: Array.isArray(called.data.candidates) ? called.data.candidates : [],
+    };
+  }
+  const data = called.data || {};
+  let error = String(data.error || called.error || "原價屋查價失敗");
+  if (called.status === 404) error = "原價屋查價功能尚未發布到 Supabase";
+  else if (called.status === 401) error = "登入狀態已失效，請重新登入後台";
+  else if (called.status === 403) error = "只有管理員可以查詢原價屋行情";
+  return {
+    ok: false,
+    code: String(data.code || called.code || "lookup_failed"),
+    status: Number(called.status || 0),
+    error: error,
+    candidates: [],
+  };
+}
+
 function mapBackofficeAdminError(status, data, fallback) {
   const code = String((data && data.code) || "");
   if (status === 401 || code === "unauthenticated") {
@@ -5269,6 +5303,7 @@ window.DK = {
   stage7FetchProfiles,
   updateBackofficeUser,
   resetBackofficeUserPassword,
+  lookupCoolpcPrices,
   getAuthMigrationStatus,
   signInSupabaseAuthForMigration,
   signOutSupabaseAuthForMigration,

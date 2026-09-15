@@ -4,6 +4,7 @@
 #   supabase functions deploy create-backoffice-user
 #   supabase functions deploy update-backoffice-user
 #   supabase functions deploy reset-backoffice-user-password
+#   supabase functions deploy coolpc-price-lookup
 
 [functions.attendance-network]
 verify_jwt = true
@@ -19,3 +20,6 @@ verify_jwt = true
 
 [functions.used-valuation-estimate]
 verify_jwt = false
+
+[functions.coolpc-price-lookup]
+verify_jwt = true
