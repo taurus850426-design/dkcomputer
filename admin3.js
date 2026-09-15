@@ -2595,6 +2595,11 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  function vqHasValidPrice(q) {
+    const price = Number(q?.price);
+    return Number.isFinite(price) && price > 0;
+  }
+
   function vqNormalize(q) {
     const r = q && typeof q === "object" ? q : {};
     const out = {
@@ -2669,7 +2674,7 @@
       brand: "",
       spec: String(r.spec || "").trim(),
       price: vqNum(r.price),
-      marketPrice: null,
+      marketPrice: vqNum(r.marketPrice),
       taxIncluded: !!r.taxIncluded,
       shippingIncluded: !!r.shippingIncluded,
       warranty: String(r.warranty || "").trim(),
@@ -2678,7 +2683,8 @@
     });
     if (!q.vendor) return { ok: false, error: "請選擇廠商" };
     if (!q.spec) return { ok: false, error: "請填完整規格" };
-    if (q.price == null || q.price < 0) return { ok: false, error: "請填正確報價" };
+    if (!vqHasValidPrice(q)) return { ok: false, error: "廠商報價必須大於 0" };
+    if (q.marketPrice != null && q.marketPrice < 0) return { ok: false, error: "請填正確原價屋行情價" };
 
     const list = loadVendorQuotes();
     list.push(q);
@@ -2908,7 +2914,8 @@
         .map((q) => {
           const stock = q.inStock ? `<span class="badge ok">現貨</span>` : `<span class="badge">—</span>`;
           const mp = (q.marketPrice == null) ? null : Number(q.marketPrice);
-          const p = (q.price == null) ? null : Number(q.price);
+          const validPrice = vqHasValidPrice(q);
+          const p = validPrice ? Number(q.price) : null;
           const diff = (mp != null && p != null) ? (mp - p) : null;
           const margin = (mp != null && mp > 0 && p != null) ? ((mp - p) / mp) : null;
           const mpText = mp == null ? "-" : fmt(mp);
@@ -2924,13 +2931,13 @@
             <td class="nowrap">${vqEsc((q.date || "").slice(0, 10))}</td>
             <td>${vqEsc(q.vendor)}</td>
             <td>${vqEsc(getVendorQuoteDisplayName(q))}</td>
-            <td style="text-align:right">${vqEsc(fmt(q.price))}</td>
+            <td style="text-align:right">${validPrice ? vqEsc(fmt(q.price)) : `<span class="badge warn">未報價（舊資料）</span>`}</td>
             <td style="text-align:right">${vqEsc(mpText)}</td>
             <td style="text-align:right">${vqEsc(diffText)}</td>
             <td style="text-align:right">${marginBadge}</td>
             <td>${stock}</td>
             <td style="text-align:right; white-space:nowrap">
-              <button type="button" class="btn btn-ghost btn-sm btn-vq-create-inv" data-id="${vqEsc(q.id)}">建立庫存</button>
+              <button type="button" class="btn btn-ghost btn-sm btn-vq-create-inv" data-id="${vqEsc(q.id)}" ${validPrice ? "" : "disabled"}>建立庫存</button>
               <button type="button" class="btn btn-ghost btn-sm btn-vq-del" data-id="${vqEsc(q.id)}">刪除</button>
             </td>
           </tr>`;
@@ -2953,7 +2960,7 @@
   }
 
   function buildVendorQuoteSummaryStats(quotes) {
-    const list = Array.isArray(quotes) ? quotes : [];
+    const list = (Array.isArray(quotes) ? quotes : []).filter(vqHasValidPrice);
     const lowest = getLowestQuotesBySpec(list);
     const winByVendor = new Map();
     for (const row of lowest) {
@@ -3167,7 +3174,7 @@
       const key = normalizeSpecKey(q);
       if (!key) continue;
       const price = Number(q?.price);
-      if (!Number.isFinite(price)) continue;
+      if (!Number.isFinite(price) || price <= 0) continue;
       const cur = best.get(key);
       if (!cur || price < Number(cur.price)) best.set(key, q);
     }
@@ -3186,7 +3193,7 @@
       const key = normalizeSpecKey(q);
       if (!key) continue;
       const price = Number(q?.price);
-      if (!Number.isFinite(price)) continue;
+      if (!Number.isFinite(price) || price <= 0) continue;
       (out[key] = out[key] || []).push({
         vendor: String(q?.vendor || ""),
         price: price,
@@ -3376,7 +3383,7 @@
       const cat = String(q?.category || "").trim() || "未分類";
       const specKey = normalizeSpecKey(q);
       const price = Number(q?.price);
-      if (!specKey || !Number.isFinite(price)) continue;
+      if (!specKey || !Number.isFinite(price) || price <= 0) continue;
       if (!byCat.has(cat)) byCat.set(cat, new Map());
       const m = byCat.get(cat);
       const cur = m.get(specKey);
@@ -3432,7 +3439,7 @@
       const cat = String(q?.category || "").trim() || "未分類";
       const price = Number(q?.price);
       const specKey = normalizeSpecKey(q);
-      if (!specKey || !Number.isFinite(price)) continue;
+      if (!specKey || !Number.isFinite(price) || price <= 0) continue;
       catQuoteCount.set(cat, (catQuoteCount.get(cat) || 0) + 1);
     }
 
@@ -3506,7 +3513,7 @@
     if (!q.date) return vqShowMsg("請選日期");
     if (!q.vendor) return vqShowMsg("請選廠商");
     if (!q.spec) return vqShowMsg("請填品牌／型號／規格");
-    if (q.price == null || q.price < 0) return vqShowMsg("請填正確報價");
+    if (!vqHasValidPrice(q)) return vqShowMsg("廠商報價必須大於 0");
 
     const list = loadVendorQuotes();
     list.push(q); // 每次新增，不覆蓋

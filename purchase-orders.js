@@ -1,4 +1,4 @@
-/* purchase-orders.js - 採購／叫貨單 1.0（僅後台；讀取既有廠商報價，不改其結構） */
+/* purchase-orders.js - 採購／叫貨單 1.0（僅後台；與廠商報價共用資料） */
 (function () {
   "use strict";
 
@@ -26,6 +26,7 @@
   let quotePage = 1;
   let lastAddedItemId = null;
   let expandedOrderId = null;
+  let quoteModalItemId = null;
 
   function bridge() {
     return window.DKPurchaseBridge || {};
@@ -198,7 +199,7 @@
       manualVendor: String(r.manualVendor || ""),
       manualUnitPrice: toNum(r.manualUnitPrice),
       quoteStatus: String(r.quoteStatus || (
-        toNum(r.selectedUnitPrice) != null || toNum(r.manualUnitPrice) != null ? "quoted" : "pending"
+        Number(r.selectedUnitPrice) > 0 || Number(r.manualUnitPrice) > 0 ? "quoted" : "pending"
       )),
       itemNote: String(r.itemNote || ""),
     };
@@ -323,8 +324,8 @@
   }
 
   function itemPrice(it) {
-    if (it.selectedUnitPrice != null && Number.isFinite(Number(it.selectedUnitPrice))) return Number(it.selectedUnitPrice);
-    if (it.manualUnitPrice != null && Number.isFinite(Number(it.manualUnitPrice))) return Number(it.manualUnitPrice);
+    if (it.selectedUnitPrice != null && Number.isFinite(Number(it.selectedUnitPrice)) && Number(it.selectedUnitPrice) > 0) return Number(it.selectedUnitPrice);
+    if (it.manualUnitPrice != null && Number.isFinite(Number(it.manualUnitPrice)) && Number(it.manualUnitPrice) > 0) return Number(it.manualUnitPrice);
     return null;
   }
 
@@ -943,6 +944,7 @@
       const level = matchLevel(q, quote);
       if (!level) return;
       const price = toNum(quote.price);
+      if (price == null || price <= 0) return;
       const days = daysAgo(quote.date);
       buckets[level].push({
         quote: quote,
@@ -1079,82 +1081,295 @@
     refreshVisibleQuoteResults();
   }
 
-  async function addManualItem() {
+  function addManualItem() {
     if (!currentOrder || !isEditable(currentOrder)) {
       showMsg("僅編輯中可加入品項");
       return;
     }
     const vendor = String((el("poManualVendor") && el("poManualVendor").value) || "").trim();
-    const price = toNum(el("poManualPrice") && el("poManualPrice").value);
     const requestText = String((el("poRequestText") && el("poRequestText").value) || "").trim();
-    const spec = String((el("poManualSpec") && el("poManualSpec").value) || "").trim() || requestText;
     const qty = Math.max(1, Math.floor(Number((el("poItemQty") && el("poItemQty").value) || 1)));
-    if (!requestText && !spec) return showMsg("請填需求規格");
+    if (!requestText) return showMsg("請填需求規格");
     if (!vendor) return showMsg("請選擇廠商");
-    if (price != null && price < 0) return showMsg("請填正確報價");
-
-    let selectedQuoteId = null;
-    let quotedAt = "";
-    let quoteSyncWarning = "";
-    if (price != null) {
-      const createQuote = bridge().createVendorQuote;
-      if (typeof createQuote !== "function") return showMsg("廠商報價模組尚未載入，請重新整理後再試");
-      const quoteResult = await createQuote({
-        date: todayYMD(),
-        vendor: vendor,
-        category: String((el("poItemCategory") && el("poItemCategory").value) || ""),
-        spec: spec,
-        price: price,
-        note: String((el("poItemNote") && el("poItemNote").value) || "") +
-          (currentOrder.orderNo ? "｜來源：" + currentOrder.orderNo : ""),
-      });
-      if (!quoteResult || !quoteResult.ok || !quoteResult.quote) {
-        return showMsg("報價儲存失敗：" + String((quoteResult && quoteResult.error) || "未知錯誤"));
-      }
-      selectedQuoteId = String(quoteResult.quote.id);
-      quotedAt = String(quoteResult.quote.date || todayYMD()).slice(0, 10);
-      if (quoteResult.cloud && !quoteResult.cloud.ok) quoteSyncWarning = "；報價已存本機但雲端同步失敗";
-
-      if (editingItemId) {
-        if (el("poManualBox")) el("poManualBox").hidden = true;
-        if (el("poConfirmManualBtn")) el("poConfirmManualBtn").textContent = "加入品項";
-        searchQuotes(spec);
-        showMsg("新報價已保存" + quoteSyncWarning + "；請在下方比價結果按「採用此報價」", 4500);
-        return;
-      }
-    }
 
     const item = normalizeItem({
-      id: editingItemId || uid("poi"),
-      requestText: requestText || spec,
+      id: uid("poi"),
+      requestText: requestText,
       category: String((el("poItemCategory") && el("poItemCategory").value) || ""),
       quantity: qty,
       selectedVendor: vendor,
-      selectedQuoteId: selectedQuoteId,
-      selectedSpec: spec,
-      selectedUnitPrice: price,
-      quotedAt: quotedAt,
+      selectedQuoteId: null,
+      selectedSpec: requestText,
+      selectedUnitPrice: null,
+      quotedAt: "",
       manualVendor: vendor,
-      manualUnitPrice: price,
-      quoteStatus: price == null ? "pending" : "quoted",
+      manualUnitPrice: null,
+      quoteStatus: "pending",
       itemNote: String((el("poItemNote") && el("poItemNote").value) || ""),
     });
-    if (editingItemId) {
-      const idx = currentOrder.items.findIndex(function (x) { return x.id === editingItemId; });
-      if (idx >= 0) currentOrder.items[idx] = item;
-      else currentOrder.items.push(item);
-    } else currentOrder.items.push(item);
+    currentOrder.items.push(item);
     editingItemId = null;
     lastAddedItemId = item.id;
     if (el("poManualBox")) el("poManualBox").hidden = true;
-    if (el("poConfirmManualBtn")) el("poConfirmManualBtn").textContent = "加入品項";
-    showMsg(price == null
-      ? "已加入等待報價品項（記得儲存叫貨單）"
-      : "報價已保存並套用到叫貨品項" + quoteSyncWarning + "（記得儲存叫貨單）", 3500);
+    showMsg("已加入等待報價品項（記得儲存叫貨單）", 3000);
     renderCurrentPick(item);
     renderItems();
     renderVendorGroups();
     refreshVisibleQuoteResults();
+  }
+
+  function quoteModalMessage(text, isError) {
+    const box = el("poQuoteMsg");
+    if (!box) return;
+    box.hidden = !text;
+    box.textContent = String(text || "");
+    box.classList.toggle("warning-number", !!isError);
+  }
+
+  function resetQuoteModalLookup() {
+    const results = el("poQuoteCoolpcResults");
+    const msg = el("poQuoteCoolpcMsg");
+    if (results) {
+      results.hidden = true;
+      results.innerHTML = "";
+    }
+    if (msg) {
+      msg.hidden = true;
+      msg.textContent = "";
+    }
+  }
+
+  function closeQuoteModal() {
+    const modal = el("poQuoteModal");
+    if (modal) modal.hidden = true;
+    document.body.classList.remove("po-quote-modal-open");
+    quoteModalItemId = null;
+    quoteModalMessage("");
+    resetQuoteModalLookup();
+  }
+
+  function fillQuoteModalSelects(vendor, category) {
+    const vendorSel = el("poQuoteVendor");
+    const vendors = (bridge().getVendors && bridge().getVendors()) || [];
+    const vendorValue = String(vendor || "").trim();
+    if (vendorSel) {
+      const vendorRows = vendors.slice();
+      if (vendorValue && vendorRows.indexOf(vendorValue) === -1) vendorRows.push(vendorValue);
+      vendorSel.innerHTML = '<option value="">請選擇廠商</option>' + vendorRows.map(function (v) {
+        return '<option value="' + esc(v) + '">' + esc(v) + "</option>";
+      }).join("");
+      vendorSel.value = vendorValue;
+    }
+
+    const categorySel = el("poQuoteCategory");
+    const categories = (bridge().getCategories && bridge().getCategories()) || [];
+    const categoryValue = String(category || "").trim();
+    if (categorySel) {
+      const categoryRows = categories.slice();
+      if (categoryValue && categoryRows.indexOf(categoryValue) === -1) categoryRows.push(categoryValue);
+      categorySel.innerHTML = '<option value="">請選擇品類</option>' + categoryRows.map(function (c) {
+        return '<option value="' + esc(c) + '">' + esc(c) + "</option>";
+      }).join("");
+      categorySel.value = categoryValue;
+    }
+  }
+
+  function renderQuoteModalHistory(item) {
+    const box = el("poQuoteHistory");
+    if (!box) return;
+    const query = itemSpec(item) || item.requestText || "";
+    const rows = loadQuotes().map(function (q) {
+      return { quote: q, level: matchLevel(query, q), price: toNum(q.price) };
+    }).filter(function (row) {
+      return row.level === "high" && row.price != null && row.price > 0;
+    }).sort(function (a, b) {
+      if (a.price !== b.price) return a.price - b.price;
+      return String(b.quote.date || "").localeCompare(String(a.quote.date || ""));
+    });
+    if (!rows.length) {
+      box.hidden = false;
+      box.innerHTML = '<strong>既有比價：</strong><span class="muted">目前沒有相符的歷史報價</span>';
+      return;
+    }
+    const best = rows[0];
+    box.hidden = false;
+    box.innerHTML = '<strong>既有比價：</strong>共 ' + esc(String(rows.length)) + " 筆｜目前最低 " +
+      esc(best.quote.vendor || "未填廠商") + " " + esc(fmtNT(best.price)) + "（" + esc(fmtDate(best.quote.date)) + "）";
+  }
+
+  function openQuoteModal(itemId) {
+    if (!currentOrder || !isEditable(currentOrder)) return showMsg("僅編輯中可新增報價");
+    const item = (currentOrder.items || []).find(function (x) { return String(x.id) === String(itemId); });
+    if (!item) return showMsg("找不到叫貨品項");
+    quoteModalItemId = String(item.id);
+    const linkedQuote = loadQuotes().find(function (q) {
+      return item.selectedQuoteId && String(q.id) === String(item.selectedQuoteId);
+    });
+    fillQuoteModalSelects(itemVendor(item), item.category);
+    if (el("poQuoteDate")) el("poQuoteDate").value = todayYMD();
+    if (el("poQuoteSpec")) el("poQuoteSpec").value = itemSpec(item) || item.requestText || "";
+    if (el("poQuotePrice")) el("poQuotePrice").value = itemPrice(item) == null ? "" : String(itemPrice(item));
+    if (el("poQuoteMarketPrice")) el("poQuoteMarketPrice").value = linkedQuote && toNum(linkedQuote.marketPrice) != null ? String(linkedQuote.marketPrice) : "";
+    if (el("poQuoteTaxIncluded")) el("poQuoteTaxIncluded").checked = !!(linkedQuote && linkedQuote.taxIncluded);
+    if (el("poQuoteShippingIncluded")) el("poQuoteShippingIncluded").checked = !!(linkedQuote && linkedQuote.shippingIncluded);
+    if (el("poQuoteWarranty")) el("poQuoteWarranty").value = linkedQuote ? String(linkedQuote.warranty || "") : "";
+    if (el("poQuoteInStock")) el("poQuoteInStock").checked = !!(linkedQuote && linkedQuote.inStock);
+    if (el("poQuoteNote")) el("poQuoteNote").value = "";
+    if (el("poQuoteItemSummary")) {
+      el("poQuoteItemSummary").textContent = (item.requestText || itemSpec(item) || "品項") + "｜數量 " + String(item.quantity || 1);
+    }
+    quoteModalMessage("");
+    resetQuoteModalLookup();
+    renderQuoteModalHistory(item);
+    const modal = el("poQuoteModal");
+    if (modal) modal.hidden = false;
+    document.body.classList.add("po-quote-modal-open");
+    try { if (el("poQuotePrice")) el("poQuotePrice").focus(); } catch (_) {}
+  }
+
+  function renderQuoteModalCoolpcCandidates(result) {
+    const results = el("poQuoteCoolpcResults");
+    const msg = el("poQuoteCoolpcMsg");
+    if (!results) return;
+    const candidates = Array.isArray(result && result.candidates) ? result.candidates : [];
+    if (!candidates.length) {
+      if (msg) {
+        msg.hidden = false;
+        msg.textContent = "找不到相近商品，請調整規格關鍵字或手動輸入行情價。";
+      }
+      return;
+    }
+    if (msg) {
+      msg.hidden = false;
+      msg.textContent = "找到 " + candidates.length + " 筆候選，請核對完整型號後再套用。";
+    }
+    results.innerHTML = candidates.map(function (c) {
+      const price = Number(c && c.price);
+      const eligible = c && c.eligible === true && Number.isFinite(price) && price >= 0;
+      return '<div class="po-quote-coolpc-candidate">' +
+        '<div><strong>' + esc(String((c && c.title) || "未命名商品")) + '</strong><div class="muted small">原價屋含稅價：' +
+        esc(Number.isFinite(price) ? fmtNT(price) : "—") + (c && c.reason ? "｜" + esc(c.reason) : "") + "</div></div>" +
+        (eligible
+          ? '<button type="button" class="btn btn-primary btn-sm" data-poq-coolpc-price="' + esc(String(price)) + '">套用</button>'
+          : '<button type="button" class="btn btn-ghost btn-sm" disabled>條件價不可套用</button>') +
+        "</div>";
+    }).join("");
+    results.hidden = false;
+  }
+
+  async function lookupCoolpcForQuoteModal() {
+    const spec = String((el("poQuoteSpec") && el("poQuoteSpec").value) || "").trim();
+    const category = String((el("poQuoteCategory") && el("poQuoteCategory").value) || "").trim();
+    if (!spec) return quoteModalMessage("請先填品牌／型號／規格", true);
+    if (!category) return quoteModalMessage("請先選擇品類", true);
+    if (!window.DK || typeof window.DK.lookupCoolpcPrices !== "function") {
+      return quoteModalMessage("查價功能尚未載入，請重新整理後再試", true);
+    }
+    const button = el("poQuoteCoolpcBtn");
+    const msg = el("poQuoteCoolpcMsg");
+    resetQuoteModalLookup();
+    quoteModalMessage("");
+    if (msg) {
+      msg.hidden = false;
+      msg.textContent = "正在查詢原價屋官方含稅價…";
+    }
+    if (button) {
+      button.disabled = true;
+      button.textContent = "查詢中…";
+    }
+    try {
+      const result = await window.DK.lookupCoolpcPrices({ query: spec, category: category });
+      if (!result || !result.ok) {
+        if (msg) msg.textContent = String((result && result.error) || "原價屋查價失敗");
+        return;
+      }
+      renderQuoteModalCoolpcCandidates(result);
+    } catch (e) {
+      if (msg) msg.textContent = "原價屋查價失敗：" + String((e && e.message) || e || "未知錯誤");
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "查原價屋";
+      }
+    }
+  }
+
+  async function saveQuoteModal() {
+    if (!currentOrder || !quoteModalItemId || !isEditable(currentOrder)) {
+      return quoteModalMessage("找不到可更新的叫貨品項", true);
+    }
+    const idx = currentOrder.items.findIndex(function (x) { return String(x.id) === String(quoteModalItemId); });
+    if (idx < 0) return quoteModalMessage("找不到可更新的叫貨品項", true);
+    const date = String((el("poQuoteDate") && el("poQuoteDate").value) || "").trim();
+    const vendor = String((el("poQuoteVendor") && el("poQuoteVendor").value) || "").trim();
+    const category = String((el("poQuoteCategory") && el("poQuoteCategory").value) || "").trim();
+    const spec = String((el("poQuoteSpec") && el("poQuoteSpec").value) || "").trim();
+    const price = toNum(el("poQuotePrice") && el("poQuotePrice").value);
+    const marketPrice = toNum(el("poQuoteMarketPrice") && el("poQuoteMarketPrice").value);
+    const note = String((el("poQuoteNote") && el("poQuoteNote").value) || "").trim();
+    if (!date) return quoteModalMessage("請選擇日期", true);
+    if (!vendor) return quoteModalMessage("請選擇廠商", true);
+    if (!spec) return quoteModalMessage("請填品牌／型號／規格", true);
+    if (price == null || price <= 0) return quoteModalMessage("廠商報價必須大於 0", true);
+    if (marketPrice != null && marketPrice < 0) return quoteModalMessage("請填正確原價屋行情價", true);
+    const createQuote = bridge().createVendorQuote;
+    if (typeof createQuote !== "function") return quoteModalMessage("廠商報價模組尚未載入，請重新整理後再試", true);
+
+    const button = el("poQuoteSaveBtn");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "儲存中…";
+    }
+    quoteModalMessage("正在同步廠商報價與叫貨品項…");
+    try {
+      const sourceNote = note + (note ? "｜" : "") + "來源：" + currentOrder.orderNo;
+      const result = await createQuote({
+        date: date,
+        vendor: vendor,
+        category: category,
+        spec: spec,
+        price: price,
+        marketPrice: marketPrice,
+        taxIncluded: !!(el("poQuoteTaxIncluded") && el("poQuoteTaxIncluded").checked),
+        shippingIncluded: !!(el("poQuoteShippingIncluded") && el("poQuoteShippingIncluded").checked),
+        warranty: String((el("poQuoteWarranty") && el("poQuoteWarranty").value) || "").trim(),
+        inStock: !!(el("poQuoteInStock") && el("poQuoteInStock").checked),
+        note: sourceNote,
+      });
+      if (!result || !result.ok || !result.quote) {
+        return quoteModalMessage("報價儲存失敗：" + String((result && result.error) || "未知錯誤"), true);
+      }
+      const original = currentOrder.items[idx];
+      const q = result.quote;
+      const updated = normalizeItem(Object.assign({}, original, {
+        category: String(q.category || category || original.category || ""),
+        selectedVendor: String(q.vendor || vendor),
+        selectedQuoteId: String(q.id),
+        selectedSpec: displayName(q),
+        selectedUnitPrice: toNum(q.price),
+        quotedAt: String(q.date || date).slice(0, 10),
+        manualVendor: "",
+        manualUnitPrice: null,
+        quoteStatus: "quoted",
+      }));
+      currentOrder.items[idx] = updated;
+      lastAddedItemId = updated.id;
+      closeQuoteModal();
+      renderCurrentPick(updated);
+      renderItems();
+      renderVendorGroups();
+      searchQuotes(updated.selectedSpec || updated.requestText || "");
+      persistCurrent();
+      const cloudWarning = result.cloud && !result.cloud.ok ? "；廠商報價雲端同步失敗，已保留本機資料" : "";
+      showMsg("報價已同步到廠商比價，並更新叫貨品項" + cloudWarning, 5000);
+    } catch (e) {
+      quoteModalMessage("報價儲存失敗：" + String((e && e.message) || e || "未知錯誤"), true);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "儲存報價並更新叫貨品項";
+      }
+    }
   }
 
   function buildPrintHtml(order, onlyVendor) {
@@ -1239,14 +1454,31 @@
       editingItemId = null;
       fillManualVendorSelect();
       if (el("poManualBox")) el("poManualBox").hidden = false;
-      if (el("poManualSpec") && el("poRequestText")) el("poManualSpec").value = el("poRequestText").value || "";
-      if (el("poManualPrice")) el("poManualPrice").value = "";
-      if (el("poConfirmManualBtn")) el("poConfirmManualBtn").textContent = "加入品項";
     });
     el("poCancelManualBtn") && el("poCancelManualBtn").addEventListener("click", function () {
       if (el("poManualBox")) el("poManualBox").hidden = true;
     });
     el("poConfirmManualBtn") && el("poConfirmManualBtn").addEventListener("click", addManualItem);
+    el("poQuoteCloseBtn") && el("poQuoteCloseBtn").addEventListener("click", closeQuoteModal);
+    el("poQuoteCancelBtn") && el("poQuoteCancelBtn").addEventListener("click", closeQuoteModal);
+    el("poQuoteSaveBtn") && el("poQuoteSaveBtn").addEventListener("click", saveQuoteModal);
+    el("poQuoteCoolpcBtn") && el("poQuoteCoolpcBtn").addEventListener("click", lookupCoolpcForQuoteModal);
+    el("poQuoteSpec") && el("poQuoteSpec").addEventListener("input", resetQuoteModalLookup);
+    el("poQuoteCategory") && el("poQuoteCategory").addEventListener("change", resetQuoteModalLookup);
+    el("poQuoteCoolpcResults") && el("poQuoteCoolpcResults").addEventListener("click", function (e) {
+      const button = e.target && e.target.closest ? e.target.closest("[data-poq-coolpc-price]") : null;
+      if (!button || button.disabled) return;
+      const price = Number(button.getAttribute("data-poq-coolpc-price"));
+      if (!Number.isFinite(price) || price < 0) return;
+      if (el("poQuoteMarketPrice")) el("poQuoteMarketPrice").value = String(Math.round(price));
+      quoteModalMessage("已套用原價屋行情價 " + fmtNT(price) + "，儲存後會一併同步");
+    });
+    el("poQuoteModal") && el("poQuoteModal").addEventListener("click", function (e) {
+      if (e.target === el("poQuoteModal")) closeQuoteModal();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && el("poQuoteModal") && !el("poQuoteModal").hidden) closeQuoteModal();
+    });
     el("poStickyViewBtn") && el("poStickyViewBtn").addEventListener("click", function () {
       const target = el("poItemsSection") || el("poItemsSummary");
       if (target && target.scrollIntoView) {
@@ -1340,24 +1572,7 @@
         const id = poi.getAttribute("data-id");
         const act = poi.getAttribute("data-poi-act");
         if (act === "quote") {
-          const it = currentOrder.items.find(function (x) { return x.id === id; });
-          if (!it) return;
-          editingItemId = id;
-          fillManualVendorSelect();
-          if (el("poRequestText")) el("poRequestText").value = it.requestText || "";
-          if (el("poItemQty")) el("poItemQty").value = String(it.quantity || 1);
-          if (el("poItemNote")) el("poItemNote").value = it.itemNote || "";
-          if (el("poItemCategory")) el("poItemCategory").value = it.category || "";
-          if (el("poManualVendor")) el("poManualVendor").value = itemVendor(it);
-          if (el("poManualSpec")) el("poManualSpec").value = itemSpec(it);
-          if (el("poManualPrice")) el("poManualPrice").value = "";
-          if (el("poConfirmManualBtn")) el("poConfirmManualBtn").textContent = "新增這筆報價";
-          searchQuotes(itemSpec(it) || it.requestText || "");
-          if (el("poManualBox")) {
-            el("poManualBox").hidden = false;
-            try { el("poManualBox").scrollIntoView({ behavior: "smooth", block: "center" }); } catch (_) {}
-          }
-          showMsg("可新增不同廠商報價；新增後再從比價結果選擇採用", 3500);
+          openQuoteModal(id);
         } else if (act === "rm") {
           currentOrder.items = currentOrder.items.filter(function (x) { return x.id !== id; });
           renderItems();
