@@ -547,18 +547,14 @@
     }
     tbody.innerHTML = list.map(function (o) {
       const tot = orderTotals(o);
-      const vendorNames = Array.from(groupByVendor(o).keys());
-      const vendorHtml = (vendorNames.length ? vendorNames : ["未指定廠商"]).map(function (vendor) {
-        const missing = vendor === "未指定廠商";
-        return '<span class="po-list-vendor' + (missing ? " is-missing" : "") + '">' + esc(vendor) + "</span>";
-      }).join("");
+      const orderNote = String(o.note || "").trim();
       const expanded = String(expandedOrderId) === String(o.id);
       return (
         '<tr class="po-list-row' + (expanded ? " is-expanded" : "") + '" data-po-row-id="' + esc(o.id) + '" tabindex="0" aria-expanded="' + (expanded ? "true" : "false") + '">' +
         "<td class=\"nowrap\">" + esc(o.orderNo) + "</td>" +
         "<td class=\"nowrap\">" + esc(fmtDate(o.createdAt)) + "</td>" +
         "<td><span class=\"" + statusBadgeClass(o.status) + "\">" + esc(STATUS_LABEL[o.status] || o.status) + "</span></td>" +
-        '<td><div class="po-list-vendors" title="共 ' + esc(String(tot.vendorCount)) + ' 間廠商">' + vendorHtml + "</div></td>" +
+        '<td><div class="po-list-note' + (orderNote ? "" : " is-missing") + '" title="' + esc(orderNote || "未填備註") + '">' + esc(orderNote || "未填備註") + "</div></td>" +
         '<td style="text-align:right">' + esc(String(tot.itemCount)) + "</td>" +
         '<td style="text-align:right">' + esc(fmtNT(tot.totalAmount)) + "</td>" +
         "<td class=\"nowrap\">" + esc(fmtDate(o.expectedDate)) + "</td>" +
