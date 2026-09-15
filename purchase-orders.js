@@ -529,8 +529,36 @@
     renderList();
   }
 
+  function buildMobileOrderCard(order) {
+    const tot = orderTotals(order);
+    const expanded = String(expandedOrderId) === String(order.id);
+    const note = String(order.note || "").trim() || "未填客戶姓名／備註";
+    const items = (order.items || []).map(function (it) {
+      const price = itemPrice(it);
+      return '<div class="po-mobile-item">' +
+        '<div><strong>' + esc(itemSpec(it) || it.requestText || "未填規格") + '</strong>' +
+        '<div class="muted small">' + esc(itemVendor(it) || "未指定廠商") + '｜數量 ' + esc(String(it.quantity || 1)) + '</div></div>' +
+        '<strong>' + esc(price == null ? "待報價" : fmtNT(price)) + '</strong>' +
+        '</div>';
+    }).join("");
+    return '<article class="po-mobile-card" data-po-row-id="' + esc(order.id) + '">' +
+      '<button class="po-mobile-card__summary" type="button" data-po-act="view" data-id="' + esc(order.id) + '" aria-expanded="' + (expanded ? "true" : "false") + '">' +
+        '<span><strong>' + esc(note) + '</strong><small>' + esc(order.orderNo) + '｜' + esc(fmtDate(order.createdAt)) + '</small></span>' +
+        '<span class="po-mobile-card__status"><span class="' + statusBadgeClass(order.status) + '">' + esc(STATUS_LABEL[order.status] || order.status) + '</span><small>' + (expanded ? "收合" : "展開") + '</small></span>' +
+      '</button>' +
+      '<div class="po-mobile-card__metrics"><span>品項 <strong>' + esc(String(tot.itemCount)) + '</strong></span><span>數量 <strong>' + esc(String(tot.totalQty)) + '</strong></span><span>總額 <strong>' + esc(fmtNT(tot.totalAmount)) + '</strong></span></div>' +
+      (expanded ? '<div class="po-mobile-card__detail">' + (items || '<p class="muted small">尚無品項</p>') +
+        '<div class="po-mobile-card__actions">' +
+          '<button type="button" class="btn btn-primary btn-sm" data-po-act="edit" data-id="' + esc(order.id) + '">開啟叫貨單</button>' +
+          '<button type="button" class="btn btn-ghost btn-sm" data-po-act="copy" data-id="' + esc(order.id) + '">複製叫貨文字</button>' +
+          '<details><summary>其他操作</summary><div class="actions"><button type="button" class="btn btn-ghost btn-sm" data-po-act="print" data-id="' + esc(order.id) + '">列印</button><button type="button" class="btn btn-danger btn-sm" data-po-act="del" data-id="' + esc(order.id) + '">刪除</button></div></details>' +
+        '</div></div>' : '') +
+      '</article>';
+  }
+
   function renderList() {
     const tbody = el("poListTbody");
+    const cards = el("poListCards");
     if (!tbody) return;
     const q = normalizePurchaseSearchText(el("poListSearch") && el("poListSearch").value);
     const st = String((el("poListStatusFilter") && el("poListStatusFilter").value) || "");
@@ -549,8 +577,10 @@
     }
     if (!list.length) {
       tbody.innerHTML = '<tr><td class="muted" colspan="9">尚無叫貨單</td></tr>';
+      if (cards) cards.innerHTML = '<div class="po-mobile-empty muted">尚無叫貨單</div>';
       return;
     }
+    if (cards) cards.innerHTML = list.map(buildMobileOrderCard).join("");
     tbody.innerHTML = list.map(function (o) {
       const tot = orderTotals(o);
       const orderNote = String(o.note || "").trim();
