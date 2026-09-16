@@ -1539,6 +1539,37 @@ async function stage7UpdateOrder(payload) {
   return stage7FinishOrderWrite(res, payload, payload.id);
 }
 
+async function stage7SyncProcurementCost(payload) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以回寫訂單採購成本" };
+  }
+  const src = payload && typeof payload === "object" ? payload : {};
+  const orderId = String(src.order_id || src.orderId || "").trim();
+  const lineKey = String(src.line_key || src.lineKey || "").trim();
+  const unitCost = Number(src.unit_cost != null ? src.unit_cost : src.unitCost);
+  if (!orderId || !lineKey) return { ok: false, error: "缺少關聯訂單或訂單品項識別碼" };
+  if (!Number.isFinite(unitCost) || unitCost <= 0) return { ok: false, error: "採購成本必須大於 0" };
+  return stage7Rpc("backoffice_sync_procurement_cost", {
+    p_order_id: orderId,
+    p_line_key: lineKey,
+    p_unit_cost: unitCost,
+    p_vendor: String(src.vendor || ""),
+    p_quote_id: String(src.quote_id || src.quoteId || ""),
+    p_quoted_at: src.quoted_at || src.quotedAt || null,
+  });
+}
+
+async function stage7ClearProcurementCost(payload) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以清除訂單採購成本" };
+  }
+  const src = payload && typeof payload === "object" ? payload : {};
+  const orderId = String(src.order_id || src.orderId || "").trim();
+  const lineKey = String(src.line_key || src.lineKey || "").trim();
+  if (!orderId || !lineKey) return { ok: false, error: "缺少關聯訂單或訂單品項識別碼" };
+  return stage7Rpc("backoffice_clear_procurement_cost", { p_order_id: orderId, p_line_key: lineKey });
+}
+
 function stage7MapOrderWriteError(res) {
   if (!res || res.ok) return res;
   const message = String(res.error || (res.data && res.data.message) || "");
@@ -1548,6 +1579,8 @@ function stage7MapOrderWriteError(res) {
     res.error = "此訂單包含已不存在的歷史品項；可以修改資料，但不能變更該品項數量";
   } else if (/insufficient stock/i.test(message)) {
     res.error = "庫存不足，請重新確認訂單品項與數量";
+  } else if (/procurement cost required/i.test(message)) {
+    res.error = "此訂單仍有採購品項尚未確認成本，不能設為已完成；請先到叫貨單補上廠商報價";
   }
   return res;
 }
@@ -1878,6 +1911,8 @@ if (typeof window !== "undefined") {
   window.stage7DeleteItem = stage7DeleteItem;
   window.stage7CreateOrder = stage7CreateOrder;
   window.stage7UpdateOrder = stage7UpdateOrder;
+  window.stage7SyncProcurementCost = stage7SyncProcurementCost;
+  window.stage7ClearProcurementCost = stage7ClearProcurementCost;
   window.stage7SaveExpense = stage7SaveExpense;
   window.stage7DeleteExpense = stage7DeleteExpense;
   window.stage7InsertAudit = stage7InsertAudit;

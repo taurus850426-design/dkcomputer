@@ -7060,8 +7060,11 @@
         const removeDisabled = line.historical_missing ? ' disabled title="歷史品項不可移除或變更數量"' : "";
         const typeLabel = line.fulfillment_type === "procurement" ? "需要採購" : line.fulfillment_type === "service" ? "服務／其他" : "現有庫存";
         const vendorLabel = line.fulfillment_type === "procurement" ? `｜預計 ${line.preferred_vendor || "未決定廠商"}` : "";
+        const pendingCost = line.fulfillment_type === "procurement" && !(costUnit > 0);
+        const costText = pendingCost ? '<span class="badge warn">待廠商報價</span>' : v2FmtNum(costUnit);
+        const cogsText = pendingCost ? "—" : v2FmtNum(cogsSub);
         const editButton = line.fulfillment_type !== "inventory" ? `<button type="button" class="btn btn-ghost btn-sm order-line-edit-manual" data-i="${i}">編輯</button> ` : "";
-        return `<tr><td class="table-primary">${v2Esc(line.name || "")}${historicalBadge}<div class="muted small">${v2Esc(typeLabel + vendorLabel)}</div></td><td class="table-secondary">${v2Esc(spec)}</td><td class="table-number neutral-number">${line.qty}</td><td class="table-number neutral-number">${v2FmtNum(line.unit_price)}</td><td class="table-number neutral-number" data-admin-only>${v2FmtNum(costUnit)}</td><td class="table-number neutral-number" data-admin-only>${v2FmtNum(cogsSub)}</td><td class="table-actions">${editButton}<button type="button" class="btn btn-ghost btn-sm tertiary-action order-line-remove" data-i="${i}"${removeDisabled}>移除</button></td></tr>`;
+        return `<tr><td class="table-primary">${v2Esc(line.name || "")}${historicalBadge}<div class="muted small">${v2Esc(typeLabel + vendorLabel)}</div></td><td class="table-secondary">${v2Esc(spec)}</td><td class="table-number neutral-number">${line.qty}</td><td class="table-number neutral-number">${v2FmtNum(line.unit_price)}</td><td class="table-number neutral-number" data-admin-only>${costText}</td><td class="table-number neutral-number" data-admin-only>${cogsText}</td><td class="table-actions">${editButton}<button type="button" class="btn btn-ghost btn-sm tertiary-action order-line-remove" data-i="${i}"${removeDisabled}>移除</button></td></tr>`;
       }).join("");
       orderLineTbody.querySelectorAll(".order-line-remove").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -7108,6 +7111,7 @@
       }
       if (cogsEl && canPerm("viewCost")) cogsEl.value = cogsSum;
       updateV2OrderGrossDisplay();
+      scheduleLiveQuotePreview();
     }
 
     function openV2OrderEditor(id) {
@@ -7170,6 +7174,8 @@
       }
       updateV2OrderGrossDisplay();
       if (orderForm) orderForm.hidden = false;
+      document.body.classList.add("order-workspace-open");
+      scheduleLiveQuotePreview();
       v2Hide(orderMsg);
     }
     function updateV2OrderGrossDisplay() {
@@ -7183,10 +7189,14 @@
       const el = document.getElementById("orderGrossProfitDisplay");
       if (el) {
         const pClass = profitNumberClass(profit);
+        const hasPendingProcurementCost = orderLineItems.some((line) =>
+          String(line.fulfillment_type || "") === "procurement" && !(Number(line.cost_unit) > 0)
+        );
         el.className = "order-gross-preview";
         el.innerHTML =
           '毛利 <span class="' + pClass + '">' + v2FmtNum(profit) + "</span>" +
-          ' / 毛利率 <span class="' + pClass + '">' + margin + "</span>";
+          ' / 毛利率 <span class="' + pClass + '">' + margin + "</span>" +
+          (hasPendingProcurementCost ? '<div class="muted small" style="margin-top:6px;color:#8a5a00">⚠ 採購成本尚未確認，目前毛利僅為暫估。</div>' : "");
       }
     }
     function applyOrderStatusSelectClass() {
@@ -7206,6 +7216,7 @@
     });
     document.getElementById("orderCancel")?.addEventListener("click", () => {
       if (orderForm) orderForm.hidden = true;
+      document.body.classList.remove("order-workspace-open");
       editingV2OrderId = null;
       clearPendingCustomerOrderLink();
       v2Hide(orderMsg);
@@ -7321,6 +7332,14 @@
             unit_price: Number(l.unit_price != null ? l.unit_price : l.unitPrice) || 0,
           })),
         };
+        if (payload.status === "completed") {
+          const missingCost = orderLineItems.find((line) =>
+            String(line.fulfillment_type || "") === "procurement" && !(Number(line.cost_unit) > 0)
+          );
+          if (missingCost) {
+            return v2Show(orderMsg, "採購品項「" + String(missingCost.name || missingCost.spec || "未命名品項") + "」尚未確認成本，不能設為已完成；請先到叫貨單補廠商報價");
+          }
+        }
         const salesTypeHint = salesType ? "" : "此訂單尚未設定銷售類型，報表會歸入未分類。";
 
         function tryUpdateLinkedCustomerStatus(orderStatus) {
@@ -7405,6 +7424,7 @@
         savedOk = true;
         setTimeout(() => {
           if (orderForm) orderForm.hidden = true;
+          document.body.classList.remove("order-workspace-open");
           editingV2OrderId = null;
           v2Hide(orderMsg);
           if (saveBtn) {
@@ -7870,6 +7890,25 @@
       } catch (_) {}
       return { canvas: draw(), filename: quoteFilename(data), data };
     }
+    let liveQuotePreviewTimer = null;
+    function scheduleLiveQuotePreview() {
+      const host = document.getElementById("orderLivePreview");
+      const img = document.getElementById("orderLivePreviewImg");
+      if (!host || !img || !orderForm || orderForm.hidden || window.innerWidth < 1280) return;
+      if (liveQuotePreviewTimer) clearTimeout(liveQuotePreviewTimer);
+      liveQuotePreviewTimer = setTimeout(() => {
+        liveQuotePreviewTimer = null;
+        try {
+          const data = collectQuoteDataFromForm();
+          const canvas = drawQuoteCanvas(data);
+          img.src = canvas.toDataURL("image/png");
+          img.alt = quoteFilename(data);
+        } catch (_) {}
+      }, 200);
+    }
+    orderForm?.addEventListener("input", scheduleLiveQuotePreview);
+    orderForm?.addEventListener("change", scheduleLiveQuotePreview);
+    window.addEventListener("resize", scheduleLiveQuotePreview);
     function quoteCanvasToBlob(canvas) {
       return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
     }
