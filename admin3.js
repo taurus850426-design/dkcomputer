@@ -445,7 +445,7 @@
   const ADMIN_TAB_KEY = "dk_admin_tab";
   const ADMIN_V2_KEY = "dk_admin_active_v2";
   const ADMIN_NAV_LAST_KEY = "dk_admin_nav_last_child";
-  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "ap", "customers", "used-market", "used-engine", "used-acquisition", "attendance", "accounts"];
+  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "ap", "used-market", "used-engine", "used-acquisition", "attendance", "accounts"];
   const VALID_V2 = ["items", "ledger", "orders", "expenses", "reports"];
   const NAV_CHILD_PERM = {
     items: "items",
@@ -4011,6 +4011,8 @@
       id: String(r.id || ("cr_" + Date.now() + "_" + Math.random().toString(16).slice(2))),
       date: String(r.date || ""),
       name: String(r.name || ""),
+      phone: String(r.phone || ""),
+      line: String(r.line || ""),
       source: String(r.source || "其他"),
       type: String(r.type || "其他"),
       budget: crSafeNum(r.budget),
@@ -5477,7 +5479,7 @@
     };
     const FORMAL_INBOUND_TYPES = { INITIAL_STOCK: true, MANUAL_IN: true, PURCHASE_RECEIPT: true };
     const REF_TYPE_LABEL = { PURCHASE: "進貨", ORDER: "訂單", RMA: "退換", SCRAP: "報廢", MOVE: "移倉", ADJUST: "調整" };
-    const ORDER_STATUS_LABEL = { pending: "待處理", paid: "已付款", shipped: "已出貨", completed: "已完成", refunded: "已退貨" };
+    const ORDER_STATUS_LABEL = { negotiating: "洽談中", confirmed: "已確認", pending: "待處理", paid: "已付款", shipped: "已出貨", completed: "已完成", refunded: "已退貨" };
     const ORDER_PAYMENT_LABEL = { cash: "現金", transfer: "轉帳", card: "刷卡" };
     const EXPENSE_TYPE_LABEL = { COGS: "銷貨成本", OPEX: "營業費用", OTHER: "其他" };
 
@@ -6692,6 +6694,7 @@
     const orderLineItemSelect = document.getElementById("orderLineItem");
     let editingV2OrderId = null;
     let orderLineItems = [];
+    let editingManualOrderLineIndex = -1;
 
     // 訂單新增/編輯：客戶欄位搜尋建議（讀客戶紀錄，只帶入名稱）
     (function initOrderCustomerSuggest() {
@@ -6742,7 +6745,7 @@
           if (seen.has(key)) continue;
           if (!key.includes(query)) continue;
           seen.add(key);
-          out.push({ name, source: String(r?.source || "其他") });
+          out.push({ name, phone: String(r?.phone || ""), line: String(r?.line || ""), source: String(r?.source || "其他") });
           if (out.length >= 5) break;
         }
         if (out.length === 0) {
@@ -6751,7 +6754,7 @@
           return;
         }
         dd.innerHTML = out
-          .map((x) => `<div class="searchable-select-option" data-name="${esc(x.name)}">${esc(x.name)}（${esc(x.source)}）</div>`)
+          .map((x) => `<div class="searchable-select-option" data-name="${esc(x.name)}" data-phone="${esc(x.phone)}" data-line="${esc(x.line)}">${esc(x.name)}${x.phone ? `｜${esc(x.phone)}` : ""}</div>`)
           .join("");
         dd.hidden = false;
       }
@@ -6765,7 +6768,11 @@
         if (!opt) return;
         e.preventDefault();
         const name = opt.getAttribute("data-name") || "";
-        inp.value = name; // 只帶入名稱
+        inp.value = name;
+        const phone = document.getElementById("orderCustomerPhone");
+        const line = document.getElementById("orderCustomerLine");
+        if (phone) phone.value = opt.getAttribute("data-phone") || "";
+        if (line) line.value = opt.getAttribute("data-line") || "";
         close();
       });
       document.addEventListener("click", (e) => {
@@ -6953,6 +6960,8 @@
     function orderStatusBadgeClass(status) {
       const s = String(status || "").trim();
       if (s === "completed") return "status-badge status-success";
+      if (s === "negotiating") return "status-badge status-muted";
+      if (s === "confirmed") return "status-badge status-info";
       if (s === "pending") return "status-badge status-warning";
       if (s === "refunded") return "status-badge status-danger";
       if (s === "paid" || s === "shipped") return "status-badge status-info";
@@ -6966,7 +6975,7 @@
       ordersPage = pageInfo.page;
       const todayStr = (DK.todayStr && DK.todayStr()) || new Date().toISOString().slice(0, 10);
       const allOrders = (DK.getOrders && DK.getOrders().map(DK.enrichOrder)) || [];
-      const todayOrders = allOrders.filter((o) => getOrderDateStr(o) === todayStr);
+      const todayOrders = allOrders.filter((o) => getOrderDateStr(o) === todayStr && o.status === "completed");
       const todayRevenue = todayOrders.reduce((s, o) => s + (Number(o.total_sale) || 0), 0);
       const todayProfit = todayOrders.reduce((s, o) => s + (Number(o.gross_profit) || 0), 0);
       const pendingShip = allOrders.filter((o) => o.status === "paid" || o.status === "pending").length;
@@ -7049,13 +7058,42 @@
           ? ' <span class="badge warn" title="庫存主檔已不存在；保留原數量仍可儲存訂單">歷史品項</span>'
           : "";
         const removeDisabled = line.historical_missing ? ' disabled title="歷史品項不可移除或變更數量"' : "";
-        return `<tr><td class="table-primary">${v2Esc(line.name || "")}${historicalBadge}</td><td class="table-secondary">${v2Esc(spec)}</td><td class="table-number neutral-number">${line.qty}</td><td class="table-number neutral-number">${v2FmtNum(line.unit_price)}</td><td class="table-number neutral-number" data-admin-only>${v2FmtNum(costUnit)}</td><td class="table-number neutral-number" data-admin-only>${v2FmtNum(cogsSub)}</td><td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action order-line-remove" data-i="${i}"${removeDisabled}>移除</button></td></tr>`;
+        const typeLabel = line.fulfillment_type === "procurement" ? "需要採購" : line.fulfillment_type === "service" ? "服務／其他" : "現有庫存";
+        const vendorLabel = line.fulfillment_type === "procurement" ? `｜預計 ${line.preferred_vendor || "未決定廠商"}` : "";
+        const editButton = line.fulfillment_type !== "inventory" ? `<button type="button" class="btn btn-ghost btn-sm order-line-edit-manual" data-i="${i}">編輯</button> ` : "";
+        return `<tr><td class="table-primary">${v2Esc(line.name || "")}${historicalBadge}<div class="muted small">${v2Esc(typeLabel + vendorLabel)}</div></td><td class="table-secondary">${v2Esc(spec)}</td><td class="table-number neutral-number">${line.qty}</td><td class="table-number neutral-number">${v2FmtNum(line.unit_price)}</td><td class="table-number neutral-number" data-admin-only>${v2FmtNum(costUnit)}</td><td class="table-number neutral-number" data-admin-only>${v2FmtNum(cogsSub)}</td><td class="table-actions">${editButton}<button type="button" class="btn btn-ghost btn-sm tertiary-action order-line-remove" data-i="${i}"${removeDisabled}>移除</button></td></tr>`;
       }).join("");
       orderLineTbody.querySelectorAll(".order-line-remove").forEach((btn) => {
         btn.addEventListener("click", () => {
           orderLineItems.splice(parseInt(btn.getAttribute("data-i"), 10), 1);
           renderOrderLineTbody();
           updateOrderTotalsFromLines();
+        });
+      });
+      orderLineTbody.querySelectorAll(".order-line-edit-manual").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const i = parseInt(btn.getAttribute("data-i"), 10);
+          const line = orderLineItems[i];
+          if (!line) return;
+          editingManualOrderLineIndex = i;
+          const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
+          set("orderManualType", line.fulfillment_type || "procurement");
+          set("orderManualCategory", line.category || "");
+          set("orderManualName", line.name || "");
+          set("orderManualSpec", line.spec || "");
+          set("orderManualQty", line.qty || 1);
+          set("orderManualPrice", line.unit_price || 0);
+          const vendor = document.getElementById("orderManualVendor");
+          if (vendor) {
+            const vendors = (window.DKPurchaseBridge && typeof window.DKPurchaseBridge.getVendors === "function") ? window.DKPurchaseBridge.getVendors() : [];
+            vendor.innerHTML = '<option value="">尚未決定</option>' + vendors.map((v) => `<option value="${v2Esc(v)}">${v2Esc(v)}</option>`).join("");
+          }
+          if (vendor && line.preferred_vendor && !Array.from(vendor.options).some((o) => o.value === line.preferred_vendor)) vendor.add(new Option(line.preferred_vendor, line.preferred_vendor));
+          set("orderManualVendor", line.preferred_vendor || "");
+          const box = document.getElementById("orderManualBox");
+          if (box) box.hidden = false;
+          const add = document.getElementById("orderManualAdd");
+          if (add) add.textContent = "更新訂單品項";
         });
       });
     }
@@ -7076,7 +7114,7 @@
       editingV2OrderId = id || null;
       const o = id ? DK.getOrders().find((x) => x.id === id) : null;
       orderLineItems = (Array.isArray(o?.items) ? o.items : []).map((l) => {
-        const itemId = l.item_id ?? l.id;
+        const itemId = l.item_id || null;
         const inventoryItem = itemId ? DK.findItemById(itemId) : null;
         let costUnit;
         if (canPerm("viewCost")) {
@@ -7093,6 +7131,9 @@
         return {
           ...l,
           item_id: itemId,
+          line_key: String(l.line_key || l.lineKey || l.id || ("line_" + Date.now() + "_" + Math.random().toString(16).slice(2))),
+          fulfillment_type: String(l.fulfillment_type || l.fulfillmentType || (itemId ? "inventory" : "service")),
+          preferred_vendor: String(l.preferred_vendor || l.preferredVendor || ""),
           unit_price: l.unit_price ?? l.unitPrice ?? 0,
           cost_unit: costUnit,
           historical_missing: !!itemId && !inventoryItem,
@@ -7105,6 +7146,8 @@
       if (orderNoEl) orderNoEl.readOnly = !!o;
       set("orderDate", o && o.created_at ? (o.created_at || "").toString().slice(0, 10) : todayStr());
       set("orderCustomer", o ? o.customer_name ?? "" : "");
+      set("orderCustomerPhone", o ? o.customer_phone ?? "" : "");
+      set("orderCustomerLine", o ? o.customer_line ?? "" : "");
       const existingSalesType = (typeof DK.normalizeOrderSalesType === "function")
         ? DK.normalizeOrderSalesType(o || {})
         : String((o && o.salesType) || "").trim();
@@ -7114,7 +7157,7 @@
       set("orderDiscount", o ? o.discount ?? 0 : 0);
       set("orderCogs", o ? o.cogs_total ?? 0 : 0);
       set("orderPayment", o ? o.payment_method ?? "transfer" : "transfer");
-      set("orderStatus", o ? o.status ?? "pending" : "pending");
+      set("orderStatus", o ? o.status ?? "negotiating" : "negotiating");
       set("orderQuoteNote", o ? o.quote_note ?? "" : "");
       applyOrderStatusSelectClass();
       renderOrderLineTbody();
@@ -7147,11 +7190,11 @@
       }
     }
     function applyOrderStatusSelectClass() {
-      const statusKeys = ["pending", "paid", "shipped", "completed", "refunded"];
+      const statusKeys = ["negotiating", "confirmed", "pending", "paid", "shipped", "completed", "refunded"];
       [document.getElementById("orderStatus"), document.getElementById("orderStatusFilter")].forEach((el) => {
         if (!el) return;
         statusKeys.forEach((k) => el.classList.remove("order-status-" + k));
-        const v = (el.value || "pending").trim();
+        const v = (el.value || "negotiating").trim();
         if (v) el.classList.add("order-status-" + v);
       });
     }
@@ -7178,7 +7221,7 @@
       if (!Number.isFinite(onHand) || onHand <= 0) return v2Show(orderMsg, "該品項目前沒有可用庫存，無法加入訂單");
       const alreadyInOrder = orderLineItems.filter((l) => l.item_id === itemId).reduce((s, l) => s + (Number(l.qty) || 0), 0);
       if (alreadyInOrder + qty > onHand) return v2Show(orderMsg, "庫存不足：" + item.sku + " 現有 " + onHand + "，明細已選 " + alreadyInOrder + "，再加 " + qty + " 會超過");
-      const line = { item_id: item.id, sku: item.sku, name: item.name, spec: item.spec || "", qty: qty, unit_price: unitPrice };
+      const line = { line_key: "line_" + Date.now() + "_" + Math.random().toString(16).slice(2), fulfillment_type: "inventory", item_id: item.id, sku: item.sku, name: item.name, spec: item.spec || "", qty: qty, unit_price: unitPrice };
       if (canPerm("viewCost") && item.cost_unit != null && item.cost_unit !== "") {
         line.cost_unit = Number(item.cost_unit) || 0;
       }
@@ -7187,6 +7230,55 @@
       updateOrderTotalsFromLines();
       v2Hide(orderMsg);
     });
+    (function initManualOrderLine() {
+      const box = document.getElementById("orderManualBox");
+      const vendor = document.getElementById("orderManualVendor");
+      function close() { if (box) box.hidden = true; editingManualOrderLineIndex = -1; const add = document.getElementById("orderManualAdd"); if (add) add.textContent = "加入訂單"; }
+      function refreshVendors() {
+        if (!vendor) return;
+        const list = (window.DKPurchaseBridge && typeof window.DKPurchaseBridge.getVendors === "function") ? window.DKPurchaseBridge.getVendors() : [];
+        vendor.innerHTML = '<option value="">尚未決定</option>' + list.map((v) => `<option value="${v2Esc(v)}">${v2Esc(v)}</option>`).join("");
+      }
+      document.getElementById("orderManualToggle")?.addEventListener("click", () => {
+        refreshVendors();
+        if (box) box.hidden = !box.hidden;
+      });
+      document.getElementById("orderManualCancel")?.addEventListener("click", close);
+      document.getElementById("orderManualType")?.addEventListener("change", (e) => {
+        if (vendor) vendor.disabled = String(e.target.value) !== "procurement";
+      });
+      document.getElementById("orderManualAdd")?.addEventListener("click", () => {
+        const type = String(document.getElementById("orderManualType")?.value || "procurement");
+        const name = String(document.getElementById("orderManualName")?.value || "").trim();
+        const spec = String(document.getElementById("orderManualSpec")?.value || "").trim();
+        const qty = Math.max(1, parseInt(document.getElementById("orderManualQty")?.value, 10) || 1);
+        const price = Math.max(0, Number(document.getElementById("orderManualPrice")?.value) || 0);
+        if (!name) return v2Show(orderMsg, "請填品項名稱");
+        if (!spec) return v2Show(orderMsg, "請填完整規格");
+        const previous = editingManualOrderLineIndex >= 0 ? orderLineItems[editingManualOrderLineIndex] : null;
+        const nextLine = {
+          line_key: previous?.line_key || ("line_" + Date.now() + "_" + Math.random().toString(16).slice(2)),
+          fulfillment_type: type,
+          item_id: null,
+          sku: "",
+          name,
+          spec,
+          category: String(document.getElementById("orderManualCategory")?.value || "").trim(),
+          preferred_vendor: type === "procurement" ? String(vendor?.value || "") : "",
+          qty,
+          unit_price: price,
+          cost_unit: 0,
+        };
+        if (editingManualOrderLineIndex >= 0) orderLineItems[editingManualOrderLineIndex] = nextLine;
+        else orderLineItems.push(nextLine);
+        ["orderManualName", "orderManualSpec", "orderManualCategory", "orderManualPrice"].forEach((id) => { const el = document.getElementById(id); if (el) el.value = id === "orderManualPrice" ? "0" : ""; });
+        if (vendor) vendor.value = "";
+        renderOrderLineTbody();
+        updateOrderTotalsFromLines();
+        close();
+        v2Hide(orderMsg);
+      });
+    })();
     document.getElementById("orderSave")?.addEventListener("click", async () => {
       if (!requirePerm("orders")) return;
       const saveBtn = document.getElementById("orderSave");
@@ -7207,22 +7299,31 @@
         const payload = {
           order_no: orderNo,
           customer_name: document.getElementById("orderCustomer")?.value || "",
+          customer_phone: document.getElementById("orderCustomerPhone")?.value || "",
+          customer_line: document.getElementById("orderCustomerLine")?.value || "",
           salesType,
           total_sale: parseFloat(document.getElementById("orderTotalSale")?.value) || 0,
           shipping_income: parseFloat(document.getElementById("orderShipping")?.value) || 0,
           discount: parseFloat(document.getElementById("orderDiscount")?.value) || 0,
           payment_method: document.getElementById("orderPayment")?.value || "transfer",
-          status: document.getElementById("orderStatus")?.value || "pending",
+          status: document.getElementById("orderStatus")?.value || "negotiating",
           quote_note: document.getElementById("orderQuoteNote")?.value || "",
           items: orderLineItems.map((l) => ({
-            item_id: l.item_id || l.id,
+            line_key: l.line_key || l.id,
+            fulfillment_type: l.fulfillment_type || (l.item_id ? "inventory" : "service"),
+            item_id: l.item_id || null,
+            sku: l.sku || "",
+            name: l.name || "",
+            spec: l.spec || "",
+            category: l.category || "",
+            preferred_vendor: l.preferred_vendor || "",
             qty: Number(l.qty) || 0,
             unit_price: Number(l.unit_price != null ? l.unit_price : l.unitPrice) || 0,
           })),
         };
         const salesTypeHint = salesType ? "" : "此訂單尚未設定銷售類型，報表會歸入未分類。";
 
-        function tryMarkLinkedCustomerAsWon() {
+        function tryUpdateLinkedCustomerStatus(orderStatus) {
           let raw = null;
           try { raw = sessionStorage.getItem(PENDING_CUSTOMER_ORDER_LINK_KEY); } catch (_) { raw = null; }
           clearPendingCustomerOrderLink();
@@ -7238,7 +7339,7 @@
               v2Show(orderMsg, "訂單已儲存，但找不到對應客戶紀錄（未更新狀態）。");
               return;
             }
-            list[idx] = { ...list[idx], status: "成交" };
+            list[idx] = { ...list[idx], status: orderStatus === "completed" ? "成交" : "洽談中" };
             localStorage.setItem(CUSTOMER_RECORDS_KEY, JSON.stringify(list));
             if (typeof renderCustomerRecordsPage === "function") renderCustomerRecordsPage();
           } catch (e) {
@@ -7251,7 +7352,7 @@
           if (typeof DK.updateOrder !== "function") return v2Show(orderMsg, "Stage 7 寫入未載入");
           res = await DK.updateOrder({ ...payload, id: editingV2OrderId });
         } else {
-          for (const line of payload.items) {
+          for (const line of payload.items.filter((x) => x.fulfillment_type === "inventory")) {
             const item = DK.findItemById(line.item_id);
             const onHand = Number(item?.qty_on_hand) || 0;
             const need = Number(line.qty) || 0;
@@ -7273,8 +7374,29 @@
           return;
         }
         const quoteNoteWarning = res.quoteNoteFailed ? (" " + (res.quoteNoteWarning || "報價備註尚未儲存。")) : "";
-        v2Show(orderMsg, (editingV2OrderId ? "已更新（庫存已同步）。" : "已新增並已扣庫存。") + salesTypeHint + quoteNoteWarning);
-        if (!editingV2OrderId) tryMarkLinkedCustomerAsWon();
+        const customerName = String(payload.customer_name || "").trim();
+        if (customerName) {
+          try {
+            const records = loadCustomerRecords();
+            const phoneKey = String(payload.customer_phone || "").replace(/\D/g, "");
+            let idx = phoneKey ? records.findIndex((r) => String(r.phone || "").replace(/\D/g, "") === phoneKey) : records.findIndex((r) => String(r.name || "").trim() === customerName);
+            const nextCustomer = crNormalize(idx >= 0 ? records[idx] : {});
+            nextCustomer.name = customerName;
+            nextCustomer.phone = payload.customer_phone;
+            nextCustomer.line = payload.customer_line;
+            nextCustomer.status = payload.status === "completed" ? "成交" : "洽談中";
+            if (idx >= 0) records[idx] = nextCustomer; else records.unshift(nextCustomer);
+            saveCustomerRecords(records);
+          } catch (_) {}
+        }
+        let purchaseWarning = "";
+        if (["confirmed", "pending", "paid", "shipped", "completed"].includes(payload.status) && window.DKPurchaseOrderSync?.syncFromSalesOrder) {
+          const purchaseSync = await window.DKPurchaseOrderSync.syncFromSalesOrder({ ...payload, id: savedId });
+          if (purchaseSync && Array.isArray(purchaseSync.warnings) && purchaseSync.warnings.length) purchaseWarning = " " + purchaseSync.warnings.join(" ");
+          else if (!purchaseSync || !purchaseSync.ok) purchaseWarning = " 叫貨單同步失敗，請勿重複新增；請到叫貨單檢查。";
+        }
+        v2Show(orderMsg, (editingV2OrderId ? "訂單已更新。" : "訂單已新增。") + salesTypeHint + quoteNoteWarning + purchaseWarning);
+        if (!editingV2OrderId) tryUpdateLinkedCustomerStatus(payload.status);
         else clearPendingCustomerOrderLink();
         showSyncToast({ ok: true }, "訂單");
         renderV2Orders();
@@ -8325,12 +8447,12 @@
       let csv = "\uFEFF" + headers.join(",") + "\n";
       rows.forEach((r) => { csv += r.map(csvCell).join(",") + "\n"; });
       const salesStats = (DK.reportSalesTypeStats && DK.reportSalesTypeStats(params.fromStr, params.toStr)) || { rows: [] };
-      csv += "\n銷售類型統計（不含退款）\n";
+      csv += "\n銷售類型統計（僅已完成訂單）\n";
       csv += "銷售類型,訂單數,營業額,毛利,平均客單\n";
       (salesStats.rows || []).forEach((r) => {
         csv += [r.salesType, Number(r.count) || 0, Number(r.revenue) || 0, Number(r.profit) || 0, Number(r.avg) || 0].map(csvCell).join(",") + "\n";
       });
-      csv += "\n訂單明細（查詢區間內，不含退款）\n";
+      csv += "\n訂單明細（查詢區間內，僅已完成訂單）\n";
       csv += "訂單編號,客戶,售價,運費,折扣,成本,毛利,毛利率,狀態,日期,銷售類型\n";
       enrichedOrders.forEach((o) => {
         const margin = o.gross_margin != null ? (o.gross_margin * 100).toFixed(1) + "%" : "";

@@ -446,7 +446,7 @@
   function reportSalesTypeStats(fromStr, toStr) {
     const orders = getOrders().filter((o) => {
       const d = orderBusinessDate(o);
-      return d >= fromStr && d <= toStr && o.status !== "refunded";
+      return d >= fromStr && d <= toStr && o.status === "completed";
     });
     const keys = ORDER_SALES_TYPES.concat(["未分類"]);
     const buckets = {};
@@ -597,7 +597,7 @@
   function reportSummaryByDateRange(fromStr, toStr) {
     const orders = getOrders().filter((o) => {
       const d = orderBusinessDate(o);
-      return d >= fromStr && d <= toStr && o.status !== "refunded";
+      return d >= fromStr && d <= toStr && o.status === "completed";
     });
     const ordersProfit = orders.reduce((s, o) => s + orderGrossProfit(o), 0);
     const revenueTotal = orders.reduce((s, o) => s + orderRevenue(o), 0);
@@ -629,11 +629,11 @@
     };
   }
 
-  /** 取得指定日期區間內的訂單（KPI／CSV 同規則：排除 refunded） */
+  /** 取得指定日期區間內的訂單（KPI／CSV 同規則：只有 completed） */
   function getOrdersInDateRange(fromStr, toStr) {
     return getOrders().filter((o) => {
       const d = orderBusinessDate(o);
-      return d >= fromStr && d <= toStr && o.status !== "refunded";
+      return d >= fromStr && d <= toStr && o.status === "completed";
     });
   }
 

@@ -1187,7 +1187,9 @@ function stage7MapLedgerRow(row, costMap, admin) {
 function stage7MapOrderRow(row, lines, cogsMap, admin) {
   const extra = row && row.extra && typeof row.extra === "object" && !Array.isArray(row.extra) ? row.extra : {};
   const items = (lines || []).map((line) => {
+    const lineExtra = line && line.extra && typeof line.extra === "object" && !Array.isArray(line.extra) ? line.extra : {};
     const mapped = {
+      ...lineExtra,
       id: line.id,
       item_id: line.item_id,
       sku: line.sku,
@@ -1410,7 +1412,14 @@ function stage7ItemPayload(item) {
 
 function stage7OrderLinesPayload(lines, headerTotal) {
   const mapped = (Array.isArray(lines) ? lines : []).map((l) => ({
-    item_id: l.item_id || l.id,
+    line_key: String(l.line_key || l.lineKey || l.id || ""),
+    fulfillment_type: String(l.fulfillment_type || l.fulfillmentType || (l.item_id || l.id ? "inventory" : "service")),
+    item_id: l.item_id || (l.fulfillment_type === "inventory" ? l.id : null) || null,
+    sku: String(l.sku || ""),
+    name: String(l.name || ""),
+    spec: String(l.spec || ""),
+    category: String(l.category || ""),
+    preferred_vendor: String(l.preferred_vendor || l.preferredVendor || ""),
     qty: Number(l.qty) || 0,
     unit_price: Number(l.unit_price != null ? l.unit_price : l.unitPrice) || 0,
   }));
@@ -1498,7 +1507,7 @@ async function stage7DeleteItem(id) {
 }
 
 async function stage7CreateOrder(payload) {
-  const res = await stage7Rpc("backoffice_create_order", {
+  const res = await stage7Rpc("backoffice_create_order_v2", {
     p_order_no: payload.order_no,
     p_customer_name: payload.customer_name || "",
     p_sales_type: payload.salesType || payload.sales_type || "",
@@ -1506,13 +1515,15 @@ async function stage7CreateOrder(payload) {
     p_discount: Number(payload.discount) || 0,
     p_payment_method: payload.payment_method || "transfer",
     p_status: payload.status || "pending",
+    p_customer_phone: payload.customer_phone || "",
+    p_customer_line: payload.customer_line || "",
     p_lines: stage7OrderLinesPayload(payload.items || payload.lines || [], payload.total_sale),
   });
   return stage7FinishOrderWrite(res, payload, null);
 }
 
 async function stage7UpdateOrder(payload) {
-  const res = await stage7Rpc("backoffice_update_order", {
+  const res = await stage7Rpc("backoffice_update_order_v2", {
     p_order_id: payload.id,
     p_order_no: payload.order_no,
     p_customer_name: payload.customer_name || "",
@@ -1521,6 +1532,8 @@ async function stage7UpdateOrder(payload) {
     p_discount: Number(payload.discount) || 0,
     p_payment_method: payload.payment_method || "transfer",
     p_status: payload.status || "pending",
+    p_customer_phone: payload.customer_phone || "",
+    p_customer_line: payload.customer_line || "",
     p_lines: stage7OrderLinesPayload(payload.items || payload.lines || [], payload.total_sale),
   });
   return stage7FinishOrderWrite(res, payload, payload.id);

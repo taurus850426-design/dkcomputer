@@ -202,6 +202,9 @@
         Number(r.selectedUnitPrice) > 0 || Number(r.manualUnitPrice) > 0 ? "quoted" : "pending"
       )),
       itemNote: String(r.itemNote || ""),
+      procurementStatus: String(r.procurementStatus || "pending"),
+      sourceSalesOrderId: String(r.sourceSalesOrderId || ""),
+      sourceSalesOrderLineKey: String(r.sourceSalesOrderLineKey || ""),
     };
   }
 
@@ -219,11 +222,103 @@
       supplierOrderDate: String(r.supplierOrderDate || ""),
       expectedDate: String(r.expectedDate || ""),
       note: String(r.note || ""),
+      sourceSalesOrderId: String(r.sourceSalesOrderId || ""),
+      sourceSalesOrderNo: String(r.sourceSalesOrderNo || ""),
+      sourceCustomerName: String(r.sourceCustomerName || ""),
       items: Array.isArray(r.items) ? r.items.map(normalizeItem) : [],
     };
     if (r.deletedAt || r.deleted_at) out.deletedAt = String(r.deletedAt || r.deleted_at);
     return out;
   }
+
+  async function syncFromSalesOrder(salesOrder) {
+    const src = salesOrder && typeof salesOrder === "object" ? salesOrder : null;
+    if (!src || !src.id) return { ok: false, error: "缺少來源訂單 ID" };
+    const sourceId = String(src.id);
+    const wanted = (Array.isArray(src.items) ? src.items : []).filter(function (line) {
+      return String(line.fulfillment_type || line.fulfillmentType || "") === "procurement";
+    });
+    const all = loadOrders();
+    let order = all.find(function (o) { return String(o.sourceSalesOrderId || "") === sourceId; }) || null;
+    const warnings = [];
+
+    if (!order && !wanted.length) return { ok: true, skipped: true };
+    if (!order) {
+      order = normalizeOrder({
+        id: "po-sales-" + sourceId,
+        orderNo: "PO-" + String(src.order_no || src.orderNo || sourceId),
+        status: "draft",
+        note: String(src.customer_name || src.customerName || "") + "｜來源訂單：" + String(src.order_no || src.orderNo || ""),
+        sourceSalesOrderId: sourceId,
+        sourceSalesOrderNo: String(src.order_no || src.orderNo || ""),
+        sourceCustomerName: String(src.customer_name || src.customerName || ""),
+        items: [],
+      });
+    }
+
+    const existingByKey = new Map((order.items || []).filter(function (it) {
+      return String(it.sourceSalesOrderLineKey || "") !== "";
+    }).map(function (it) { return [String(it.sourceSalesOrderLineKey), it]; }));
+    const nextLinked = [];
+    wanted.forEach(function (line, index) {
+      const lineKey = String(line.line_key || line.lineKey || line.id || (sourceId + ":" + index));
+      const old = existingByKey.get(lineKey) || null;
+      const desiredVendor = String(line.preferred_vendor || line.preferredVendor || "").trim();
+      const locked = old && (old.procurementStatus === "ordered" || old.procurementStatus === "received");
+      const oldVendor = old ? itemVendor(old) : "";
+      const vendorChanged = !!old && desiredVendor !== oldVendor;
+      let vendor = desiredVendor;
+      if (locked && vendorChanged) {
+        vendor = oldVendor;
+        warnings.push("「" + String(line.name || line.spec || "品項") + "」已向 " + (vendor || "原廠商") + " 叫貨，未自動改成 " + (desiredVendor || "尚未指定") + "；請先在叫貨單取消原叫貨。");
+      }
+      const quoteReset = vendorChanged && !locked ? {
+        selectedQuoteId: null,
+        selectedUnitPrice: null,
+        manualUnitPrice: null,
+        quotedAt: "",
+        quoteStatus: "pending",
+      } : {};
+      const next = normalizeItem(Object.assign({}, old || {}, quoteReset, {
+        id: old ? old.id : ("poi-sales-" + lineKey),
+        requestText: String(line.name || line.spec || ""),
+        category: String(line.category || ""),
+        quantity: Math.max(1, Number(line.qty) || 1),
+        selectedVendor: vendor,
+        manualVendor: vendor,
+        selectedSpec: String(line.spec || line.name || ""),
+        quoteStatus: vendorChanged && !locked ? "pending" : (old ? old.quoteStatus : "pending"),
+        itemNote: "來源訂單：" + String(src.order_no || src.orderNo || "") + "｜客戶：" + String(src.customer_name || src.customerName || ""),
+        sourceSalesOrderId: sourceId,
+        sourceSalesOrderLineKey: lineKey,
+      }));
+      nextLinked.push(next);
+      existingByKey.delete(lineKey);
+    });
+
+    existingByKey.forEach(function (old) {
+      if (old.procurementStatus === "ordered" || old.procurementStatus === "received") {
+        nextLinked.push(old);
+        warnings.push("已叫貨品項「" + (old.selectedSpec || old.requestText) + "」已從訂單移除，但叫貨紀錄仍保留，需人工處理取消。");
+      }
+    });
+    const unrelated = (order.items || []).filter(function (it) { return !it.sourceSalesOrderLineKey; });
+    order.items = unrelated.concat(nextLinked);
+    order.updatedAt = new Date().toISOString();
+    order.sourceSalesOrderNo = String(src.order_no || src.orderNo || order.sourceSalesOrderNo || "");
+    order.sourceCustomerName = String(src.customer_name || src.customerName || order.sourceCustomerName || "");
+    order.note = order.sourceCustomerName + "｜來源訂單：" + order.sourceSalesOrderNo;
+
+    const idx = all.findIndex(function (o) { return String(o.id) === String(order.id); });
+    if (idx >= 0) all[idx] = order; else all.unshift(order);
+    if (!saveOrders(all)) return { ok: false, error: "叫貨單本機儲存失敗" };
+    syncPurchaseOrderToCloud(order, warnings.length ? "叫貨單已更新，但有項目需要人工確認" : "草稿叫貨單已同步");
+    try { window.dispatchEvent(new CustomEvent("dk:purchase-orders-updated")); } catch (_) {}
+    return { ok: true, order: order, warnings: warnings };
+  }
+
+  window.DKPurchaseOrderSync = window.DKPurchaseOrderSync || {};
+  window.DKPurchaseOrderSync.syncFromSalesOrder = syncFromSalesOrder;
 
   function nextOrderNo(list) {
     const day = ymdCompact(new Date());
@@ -709,6 +804,15 @@
           return false;
         }
       }
+    }
+    if (nextStatus === "ordered" && currentOrder.status !== "ordered") {
+      currentOrder.items = (currentOrder.items || []).map(function (it) {
+        return Object.assign({}, it, { procurementStatus: "ordered" });
+      });
+    } else if (nextStatus === "received") {
+      currentOrder.items = (currentOrder.items || []).map(function (it) {
+        return Object.assign({}, it, { procurementStatus: "received" });
+      });
     }
     currentOrder.status = nextStatus;
     currentOrder.supplierOrderDate = String((el("poSupplierOrderDate") && el("poSupplierOrderDate").value) || "");
