@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260916stage22" />
+            <link rel="stylesheet" href="./styles.css?v=20260916stage23" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -319,6 +319,8 @@
               </div>
               <div id="ordersPagination" class="pagination"></div>
               <div id="orderForm" class="section-card-soft surface-neutral admin-stack-gap" style="margin-top:12px" hidden>
+                <div class="order-workspace-layout">
+                <div class="order-workspace-main">
                 <h3 class="h3 section-title form-section-title">新增 / 編輯訂單</h3>
                 <div class="form-grid">
                   <div class="field"><label for="orderNo">訂單編號</label><input id="orderNo" type="text" placeholder="自動產生" /></div>
@@ -387,6 +389,12 @@
                   </div>
                 </div>
                 <div id="orderMsg" class="muted" hidden></div>
+                </div>
+                <aside id="orderLivePreview" class="desktop-live-preview" aria-label="即時報價單預覽">
+                  <div class="desktop-live-preview__head"><strong>報價單即時預覽</strong><span class="muted small">內容尚未儲存也會更新</span></div>
+                  <div class="desktop-live-preview__body"><img id="orderLivePreviewImg" alt="即時報價單預覽" /></div>
+                </aside>
+                </div>
               </div>
             </div>
 
@@ -1306,6 +1314,8 @@
                   <button id="poPrintBtn" class="btn btn-ghost tertiary-action" type="button">列印叫貨單</button>
                 </div>
 
+                <div class="po-workspace-layout">
+                <div class="po-workspace-main">
                 <div class="section-card-soft po-info-card" style="margin-top:12px">
                   <h3 class="h3">叫貨單基本資訊</h3>
                   <div class="form-grid" style="margin-top:8px">
@@ -1400,6 +1410,12 @@
                     <h3 class="h3">依廠商檢視／複製</h3>
                   </div>
                   <div id="poVendorGroups" class="po-vendor-groups"></div>
+                </div>
+                </div>
+                <aside id="poLivePreview" class="desktop-live-preview" aria-label="即時叫貨單預覽">
+                  <div class="desktop-live-preview__head"><strong>叫貨單即時預覽</strong><span class="muted small">依目前未儲存內容更新</span></div>
+                  <div id="poLivePreviewBody" class="desktop-live-preview__body po-live-preview-paper"></div>
+                </aside>
                 </div>
 
                 <div id="poStickyCart" class="po-sticky-cart" hidden>
@@ -3410,6 +3426,30 @@
         </div>
       </div>
     </div>
+    <div id="poReceiveModal" class="po-quote-modal" hidden>
+      <div class="po-quote-modal__card po-receive-modal__card" role="dialog" aria-modal="true" aria-labelledby="poReceiveModalTitle">
+        <div class="po-quote-modal__head">
+          <div>
+            <h3 id="poReceiveModalTitle" class="h3">登記品項到貨</h3>
+            <div id="poReceiveItemSummary" class="muted small"></div>
+          </div>
+          <button id="poReceiveCloseBtn" class="btn btn-ghost btn-sm" type="button">關閉</button>
+        </div>
+        <div class="po-quote-modal__body">
+          <div class="form-grid">
+            <div class="field"><label for="poReceiveDate">到貨日期</label><input id="poReceiveDate" type="date" /></div>
+            <div class="field"><label for="poReceiveDestination">到貨用途</label><select id="poReceiveDestination"><option value="customer">客戶訂單專用（預設）</option><option value="inventory">入一般庫存</option></select></div>
+            <div id="poReceiveInventoryField" class="field full" hidden><label for="poReceiveInventoryItem">加入哪個庫存品項</label><select id="poReceiveInventoryItem"><option value="">請選擇既有庫存品項</option></select><div class="form-hint">找不到品項時，請先到庫存新增品項，再回來登記到貨。</div></div>
+            <div class="field full"><label for="poReceiveNote">到貨備註</label><input id="poReceiveNote" type="text" placeholder="例如：客戶王先生專用／外盒微損" /></div>
+          </div>
+          <div id="poReceiveMsg" class="muted small" hidden></div>
+        </div>
+        <div class="po-quote-modal__actions">
+          <button id="poReceiveSaveBtn" class="btn btn-primary" type="button">確認到貨</button>
+          <button id="poReceiveCancelBtn" class="btn btn-ghost" type="button">取消</button>
+        </div>
+      </div>
+    </div>
     <div id="quotePreviewModal" class="quote-preview-modal" hidden>
       <div class="quote-preview-card" role="dialog" aria-modal="true" aria-labelledby="quotePreviewTitle">
         <div class="quote-preview-head">
@@ -3425,16 +3465,16 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260916stage22"></script>
-    <script src="./inventory-ledger.js?v=20260916stage22"></script>
+    <script src="./shared.js?v=20260916stage23"></script>
+    <script src="./inventory-ledger.js?v=20260916stage23"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260916stage22"></script>
+    <script src="./admin3.js?v=20260916stage23"></script>
     <script src="./used-valuation-admin.js?v=20260912s03zh"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
     <script src="./used-acquisition-admin.js?v=20260912s07"></script>
-    <script src="./purchase-orders.js?v=20260916stage22"></script>
+    <script src="./purchase-orders.js?v=20260916stage23"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260913s20"></script>
   </body>

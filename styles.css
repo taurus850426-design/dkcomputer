@@ -3239,6 +3239,94 @@ body.admin-page #feHomeBannerAddBtn{
   body.theme-apple *{ scroll-behavior: auto !important; transition: none !important; }
 }
 
+/* Stage 23 | Desktop dual-pane order and purchase previews */
+.desktop-live-preview{
+  display: none;
+}
+@media (min-width: 1280px){
+  body.admin-page.order-workspace-open .admin-shell .container{
+    --container: 1600px;
+  }
+  body.admin-page #orderForm{
+    padding: 18px;
+  }
+  body.admin-page .order-workspace-layout,
+  body.admin-page .po-workspace-layout{
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(390px, 0.62fr);
+    gap: 18px;
+    align-items: start;
+  }
+  body.admin-page .order-workspace-main,
+  body.admin-page .po-workspace-main{
+    min-width: 0;
+  }
+  body.admin-page .desktop-live-preview{
+    display: block;
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 32px);
+    overflow: hidden;
+    border: 1px solid rgba(17,24,39,0.10);
+    border-radius: 16px;
+    background: #eef1f5;
+    box-shadow: var(--dk-shadow-soft);
+  }
+  body.admin-page .desktop-live-preview__head{
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 10px;
+    padding: 12px 14px;
+    background: #fff;
+    border-bottom: 1px solid rgba(17,24,39,0.08);
+  }
+  body.admin-page .desktop-live-preview__body{
+    max-height: calc(100vh - 92px);
+    overflow: auto;
+    padding: 12px;
+  }
+  body.admin-page #orderLivePreviewImg{
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #fff;
+    box-shadow: 0 8px 28px rgba(15,23,42,0.14);
+  }
+  body.admin-page #poEditorView:not([hidden]){
+    width: min(1560px, calc(100vw - 32px));
+  }
+  body.admin-page .po-live-preview-paper .po-print-inner{
+    background: #fff;
+    color: #111827;
+    padding: 22px;
+    box-shadow: 0 8px 28px rgba(15,23,42,0.14);
+    font-size: 12px;
+  }
+  body.admin-page .po-live-preview-paper h1{
+    margin: 0 0 10px;
+    font-size: 24px;
+  }
+  body.admin-page .po-live-preview-paper h3{
+    margin: 16px 0 6px;
+  }
+  body.admin-page .po-live-preview-paper table{
+    width: 100%;
+    border-collapse: collapse;
+  }
+  body.admin-page .po-live-preview-paper th,
+  body.admin-page .po-live-preview-paper td{
+    padding: 6px;
+    border: 1px solid #d1d5db;
+    text-align: left;
+    vertical-align: top;
+  }
+}
+
+.po-receive-modal__card{
+  max-width: 660px;
+}
+
 @media (max-width: 980px){
   body.theme-apple .h1{ font-size: 34px; }
   body.theme-apple .section{ padding: 44px 0; }

@@ -27,6 +27,8 @@
   let lastAddedItemId = null;
   let expandedOrderId = null;
   let quoteModalItemId = null;
+  let receiveModalItemId = null;
+  let poPreviewTimer = null;
 
   function bridge() {
     return window.DKPurchaseBridge || {};
@@ -205,6 +207,12 @@
       procurementStatus: String(r.procurementStatus || "pending"),
       sourceSalesOrderId: String(r.sourceSalesOrderId || ""),
       sourceSalesOrderLineKey: String(r.sourceSalesOrderLineKey || ""),
+      costSyncedAt: String(r.costSyncedAt || ""),
+      receivedAt: String(r.receivedAt || ""),
+      receiptDestination: String(r.receiptDestination || ""),
+      receiptInventoryItemId: String(r.receiptInventoryItemId || ""),
+      receiptLedgerId: String(r.receiptLedgerId || ""),
+      receiptNote: String(r.receiptNote || ""),
     };
   }
 
@@ -241,6 +249,7 @@
     const all = loadOrders();
     let order = all.find(function (o) { return String(o.sourceSalesOrderId || "") === sourceId; }) || null;
     const warnings = [];
+    const costKeysToClear = [];
 
     if (!order && !wanted.length) return { ok: true, skipped: true };
     if (!order) {
@@ -264,7 +273,7 @@
       const lineKey = String(line.line_key || line.lineKey || line.id || (sourceId + ":" + index));
       const old = existingByKey.get(lineKey) || null;
       const desiredVendor = String(line.preferred_vendor || line.preferredVendor || "").trim();
-      const locked = old && (old.procurementStatus === "ordered" || old.procurementStatus === "received");
+      const locked = old && (old.procurementStatus === "ordered" || old.procurementStatus === "received" || String(src.status || "") === "completed");
       const oldVendor = old ? itemVendor(old) : "";
       const vendorChanged = !!old && desiredVendor !== oldVendor;
       let vendor = desiredVendor;
@@ -279,6 +288,7 @@
         quotedAt: "",
         quoteStatus: "pending",
       } : {};
+      if (vendorChanged && !locked && old && old.sourceSalesOrderLineKey) costKeysToClear.push(String(old.sourceSalesOrderLineKey));
       const next = normalizeItem(Object.assign({}, old || {}, quoteReset, {
         id: old ? old.id : ("poi-sales-" + lineKey),
         requestText: String(line.name || line.spec || ""),
@@ -300,6 +310,8 @@
       if (old.procurementStatus === "ordered" || old.procurementStatus === "received") {
         nextLinked.push(old);
         warnings.push("已叫貨品項「" + (old.selectedSpec || old.requestText) + "」已從訂單移除，但叫貨紀錄仍保留，需人工處理取消。");
+      } else if (old.sourceSalesOrderLineKey) {
+        costKeysToClear.push(String(old.sourceSalesOrderLineKey));
       }
     });
     const unrelated = (order.items || []).filter(function (it) { return !it.sourceSalesOrderLineKey; });
@@ -312,6 +324,19 @@
     const idx = all.findIndex(function (o) { return String(o.id) === String(order.id); });
     if (idx >= 0) all[idx] = order; else all.unshift(order);
     if (!saveOrders(all)) return { ok: false, error: "叫貨單本機儲存失敗" };
+    if (costKeysToClear.length) {
+      if (typeof window.stage7ClearProcurementCost !== "function") {
+        warnings.push("舊廠商成本尚未清除；請確認 Supabase Stage 23 已更新。");
+      } else {
+        for (const lineKey of Array.from(new Set(costKeysToClear))) {
+          const cleared = await window.stage7ClearProcurementCost({ order_id: sourceId, line_key: lineKey });
+          if (!cleared || !cleared.ok) warnings.push("品項成本清除失敗：" + String((cleared && cleared.error) || lineKey));
+        }
+        try {
+          if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") await window.DK.fetchV2DataFromSupabase();
+        } catch (_) {}
+      }
+    }
     syncPurchaseOrderToCloud(order, warnings.length ? "叫貨單已更新，但有項目需要人工確認" : "草稿叫貨單已同步");
     try { window.dispatchEvent(new CustomEvent("dk:purchase-orders-updated")); } catch (_) {}
     return { ok: true, order: order, warnings: warnings };
@@ -473,7 +498,12 @@
   }
 
   function canUpdateQuote(order) {
-    return !!order && (order.status === "draft" || order.status === "ordered");
+    return !!order && (order.status === "draft" || order.status === "ordered" || order.status === "partial");
+  }
+
+  function canReceiveItem(order, item) {
+    return !!order && !!item && (order.status === "ordered" || order.status === "partial")
+      && item.procurementStatus !== "received";
   }
 
   function el(id) {
@@ -552,6 +582,7 @@
       if (editor) editor.classList.remove("po-editor-has-sticky");
     } else {
       updateStickyCart();
+      schedulePurchasePreview();
     }
   }
 
@@ -805,13 +836,19 @@
         }
       }
     }
+    if (nextStatus === "received" && (currentOrder.items || []).some(function (it) { return it.procurementStatus !== "received"; })) {
+      showMsg("仍有品項尚未逐項登記到貨，請使用叫貨清單內的「登記到貨」。");
+      if (el("poStatus")) el("poStatus").value = currentOrder.status;
+      return false;
+    }
+    if (nextStatus === "partial" && !(currentOrder.items || []).some(function (it) { return it.procurementStatus === "received"; })) {
+      showMsg("尚未登記任何到貨品項，不能改為部分到貨。");
+      if (el("poStatus")) el("poStatus").value = currentOrder.status;
+      return false;
+    }
     if (nextStatus === "ordered" && currentOrder.status !== "ordered") {
       currentOrder.items = (currentOrder.items || []).map(function (it) {
         return Object.assign({}, it, { procurementStatus: "ordered" });
-      });
-    } else if (nextStatus === "received") {
-      currentOrder.items = (currentOrder.items || []).map(function (it) {
-        return Object.assign({}, it, { procurementStatus: "received" });
       });
     }
     currentOrder.status = nextStatus;
@@ -838,6 +875,7 @@
     renderList();
     renderPurchaseOrdersSyncPanel();
     syncPurchaseOrderToCloud(copy, "已儲存並同步 " + copy.orderNo);
+    schedulePurchasePreview();
   }
 
   function renderItems() {
@@ -856,6 +894,7 @@
     if (!items.length) {
       lastAddedItemId = null;
       tbody.innerHTML = '<tr><td class="muted" colspan="10">尚未加入品項</td></tr>';
+      schedulePurchasePreview();
       return;
     }
     const highlightId = lastAddedItemId;
@@ -872,9 +911,15 @@
             : '<span class="badge ok">已報價／待確認</span>'));
       const canEdit = isEditable(currentOrder);
       const canQuote = canUpdateQuote(currentOrder);
-      const quoteLabel = currentOrder.status === "ordered" ? "補廠商報價" : "比價／新增報價";
+      const canReceive = canReceiveItem(currentOrder, it);
+      const quoteLabel = currentOrder.status === "draft" ? "比價／新增報價" : "補廠商報價";
+      const receiptBadge = it.procurementStatus === "received"
+        ? '<div style="margin-top:4px"><span class="badge ok">已到貨・' + esc(it.receiptDestination === "inventory" ? "一般庫存" : "客戶專用") + '</span></div>'
+        : (currentOrder.status === "ordered" || currentOrder.status === "partial"
+          ? '<div style="margin-top:4px"><span class="badge info">等待到貨</span></div>' : "");
       const actions =
         (canQuote ? '<button type="button" class="btn btn-primary btn-sm" data-poi-act="quote" data-id="' + esc(it.id) + '">' + quoteLabel + '</button> ' : "") +
+        (canReceive ? '<button type="button" class="btn btn-ghost btn-sm secondary-action" data-poi-act="receive" data-id="' + esc(it.id) + '">登記到貨</button> ' : "") +
         (canEdit ? '<button type="button" class="btn btn-ghost btn-sm" data-poi-act="rm" data-id="' + esc(it.id) + '">移除</button>' : "");
       const hl = highlightId && String(it.id) === String(highlightId) ? " ui-enter-soft" : "";
       return (
@@ -886,7 +931,7 @@
         '<td style="text-align:right">' + esc(String(it.quantity)) + "</td>" +
         '<td style="text-align:right">' + esc(fmtNT(itemSubtotal(it))) + "</td>" +
         "<td class=\"nowrap\">" + esc(fmtDate(it.quotedAt)) + "</td>" +
-        "<td>" + tip + "</td>" +
+        "<td>" + tip + receiptBadge + "</td>" +
         "<td>" + esc(it.itemNote || "") + "</td>" +
         '<td style="text-align:right;white-space:nowrap">' +
         (actions || "—") +
@@ -894,6 +939,7 @@
       );
     }).join("");
     lastAddedItemId = null;
+    schedulePurchasePreview();
   }
 
   function groupByVendor(order) {
@@ -1496,6 +1542,31 @@
         quoteStatus: "quoted",
       }));
       currentOrder.items[idx] = updated;
+      let costSyncWarning = "";
+      if (updated.sourceSalesOrderId && updated.sourceSalesOrderLineKey) {
+        if (typeof window.stage7SyncProcurementCost !== "function") {
+          costSyncWarning = "；訂單成本同步功能尚未部署";
+        } else {
+          const costSync = await window.stage7SyncProcurementCost({
+            order_id: updated.sourceSalesOrderId,
+            line_key: updated.sourceSalesOrderLineKey,
+            unit_cost: updated.selectedUnitPrice,
+            vendor: updated.selectedVendor,
+            quote_id: updated.selectedQuoteId,
+            quoted_at: updated.quotedAt,
+          });
+          if (costSync && costSync.ok) {
+            updated.costSyncedAt = new Date().toISOString();
+            try {
+              if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") {
+                await window.DK.fetchV2DataFromSupabase();
+              }
+            } catch (_) {}
+          } else {
+            costSyncWarning = "；訂單成本尚未同步：" + String((costSync && costSync.error) || "請確認 Supabase Stage 23 已更新");
+          }
+        }
+      }
       lastAddedItemId = updated.id;
       closeQuoteModal();
       renderCurrentPick(updated);
@@ -1504,7 +1575,7 @@
       searchQuotes(updated.selectedSpec || updated.requestText || "");
       persistCurrent({ quoteOnly: true });
       const cloudWarning = result.cloud && !result.cloud.ok ? "；廠商報價雲端同步失敗，已保留本機資料" : "";
-      showMsg("報價已同步到廠商比價，並更新叫貨品項" + cloudWarning, 5000);
+      showMsg("報價已同步到廠商比價、叫貨品項" + (updated.costSyncedAt ? "及訂單成本" : "") + cloudWarning + costSyncWarning, 6000);
     } catch (e) {
       quoteModalMessage("報價儲存失敗：" + String((e && e.message) || e || "未知錯誤"), true);
     } finally {
@@ -1512,6 +1583,127 @@
         button.disabled = false;
         button.textContent = "儲存報價並更新叫貨品項";
       }
+    }
+  }
+
+  function receiveModalMessage(text, danger) {
+    const node = el("poReceiveMsg");
+    if (!node) return;
+    node.hidden = !text;
+    node.textContent = String(text || "");
+    node.classList.toggle("danger-text", !!danger);
+  }
+
+  function closeReceiveModal() {
+    receiveModalItemId = null;
+    const modal = el("poReceiveModal");
+    if (modal) modal.hidden = true;
+    document.body.classList.remove("po-quote-modal-open");
+    receiveModalMessage("");
+  }
+
+  function fillReceiveInventoryItems() {
+    const select = el("poReceiveInventoryItem");
+    if (!select) return;
+    let items = [];
+    try { items = window.DK && typeof window.DK.getItems === "function" ? window.DK.getItems() : []; } catch (_) {}
+    items = (Array.isArray(items) ? items : []).slice().sort(function (a, b) {
+      return String(a.name || a.sku || "").localeCompare(String(b.name || b.sku || ""), "zh-Hant");
+    });
+    select.innerHTML = '<option value="">請選擇既有庫存品項</option>' + items.map(function (it) {
+      const label = [it.sku, it.name, it.spec].filter(Boolean).join("｜") + "（現有 " + String(Number(it.qty_on_hand) || 0) + "）";
+      return '<option value="' + esc(it.id) + '">' + esc(label) + '</option>';
+    }).join("");
+  }
+
+  function toggleReceiveInventoryField() {
+    const field = el("poReceiveInventoryField");
+    const destination = String((el("poReceiveDestination") && el("poReceiveDestination").value) || "customer");
+    if (field) field.hidden = destination !== "inventory";
+  }
+
+  function openReceiveModal(itemId) {
+    if (!currentOrder) return;
+    const item = (currentOrder.items || []).find(function (it) { return String(it.id) === String(itemId); });
+    if (!item || !canReceiveItem(currentOrder, item)) return showMsg("此品項目前不能登記到貨", 3000);
+    if (!(itemPrice(item) > 0)) return showMsg("請先補上廠商報價，再登記到貨", 3500);
+    receiveModalItemId = String(item.id);
+    if (el("poReceiveDate")) el("poReceiveDate").value = todayYMD();
+    if (el("poReceiveDestination")) el("poReceiveDestination").value = "customer";
+    if (el("poReceiveNote")) el("poReceiveNote").value = "";
+    if (el("poReceiveItemSummary")) {
+      el("poReceiveItemSummary").textContent = itemSpec(item) + "｜" + itemVendor(item) + "｜數量 " + String(item.quantity || 1) + "｜成本 " + fmtNT(itemPrice(item));
+    }
+    fillReceiveInventoryItems();
+    toggleReceiveInventoryField();
+    receiveModalMessage("");
+    const modal = el("poReceiveModal");
+    if (modal) modal.hidden = false;
+    document.body.classList.add("po-quote-modal-open");
+  }
+
+  async function saveReceiveModal() {
+    if (!currentOrder || !receiveModalItemId) return receiveModalMessage("找不到叫貨品項", true);
+    const idx = currentOrder.items.findIndex(function (it) { return String(it.id) === String(receiveModalItemId); });
+    if (idx < 0) return receiveModalMessage("找不到叫貨品項", true);
+    const original = currentOrder.items[idx];
+    if (!canReceiveItem(currentOrder, original)) return receiveModalMessage("此品項已登記到貨", true);
+    const receivedAt = String((el("poReceiveDate") && el("poReceiveDate").value) || "").trim();
+    const destination = String((el("poReceiveDestination") && el("poReceiveDestination").value) || "customer");
+    const inventoryItemId = String((el("poReceiveInventoryItem") && el("poReceiveInventoryItem").value) || "").trim();
+    const note = String((el("poReceiveNote") && el("poReceiveNote").value) || "").trim();
+    if (!receivedAt) return receiveModalMessage("請選擇到貨日期", true);
+    if (destination === "inventory" && !inventoryItemId) return receiveModalMessage("請選擇要增加的既有庫存品項", true);
+    const button = el("poReceiveSaveBtn");
+    if (button) { button.disabled = true; button.textContent = "處理中…"; }
+    receiveModalMessage(destination === "inventory" ? "正在寫入正式入庫紀錄…" : "正在登記客戶專用品項…");
+    try {
+      let stockResult = null;
+      if (destination === "inventory") {
+        if (typeof window.stage7RpcAdjustStock !== "function") return receiveModalMessage("正式入庫功能尚未載入", true);
+        const receiptKey = "purchase-order:" + currentOrder.id + ":" + original.id;
+        stockResult = await window.stage7RpcAdjustStock({
+          item_id: inventoryItemId,
+          qty: Math.max(1, Number(original.quantity) || 1),
+          type: "IN",
+          unit_cost: itemPrice(original),
+          note: "叫貨單 " + currentOrder.orderNo + "｜" + itemSpec(original) + (note ? "｜" + note : ""),
+          inbound_date: receivedAt,
+          movement_type: "PURCHASE_RECEIPT",
+          source_type: "purchase_order",
+          source_id: receiptKey,
+        });
+        if (!stockResult || !stockResult.ok) {
+          return receiveModalMessage("入庫失敗：" + String((stockResult && stockResult.error) || "未知錯誤"), true);
+        }
+      }
+
+      currentOrder.items[idx] = normalizeItem(Object.assign({}, original, {
+        procurementStatus: "received",
+        receivedAt: receivedAt,
+        receiptDestination: destination,
+        receiptInventoryItemId: destination === "inventory" ? inventoryItemId : "",
+        receiptLedgerId: stockResult && stockResult.data && stockResult.data.ledger_id ? String(stockResult.data.ledger_id) : "",
+        receiptNote: note,
+      }));
+      const allReceived = currentOrder.items.length > 0 && currentOrder.items.every(function (it) { return it.procurementStatus === "received"; });
+      const anyReceived = currentOrder.items.some(function (it) { return it.procurementStatus === "received"; });
+      currentOrder.status = allReceived ? "received" : (anyReceived ? "partial" : "ordered");
+      if (el("poStatus")) el("poStatus").value = currentOrder.status;
+      closeReceiveModal();
+      renderItems();
+      renderVendorGroups();
+      persistCurrent({ quoteOnly: true });
+      if (destination === "inventory") {
+        try {
+          if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") await window.DK.fetchV2DataFromSupabase();
+        } catch (_) {}
+      }
+      showMsg("已登記到貨：" + (destination === "inventory" ? "已加入一般庫存" : "客戶訂單專用，不列入可售庫存"), 5000);
+    } catch (e) {
+      receiveModalMessage("到貨處理失敗：" + String((e && e.message) || e || "未知錯誤"), true);
+    } finally {
+      if (button) { button.disabled = false; button.textContent = "確認到貨"; }
     }
   }
 
@@ -1546,6 +1738,25 @@
       '<p class="muted">參考單價為歷史報價快照，實際成交價以廠商確認為準。</p>' +
       "</div>"
     );
+  }
+
+  function schedulePurchasePreview() {
+    const host = el("poLivePreviewBody");
+    const editor = el("poEditorView");
+    if (!host || !editor || editor.hidden || !currentOrder || window.innerWidth < 1280) return;
+    if (poPreviewTimer) clearTimeout(poPreviewTimer);
+    poPreviewTimer = setTimeout(function () {
+      poPreviewTimer = null;
+      try {
+        const previewOrder = Object.assign({}, currentOrder, {
+          status: String((el("poStatus") && el("poStatus").value) || currentOrder.status),
+          supplierOrderDate: String((el("poSupplierOrderDate") && el("poSupplierOrderDate").value) || currentOrder.supplierOrderDate || ""),
+          expectedDate: String((el("poExpectedDate") && el("poExpectedDate").value) || currentOrder.expectedDate || ""),
+          note: String((el("poNote") && el("poNote").value) || ""),
+        });
+        host.innerHTML = buildPrintHtml(previewOrder, "");
+      } catch (_) {}
+    }, 160);
   }
 
   function printOrder(order, onlyVendor) {
@@ -1619,8 +1830,19 @@
     el("poQuoteModal") && el("poQuoteModal").addEventListener("click", function (e) {
       if (e.target === el("poQuoteModal")) closeQuoteModal();
     });
+    el("poReceiveCloseBtn") && el("poReceiveCloseBtn").addEventListener("click", closeReceiveModal);
+    el("poReceiveCancelBtn") && el("poReceiveCancelBtn").addEventListener("click", closeReceiveModal);
+    el("poReceiveSaveBtn") && el("poReceiveSaveBtn").addEventListener("click", saveReceiveModal);
+    el("poReceiveDestination") && el("poReceiveDestination").addEventListener("change", toggleReceiveInventoryField);
+    el("poReceiveModal") && el("poReceiveModal").addEventListener("click", function (e) {
+      if (e.target === el("poReceiveModal")) closeReceiveModal();
+    });
+    el("poEditorView") && el("poEditorView").addEventListener("input", schedulePurchasePreview);
+    el("poEditorView") && el("poEditorView").addEventListener("change", schedulePurchasePreview);
+    window.addEventListener("resize", schedulePurchasePreview);
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && el("poQuoteModal") && !el("poQuoteModal").hidden) closeQuoteModal();
+      if (e.key === "Escape" && el("poReceiveModal") && !el("poReceiveModal").hidden) closeReceiveModal();
     });
     el("poStickyViewBtn") && el("poStickyViewBtn").addEventListener("click", function () {
       const target = el("poItemsSection") || el("poItemsSummary");
@@ -1716,6 +1938,8 @@
         const act = poi.getAttribute("data-poi-act");
         if (act === "quote") {
           openQuoteModal(id);
+        } else if (act === "receive") {
+          openReceiveModal(id);
         } else if (act === "rm") {
           currentOrder.items = currentOrder.items.filter(function (x) { return x.id !== id; });
           renderItems();
