@@ -2524,6 +2524,8 @@ body.admin-page .cat-image-slot > div[style*="margin-top:6px"]{
 /* ????????????????? */
 .order-status-badge{ display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
 .order-status-pending{ background: rgba(191,72,0,0.14); color: #b34a00; }
+.order-status-negotiating{ background: rgba(100,116,139,0.14); color: #475569; }
+.order-status-confirmed{ background: rgba(37,99,235,0.14); color: #1d4ed8; }
 .order-status-paid{ background: rgba(0,113,227,0.14); color: #0066cc; }
 .order-status-shipped{ background: rgba(124,92,255,0.14); color: #5c4dbf; }
 .order-status-completed{ background: rgba(46,229,157,0.2); color: #0d9668; }
@@ -5039,6 +5041,13 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
   border-radius: 12px;
   background: rgba(17,24,39,0.02);
 }
+.order-manual-box{
+  padding: 12px;
+  border: 1px dashed rgba(29,78,216,0.28);
+  border-radius: 12px;
+  background: rgba(29,78,216,0.04);
+}
+.order-manual-box[hidden]{ display: none !important; }
 .po-current-pick{
   margin-top: 12px;
   padding: 10px 12px;
