@@ -3239,7 +3239,7 @@ body.admin-page #feHomeBannerAddBtn{
   body.theme-apple *{ scroll-behavior: auto !important; transition: none !important; }
 }
 
-/* Stage 23.1 | Wide-screen fixed order and purchase previews */
+/* Stage 23.2 | Stable wide-screen order and purchase previews */
 .desktop-live-preview{
   display: none;
 }
@@ -3256,13 +3256,14 @@ body.admin-page #feHomeBannerAddBtn{
     min-width: 0;
   }
   body.admin-page .desktop-live-preview{
-    display: block;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
     position: fixed;
     top: 16px;
-    right: 12px;
+    right: 8px;
     z-index: 40;
-    width: clamp(300px, calc((100vw - 1080px) / 2 - 24px), 420px);
-    max-height: calc(100vh - 32px);
+    width: clamp(320px, calc((100vw - 1080px) / 2 - 12px), 460px);
+    height: calc(100vh - 32px);
     overflow: hidden;
     border: 1px solid rgba(17,24,39,0.10);
     border-radius: 16px;
@@ -3279,8 +3280,9 @@ body.admin-page #feHomeBannerAddBtn{
     border-bottom: 1px solid rgba(17,24,39,0.08);
   }
   body.admin-page .desktop-live-preview__body{
-    max-height: calc(100vh - 92px);
+    min-height: 0;
     overflow: auto;
+    scrollbar-gutter: stable;
     padding: 12px;
   }
   body.admin-page #orderLivePreviewImg{
