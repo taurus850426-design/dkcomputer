@@ -7133,6 +7133,14 @@ body.admin-page textarea:focus-visible{
   }
 }
 
+/* Stage 23.3 | Keep fixed previews viewport-anchored while hovering workspaces */
+@media (min-width: 1760px){
+  body.admin-page #tab-inv.card:hover,
+  body.admin-page #tab-purchase.card:hover{
+    transform: none;
+  }
+}
+
 @media (max-width: 900px){
   body.admin-page .tabs{
     overflow-x: auto;
