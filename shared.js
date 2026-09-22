@@ -1613,6 +1613,17 @@ async function stage7FinishOrderWrite(res, payload, fallbackId) {
       quoteNoteWarning: "訂單已儲存，但報價備註儲存失敗；請勿重複建立訂單",
     };
   }
+  const sourceRes = await stage7Rpc("backoffice_set_order_customer_source", {
+    p_order_id: orderId,
+    p_customer_source: payload && payload.customer_source != null ? String(payload.customer_source) : "",
+  });
+  if (!sourceRes || !sourceRes.ok) {
+    return {
+      ...res,
+      customerSourceFailed: true,
+      customerSourceWarning: "訂單已儲存，但客戶來源儲存失敗；請勿重複建立訂單",
+    };
+  }
   return res;
 }
 
