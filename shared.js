@@ -1570,6 +1570,36 @@ async function stage7ClearProcurementCost(payload) {
   return stage7Rpc("backoffice_clear_procurement_cost", { p_order_id: orderId, p_line_key: lineKey });
 }
 
+async function stage7ReceivePurchaseItem(payload) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以登記採購到貨" };
+  }
+  const src = payload && typeof payload === "object" ? payload : {};
+  const qty = Math.max(1, Number(src.qty) || 1);
+  const unitCost = Number(src.unit_cost != null ? src.unit_cost : src.unitCost);
+  const category = String(src.category || "").trim();
+  if (!String(src.purchase_order_id || "").trim() || !String(src.purchase_item_id || "").trim()) {
+    return { ok: false, error: "缺少叫貨單或叫貨品項識別碼" };
+  }
+  if (!String(src.name || "").trim()) return { ok: false, error: "品項／完整規格必填" };
+  if (!category) return { ok: false, error: "品類必填" };
+  if (!Number.isFinite(unitCost) || unitCost <= 0) return { ok: false, error: "到貨成本必須大於 0" };
+  return stage7Rpc("backoffice_receive_purchase_item", {
+    p_order_id: String(src.order_id || ""),
+    p_line_key: String(src.line_key || ""),
+    p_purchase_order_id: String(src.purchase_order_id || ""),
+    p_purchase_item_id: String(src.purchase_item_id || ""),
+    p_inventory_item_id: String(src.inventory_item_id || ""),
+    p_name: String(src.name || ""),
+    p_category: category,
+    p_qty: qty,
+    p_unit_cost: unitCost,
+    p_vendor: String(src.vendor || ""),
+    p_received_at: src.received_at || null,
+    p_note: String(src.note || ""),
+  });
+}
+
 function stage7MapOrderWriteError(res) {
   if (!res || res.ok) return res;
   const message = String(res.error || (res.data && res.data.message) || "");
@@ -1924,6 +1954,7 @@ if (typeof window !== "undefined") {
   window.stage7UpdateOrder = stage7UpdateOrder;
   window.stage7SyncProcurementCost = stage7SyncProcurementCost;
   window.stage7ClearProcurementCost = stage7ClearProcurementCost;
+  window.stage7ReceivePurchaseItem = stage7ReceivePurchaseItem;
   window.stage7SaveExpense = stage7SaveExpense;
   window.stage7DeleteExpense = stage7DeleteExpense;
   window.stage7InsertAudit = stage7InsertAudit;

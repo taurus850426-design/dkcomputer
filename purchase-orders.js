@@ -1610,7 +1610,7 @@
     items = (Array.isArray(items) ? items : []).slice().sort(function (a, b) {
       return String(a.name || a.sku || "").localeCompare(String(b.name || b.sku || ""), "zh-Hant");
     });
-    select.innerHTML = '<option value="">請選擇既有庫存品項</option>' + items.map(function (it) {
+    select.innerHTML = '<option value="__auto__">自動建立新庫存品項（建議）</option>' + items.map(function (it) {
       const label = [it.sku, it.name, it.spec].filter(Boolean).join("｜") + "（現有 " + String(Number(it.qty_on_hand) || 0) + "）";
       return '<option value="' + esc(it.id) + '">' + esc(label) + '</option>';
     }).join("");
@@ -1650,40 +1650,44 @@
     if (!canReceiveItem(currentOrder, original)) return receiveModalMessage("此品項已登記到貨", true);
     const receivedAt = String((el("poReceiveDate") && el("poReceiveDate").value) || "").trim();
     const destination = String((el("poReceiveDestination") && el("poReceiveDestination").value) || "customer");
-    const inventoryItemId = String((el("poReceiveInventoryItem") && el("poReceiveInventoryItem").value) || "").trim();
+    const selectedInventoryItemId = String((el("poReceiveInventoryItem") && el("poReceiveInventoryItem").value) || "__auto__").trim();
+    const inventoryItemId = selectedInventoryItemId === "__auto__" ? "" : selectedInventoryItemId;
     const note = String((el("poReceiveNote") && el("poReceiveNote").value) || "").trim();
     if (!receivedAt) return receiveModalMessage("請選擇到貨日期", true);
-    if (destination === "inventory" && !inventoryItemId) return receiveModalMessage("請選擇要增加的既有庫存品項", true);
+    if (!String(original.category || "").trim()) return receiveModalMessage("此叫貨品項尚未設定品類，請先補上品類", true);
+    if (destination === "customer" && (!original.sourceSalesOrderId || !original.sourceSalesOrderLineKey)) {
+      return receiveModalMessage("此品項沒有來源訂單，請改選「入一般庫存」", true);
+    }
     const button = el("poReceiveSaveBtn");
     if (button) { button.disabled = true; button.textContent = "處理中…"; }
-    receiveModalMessage(destination === "inventory" ? "正在寫入正式入庫紀錄…" : "正在登記客戶專用品項…");
+    receiveModalMessage(destination === "inventory" ? "正在自動建立／更新庫存…" : "正在入庫並綁定原訂單…");
     try {
-      let stockResult = null;
-      if (destination === "inventory") {
-        if (typeof window.stage7RpcAdjustStock !== "function") return receiveModalMessage("正式入庫功能尚未載入", true);
-        const receiptKey = "purchase-order:" + currentOrder.id + ":" + original.id;
-        stockResult = await window.stage7RpcAdjustStock({
-          item_id: inventoryItemId,
-          qty: Math.max(1, Number(original.quantity) || 1),
-          type: "IN",
-          unit_cost: itemPrice(original),
-          note: "叫貨單 " + currentOrder.orderNo + "｜" + itemSpec(original) + (note ? "｜" + note : ""),
-          inbound_date: receivedAt,
-          movement_type: "PURCHASE_RECEIPT",
-          source_type: "purchase_order",
-          source_id: receiptKey,
-        });
-        if (!stockResult || !stockResult.ok) {
-          return receiveModalMessage("入庫失敗：" + String((stockResult && stockResult.error) || "未知錯誤"), true);
-        }
+      if (typeof window.stage7ReceivePurchaseItem !== "function") return receiveModalMessage("自動入庫功能尚未載入，請先完成 Stage 25 更新", true);
+      const stockResult = await window.stage7ReceivePurchaseItem({
+        order_id: original.sourceSalesOrderId,
+        line_key: original.sourceSalesOrderLineKey,
+        purchase_order_id: currentOrder.id,
+        purchase_item_id: original.id,
+        inventory_item_id: destination === "inventory" ? inventoryItemId : "",
+        name: itemSpec(original),
+        category: original.category,
+        qty: Math.max(1, Number(original.quantity) || 1),
+        unit_cost: itemPrice(original),
+        vendor: itemVendor(original),
+        received_at: receivedAt,
+        note: note,
+      });
+      if (!stockResult || !stockResult.ok) {
+        return receiveModalMessage("入庫失敗：" + String((stockResult && stockResult.error) || "未知錯誤"), true);
       }
+      const resultData = stockResult.data && typeof stockResult.data === "object" ? stockResult.data : {};
 
       currentOrder.items[idx] = normalizeItem(Object.assign({}, original, {
         procurementStatus: "received",
         receivedAt: receivedAt,
         receiptDestination: destination,
-        receiptInventoryItemId: destination === "inventory" ? inventoryItemId : "",
-        receiptLedgerId: stockResult && stockResult.data && stockResult.data.ledger_id ? String(stockResult.data.ledger_id) : "",
+        receiptInventoryItemId: String(resultData.item_id || inventoryItemId || ""),
+        receiptLedgerId: String(resultData.ledger_id || ""),
         receiptNote: note,
       }));
       const allReceived = currentOrder.items.length > 0 && currentOrder.items.every(function (it) { return it.procurementStatus === "received"; });
@@ -1694,12 +1698,10 @@
       renderItems();
       renderVendorGroups();
       persistCurrent({ quoteOnly: true });
-      if (destination === "inventory") {
-        try {
-          if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") await window.DK.fetchV2DataFromSupabase();
-        } catch (_) {}
-      }
-      showMsg("已登記到貨：" + (destination === "inventory" ? "已加入一般庫存" : "客戶訂單專用，不列入可售庫存"), 5000);
+      try {
+        if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") await window.DK.fetchV2DataFromSupabase();
+      } catch (_) {}
+      showMsg("已登記到貨：" + (resultData.reserved_for_order ? "已自動入庫並綁定原訂單，不會重複扣庫存" : "已自動加入一般庫存"), 6000);
     } catch (e) {
       receiveModalMessage("到貨處理失敗：" + String((e && e.message) || e || "未知錯誤"), true);
     } finally {
