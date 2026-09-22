@@ -6544,6 +6544,64 @@ body.admin-page .order-gross-preview{
   font-size: 15px;
   font-weight: 600;
 }
+
+/* Stage 24 | Compact monthly order analysis */
+body.admin-page .order-monthly-analysis{
+  display: grid;
+  gap: 14px;
+}
+body.admin-page .order-monthly-analysis__head{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+body.admin-page .order-monthly-analysis__head p{ margin: 4px 0 0; }
+body.admin-page .order-monthly-stat-grid{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+body.admin-page .order-monthly-stat{
+  padding: 12px 14px;
+  border: 1px solid rgba(17,24,39,0.08);
+  border-radius: 12px;
+  background: #fff;
+}
+body.admin-page .order-monthly-stat__label{
+  color: var(--dk-muted);
+  font-size: 12px;
+}
+body.admin-page .order-monthly-stat__value{
+  margin-top: 4px;
+  color: var(--dk-text);
+  font-size: 22px;
+  font-weight: 800;
+}
+body.admin-page .order-monthly-source-wrap{
+  display: grid;
+  gap: 8px;
+}
+body.admin-page .order-monthly-source-list{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+body.admin-page .order-monthly-source-chip{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid rgba(29,78,216,0.14);
+  border-radius: 999px;
+  background: rgba(29,78,216,0.06);
+  color: var(--dk-text);
+  font-size: 12px;
+}
+body.admin-page .order-monthly-source-chip strong{ font-size: 13px; }
+@media (max-width: 640px){
+  body.admin-page .order-monthly-stat-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 body.admin-page #v2-orders .orders-toolbar .search{
   flex: 1 1 220px;
   min-width: 180px;
