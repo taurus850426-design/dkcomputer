@@ -162,10 +162,13 @@
   }
 
   /**
-   * 訂單 business date：與 Stage 16 SQL dk_order_business_date 對齊。
-   * 優先 orders.date（DATE）；缺值才用 created_at 的 UTC 日期。
+   * 訂單 business date：已完成訂單優先使用完成日；歷史資料缺值時沿用訂單日期。
    */
   function orderBusinessDate(o) {
+    const completedAt = o && o.status === "completed" && o.completed_at != null
+      ? formatLocalDate(o.completed_at)
+      : "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(completedAt)) return completedAt;
     const dateCol = o && o.date != null ? String(o.date).slice(0, 10) : "";
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateCol)) return dateCol;
     const created = o && o.created_at != null ? String(o.created_at).slice(0, 10) : "";

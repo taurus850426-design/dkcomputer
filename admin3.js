@@ -7469,12 +7469,19 @@
           })),
         };
         if (payload.status === "completed") {
-          const missingCost = orderLineItems.find((line) =>
-            String(line.fulfillment_type || "") === "procurement" && !(Number(line.cost_unit) > 0)
+          const pendingReceipt = orderLineItems.find((line) =>
+            String(line.fulfillment_type || "") === "procurement"
           );
-          if (missingCost) {
-            return v2Show(orderMsg, "採購品項「" + String(missingCost.name || missingCost.spec || "未命名品項") + "」尚未確認成本，不能設為已完成；請先到叫貨單補廠商報價");
+          if (pendingReceipt) {
+            return v2Show(orderMsg, "採購品項「" + String(pendingReceipt.name || pendingReceipt.spec || "未命名品項") + "」尚未登記到貨，不能設為已完成；請先到叫貨單完成到貨入庫");
           }
+        }
+        const previousOrder = editingV2OrderId
+          ? orders.find((x) => String(x.id) === String(editingV2OrderId))
+          : null;
+        if (payload.status === "refunded" && previousOrder?.status !== "refunded") {
+          const confirmed = window.confirm("確認商品已實際退回，並同意將此訂單的庫存品項退回可用庫存？\n\n若尚未收到退貨，請按取消並維持原狀態。");
+          if (!confirmed) return v2Show(orderMsg, "已取消退款狀態變更，訂單尚未修改");
         }
 
         function tryUpdateLinkedCustomerStatus(orderStatus) {
