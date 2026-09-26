@@ -48,14 +48,14 @@ const SUPABASE_SITE_ASSET_BUCKET = "site-assets";
 const V2_STORAGE_KEYS = { items: "dk_v2_items", ledger: "dk_v2_ledger", orders: "dk_v2_orders", expenses: "dk_v2_expenses", auditLogs: "dk_v2_audit_logs" };
 
 const DEFAULT_CONFIG = {
-  siteTitle: "二手電腦・實測交付｜依用途配機，不亂賣、不踩雷",
+  siteTitle: "DK電競電腦｜員林電腦維修、彰化二手電腦與電競主機",
   brand: {
     mark: "DK",
-    title: "二手電腦・實測交付",
-    subtitle: "依用途配機，不亂賣、不踩雷",
+    title: "DK電競電腦",
+    subtitle: "員林在地電腦維修・二手電腦・電競主機",
   },
   frontend: {
-    heroTagline: "二手電腦・實測交付",
+    heroTagline: "DK電競電腦・彰化員林",
     heroSub: "依用途配機，不亂賣、不踩雷",
     heroBtn1: "🔥 我要買整機",
     heroBtn2: "🧠 不知道怎麼選（需求表單）",
@@ -68,8 +68,8 @@ const DEFAULT_CONFIG = {
     machinePageTitle: "整機販售",
     machinePageSub: "依用途分類，不寫一堆規格。價格是「約」，詳細配備請加 LINE 詢問。",
     // 分享連結（LINE / Facebook）預設標題與說明、圖片（可在後台覆寫）
-    ogTitle: "二手電腦・實測交付｜依用途配機，不亂賣、不踩雷",
-    ogDescription: "依用途配機，不亂賣、不踩雷。買整機、不知道怎麼選、電腦維修，加 LINE 一次搞定。",
+    ogTitle: "DK電競電腦｜員林電腦維修與彰化二手電腦",
+    ogDescription: "彰化員林在地電腦維修、二手電腦、電競主機、零件升級與客製化配單服務。",
     ogImageUrl: "",
     /** 整機頁五張分類卡片：背景圖與標題 */
     catImages: {},
@@ -131,11 +131,11 @@ const DEFAULT_CONFIG = {
     },
   },
   shop: {
-    name: "哈啦電競電腦維修",
-    address: "510 彰化縣員林市中山路二段 277 巷 12 弄 73 號 B1",
-    phone: "0976 009 628",
+    name: "DK電競電腦",
+    address: "510 彰化縣員林市和平里中山路二段277巷12弄73號B1",
+    phone: "0976-009-628",
     // 你提供的 Google 商家分享連結
-    mapUrl: "https://share.google/8KYdQojTnx4cKgqxz",
+    mapUrl: "https://share.google/qVuJjq5QQMiY9Z9B8",
     // Google 商家照片（建議放在本專案 assets 資料夾）
     photoUrl:
       "file:///C:/Users/Hi/.cursor/projects/c-Users-Hi-Desktop-2/assets/c__Users_Hi_AppData_Roaming_Cursor_User_workspaceStorage_fd07e6f51d41fe8bccbee3cc5dca28d0_images_S__5128195-53ab6056-6438-4d95-8ea3-209ff94139ed.png",
@@ -2443,7 +2443,8 @@ function applyConfigToHomePage() {
 
   const heroTitle = document.getElementById("heroTitle");
   if (heroTitle) heroTitle.textContent = cfg.siteTitle;
-  if (document.querySelector("title")) document.title = cfg.siteTitle || document.title;
+  const isHomePage = document.body.classList.contains("home-page");
+  if (isHomePage && document.querySelector("title")) document.title = DEFAULT_CONFIG.siteTitle;
 
   // 更新分享用 meta（LINE / FB 預覽用）：og:title / og:description / og:image
   try {
@@ -2455,9 +2456,9 @@ function applyConfigToHomePage() {
         ? fe.ogImageUrl.trim()
         : (cfg.shop && cfg.shop.photoUrl && cfg.shop.photoUrl.trim()) || "";
     const ogTitleMeta = document.querySelector('meta[property="og:title"]');
-    if (ogTitleMeta) ogTitleMeta.setAttribute("content", ogTitle);
+    if (ogTitleMeta && isHomePage) ogTitleMeta.setAttribute("content", DEFAULT_CONFIG.frontend.ogTitle);
     const ogDescMeta = document.querySelector('meta[property="og:description"]');
-    if (ogDescMeta) ogDescMeta.setAttribute("content", ogDescription);
+    if (ogDescMeta && isHomePage) ogDescMeta.setAttribute("content", DEFAULT_CONFIG.frontend.ogDescription);
     const ogImgMeta = document.querySelector('meta[property="og:image"]');
     if (ogImgMeta && ogImage) ogImgMeta.setAttribute("content", ogImage);
   } catch (e) {
@@ -2484,7 +2485,7 @@ function applyConfigToHomePage() {
     brandMark.hidden = !!brandLogoUrl;
   }
   const brandTitle = document.getElementById("brandTitle");
-  if (brandTitle) brandTitle.textContent = cfg.brand.title;
+  if (brandTitle) brandTitle.textContent = "DK電競電腦";
   const brandSubtitle = document.getElementById("brandSubtitle");
   if (brandSubtitle) brandSubtitle.textContent = cfg.brand.subtitle;
 
