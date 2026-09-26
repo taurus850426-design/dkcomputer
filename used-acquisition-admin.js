@@ -331,6 +331,27 @@
     }).join("");
   }
 
+  function suggestedRiskReserve(marketMid, liquidity, market, inventory) {
+    var price = Number(marketMid);
+    if (!Number.isFinite(price) || price <= 0) return 0;
+    var pctMap = { LOW: 0, MEDIUM: 3, HIGH: 7 };
+    var pct = (pctMap[liquidity] || 0) + (pctMap[market] || 0) + (pctMap[inventory] || 0);
+    pct = Math.min(15, pct);
+    return Math.ceil((price * pct / 100) / 100) * 100;
+  }
+
+  function applyRiskReserveSuggestion() {
+    var r = latestResult();
+    var reserve = suggestedRiskReserve(
+      r && r.market_mid,
+      ($("uaLiq") || {}).value,
+      ($("uaMkt") || {}).value,
+      ($("uaInv") || {}).value
+    );
+    if ($("uaReserve")) $("uaReserve").value = String(reserve);
+    showMsg("已依市場中間價與三項風險帶入預留金額，可再手動調整。", false);
+  }
+
   function renderDecisionBlock() {
     var host = $("uaDecisionCard");
     var d = latestEvaluation();
@@ -339,11 +360,19 @@
     var r = latestResult();
     var st = current.case.status;
     var canEdit = st === "CONTACTED" || st === "INSPECTION_PENDING";
+    var defaultLiq = snap.liquidity_level || "MEDIUM";
+    var defaultMkt = snap.market_risk_level || "MEDIUM";
+    var defaultInv = snap.inventory_risk_level || "MEDIUM";
+    var defaultRefurb = snap.estimated_refurbishment_cost != null ? snap.estimated_refurbishment_cost : 500;
+    var defaultMargin = snap.target_margin_pct != null ? snap.target_margin_pct : 25;
+    var defaultReserve = snap.risk_reserve_amount != null
+      ? snap.risk_reserve_amount
+      : suggestedRiskReserve(r && r.market_mid, defaultLiq, defaultMkt, defaultInv);
     var html = "";
     html += '<p class="form-hint">預估轉售價目前採本次市場估值中位數。</p>';
     html += '<p class="form-hint">最高收購價依翻新成本與你設定的目標毛利率計算。</p>';
     html += '<p class="form-hint">建議收購價再扣除你設定的風險預留金額。</p>';
-    html += '<p class="form-hint">風險等級目前用於案件紀錄；實際價格預留請填「風險預留金額」。風險等級本身目前不會自動套折價係數。</p>';
+    html += '<p class="form-hint">風險預留可依流動性、市場與庫存風險自動帶入，最高以市場中間價 15% 計算，仍可人工調整。</p>';
     if (d && !parsed.ok) {
       html += '<p class="muted">此筆歷史評估資料格式無法解析</p>';
     }
@@ -355,12 +384,12 @@
     if (canEdit) {
       html +=
         '<div class="form-grid">' +
-          '<div class="field"><label for="uaRefurb">翻新／維修預估成本</label><input id="uaRefurb" type="number" min="0" step="1" value="' + esc(snap.estimated_refurbishment_cost || "") + '" /></div>' +
-          '<div class="field"><label for="uaMargin">目標毛利率（%）</label><input id="uaMargin" type="number" min="1" max="90" step="0.1" value="' + esc(snap.target_margin_pct || "") + '" /></div>' +
-          '<div class="field"><label for="uaReserve">風險預留金額</label><input id="uaReserve" type="number" min="0" step="1" value="' + esc(snap.risk_reserve_amount || "") + '" /></div>' +
-          '<div class="field"><label for="uaLiq">流動性風險</label><select id="uaLiq">' + riskSelect("uaLiq", snap.liquidity_level || "MEDIUM") + "</select></div>" +
-          '<div class="field"><label for="uaMkt">市場風險</label><select id="uaMkt">' + riskSelect("uaMkt", snap.market_risk_level || "MEDIUM") + "</select></div>" +
-          '<div class="field"><label for="uaInv">庫存風險</label><select id="uaInv">' + riskSelect("uaInv", snap.inventory_risk_level || "MEDIUM") + "</select></div>" +
+          '<div class="field"><label for="uaRefurb">翻新／維修預估成本</label><input id="uaRefurb" type="number" min="0" step="1" value="' + esc(defaultRefurb) + '" /></div>' +
+          '<div class="field"><label for="uaMargin">目標毛利率（%）</label><input id="uaMargin" type="number" min="1" max="90" step="0.1" value="' + esc(defaultMargin) + '" /></div>' +
+          '<div class="field"><label for="uaReserve">風險預留金額</label><input id="uaReserve" type="number" min="0" step="1" value="' + esc(defaultReserve) + '" /><button id="uaSuggestReserve" class="btn btn-ghost btn-sm" type="button" style="margin-top:6px">依風險重新計算</button></div>' +
+          '<div class="field"><label for="uaLiq">流動性風險</label><select id="uaLiq">' + riskSelect("uaLiq", defaultLiq) + "</select></div>" +
+          '<div class="field"><label for="uaMkt">市場風險</label><select id="uaMkt">' + riskSelect("uaMkt", defaultMkt) + "</select></div>" +
+          '<div class="field"><label for="uaInv">庫存風險</label><select id="uaInv">' + riskSelect("uaInv", defaultInv) + "</select></div>" +
           '<div class="field full"><label for="uaDecNote">備註</label><input id="uaDecNote" type="text" maxlength="500" value="' + esc(typeof snap.note === "string" ? snap.note : "") + '" /></div>' +
         "</div>" +
         '<div class="actions ua-actions">' +
@@ -393,8 +422,10 @@
     renderPreviewBox();
     var btnP = $("uaBtnPreview");
     var btnS = $("uaBtnSaveDecision");
+    var btnR = $("uaSuggestReserve");
     if (btnP) btnP.addEventListener("click", onPreview);
     if (btnS) btnS.addEventListener("click", onSaveDecision);
+    if (btnR) btnR.addEventListener("click", applyRiskReserveSuggestion);
   }
 
   function renderPreviewBox() {
@@ -718,7 +749,7 @@
       '<p class="form-hint">毛利、毛利率與庫存天數由系統依收購紀錄與出售資料計算，建立後不可修改。</p>' +
       '<div class="form-grid">' +
         '<div class="field"><label for="uaResalePrice">實際售價</label><input id="uaResalePrice" type="number" min="0" step="1" /></div>' +
-        '<div class="field"><label for="uaResaleRefurb">實際整理／維修成本</label><input id="uaResaleRefurb" type="number" min="0" step="1" /></div>' +
+        '<div class="field"><label for="uaResaleRefurb">實際整理��維修成本</label><input id="uaResaleRefurb" type="number" min="0" step="1" /></div>' +
         '<div class="field"><label for="uaSoldAt">出售日期</label><input id="uaSoldAt" type="datetime-local" /></div>' +
         '<div class="field full"><label for="uaResaleNote">備註</label><input id="uaResaleNote" type="text" maxlength="1000" /></div>' +
       "</div>" +

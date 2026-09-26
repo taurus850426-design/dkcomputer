@@ -405,6 +405,137 @@
     await loadAll();
   }
 
+  function downloadCsvTemplate() {
+    const header = "分類,品牌,型號,規格,低價,中間價,高價,樣本數,可信度,來源,生效日期,備註\r\n";
+    const blob = new Blob(["\ufeff" + header], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "DK二手行情匯入範本.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function parseCsv(text) {
+    const rows = [];
+    let row = [];
+    let cell = "";
+    let quoted = false;
+    const input = String(text || "").replace(/^\ufeff/, "");
+    for (let i = 0; i < input.length; i += 1) {
+      const ch = input[i];
+      if (quoted) {
+        if (ch === '"' && input[i + 1] === '"') {
+          cell += '"';
+          i += 1;
+        } else if (ch === '"') {
+          quoted = false;
+        } else {
+          cell += ch;
+        }
+      } else if (ch === '"') {
+        quoted = true;
+      } else if (ch === ",") {
+        row.push(cell.trim());
+        cell = "";
+      } else if (ch === "\n") {
+        row.push(cell.replace(/\r$/, "").trim());
+        if (row.some(function (v) { return v !== ""; })) rows.push(row);
+        row = [];
+        cell = "";
+      } else {
+        cell += ch;
+      }
+    }
+    row.push(cell.replace(/\r$/, "").trim());
+    if (row.some(function (v) { return v !== ""; })) rows.push(row);
+    return rows;
+  }
+
+  function csvRowPayload(headers, values, batchId) {
+    const data = {};
+    headers.forEach(function (h, i) { data[h] = values[i] == null ? "" : values[i]; });
+    const num = function (key) { return Number(String(data[key] || "").replace(/,/g, "")); };
+    return {
+      market_batch_id: batchId,
+      category: String(data["分類"] || "").toUpperCase(),
+      brand: data["品牌"] || "",
+      model: data["型號"] || "",
+      variant: data["規格"] || "",
+      market_low: num("低價"),
+      market_mid: num("中間價"),
+      market_high: num("高價"),
+      sample_count: num("樣本數"),
+      confidence: num("可信度"),
+      source_type: data["來源"] || "DK人工行情",
+      effective_date: data["生效日期"] || new Date().toISOString().slice(0, 10),
+      note: data["備註"] || "",
+    };
+  }
+
+  function validateCsvPayload(p) {
+    if (CATEGORIES.indexOf(p.category) < 0) return "分類必須是 " + CATEGORIES.join("／");
+    if (!String(p.model || "").trim()) return "缺少型號";
+    if (![p.market_low, p.market_mid, p.market_high].every(Number.isFinite)) return "低價、中間價、高價必須是數字";
+    if (p.market_low < 0 || p.market_mid < p.market_low || p.market_high < p.market_mid) return "價格必須符合低價 ≤ 中間價 ≤ 高價";
+    if (!Number.isFinite(p.sample_count) || p.sample_count < 0) return "樣本數不可小於 0";
+    if (!Number.isFinite(p.confidence) || p.confidence < 0 || p.confidence > 100) return "可信度必須是 0～100";
+    return "";
+  }
+
+  async function importCsv(file) {
+    const result = $("uvCsvResult");
+    const input = $("uvCsvInput");
+    const batch = selectedBatch();
+    if (!isDraft(batch)) {
+      showMsg("請先建立並選擇草稿批次，再匯入 CSV。", true);
+      if (input) input.value = "";
+      return;
+    }
+    const rows = parseCsv(await file.text());
+    if (rows.length < 2) {
+      showMsg("CSV 沒有可匯入的行情資料。", true);
+      if (input) input.value = "";
+      return;
+    }
+    const headers = rows[0].map(function (h) { return String(h || "").trim(); });
+    const required = ["分類", "品牌", "型號", "規格", "低價", "中間價", "高價", "樣本數", "可信度", "來源", "生效日期", "備註"];
+    const missing = required.filter(function (h) { return headers.indexOf(h) < 0; });
+    if (missing.length) {
+      showMsg("CSV 缺少欄位：" + missing.join("、"), true);
+      if (input) input.value = "";
+      return;
+    }
+    let success = 0;
+    const errors = [];
+    if (result) {
+      result.hidden = false;
+      result.textContent = "匯入中：0／" + (rows.length - 1);
+    }
+    for (let i = 1; i < rows.length; i += 1) {
+      const payload = csvRowPayload(headers, rows[i], batch.id);
+      const invalid = validateCsvPayload(payload);
+      if (invalid) {
+        errors.push("第 " + (i + 1) + " 列：" + invalid);
+      } else {
+        const res = await callRpc("backoffice_used_market_create_price", { p_payload: payload });
+        if (res && res.ok) success += 1;
+        else errors.push("第 " + (i + 1) + " 列：" + friendlyError(res));
+      }
+      if (result) result.textContent = "匯入中：" + i + "／" + (rows.length - 1);
+    }
+    if (input) input.value = "";
+    await loadAll();
+    const summary = "已匯入 " + success + " 筆" + (errors.length ? "，失敗 " + errors.length + " 筆。" + errors.slice(0, 5).join("；") : "。");
+    if (result) {
+      result.hidden = false;
+      result.textContent = summary;
+    }
+    showMsg(summary, errors.length > 0 && success === 0);
+  }
+
   async function submitConfirm() {
     const reason = $("uvConfirmReason").value;
     if (!String(reason || "").trim()) {
@@ -451,6 +582,11 @@
     }
 
     $("uvBtnNewBatch") && $("uvBtnNewBatch").addEventListener("click", function () { openBatchForm(null); });
+    $("uvDownloadTemplate") && $("uvDownloadTemplate").addEventListener("click", downloadCsvTemplate);
+    $("uvCsvInput") && $("uvCsvInput").addEventListener("change", function (ev) {
+      const file = ev.target && ev.target.files && ev.target.files[0];
+      if (file) importCsv(file).catch(function () { showMsg("CSV 匯入失敗，請確認檔案格式。", true); });
+    });
     $("uvBatchCancel") && $("uvBatchCancel").addEventListener("click", closeBatchForm);
     $("uvBatchSave") && $("uvBatchSave").addEventListener("click", function () { saveBatch().catch(function () { showMsg("操作失敗，請稍後再試。", true); }); });
     $("uvBtnNewPrice") && $("uvBtnNewPrice").addEventListener("click", function () { openPriceForm(null); });
