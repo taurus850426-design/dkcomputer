@@ -1214,6 +1214,7 @@ function stage7MapOrderRow(row, lines, cogsMap, admin) {
     payment_method: row.payment_method,
     status: row.status,
     shipped_at: row.shipped_at,
+    completed_at: row.completed_at,
     date: row.date,
     created_at: row.created_at,
     updated_at: row.updated_at,
