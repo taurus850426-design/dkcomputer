@@ -581,6 +581,22 @@
                   </select>
                 </div>
                 <div class="field">
+                  <label for="webEditCpu">CPU</label>
+                  <input id="webEditCpu" type="text" placeholder="例如 Ryzen 5 5600" />
+                </div>
+                <div class="field">
+                  <label for="webEditGpu">顯示卡</label>
+                  <input id="webEditGpu" type="text" placeholder="例如 RTX 3060 Ti 8GB" />
+                </div>
+                <div class="field">
+                  <label for="webEditRam">記憶體</label>
+                  <input id="webEditRam" type="text" placeholder="例如 DDR4 16GB" />
+                </div>
+                <div class="field">
+                  <label for="webEditSsd">儲存空間</label>
+                  <input id="webEditSsd" type="text" placeholder="例如 NVMe SSD 1TB" />
+                </div>
+                <div class="field">
                   <label for="webEditPrice">售價（NT$）</label>
                   <input id="webEditPrice" type="number" min="0" step="10" />
                 </div>
@@ -599,7 +615,23 @@
                   <input id="webEditFeaturedOrder" type="number" min="1" step="1" placeholder="例如 1" disabled />
                 </div>
                 <div class="field full">
-                  <label>產品介紹（可調整字體、格式與插入圖片）</label>
+                  <label for="webEditHighlight">商品賣點</label>
+                  <textarea id="webEditHighlight" rows="3" placeholder="用 1–3 句說明這台商品最值得買的地方"></textarea>
+                </div>
+                <div class="field full">
+                  <label for="webEditUsage">適合用途</label>
+                  <textarea id="webEditUsage" rows="2" placeholder="例如 LOL、VALORANT、APEX、剪輯、多螢幕"></textarea>
+                </div>
+                <div class="field">
+                  <label for="webEditWarranty">保固說明</label>
+                  <textarea id="webEditWarranty" rows="3" placeholder="例如 店保 90 天，非人為損壞可協助處理"></textarea>
+                </div>
+                <div class="field">
+                  <label for="webEditDelivery">配送方式</label>
+                  <textarea id="webEditDelivery" rows="3" placeholder="例如 可寄送／彰化、台中可面交"></textarea>
+                </div>
+                <div class="field full">
+                  <label>完整補充說明（選填，可調整格式與插入圖片）</label>
                   <div id="webEditNoteEditor" class="publish-rich-editor-wrap" style="min-height:180px"></div>
                 </div>
                 <div class="field full">
@@ -632,8 +664,40 @@
                     <option value="周邊">⑤ 電腦周邊</option>
                   </select>
                 </div>
+                <div class="field">
+                  <label for="publishCpu">CPU</label>
+                  <input id="publishCpu" type="text" placeholder="例如 Ryzen 5 5600" />
+                </div>
+                <div class="field">
+                  <label for="publishGpu">顯示卡</label>
+                  <input id="publishGpu" type="text" placeholder="例如 RTX 3060 Ti 8GB" />
+                </div>
+                <div class="field">
+                  <label for="publishRam">記憶體</label>
+                  <input id="publishRam" type="text" placeholder="例如 DDR4 16GB" />
+                </div>
+                <div class="field">
+                  <label for="publishSsd">儲存空間</label>
+                  <input id="publishSsd" type="text" placeholder="例如 NVMe SSD 1TB" />
+                </div>
                 <div class="field full">
-                  <label>產品介紹（選填，可調整字體、格式與插入圖片）</label>
+                  <label for="publishHighlight">商品賣點</label>
+                  <textarea id="publishHighlight" rows="3" placeholder="用 1–3 句說明這台商品最值得買的地方"></textarea>
+                </div>
+                <div class="field full">
+                  <label for="publishUsage">適合用途</label>
+                  <textarea id="publishUsage" rows="2" placeholder="例如 LOL、VALORANT、APEX、剪輯、多螢幕"></textarea>
+                </div>
+                <div class="field">
+                  <label for="publishWarranty">保固說明</label>
+                  <textarea id="publishWarranty" rows="3" placeholder="例如 店保 90 天，非人為損壞可協助處理"></textarea>
+                </div>
+                <div class="field">
+                  <label for="publishDelivery">配送方式</label>
+                  <textarea id="publishDelivery" rows="3" placeholder="例如 可寄送／彰化、台中可面交"></textarea>
+                </div>
+                <div class="field full">
+                  <label>完整補充說明（選填，可調整格式與插入圖片）</label>
                   <div id="publishSpecSummaryEditor" class="publish-rich-editor-wrap" style="min-height:220px"></div>
                 </div>
                 <div class="field full">
@@ -3500,12 +3564,12 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20260922stage24"></script>
+    <script src="./shared.js?v=20260927stage31"></script>
     <script src="./inventory-ledger.js?v=20260916stage23"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260922stage24"></script>
+    <script src="./admin3.js?v=20260927stage31"></script>
     <script src="./used-valuation-admin.js?v=20260912s03zh"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
     <script src="./used-acquisition-admin.js?v=20260912s07"></script>

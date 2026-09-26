@@ -243,6 +243,14 @@
   const webEditStockStatus = document.getElementById("webEditStockStatus");
   const webEditPrice = document.getElementById("webEditPrice");
   const webEditQty = document.getElementById("webEditQty");
+  const webEditCpu = document.getElementById("webEditCpu");
+  const webEditGpu = document.getElementById("webEditGpu");
+  const webEditRam = document.getElementById("webEditRam");
+  const webEditSsd = document.getElementById("webEditSsd");
+  const webEditHighlight = document.getElementById("webEditHighlight");
+  const webEditUsage = document.getElementById("webEditUsage");
+  const webEditWarranty = document.getElementById("webEditWarranty");
+  const webEditDelivery = document.getElementById("webEditDelivery");
   const webEditNote = document.getElementById("webEditNote");
   const webEditSaveBtn = document.getElementById("webEditSaveBtn");
   const webEditOffBtn = document.getElementById("webEditOffBtn");
@@ -251,6 +259,14 @@
   const publishQty = document.getElementById("publishQty");
   const publishProductName = document.getElementById("publishProductName");
   const publishCategory = document.getElementById("publishCategory");
+  const publishCpu = document.getElementById("publishCpu");
+  const publishGpu = document.getElementById("publishGpu");
+  const publishRam = document.getElementById("publishRam");
+  const publishSsd = document.getElementById("publishSsd");
+  const publishHighlight = document.getElementById("publishHighlight");
+  const publishUsage = document.getElementById("publishUsage");
+  const publishWarranty = document.getElementById("publishWarranty");
+  const publishDelivery = document.getElementById("publishDelivery");
   const publishPrice = document.getElementById("publishPrice");
   const publishPhotosInput = document.getElementById("publishPhotosInput");
   const publishPhotoStrip = document.getElementById("publishPhotoStrip");
@@ -1030,6 +1046,14 @@
     if (webEditCategory) webEditCategory.value = it?.category ?? "文書";
     if (webEditStockStatus) webEditStockStatus.value = it?.stockStatus ?? "現貨";
     if (webEditPrice) webEditPrice.value = it?.price ?? "";
+    if (webEditCpu) webEditCpu.value = it?.cpu ?? it?.spec_cpu ?? "";
+    if (webEditGpu) webEditGpu.value = it?.gpu ?? it?.spec_gpu ?? "";
+    if (webEditRam) webEditRam.value = it?.ram ?? it?.spec_ram ?? "";
+    if (webEditSsd) webEditSsd.value = it?.ssd ?? it?.spec_ssd ?? "";
+    if (webEditHighlight) webEditHighlight.value = it?.highlight ?? "";
+    if (webEditUsage) webEditUsage.value = it?.suitableUse ?? "";
+    if (webEditWarranty) webEditWarranty.value = it?.warrantyInfo ?? "";
+    if (webEditDelivery) webEditDelivery.value = it?.deliveryInfo ?? "";
     if (webEditQty) {
       if (qtyFromStock != null) {
         webEditQty.value = String(qtyFromStock);
@@ -1115,7 +1139,15 @@
         stockStatus: webEditStockStatus?.value ?? items[idx].stockStatus,
         price: Number(webEditPrice?.value) || items[idx].price,
         qty: resolvedQty,
-        note: (webEditQuill && webEditQuill.root ? webEditQuill.root.innerHTML.trim() : "") || items[idx].note,
+        cpu: webEditCpu?.value?.trim() ?? items[idx].cpu,
+        gpu: webEditGpu?.value?.trim() ?? items[idx].gpu,
+        ram: webEditRam?.value?.trim() ?? items[idx].ram,
+        ssd: webEditSsd?.value?.trim() ?? items[idx].ssd,
+        highlight: webEditHighlight?.value?.trim() ?? items[idx].highlight,
+        suitableUse: webEditUsage?.value?.trim() ?? items[idx].suitableUse,
+        warrantyInfo: webEditWarranty?.value?.trim() ?? items[idx].warrantyInfo,
+        deliveryInfo: webEditDelivery?.value?.trim() ?? items[idx].deliveryInfo,
+        note: webEditQuill && webEditQuill.root ? webEditQuill.root.innerHTML.trim() : (items[idx].note || ""),
         photos: [...editPhotos],
         featuredHome: featured.featuredHome,
         featuredOrder: featured.featuredOrder,
@@ -1191,6 +1223,14 @@
       stockStatus: "現貨",
       price: price || 0,
       tags: [],
+      cpu: publishCpu?.value?.trim() || "",
+      gpu: publishGpu?.value?.trim() || "",
+      ram: publishRam?.value?.trim() || "",
+      ssd: publishSsd?.value?.trim() || "",
+      highlight: publishHighlight?.value?.trim() || "",
+      suitableUse: publishUsage?.value?.trim() || "",
+      warrantyInfo: publishWarranty?.value?.trim() || "",
+      deliveryInfo: publishDelivery?.value?.trim() || "",
       note: (publishQuill && publishQuill.root ? publishQuill.root.innerHTML.trim() : "") ?? "",
       photos: [...publishPhotos],
       featuredHome: featured.featuredHome,
@@ -1216,6 +1256,10 @@
     }
     publishPhotos.length = 0;
     renderPublishPhotoStrip();
+    [publishProductName, publishCpu, publishGpu, publishRam, publishSsd, publishHighlight, publishUsage, publishWarranty, publishDelivery, publishPrice].forEach((el) => {
+      if (el) el.value = "";
+    });
+    if (publishQuill && publishQuill.root) publishQuill.root.innerHTML = "";
     if (publishFormCard) publishFormCard.hidden = true;
     if (syncOk) show(publishMsg, "已上架：" + name);
     if (publishMsg) publishMsg.hidden = false;

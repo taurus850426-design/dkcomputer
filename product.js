@@ -78,10 +78,22 @@
 
     const note = item.note?.trim() || "";
     const noteText = getPlainProductNote(note);
-    const preview = noteText.length > 150 ? `${noteText.slice(0, 150).trim()}…` : noteText;
+    const structured = [item.highlight, item.suitableUse, item.warrantyInfo, item.deliveryInfo]
+      .some((value) => String(value || "").trim());
+    const legacyPreview = !structured && noteText
+      ? (noteText.length > 150 ? `${noteText.slice(0, 150).trim()}…` : noteText)
+      : "";
     const escape = typeof DK.escapeHtml === "function"
       ? DK.escapeHtml
       : (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const textBlock = (id, title, value) => {
+      const text = String(value || "").trim();
+      if (!text) return "";
+      return `<section class="product-summary-block" aria-labelledby="${id}">
+          <h2 id="${id}">${title}</h2>
+          <p>${escape(text).replace(/\n/g, "<br>")}</p>
+        </section>`;
+    };
 
     const specsHtml = specs.length
       ? `<section class="product-summary-block" aria-labelledby="productSpecsTitle">
@@ -89,12 +101,10 @@
           <dl class="product-spec-list">${specs.map(([label, value]) => `<div><dt>${escape(label)}</dt><dd>${escape(String(value).trim())}</dd></div>`).join("")}</dl>
         </section>`
       : "";
-    const previewHtml = preview
-      ? `<section class="product-summary-block" aria-labelledby="productSummaryTitle">
-          <h2 id="productSummaryTitle">商品重點</h2>
-          <p>${escape(preview)}</p>
-        </section>`
-      : "";
+    const highlightHtml = textBlock("productHighlightTitle", "商品賣點", item.highlight || legacyPreview);
+    const usageHtml = textBlock("productUsageTitle", "適合用途", item.suitableUse);
+    const warrantyHtml = textBlock("productWarrantyTitle", "保固說明", item.warrantyInfo);
+    const deliveryHtml = textBlock("productDeliveryTitle", "配送方式", item.deliveryInfo);
     const fullHtml = note
       ? `<details class="product-full-description">
           <summary>查看完整商品說明</summary>
@@ -102,8 +112,8 @@
         </details>`
       : "";
 
-    return specsHtml || previewHtml || fullHtml
-      ? `${specsHtml}${previewHtml}${fullHtml}`
+    return specsHtml || highlightHtml || usageHtml || warrantyHtml || deliveryHtml || fullHtml
+      ? `${specsHtml}${highlightHtml}${usageHtml}${warrantyHtml}${deliveryHtml}${fullHtml}`
       : '<p class="muted">商品資訊請加 LINE 詢問。</p>';
   }
 
