@@ -57,6 +57,56 @@
     return out.innerHTML;
   }
 
+  function getPlainProductNote(html) {
+    const sanitized = sanitizeProductNote(html);
+    if (!sanitized) return "";
+    const div = document.createElement("div");
+    div.innerHTML = sanitized;
+    return (div.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
+  function buildProductIntro(item) {
+    const specs = [
+      ["CPU", item.cpu || item.spec_cpu],
+      ["顯示卡", item.gpu || item.spec_gpu],
+      ["記憶體", item.ram || item.spec_ram],
+      ["儲存", item.ssd || item.spec_ssd],
+    ].filter(([, value]) => {
+      const text = String(value || "").trim();
+      return text && text !== "未標示" && text !== "undefined" && text !== "null";
+    });
+
+    const note = item.note?.trim() || "";
+    const noteText = getPlainProductNote(note);
+    const preview = noteText.length > 150 ? `${noteText.slice(0, 150).trim()}…` : noteText;
+    const escape = typeof DK.escapeHtml === "function"
+      ? DK.escapeHtml
+      : (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    const specsHtml = specs.length
+      ? `<section class="product-summary-block" aria-labelledby="productSpecsTitle">
+          <h2 id="productSpecsTitle">規格重點</h2>
+          <dl class="product-spec-list">${specs.map(([label, value]) => `<div><dt>${escape(label)}</dt><dd>${escape(String(value).trim())}</dd></div>`).join("")}</dl>
+        </section>`
+      : "";
+    const previewHtml = preview
+      ? `<section class="product-summary-block" aria-labelledby="productSummaryTitle">
+          <h2 id="productSummaryTitle">商品重點</h2>
+          <p>${escape(preview)}</p>
+        </section>`
+      : "";
+    const fullHtml = note
+      ? `<details class="product-full-description">
+          <summary>查看完整商品說明</summary>
+          <div class="product-full-description-content">${sanitizeProductNote(note)}</div>
+        </details>`
+      : "";
+
+    return specsHtml || previewHtml || fullHtml
+      ? `${specsHtml}${previewHtml}${fullHtml}`
+      : '<p class="muted">商品資訊請加 LINE 詢問。</p>';
+  }
+
   function getItems() {
     // Stage 6-6-2：公開頁只顯示 inventory。inventory 為空時顯示空狀態，
     // 不 fallback getStock()／DEFAULT_STOCK，避免訪客看到本機 legacy 假資料。
@@ -90,8 +140,7 @@
     document.title = (item.name || "商品") + "｜二手電腦・依用途配機";
 
     if (introEl) {
-      const note = item.note?.trim() || "";
-      introEl.innerHTML = note ? sanitizeProductNote(note) : "（無產品介紹）";
+      introEl.innerHTML = buildProductIntro(item);
       introEl.classList.add("product-detail-intro-html");
     }
 
