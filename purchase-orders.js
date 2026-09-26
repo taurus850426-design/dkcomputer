@@ -28,6 +28,7 @@
   let expandedOrderId = null;
   let quoteModalItemId = null;
   let receiveModalItemId = null;
+  let receiveModalMode = "receive";
   let poPreviewTimer = null;
 
   function bridge() {
@@ -920,6 +921,7 @@
       const actions =
         (canQuote ? '<button type="button" class="btn btn-primary btn-sm" data-poi-act="quote" data-id="' + esc(it.id) + '">' + quoteLabel + '</button> ' : "") +
         (canReceive ? '<button type="button" class="btn btn-ghost btn-sm secondary-action" data-poi-act="receive" data-id="' + esc(it.id) + '">登記到貨</button> ' : "") +
+        (it.procurementStatus === "received" ? '<button type="button" class="btn btn-ghost btn-sm secondary-action" data-poi-act="destination" data-id="' + esc(it.id) + '">修改用途</button> ' : "") +
         (canEdit ? '<button type="button" class="btn btn-ghost btn-sm" data-poi-act="rm" data-id="' + esc(it.id) + '">移除</button>' : "");
       const hl = highlightId && String(it.id) === String(highlightId) ? " ui-enter-soft" : "";
       return (
@@ -1596,6 +1598,7 @@
 
   function closeReceiveModal() {
     receiveModalItemId = null;
+    receiveModalMode = "receive";
     const modal = el("poReceiveModal");
     if (modal) modal.hidden = true;
     document.body.classList.remove("po-quote-modal-open");
@@ -1619,7 +1622,7 @@
   function toggleReceiveInventoryField() {
     const field = el("poReceiveInventoryField");
     const destination = String((el("poReceiveDestination") && el("poReceiveDestination").value) || "customer");
-    if (field) field.hidden = destination !== "inventory";
+    if (field) field.hidden = receiveModalMode === "destination" || destination !== "inventory";
   }
 
   function openReceiveModal(itemId) {
@@ -1628,6 +1631,10 @@
     if (!item || !canReceiveItem(currentOrder, item)) return showMsg("此品項目前不能登記到貨", 3000);
     if (!(itemPrice(item) > 0)) return showMsg("請先補上廠商報價，再登記到貨", 3500);
     receiveModalItemId = String(item.id);
+    receiveModalMode = "receive";
+    if (el("poReceiveModalTitle")) el("poReceiveModalTitle").textContent = "登記品項到貨";
+    if (el("poReceiveSaveBtn")) el("poReceiveSaveBtn").textContent = "確認到貨";
+    if (el("poReceiveDate")) el("poReceiveDate").disabled = false;
     if (el("poReceiveDate")) el("poReceiveDate").value = todayYMD();
     if (el("poReceiveDestination")) el("poReceiveDestination").value = "customer";
     if (el("poReceiveNote")) el("poReceiveNote").value = "";
@@ -1642,11 +1649,37 @@
     document.body.classList.add("po-quote-modal-open");
   }
 
+  function openDestinationModal(itemId) {
+    if (!currentOrder) return;
+    const item = (currentOrder.items || []).find(function (it) { return String(it.id) === String(itemId); });
+    if (!item || item.procurementStatus !== "received") return showMsg("此品項尚未登記到貨", 3000);
+    receiveModalItemId = String(item.id);
+    receiveModalMode = "destination";
+    if (el("poReceiveModalTitle")) el("poReceiveModalTitle").textContent = "修改到貨用途";
+    if (el("poReceiveSaveBtn")) el("poReceiveSaveBtn").textContent = "儲存用途";
+    if (el("poReceiveDate")) {
+      el("poReceiveDate").value = String(item.receivedAt || "").slice(0, 10) || todayYMD();
+      el("poReceiveDate").disabled = true;
+    }
+    if (el("poReceiveDestination")) el("poReceiveDestination").value = item.receiptDestination === "inventory" ? "inventory" : "customer";
+    if (el("poReceiveNote")) el("poReceiveNote").value = item.receiptNote || "";
+    if (el("poReceiveItemSummary")) {
+      el("poReceiveItemSummary").textContent = itemSpec(item) + "｜目前：" + (item.receiptDestination === "inventory" ? "一般庫存" : "客戶訂單專用");
+    }
+    fillReceiveInventoryItems();
+    toggleReceiveInventoryField();
+    receiveModalMessage("修改只會調整用途與訂單綁定，不會重複入庫。");
+    const modal = el("poReceiveModal");
+    if (modal) modal.hidden = false;
+    document.body.classList.add("po-quote-modal-open");
+  }
+
   async function saveReceiveModal() {
     if (!currentOrder || !receiveModalItemId) return receiveModalMessage("找不到叫貨品項", true);
     const idx = currentOrder.items.findIndex(function (it) { return String(it.id) === String(receiveModalItemId); });
     if (idx < 0) return receiveModalMessage("找不到叫貨品項", true);
     const original = currentOrder.items[idx];
+    if (receiveModalMode === "destination") return saveDestinationModal(original, idx);
     if (!canReceiveItem(currentOrder, original)) return receiveModalMessage("此品項已登記到貨", true);
     const receivedAt = String((el("poReceiveDate") && el("poReceiveDate").value) || "").trim();
     const destination = String((el("poReceiveDestination") && el("poReceiveDestination").value) || "customer");
@@ -1664,8 +1697,8 @@
     try {
       if (typeof window.stage7ReceivePurchaseItem !== "function") return receiveModalMessage("自動入庫功能尚未載入，請先完成 Stage 25 更新", true);
       const stockResult = await window.stage7ReceivePurchaseItem({
-        order_id: original.sourceSalesOrderId,
-        line_key: original.sourceSalesOrderLineKey,
+        order_id: destination === "customer" ? original.sourceSalesOrderId : "",
+        line_key: destination === "customer" ? original.sourceSalesOrderLineKey : "",
         purchase_order_id: currentOrder.id,
         purchase_item_id: original.id,
         inventory_item_id: destination === "inventory" ? inventoryItemId : "",
@@ -1706,6 +1739,56 @@
       receiveModalMessage("到貨處理失敗：" + String((e && e.message) || e || "未知錯誤"), true);
     } finally {
       if (button) { button.disabled = false; button.textContent = "確認到貨"; }
+    }
+  }
+
+  async function saveDestinationModal(original, idx) {
+    const destination = String((el("poReceiveDestination") && el("poReceiveDestination").value) || "customer");
+    const note = String((el("poReceiveNote") && el("poReceiveNote").value) || "").trim();
+    if (destination === "customer" && (!original.sourceSalesOrderId || !original.sourceSalesOrderLineKey)) {
+      return receiveModalMessage("此品項沒有來源訂單，不能改為客戶訂單專用", true);
+    }
+    if (destination === original.receiptDestination) {
+      closeReceiveModal();
+      return showMsg("到貨用途沒有變更", 2500);
+    }
+    const button = el("poReceiveSaveBtn");
+    if (button) { button.disabled = true; button.textContent = "處理中…"; }
+    receiveModalMessage("正在調整庫存用途與訂單綁定…");
+    try {
+      if (typeof window.stage7SetPurchaseReceiptDestination !== "function") {
+        return receiveModalMessage("修改用途功能尚未載入，請先完成 Stage 25.1 SQL 更新", true);
+      }
+      const result = await window.stage7SetPurchaseReceiptDestination({
+        order_id: original.sourceSalesOrderId,
+        line_key: original.sourceSalesOrderLineKey,
+        purchase_order_id: currentOrder.id,
+        purchase_item_id: original.id,
+        destination: destination,
+        note: note,
+      });
+      if (!result || !result.ok) {
+        let error = String((result && result.error) || "未知錯誤");
+        if (/finalized order/i.test(error)) error = "訂單已出貨、完成或退款，不能再修改用途";
+        else if (/insufficient stock/i.test(error)) error = "一般庫存數量不足，可能已被其他單據使用，無法改成客戶專用";
+        return receiveModalMessage("修改失敗：" + error, true);
+      }
+      currentOrder.items[idx] = normalizeItem(Object.assign({}, original, {
+        receiptDestination: destination,
+        receiptNote: note,
+      }));
+      closeReceiveModal();
+      renderItems();
+      renderVendorGroups();
+      persistCurrent({ quoteOnly: true });
+      try {
+        if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") await window.DK.fetchV2DataFromSupabase();
+      } catch (_) {}
+      showMsg("已改為「" + (destination === "customer" ? "客戶訂單專用" : "一般庫存") + "」，庫存數量不會重複增加", 6000);
+    } catch (e) {
+      receiveModalMessage("修改失敗：" + String((e && e.message) || e || "未知錯誤"), true);
+    } finally {
+      if (button) { button.disabled = false; button.textContent = receiveModalMode === "destination" ? "儲存用途" : "確認到貨"; }
     }
   }
 
@@ -1942,6 +2025,8 @@
           openQuoteModal(id);
         } else if (act === "receive") {
           openReceiveModal(id);
+        } else if (act === "destination") {
+          openDestinationModal(id);
         } else if (act === "rm") {
           currentOrder.items = currentOrder.items.filter(function (x) { return x.id !== id; });
           renderItems();
