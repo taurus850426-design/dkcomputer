@@ -1777,6 +1777,18 @@
             </div>
             <div id="uvMarketPageMsg" class="muted small admin-msg-gap" hidden></div>
 
+            <div class="section-card-soft surface-info ui-enter admin-stack-gap">
+              <h3 class="h3 section-title">不等外部資料也能開始</h3>
+              <p class="muted small">先用 DK 實際成交紀錄與人工查到的行情建立基準。CSV 可一次匯入多筆 CPU、顯卡或其他零件行情。</p>
+              <div class="actions" style="margin-top:10px">
+                <button id="uvDownloadTemplate" class="btn btn-ghost btn-sm" type="button">下載行情範本</button>
+                <label class="btn btn-primary btn-sm" for="uvCsvInput" style="margin:0">匯入 CSV</label>
+                <input id="uvCsvInput" type="file" accept=".csv,text/csv" hidden />
+              </div>
+              <p class="form-hint">請先建立並選擇「草稿」批次再匯入。匯入完成後確認內容，再啟用為正式行情。</p>
+              <div id="uvCsvResult" class="muted small" hidden></div>
+            </div>
+
             <div class="section-card-soft surface-success ui-enter admin-stack-gap">
               <h3 class="h3 section-title">目前正式行情</h3>
               <div id="uvActiveBatchCard"></div>
@@ -3570,9 +3582,9 @@
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script src="./admin3.js?v=20260927stage31"></script>
-    <script src="./used-valuation-admin.js?v=20260912s03zh"></script>
+    <script src="./used-valuation-admin.js?v=20260927stage32"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
-    <script src="./used-acquisition-admin.js?v=20260912s07"></script>
+    <script src="./used-acquisition-admin.js?v=20260927stage32"></script>
     <script src="./purchase-orders.js?v=20260916stage23"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260913s20"></script>
