@@ -320,6 +320,8 @@
                       <th class="table-number" data-admin-only>毛利</th>
                       <th class="table-number" data-admin-only>毛利率</th>
                       <th>狀態</th>
+                      <th>收款</th>
+                      <th>交貨</th>
                       <th>日期</th>
                       <th class="table-actions">操作</th>
                     </tr>
@@ -402,6 +404,13 @@
                   <div class="field"><label for="orderDiscount">折扣</label><input id="orderDiscount" type="number" min="0" value="0" /></div>
                   <div class="field" data-admin-only><label for="orderCogs">整單成本</label><input id="orderCogs" type="number" min="0" value="0" /></div>
                   <div class="field"><label for="orderPayment">付款方式</label><select id="orderPayment"><option value="cash">現金</option><option value="transfer">轉帳</option><option value="card">刷卡</option></select></div>
+                  <div class="field"><label for="orderPaymentStatus">收款狀態</label><select id="orderPaymentStatus"><option value="unpaid">未收款</option><option value="partial">部分收款</option><option value="paid">已收款</option></select></div>
+                  <div class="field"><label for="orderReceivedAmount">實收金額</label><input id="orderReceivedAmount" type="number" min="0" step="1" value="0" /></div>
+                  <div class="field"><label for="orderPaymentDate">收款日期</label><input id="orderPaymentDate" type="date" /></div>
+                  <div class="field"><label for="orderPaymentReference">收款備註／末五碼</label><input id="orderPaymentReference" type="text" placeholder="例如：轉帳末五碼 12345" /></div>
+                  <div class="field"><label for="orderDeliveryStatus">交貨狀態</label><select id="orderDeliveryStatus"><option value="pending">尚未交付</option><option value="delivered">已交付</option></select></div>
+                  <div class="field"><label for="orderDeliveredAt">交付日期</label><input id="orderDeliveredAt" type="date" /></div>
+                  <div class="field full"><label for="orderDeliveryNote">交貨備註</label><input id="orderDeliveryNote" type="text" placeholder="例如：門市取貨／宅配單號" /></div>
                   <div class="field"><label for="orderStatus">狀態</label><select id="orderStatus"><option value="negotiating">洽談中</option><option value="confirmed">已確認</option><option value="pending">待處理</option><option value="paid">已付款</option><option value="shipped">已出貨</option><option value="completed">已完成</option><option value="refunded">已退貨</option></select><div class="form-hint">洽談中不扣庫存、不建立叫貨單；已確認後才建立或更新該客戶的草稿叫貨單。</div></div>
                   <div class="field full" data-admin-only><label>毛利（自動）</label><div id="orderGrossProfitDisplay" class="order-gross-preview">-</div></div>
                   <div class="field full"><label for="orderQuoteNote">報價備註</label><input id="orderQuoteNote" type="text" placeholder="例如：價格有效 3 天、含組裝…" autocomplete="off" /><div class="form-hint">會隨訂單儲存，重新開啟仍會保留，並顯示在報價單。</div></div>
@@ -1541,7 +1550,7 @@
             </div>
           </section>
 
-          <!-- ⑧ 客戶紀錄（localStorage：dk_customer_records_v1） -->
+          <!-- ⑧ 客戶紀錄（Supabase 主檔；localStorage 僅作畫面快取） -->
           <section id="tab-customers" class="card" hidden>
             <div id="customer-section">
               <div class="section-head inv-items-head">
@@ -1640,6 +1649,8 @@
                 <div class="form-grid" style="margin-top:12px">
                   <div class="field"><label for="crDate">日期</label><input id="crDate" type="date" /></div>
                   <div class="field"><label for="crName">客戶名稱 / 暱稱</label><input id="crName" type="text" autocomplete="off" /></div>
+                  <div class="field"><label for="crPhone">電話</label><input id="crPhone" type="tel" autocomplete="tel" /></div>
+                  <div class="field"><label for="crLine">LINE</label><input id="crLine" type="text" autocomplete="off" /></div>
                   <div class="field">
                     <label for="crSource">來源</label>
                     <select id="crSource">

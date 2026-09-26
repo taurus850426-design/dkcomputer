@@ -1618,6 +1618,32 @@ async function stage7SetPurchaseReceiptDestination(payload) {
   });
 }
 
+async function stage7SetOrderOperations(payload) {
+  const src = payload && typeof payload === "object" ? payload : {};
+  return stage7Rpc("backoffice_set_order_operations", {
+    p_order_id: String(src.order_id || src.id || ""),
+    p_payment_status: String(src.payment_status || "unpaid"),
+    p_received_amount: Number(src.received_amount) || 0,
+    p_payment_date: src.payment_date || null,
+    p_payment_reference: String(src.payment_reference || ""),
+    p_delivery_status: String(src.delivery_status || "pending"),
+    p_delivered_at: src.delivered_at || null,
+    p_delivery_note: String(src.delivery_note || ""),
+  });
+}
+
+async function stage7ListCustomerRecords() {
+  return stage7Rpc("backoffice_list_customer_records", {});
+}
+
+async function stage7UpsertCustomerRecord(record) {
+  return stage7Rpc("backoffice_upsert_customer_record", { p_record: record || {} });
+}
+
+async function stage7DeleteCustomerRecord(id) {
+  return stage7Rpc("backoffice_delete_customer_record", { p_customer_id: String(id || "") });
+}
+
 function stage7MapOrderWriteError(res) {
   if (!res || res.ok) return res;
   const message = String(res.error || (res.data && res.data.message) || "");
@@ -1627,8 +1653,10 @@ function stage7MapOrderWriteError(res) {
     res.error = "此訂單包含已不存在的歷史品項；可以修改資料，但不能變更該品項數量";
   } else if (/insufficient stock/i.test(message)) {
     res.error = "庫存不足，請重新確認訂單品項與數量";
-  } else if (/procurement cost required/i.test(message)) {
-    res.error = "此訂單仍有採購品項尚未確認成本，不能設為已完成；請先到叫貨單補上廠商報價";
+  } else if (/procurement (cost|receipt) required/i.test(message)) {
+    res.error = "此訂單仍有採購品項尚未登記到貨，不能設為已完成；請先到叫貨單完成到貨入庫";
+  } else if (/delivery confirmation required/i.test(message)) {
+    res.error = "訂單尚未確認交付，不能設為已完成；請先儲存「已交付」狀態";
   }
   return res;
 }
@@ -1670,6 +1698,17 @@ async function stage7FinishOrderWrite(res, payload, fallbackId) {
       ...res,
       customerSourceFailed: true,
       customerSourceWarning: "訂單已儲存，但客戶來源儲存失敗；請勿重複建立訂單",
+    };
+  }
+  const operationsRes = await stage7SetOrderOperations({
+    ...(payload || {}),
+    order_id: orderId,
+  });
+  if (!operationsRes || !operationsRes.ok) {
+    return {
+      ...res,
+      operationsFailed: true,
+      operationsWarning: "訂單已儲存，但收款／交貨資料儲存失敗；請重新開啟訂單確認",
     };
   }
   return res;
@@ -1974,6 +2013,10 @@ if (typeof window !== "undefined") {
   window.stage7ClearProcurementCost = stage7ClearProcurementCost;
   window.stage7ReceivePurchaseItem = stage7ReceivePurchaseItem;
   window.stage7SetPurchaseReceiptDestination = stage7SetPurchaseReceiptDestination;
+  window.stage7SetOrderOperations = stage7SetOrderOperations;
+  window.stage7ListCustomerRecords = stage7ListCustomerRecords;
+  window.stage7UpsertCustomerRecord = stage7UpsertCustomerRecord;
+  window.stage7DeleteCustomerRecord = stage7DeleteCustomerRecord;
   window.stage7SaveExpense = stage7SaveExpense;
   window.stage7DeleteExpense = stage7DeleteExpense;
   window.stage7InsertAudit = stage7InsertAudit;
