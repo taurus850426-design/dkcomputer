@@ -762,6 +762,43 @@ body.theme-apple #home-entries .home-entry-sub{
 .product-detail-intro-html img{ max-width: 100%; height: auto; border-radius: 8px; display: block; margin: 8px 0; }
 .product-detail-intro-html a{ color: var(--primary, #7c5cff); text-decoration: none; }
 .product-detail-intro-html a:hover{ text-decoration: underline; }
+.product-summary-block{
+  padding: 14px 16px;
+  margin: 0 0 12px;
+  border: 1px solid rgba(196, 181, 253, 0.18);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.04);
+}
+.product-summary-block h2{
+  margin: 0 0 10px;
+  color: var(--text);
+  font-size: 15px;
+}
+.product-summary-block p{ margin: 0; }
+.product-spec-list{ display: grid; gap: 8px; margin: 0; }
+.product-spec-list > div{ display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; }
+.product-spec-list dt{ color: var(--muted); font-size: 13px; }
+.product-spec-list dd{ margin: 0; color: var(--text); font-weight: 650; overflow-wrap: anywhere; }
+.product-full-description{
+  margin: 4px 0 16px;
+  border: 1px solid rgba(196, 181, 253, 0.18);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.product-full-description summary{
+  padding: 12px 14px;
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+  list-style-position: inside;
+}
+.product-full-description-content{
+  max-height: 420px;
+  padding: 14px;
+  overflow: auto;
+  border-top: 1px solid rgba(196, 181, 253, 0.14);
+  overflow-wrap: anywhere;
+}
 .product-detail-price{ font-weight: 800; font-size: 18px; margin-bottom: 4px; }
 .product-detail-qty{ font-size: 14px; color: var(--muted); margin-bottom: 16px; }
 .product-detail-line-btn{ width: 100%; }
@@ -6387,6 +6424,15 @@ body.admin-page .inv-ungrouped-row .ungrouped-assign-btn{
   box-shadow: none;
   transition: box-shadow 180ms ease, border-color 180ms ease, background-color 180ms ease;
 }
+
+/* Public service pages use a light content card inside the dark storefront theme. */
+body.public-service-page .section-card-soft.prose{
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #334155;
+}
+body.public-service-page .section-card-soft.prose :is(h2, h3, h4, strong){ color: #0f172a; }
+body.public-service-page .section-card-soft.prose a:not(.btn){ color: #5b21b6; }
 .kpi-card{
   transition: box-shadow 180ms ease, border-color 180ms ease, transform 180ms ease;
 }
