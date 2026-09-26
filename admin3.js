@@ -315,17 +315,99 @@
     el.textContent = "";
   }
 
-  function showCenterToast(msg) {
-    const toast = document.getElementById("adminToast");
-    if (!toast) return;
-    toast.textContent = msg;
-    toast.hidden = false;
-    requestAnimationFrame(() => toast.classList.add("show"));
-    setTimeout(() => {
-      toast.classList.remove("show");
-      setTimeout(() => { toast.hidden = true; }, 280);
-    }, 2500);
+  function inferFeedbackType(message) {
+    const text = String(message || "");
+    if (/處理中|儲存中|同步中|載入中|上傳中|建立中|更新中|正在/.test(text)) return "loading";
+    if (/失敗|錯誤|異常|無法|找不到|不足|禁止|未完成|沒有.*權限|請先登入/.test(text)) return "error";
+    if (/警告|注意|尚未|仍有|請先|請確認|未設定|僅存於本機/.test(text)) return "warning";
+    if (/成功|已儲存|已同步|已完成|已建立|已更新|已刪除|已登記|已改為|已加入|已匯出|已複製|完成/.test(text)) return "success";
+    return "info";
   }
+
+  function initAdminFeedback() {
+    const toast = document.getElementById("adminToast");
+    if (!toast || toast.dataset.feedbackReady === "1") return;
+    toast.dataset.feedbackReady = "1";
+    let hideTimer = null;
+    let lastKey = "";
+    let lastAt = 0;
+
+    function hideFeedback() {
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = null;
+      toast.classList.remove("show");
+      setTimeout(() => { if (!toast.classList.contains("show")) toast.hidden = true; }, 220);
+    }
+
+    function showFeedback(message, type, options) {
+      const text = String(message || "").trim();
+      if (!text) return;
+      const tone = type || inferFeedbackType(text);
+      const now = Date.now();
+      const key = tone + "|" + text;
+      if (key === lastKey && now - lastAt < 900) return;
+      lastKey = key;
+      lastAt = now;
+      if (hideTimer) clearTimeout(hideTimer);
+
+      const icon = document.createElement("span");
+      icon.className = "admin-toast__icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = tone === "success" ? "✓" : tone === "error" ? "×" : tone === "warning" ? "!" : tone === "loading" ? "" : "i";
+      const body = document.createElement("span");
+      body.className = "admin-toast__body";
+      const title = document.createElement("strong");
+      title.textContent = tone === "success" ? "操作成功" : tone === "error" ? "操作失敗" : tone === "warning" ? "請注意" : tone === "loading" ? "處理中" : "系統通知";
+      const detail = document.createElement("span");
+      detail.textContent = text;
+      body.append(title, detail);
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "admin-toast__close";
+      close.setAttribute("aria-label", "關閉通知");
+      close.textContent = "×";
+      close.addEventListener("click", hideFeedback, { once: true });
+
+      toast.replaceChildren(icon, body, close);
+      toast.className = "admin-toast admin-toast--" + tone;
+      toast.setAttribute("role", tone === "error" ? "alert" : "status");
+      toast.setAttribute("aria-live", tone === "error" ? "assertive" : "polite");
+      toast.hidden = false;
+      requestAnimationFrame(() => toast.classList.add("show"));
+      if (tone !== "loading") {
+        const duration = Number(options && options.duration) || (tone === "error" ? 8000 : tone === "warning" ? 6000 : 4000);
+        hideTimer = setTimeout(hideFeedback, duration);
+      }
+    }
+
+    window.DKAdminFeedback = { show: showFeedback, hide: hideFeedback, inferType: inferFeedbackType };
+
+    const pending = new Set();
+    const flushMessage = (node) => {
+      pending.delete(node);
+      if (!node || node.hidden || node.closest("[hidden]") || node.dataset.noGlobalFeedback === "1") return;
+      const text = String(node.textContent || "").trim();
+      if (text) showFeedback(text, inferFeedbackType(text));
+    };
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        const target = mutation.target.nodeType === 1 ? mutation.target : mutation.target.parentElement;
+        const node = target && target.closest ? target.closest('[id$="Msg"]') : null;
+        if (!node || pending.has(node)) return;
+        pending.add(node);
+        queueMicrotask(() => flushMessage(node));
+      });
+    });
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["hidden", "class"] });
+  }
+
+  function showCenterToast(msg, type) {
+    if (!window.DKAdminFeedback) initAdminFeedback();
+    window.DKAdminFeedback?.show(msg, type || inferFeedbackType(msg));
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initAdminFeedback, { once: true });
+  else initAdminFeedback();
 
   function updateSyncStatusBar() {
     const bar = document.getElementById("syncStatusBar");
