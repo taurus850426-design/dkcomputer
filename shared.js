@@ -620,6 +620,14 @@ async function fetchInventoryFromSupabase() {
     category: String(r.category || ""),
     stockStatus: String(r.stock_status || "現貨"),
     price: typeof r.price === "number" ? r.price : toNumber(r.price) ?? null,
+    cpu: String(r.cpu || ""),
+    gpu: String(r.gpu || ""),
+    ram: String(r.ram || ""),
+    ssd: String(r.ssd || ""),
+    highlight: String(r.highlight || ""),
+    suitableUse: String(r.suitable_use || ""),
+    warrantyInfo: String(r.warranty_info || ""),
+    deliveryInfo: String(r.delivery_info || ""),
     note: String(r.note || ""),
     photos: Array.isArray(r.photos) ? r.photos : [],
     qty: (() => { const n = typeof r.qty === "number" ? r.qty : Number(r.qty); return Number.isFinite(n) && n >= 0 ? n : null; })(),
@@ -734,6 +742,14 @@ async function upsertInventoryItemToSupabase(item) {
     category: String(item.category || ""),
     stock_status: String(item.stockStatus || "現貨"),
     price: typeof item.price === "number" ? item.price : toNumber(item.price),
+    cpu: String(item.cpu || item.spec_cpu || ""),
+    gpu: String(item.gpu || item.spec_gpu || ""),
+    ram: String(item.ram || item.spec_ram || ""),
+    ssd: String(item.ssd || item.spec_ssd || ""),
+    highlight: String(item.highlight || ""),
+    suitable_use: String(item.suitableUse || ""),
+    warranty_info: String(item.warrantyInfo || ""),
+    delivery_info: String(item.deliveryInfo || ""),
     note: String(item.note || ""),
     photos: Array.isArray(item.photos) ? item.photos : [],
     qty: typeof item.qty === "number" && item.qty >= 0 ? item.qty : null,
@@ -1002,7 +1018,7 @@ async function saveAllStockDataToSupabase() {
 
 // ===== Stage 6-6-3：orders_data cloud 已退役 =====
 // 正式訂單在 Stage 7 orders / order_items。本表無正式呼叫端。
-// 保留函式名稱，避免 DK.* 炸掉。不發 REST、不 fallback anon、不建 JWT WRITE。
+// 保留���式名稱，避免 DK.* 炸掉。不發 REST、不 fallback anon、不建 JWT WRITE。
 async function fetchOrdersFromSupabase() {
   return null;
 }
@@ -2232,6 +2248,10 @@ function stockToInventoryItem(it) {
     ssd: String(it?.spec?.storage || "").trim(),
     price: typeof web.price === "number" ? web.price : toNumber(web.price) ?? undefined,
     tags,
+    highlight: String(web.highlight || "").trim(),
+    suitableUse: String(web.suitableUse || "").trim(),
+    warrantyInfo: String(web.warrantyInfo || "").trim(),
+    deliveryInfo: String(web.deliveryInfo || "").trim(),
     note: String(web.note || it?.note || it?.modelSpec || "").trim(),
     photos,
   };
