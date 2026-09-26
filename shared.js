@@ -1600,6 +1600,23 @@ async function stage7ReceivePurchaseItem(payload) {
   });
 }
 
+async function stage7SetPurchaseReceiptDestination(payload) {
+  if (!stage7IsAdminRole()) {
+    return { ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以修改到貨用途" };
+  }
+  const src = payload && typeof payload === "object" ? payload : {};
+  const destination = String(src.destination || "").trim();
+  if (destination !== "customer" && destination !== "inventory") return { ok: false, error: "到貨用途不正確" };
+  return stage7Rpc("backoffice_set_purchase_receipt_destination", {
+    p_order_id: String(src.order_id || ""),
+    p_line_key: String(src.line_key || ""),
+    p_purchase_order_id: String(src.purchase_order_id || ""),
+    p_purchase_item_id: String(src.purchase_item_id || ""),
+    p_destination: destination,
+    p_note: String(src.note || ""),
+  });
+}
+
 function stage7MapOrderWriteError(res) {
   if (!res || res.ok) return res;
   const message = String(res.error || (res.data && res.data.message) || "");
@@ -1955,6 +1972,7 @@ if (typeof window !== "undefined") {
   window.stage7SyncProcurementCost = stage7SyncProcurementCost;
   window.stage7ClearProcurementCost = stage7ClearProcurementCost;
   window.stage7ReceivePurchaseItem = stage7ReceivePurchaseItem;
+  window.stage7SetPurchaseReceiptDestination = stage7SetPurchaseReceiptDestination;
   window.stage7SaveExpense = stage7SaveExpense;
   window.stage7DeleteExpense = stage7DeleteExpense;
   window.stage7InsertAudit = stage7InsertAudit;
