@@ -4072,7 +4072,7 @@
     }
   }
 
-  // ===== 客戶紀錄（localStorage：dk_customer_records_v1）=====
+  // ===== 客戶紀錄（Supabase 主檔；localStorage 僅作畫面快取）=====
   function crNowISODate() {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -4117,6 +4117,31 @@
   function saveCustomerRecords(list) {
     const safe = Array.isArray(list) ? list.map(crNormalize) : [];
     localStorage.setItem(CUSTOMER_RECORDS_KEY, JSON.stringify(safe));
+  }
+
+  async function saveCustomerRecordToCloud(record) {
+    if (typeof window.stage7UpsertCustomerRecord !== "function") return { ok: false, error: "客戶雲端功能尚未載入" };
+    return window.stage7UpsertCustomerRecord(crNormalize(record));
+  }
+
+  async function syncCustomerRecordsFromCloud() {
+    if (typeof window.stage7ListCustomerRecords !== "function" || typeof window.stage7UpsertCustomerRecord !== "function") return;
+    const local = loadCustomerRecords();
+    const first = await window.stage7ListCustomerRecords();
+    if (!first?.ok) return;
+    const cloud = Array.isArray(first.data?.records) ? first.data.records.map(crNormalize) : [];
+    const cloudIds = new Set(cloud.map((r) => String(r.id)));
+    const cloudPhones = new Set(cloud.map((r) => String(r.phone || "").replace(/\D/g, "")).filter(Boolean));
+    for (const rec of local) {
+      const phone = String(rec.phone || "").replace(/\D/g, "");
+      if (cloudIds.has(String(rec.id)) || (phone && cloudPhones.has(phone))) continue;
+      await window.stage7UpsertCustomerRecord(rec);
+    }
+    const refreshed = await window.stage7ListCustomerRecords();
+    if (refreshed?.ok && Array.isArray(refreshed.data?.records)) {
+      saveCustomerRecords(refreshed.data.records);
+      renderCustomerRecordsPage();
+    }
   }
 
   function crEsc(s) {
@@ -4354,9 +4379,11 @@
     el.textContent = text;
   }
 
-  function addCustomerRecordFromForm() {
+  async function addCustomerRecordFromForm() {
     const dateEl = document.getElementById("crDate");
     const nameEl = document.getElementById("crName");
+    const phoneEl = document.getElementById("crPhone");
+    const lineEl = document.getElementById("crLine");
     const sourceEl = document.getElementById("crSource");
     const typeEl = document.getElementById("crType");
     const budgetEl = document.getElementById("crBudget");
@@ -4371,6 +4398,8 @@
     const rec = crNormalize({
       date: String(dateEl?.value || "").trim(),
       name: String(nameEl?.value || "").trim(),
+      phone: String(phoneEl?.value || "").trim(),
+      line: String(lineEl?.value || "").trim(),
       source: String(sourceEl?.value || "其他"),
       type: String(typeEl?.value || "其他"),
       budget: crSafeNum(budgetEl?.value),
@@ -4386,8 +4415,11 @@
     if (!rec.date) return crShowMsg("請選日期");
     if (!rec.name) return crShowMsg("請填客戶名稱 / 暱稱");
 
-    const list = loadCustomerRecords();
-    list.push(rec);
+    const cloudRes = await saveCustomerRecordToCloud(rec);
+    if (!cloudRes?.ok) return crShowMsg("客戶資料雲端儲存失敗：" + String(cloudRes?.error || "未知錯誤"));
+    const saved = crNormalize(cloudRes.data?.record || rec);
+    const list = loadCustomerRecords().filter((x) => String(x.id) !== String(saved.id));
+    list.push(saved);
     saveCustomerRecords(list);
     crShowMsg("已新增");
     renderCustomerRecordsPage();
@@ -4399,6 +4431,8 @@
 
     // 清空部分欄位（保留來源/類型/狀態讓你連續輸入更快）
     if (nameEl) nameEl.value = "";
+    if (phoneEl) phoneEl.value = "";
+    if (lineEl) lineEl.value = "";
     if (budgetEl) budgetEl.value = "";
     if (useEl) useEl.value = "";
     if (dealEl) dealEl.value = "";
@@ -4409,10 +4443,13 @@
     setTimeout(() => crShowMsg(""), 2500);
   }
 
-  function deleteCustomerRecordById(id) {
+  async function deleteCustomerRecordById(id) {
     if (!requirePerm("deleteCustomer")) return;
     const target = String(id || "");
     if (!target) return;
+    if (typeof window.stage7DeleteCustomerRecord !== "function") return crShowMsg("客戶雲端刪除功能尚未載入");
+    const cloudRes = await window.stage7DeleteCustomerRecord(target);
+    if (!cloudRes?.ok) return crShowMsg("刪除失敗：" + String(cloudRes?.error || "未知錯誤"));
     const list = loadCustomerRecords();
     const next = list.filter((x) => String(x.id) !== target);
     saveCustomerRecords(next);
@@ -4494,6 +4531,7 @@
     });
     // 初始化一次（避免空白頁）
     renderCustomerRecordsPage();
+    syncCustomerRecordsFromCloud().catch(() => {});
   })();
 
   function updateCatImage(cat, dataUrl) {
@@ -7133,6 +7171,8 @@
           </td>
           <td class="table-number ${profitCls}" data-admin-only>${v2Esc(margin)}</td>
           <td><span class="${statusClass}">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</span></td>
+          <td><span class="status-badge ${o.payment_status === "paid" ? "status-success" : (o.payment_status === "partial" ? "status-warning" : "status-danger")}">${v2Esc(o.payment_status === "paid" ? "已收款" : (o.payment_status === "partial" ? "部分收款" : "未收款"))}</span></td>
+          <td><span class="status-badge ${o.delivery_status === "delivered" ? "status-success" : "status-warning"}">${v2Esc(o.delivery_status === "delivered" ? "已交付" : "未交付")}</span></td>
           <td class="nowrap table-secondary">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td>
           <td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td>
         </tr>`;
@@ -7288,6 +7328,13 @@
       set("orderDiscount", o ? o.discount ?? 0 : 0);
       set("orderCogs", o ? o.cogs_total ?? 0 : 0);
       set("orderPayment", o ? o.payment_method ?? "transfer" : "transfer");
+      set("orderPaymentStatus", o ? o.payment_status ?? "unpaid" : "unpaid");
+      set("orderReceivedAmount", o ? o.received_amount ?? 0 : 0);
+      set("orderPaymentDate", o ? o.payment_date ?? "" : "");
+      set("orderPaymentReference", o ? o.payment_reference ?? "" : "");
+      set("orderDeliveryStatus", o ? o.delivery_status ?? "pending" : "pending");
+      set("orderDeliveredAt", o ? o.delivered_at ?? "" : "");
+      set("orderDeliveryNote", o ? o.delivery_note ?? "" : "");
       set("orderStatus", o ? o.status ?? "negotiating" : "negotiating");
       set("orderQuoteNote", o ? o.quote_note ?? "" : "");
       applyOrderStatusSelectClass();
@@ -7337,6 +7384,19 @@
     }
     ["orderTotalSale", "orderShipping", "orderDiscount", "orderCogs"].forEach((id) => document.getElementById(id)?.addEventListener("input", updateV2OrderGrossDisplay));
     document.getElementById("orderStatus")?.addEventListener("change", applyOrderStatusSelectClass);
+    document.getElementById("orderPaymentStatus")?.addEventListener("change", (e) => {
+      const dateEl = document.getElementById("orderPaymentDate");
+      const amountEl = document.getElementById("orderReceivedAmount");
+      if (e.target.value === "unpaid") {
+        if (amountEl) amountEl.value = "0";
+        if (dateEl) dateEl.value = "";
+      } else if (dateEl && !dateEl.value) dateEl.value = (DK.todayStr && DK.todayStr()) || new Date().toISOString().slice(0, 10);
+    });
+    document.getElementById("orderDeliveryStatus")?.addEventListener("change", (e) => {
+      const dateEl = document.getElementById("orderDeliveredAt");
+      if (e.target.value === "delivered" && dateEl && !dateEl.value) dateEl.value = (DK.todayStr && DK.todayStr()) || new Date().toISOString().slice(0, 10);
+      if (e.target.value === "pending" && dateEl) dateEl.value = "";
+    });
     document.getElementById("btnNewOrder")?.addEventListener("click", () => {
       openV2OrderEditor(null);
       setTimeout(consumeCreateOrderFromCustomerIfAny, 0);
@@ -7453,6 +7513,13 @@
           shipping_income: parseFloat(document.getElementById("orderShipping")?.value) || 0,
           discount: parseFloat(document.getElementById("orderDiscount")?.value) || 0,
           payment_method: document.getElementById("orderPayment")?.value || "transfer",
+          payment_status: document.getElementById("orderPaymentStatus")?.value || "unpaid",
+          received_amount: parseFloat(document.getElementById("orderReceivedAmount")?.value) || 0,
+          payment_date: document.getElementById("orderPaymentDate")?.value || null,
+          payment_reference: document.getElementById("orderPaymentReference")?.value || "",
+          delivery_status: document.getElementById("orderDeliveryStatus")?.value || "pending",
+          delivered_at: document.getElementById("orderDeliveredAt")?.value || null,
+          delivery_note: document.getElementById("orderDeliveryNote")?.value || "",
           status: document.getElementById("orderStatus")?.value || "negotiating",
           quote_note: document.getElementById("orderQuoteNote")?.value || "",
           items: orderLineItems.map((l) => ({
@@ -7468,6 +7535,15 @@
             unit_price: Number(l.unit_price != null ? l.unit_price : l.unitPrice) || 0,
           })),
         };
+        const previousOrder = editingV2OrderId
+          ? orders.find((x) => String(x.id) === String(editingV2OrderId))
+          : null;
+        const amountDue = Math.max(0, payload.total_sale + payload.shipping_income - payload.discount);
+        if (payload.payment_status === "unpaid" && payload.received_amount !== 0) return v2Show(orderMsg, "未收款時，實收金額必須為 0");
+        if (payload.payment_status === "partial" && !(payload.received_amount > 0 && payload.received_amount < amountDue)) return v2Show(orderMsg, "部分收款金額必須大於 0 且小於訂單應收總額");
+        if (payload.payment_status === "paid" && payload.received_amount < amountDue) return v2Show(orderMsg, "已收款金額不可低於訂單應收總額");
+        if (payload.payment_status !== "unpaid" && !payload.payment_date) return v2Show(orderMsg, "請填寫收款日期");
+        if (payload.delivery_status === "delivered" && !payload.delivered_at) return v2Show(orderMsg, "請填寫交付日期");
         if (payload.status === "completed") {
           const pendingReceipt = orderLineItems.find((line) =>
             String(line.fulfillment_type || "") === "procurement"
@@ -7475,10 +7551,9 @@
           if (pendingReceipt) {
             return v2Show(orderMsg, "採購品項「" + String(pendingReceipt.name || pendingReceipt.spec || "未命名品項") + "」尚未登記到貨，不能設為已完成；請先到叫貨單完成到貨入庫");
           }
+          if (payload.delivery_status !== "delivered") return v2Show(orderMsg, "訂單尚未交付，不能設為已完成");
+          if (previousOrder?.delivery_status !== "delivered") return v2Show(orderMsg, "請先將交貨狀態設為「已交付」並儲存；確認交付成功後，再將訂單設為已完成");
         }
-        const previousOrder = editingV2OrderId
-          ? orders.find((x) => String(x.id) === String(editingV2OrderId))
-          : null;
         if (payload.status === "refunded" && previousOrder?.status !== "refunded") {
           const confirmed = window.confirm("確認商品已實際退回，並同意將此訂單的庫存品項退回可用庫存？\n\n若尚未收到退貨，請按取消並維持原狀態。");
           if (!confirmed) return v2Show(orderMsg, "已取消退款狀態變更，訂單尚未修改");
@@ -7502,6 +7577,7 @@
             }
             list[idx] = { ...list[idx], status: orderStatus === "completed" ? "成交" : "洽談中" };
             localStorage.setItem(CUSTOMER_RECORDS_KEY, JSON.stringify(list));
+            saveCustomerRecordToCloud(list[idx]).catch(() => {});
             if (typeof renderCustomerRecordsPage === "function") renderCustomerRecordsPage();
           } catch (e) {
             v2Show(orderMsg, "訂單已儲存，但更新客戶狀態失敗：" + String(e?.message || e || ""));
@@ -7536,6 +7612,7 @@
         }
         const quoteNoteWarning = res.quoteNoteFailed ? (" " + (res.quoteNoteWarning || "報價備註尚未儲存。")) : "";
         const customerSourceWarning = res.customerSourceFailed ? (" " + (res.customerSourceWarning || "客戶來源尚未儲存。")) : "";
+        const operationsWarning = res.operationsFailed ? (" " + (res.operationsWarning || "收款／交貨資料尚未儲存。")) : "";
         const customerName = String(payload.customer_name || "").trim();
         if (customerName) {
           try {
@@ -7549,6 +7626,7 @@
             nextCustomer.status = payload.status === "completed" ? "成交" : "洽談中";
             if (idx >= 0) records[idx] = nextCustomer; else records.unshift(nextCustomer);
             saveCustomerRecords(records);
+            saveCustomerRecordToCloud(nextCustomer).catch(() => {});
           } catch (_) {}
         }
         let purchaseWarning = "";
@@ -7557,7 +7635,7 @@
           if (purchaseSync && Array.isArray(purchaseSync.warnings) && purchaseSync.warnings.length) purchaseWarning = " " + purchaseSync.warnings.join(" ");
           else if (!purchaseSync || !purchaseSync.ok) purchaseWarning = " 叫貨單同步失敗，請勿重複新增；請到叫貨單檢查。";
         }
-        v2Show(orderMsg, (editingV2OrderId ? "訂單已更新。" : "訂單已新增。") + quoteNoteWarning + customerSourceWarning + purchaseWarning);
+        v2Show(orderMsg, (editingV2OrderId ? "訂單已更新。" : "訂單已新增。") + quoteNoteWarning + customerSourceWarning + operationsWarning + purchaseWarning);
         if (!editingV2OrderId) tryUpdateLinkedCustomerStatus(payload.status);
         else clearPendingCustomerOrderLink();
         showSyncToast({ ok: true }, "訂單");
