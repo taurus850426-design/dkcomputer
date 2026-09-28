@@ -347,12 +347,19 @@
     let hideTimer = null;
     let lastKey = "";
     let lastAt = 0;
+    let lastSource = null;
+    let loadingSource = null;
+    let feedbackVersion = 0;
 
     function hideFeedback() {
+      const version = ++feedbackVersion;
+      loadingSource = null;
+      lastKey = "";
+      lastSource = null;
       if (hideTimer) clearTimeout(hideTimer);
       hideTimer = null;
       toast.classList.remove("show");
-      setTimeout(() => { if (!toast.classList.contains("show")) toast.hidden = true; }, 220);
+      setTimeout(() => { if (version === feedbackVersion) toast.hidden = true; }, 220);
     }
 
     function showFeedback(message, type, options) {
@@ -361,7 +368,11 @@
       const tone = type || inferFeedbackType(text);
       const now = Date.now();
       const key = tone + "|" + text;
-      if (key === lastKey && now - lastAt < 900) return;
+      const source = (options && options.source) || null;
+      if (key === lastKey && source === lastSource && now - lastAt < 900) return;
+      const version = ++feedbackVersion;
+      loadingSource = tone === "loading" ? source : null;
+      lastSource = source;
       lastKey = key;
       lastAt = now;
       if (hideTimer) clearTimeout(hideTimer);
@@ -389,7 +400,7 @@
       toast.setAttribute("role", tone === "error" ? "alert" : "status");
       toast.setAttribute("aria-live", tone === "error" ? "assertive" : "polite");
       toast.hidden = false;
-      requestAnimationFrame(() => toast.classList.add("show"));
+      requestAnimationFrame(() => { if (version === feedbackVersion) toast.classList.add("show"); });
       if (tone !== "loading") {
         const duration = Number(options && options.duration) || (tone === "error" ? 8000 : tone === "warning" ? 6000 : 4000);
         hideTimer = setTimeout(hideFeedback, duration);
@@ -403,9 +414,13 @@
       pending.delete(node);
       if (!node || node.hidden || node.closest("[hidden]") || node.dataset.noGlobalFeedback === "1") return;
       const text = String(node.textContent || "").trim();
-      if (text) showFeedback(text, inferFeedbackType(text));
+      if (text) showFeedback(text, inferFeedbackType(text), { source: node });
     };
     const observer = new MutationObserver((mutations) => {
+      // A mirrored progress message must end when its source completes or leaves the page.
+      if (loadingSource && (!loadingSource.isConnected || loadingSource.closest("[hidden]") ||
+          loadingSource.dataset.noGlobalFeedback === "1" || !String(loadingSource.textContent || "").trim() ||
+          inferFeedbackType(loadingSource.textContent) !== "loading")) hideFeedback();
       mutations.forEach((mutation) => {
         const target = mutation.target.nodeType === 1 ? mutation.target : mutation.target.parentElement;
         const node = target && target.closest ? target.closest('[id$="Msg"]') : null;
