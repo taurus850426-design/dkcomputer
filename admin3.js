@@ -6868,6 +6868,11 @@
     let editingV2OrderId = null;
     let orderLineItems = [];
     let editingManualOrderLineIndex = -1;
+    const orderReceivedAmountEl = document.getElementById("orderReceivedAmount");
+    orderReceivedAmountEl?.addEventListener("blur", function () {
+      const amount = Number(orderReceivedAmountEl.value);
+      if (Number.isFinite(amount) && amount >= 0) orderReceivedAmountEl.value = String(amount);
+    });
 
     // 訂單新增/編輯：客戶欄位搜尋建議（讀客戶紀錄，只帶入名稱）
     (function initOrderCustomerSuggest() {
@@ -7579,6 +7584,7 @@
             unit_price: Number(l.unit_price != null ? l.unit_price : l.unitPrice) || 0,
           })),
         };
+        if (orderReceivedAmountEl) orderReceivedAmountEl.value = String(payload.received_amount);
         const previousOrder = editingV2OrderId
           ? orders.find((x) => String(x.id) === String(editingV2OrderId))
           : null;
@@ -7596,7 +7602,6 @@
             return v2Show(orderMsg, "採購品項「" + String(pendingReceipt.name || pendingReceipt.spec || "未命名品項") + "」尚未登記到貨，不能設為已完成；請先到叫貨單完成到貨入庫");
           }
           if (payload.delivery_status !== "delivered") return v2Show(orderMsg, "訂單尚未交付，不能設為已完成");
-          if (previousOrder?.delivery_status !== "delivered") return v2Show(orderMsg, "請先將交貨狀態設為「已交付」並儲存；確認交付成功後，再將訂單設為已完成");
         }
         if (payload.status === "refunded" && previousOrder?.status !== "refunded") {
           const confirmed = window.confirm("確認商品已實際退回，並同意將此訂單的庫存品項退回可用庫存？\n\n若尚未收到退貨，請按取消並維持原狀態。");
@@ -7631,6 +7636,13 @@
         let res;
         if (editingV2OrderId) {
           if (typeof DK.updateOrder !== "function") return v2Show(orderMsg, "Stage 7 寫入未載入");
+          if (payload.status === "completed" && previousOrder?.delivery_status !== "delivered") {
+            if (typeof DK.setOrderOperations !== "function") return v2Show(orderMsg, "收款／交貨寫入功能尚未載入");
+            const operationsRes = await DK.setOrderOperations({ ...payload, order_id: editingV2OrderId });
+            if (!operationsRes || !operationsRes.ok) {
+              return v2Show(orderMsg, (operationsRes && operationsRes.error) || "交付狀態儲存失敗，訂單尚未設為已完成");
+            }
+          }
           res = await DK.updateOrder({ ...payload, id: editingV2OrderId });
         } else {
           for (const line of payload.items.filter((x) => x.fulfillment_type === "inventory")) {

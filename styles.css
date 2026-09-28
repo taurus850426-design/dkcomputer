@@ -8399,6 +8399,27 @@ body.admin-page #tab-accounts .table-actions{
 #tab-used-market .uv-price-toolbar select{
   min-width: 140px;
 }
+#tab-used-market .uv-auto-stats{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+  margin:14px 0;
+}
+#tab-used-market .uv-auto-stats>div{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  padding:12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:rgba(255,255,255,.025);
+}
+#tab-used-market .uv-auto-detail{margin-top:14px}
+#tab-used-market .uv-auto-detail summary{cursor:pointer;font-weight:700}
+#tab-used-market .uv-auto-observations{display:grid;gap:8px;margin-top:12px}
+#tab-used-market .uv-auto-observation{padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+#tab-used-market .uv-auto-observation.is-rejected{opacity:.65}
+@media(max-width:700px){#tab-used-market .uv-auto-stats{grid-template-columns:1fr}}
 #tab-used-market .uv-overlay{
   position: fixed;
   inset: 0;

@@ -755,6 +755,13 @@
         return res;
       });
     },
+    setOrderOperations: function (payload) {
+      if (typeof global.stage7SetOrderOperations !== "function") return Promise.resolve({ ok: false, error: "收款／交貨寫入功能未載入" });
+      return global.stage7SetOrderOperations(payload).then(function (res) {
+        if (!res || !res.ok) return { ok: false, error: rpcError(res), data: res && res.data };
+        return res;
+      });
+    },
     getOrders,
     saveOrders,
     enrichOrder,
