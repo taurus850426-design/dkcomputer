@@ -1778,6 +1778,35 @@
             <div id="uvMarketPageMsg" class="muted small admin-msg-gap" hidden></div>
 
             <div class="section-card-soft surface-info ui-enter admin-stack-gap">
+              <div class="inv-section-head uv-price-head">
+                <div>
+                  <h3 class="h3 section-title">自動行情候選區（測試中）</h3>
+                  <p class="muted small">自動搜尋公開商品資料並先做清洗。候選結果不會直接改動正式估價。</p>
+                </div>
+                <div class="actions">
+                  <button id="uamRefresh" class="btn btn-ghost btn-sm" type="button">重新整理</button>
+                  <button id="uamCollect" class="btn btn-primary btn-sm" type="button">抓取前 5 個型號</button>
+                </div>
+              </div>
+              <div id="uamMsg" class="muted small" hidden></div>
+              <div class="uv-auto-stats">
+                <div><span class="muted small">監控型號</span><strong id="uamModelCount">—</strong></div>
+                <div><span class="muted small">有效樣本</span><strong id="uamAcceptedCount">—</strong></div>
+                <div><span class="muted small">最近更新</span><strong id="uamUpdatedAt">—</strong></div>
+              </div>
+              <div class="table-wrap uv-price-table-wrap">
+                <table class="table table-compact">
+                  <thead><tr><th>分類</th><th>型號</th><th class="table-number">有效／排除</th><th class="table-number">低價</th><th class="table-number">中位</th><th class="table-number">高價</th><th>更新時間</th><th>操作</th></tr></thead>
+                  <tbody id="uamSummaryBody"><tr><td colspan="8" class="muted">執行 Stage 33 SQL 後即可載入。</td></tr></tbody>
+                </table>
+              </div>
+              <details class="uv-auto-detail">
+                <summary>查看最近抓取明細與排除原因</summary>
+                <div id="uamObservationList" class="uv-auto-observations"><p class="muted small">請先選擇型號。</p></div>
+              </details>
+            </div>
+
+            <div class="section-card-soft surface-info ui-enter admin-stack-gap">
               <h3 class="h3 section-title">不等外部資料也能開始</h3>
               <p class="muted small">先用 DK 實際成交紀錄與人工查到的行情建立基準。CSV 可一次匯入多筆 CPU、顯卡或其他零件行情。</p>
               <div class="actions" style="margin-top:10px">
@@ -3577,12 +3606,13 @@
       </div>
     </div>
     <script src="./shared.js?v=20260927stage31"></script>
-    <script src="./inventory-ledger.js?v=20260916stage23"></script>
+    <script src="./inventory-ledger.js?v=20260927stage34"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20260927stage31"></script>
+    <script src="./admin3.js?v=20260927stage34"></script>
     <script src="./used-valuation-admin.js?v=20260927stage32"></script>
+    <script src="./used-market-auto-admin.js?v=20260927stage33"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
     <script src="./used-acquisition-admin.js?v=20260927stage32"></script>
     <script src="./purchase-orders.js?v=20260916stage23"></script>

@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.coolpc-price-lookup]
 verify_jwt = true
+
+[functions.used-market-collector]
+verify_jwt = true
