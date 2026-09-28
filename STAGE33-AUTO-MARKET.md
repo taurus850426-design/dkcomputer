@@ -1,5 +1,14 @@
 # Stage 33｜自動行情蒐集 MVP
 
+## 2026-09-29 篩選修正部署
+
+1. 在 SQL Editor 執行 `supabase-stage34-market-quality.sql`，候選統計只使用新版規則資料，並以每個商品連結的最新紀錄計算。舊資料保留供稽核，不再影響統計。
+2. 將 `supabase/functions/used-market-collector/index.ts` 更新至同名 Edge Function 並部署。既有 Secret 不需重設。
+3. 先抓一個型號並查看明細；未明示二手、翻新、全新與多型號商品均不納入。樣本不足時保持空白，不以未確認商品補數。
+4. 相同連結會移除追蹤參數後去重；不同商品連結不會僅因標題相同而合併。來源價格仍需人工確認幣別、地區、運費與實際規格，不能視為已成交價格。
+
+本機驗證：`node --test tests/backup-regression.cjs`。正式 SQL 與外部 API 需部署後驗證。
+
 ## 已完成
 
 - 20 個常見 CPU／GPU 監控型號。
