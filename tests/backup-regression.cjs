@@ -8,7 +8,7 @@ const root = path.join(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8').replace(/\r\n/g, '\n');
 
 const collector = read('supabase/functions/used-market-collector/index.ts').replace(/^import .*\n/, '');
-const context = { Deno: { serve() {} }, Response, URLSearchParams, AbortSignal };
+const context = { Deno: { serve() {} }, Response, URL, URLSearchParams, AbortSignal };
 vm.createContext(context);
 vm.runInContext(stripTypeScriptTypes(collector), context);
 
@@ -22,6 +22,25 @@ test('candidate filtering separates related models and memory variants', () => {
   assert.equal(check('全新 RTX 3060 12GB', 'RTX 3060', '12GB'), false);
   assert.equal(check('故障 RTX 3060 12GB', 'RTX 3060', '12GB'), false);
   assert.equal(context.classify('RTX 3060', 1, 100, 20000, 'RTX 3060').accepted, false);
+});
+
+test('screenshot examples require used evidence and preserve clock-speed boundaries', () => {
+  const check = (title, condition = '') => context.classify(title, 3364, 800, 5000, 'i5-10400F', '', condition);
+  assert.equal(check('INTEL CPU CORE I5-10400F').accepted, false);
+  assert.equal(check('INTEL CPU COREI5-10400F', 'Used').accepted, true);
+  assert.equal(check('Intel Core i5-10400F Box').reason, '未確認二手狀態');
+  assert.equal(check('Intel Core i5-10400F 2.9 GHz Six-Core LGA 1200 Processor', 'Used').accepted, true);
+  assert.equal(check('二手 Intel Core i5-10400F 2.9GHz').accepted, true);
+  assert.equal(check('Intel Core i5-10400F 2.9GHz', 'New').accepted, false);
+  assert.equal(check('二手 i5-10400F 主機 CPU').accepted, false);
+  assert.equal(check('非二手 i5-10400F').accepted, false);
+  assert.equal(check('二手 i5-10400F / i5-11400F').accepted, false);
+});
+
+test('URL identity removes tracking but preserves product variants', () => {
+  assert.equal(context.canonicalUrl('https://shop.test/item?id=1&utm_source=google#top'), 'https://shop.test/item?id=1');
+  assert.notEqual(context.canonicalUrl('https://shop.test/item?id=1'), context.canonicalUrl('https://shop.test/item?id=2'));
+  assert.equal(context.canonicalUrl('javascript:alert(1)'), '');
 });
 
 test('observation attributes escape quotes and reject script URLs', () => {
