@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-            <link rel="stylesheet" href="./styles.css?v=20260922stage24" />
+            <link rel="stylesheet" href="./styles.css?v=20260929stage35" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -1781,7 +1781,7 @@
               <div class="inv-section-head uv-price-head">
                 <div>
                   <h3 class="h3 section-title">自動行情候選區（測試中）</h3>
-                  <p class="muted small">自動搜尋公開商品資料並先做清洗。候選結果不會直接改動正式估價。</p>
+                  <p class="muted small">先核對來源、二手規格及含運台幣價。至少 3 筆人工確認的台灣樣本才產生參考價；海外另列，轉入草稿不會自動啟用。</p>
                 </div>
                 <div class="actions">
                   <button id="uamRefresh" class="btn btn-ghost btn-sm" type="button">重新整理</button>
@@ -1791,13 +1791,13 @@
               <div id="uamMsg" class="muted small" hidden></div>
               <div class="uv-auto-stats">
                 <div><span class="muted small">監控型號</span><strong id="uamModelCount">—</strong></div>
-                <div><span class="muted small">有效樣本</span><strong id="uamAcceptedCount">—</strong></div>
+                <div><span class="muted small">台灣人工確認樣本</span><strong id="uamAcceptedCount">—</strong></div>
                 <div><span class="muted small">最近更新</span><strong id="uamUpdatedAt">—</strong></div>
               </div>
               <div class="table-wrap uv-price-table-wrap">
                 <table class="table table-compact">
-                  <thead><tr><th>分類</th><th>型號</th><th class="table-number">有效／排除</th><th class="table-number">低價</th><th class="table-number">中位</th><th class="table-number">高價</th><th>更新時間</th><th>操作</th></tr></thead>
-                  <tbody id="uamSummaryBody"><tr><td colspan="8" class="muted">執行 Stage 33 SQL 後即可載入。</td></tr></tbody>
+                  <thead><tr><th>分類</th><th>型號</th><th class="table-number">樣本審核</th><th class="table-number">低價</th><th class="table-number">中位</th><th class="table-number">高價</th><th>更新時間</th><th>操作</th></tr></thead>
+                  <tbody id="uamSummaryBody"><tr><td colspan="8" class="muted">按重新整理載入人工審核行情；首次使用需完成資料庫更新。</td></tr></tbody>
                 </table>
               </div>
               <details class="uv-auto-detail">
@@ -3612,7 +3612,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script src="./admin3.js?v=20260927stage34"></script>
     <script src="./used-valuation-admin.js?v=20260927stage32"></script>
-    <script src="./used-market-auto-admin.js?v=20260927stage33"></script>
+    <script src="./used-market-auto-admin.js?v=20260929stage35"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
     <script src="./used-acquisition-admin.js?v=20260927stage32"></script>
     <script src="./purchase-orders.js?v=20260916stage23"></script>
