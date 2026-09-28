@@ -8419,6 +8419,12 @@ body.admin-page #tab-accounts .table-actions{
 #tab-used-market .uv-auto-observations{display:grid;gap:8px;margin-top:12px}
 #tab-used-market .uv-auto-observation{padding:10px 12px;border:1px solid var(--line);border-radius:10px}
 #tab-used-market .uv-auto-observation.is-rejected{opacity:.65}
+#uamReviewForm{display:grid;gap:12px;margin:16px 0}
+#uamReviewForm label{display:grid;gap:6px}
+#uamReviewForm textarea{min-height:90px;width:100%;box-sizing:border-box}
+#uamReviewForm input[type="checkbox"]{width:auto;justify-self:start}
+#uamObservationList section{min-width:0}
+#uamObservationList article{overflow-wrap:anywhere;margin-bottom:8px}
 @media(max-width:700px){#tab-used-market .uv-auto-stats{grid-template-columns:1fr}}
 #tab-used-market .uv-overlay{
   position: fixed;
