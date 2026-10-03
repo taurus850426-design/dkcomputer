@@ -117,7 +117,7 @@
 
             <div id="restockForm" class="section-card admin-stack-gap" hidden>
               <h3 class="h3 section-title">補貨</h3>
-              <div class="form-grid" style="grid-template-columns: 1fr auto auto auto auto;">
+              <div class="form-grid" style="grid-template-columns: 1fr auto auto auto auto auto;">
                 <div class="searchable-select-wrap">
                   <select id="restockItemId" aria-hidden="true" tabindex="-1"></select>
                   <input id="restockItemSearch" type="text" class="searchable-select-input" placeholder="輸入名稱／規格搜尋品項…" autocomplete="off" />
@@ -126,6 +126,7 @@
                 <input id="restockQty" type="number" min="1" value="1" placeholder="數量" style="width:80px" />
                 <input id="restockUnitCost" type="number" min="0" step="1" placeholder="單位成本" style="width:100px" data-admin-only />
                 <input id="restockInboundDate" type="date" placeholder="入庫日" style="width:140px" />
+                <select id="restockFundingOwner" aria-label="出資來源" data-admin-only><option value="hala" selected>HALA</option><option value="boss">BOSS</option></select>
                 <button id="restockSubmit" class="btn btn-primary primary-action" type="button">入庫</button>
               </div>
               <p class="form-hint">找不到品項？<button type="button" id="restockGoNew" class="btn btn-ghost btn-sm tertiary-action">新增品項</button></p>
@@ -252,6 +253,7 @@
                 <div class="field"><label for="ledgerType">類型</label><select id="ledgerType"><option value="IN">入庫</option><option value="OUT">出庫</option><option value="ADJUST">調整</option></select></div>
                   <div class="field"><label for="ledgerQty">數量</label><input id="ledgerQty" type="number" /></div>
                   <div class="field"><label for="ledgerUnitCost">單位成本（入庫必填）</label><input id="ledgerUnitCost" type="number" min="0" step="1" /></div>
+                  <div class="field" id="ledgerFundingOwnerField" data-admin-only><label for="ledgerFundingOwner">出資來源</label><select id="ledgerFundingOwner"><option value="hala" selected>HALA</option><option value="boss">BOSS</option></select></div>
                   <div class="field"><label for="ledgerRefType">參考類型</label><select id="ledgerRefType"><option value="PURCHASE">進貨</option><option value="ORDER">訂單</option><option value="RMA">退換</option><option value="SCRAP">報廢</option><option value="MOVE">移倉</option><option value="ADJUST">調整</option></select></div>
                   <div class="field"><label for="ledgerRefId">參考單號</label><input id="ledgerRefId" type="text" placeholder="訂單號/進貨單號" /></div>
                   <div class="field full"><label for="ledgerNote">備註</label><input id="ledgerNote" type="text" /></div>
@@ -509,9 +511,19 @@
                 </div>
               </div>
               <div id="reportShareHeading" class="section-card-soft surface-neutral admin-stack-gap" style="margin-bottom:8px">
-                <h3 class="h3 section-title" style="margin:0">庫存與分潤</h3>
+                <h3 class="h3 section-title" style="margin:0">庫存</h3>
               </div>
               <div id="reportShareKpiGrid" class="kpi-grid ui-enter admin-stack-gap"></div>
+              <div class="section-card-soft surface-info admin-stack-gap">
+                <h3 class="h3 section-title">BOSS 本金返還</h3>
+                <div class="form-grid">
+                  <div class="field"><label for="bossRepaymentAmount">返還金額</label><input id="bossRepaymentAmount" type="number" min="1" step="1" placeholder="例如 10000" /></div>
+                  <div class="field"><label for="bossRepaymentDate">返還日期</label><input id="bossRepaymentDate" type="date" /></div>
+                  <div class="field"><label for="bossRepaymentNote">備註</label><input id="bossRepaymentNote" type="text" placeholder="例如：10 月庫存本金" /></div>
+                  <div class="field actions"><button id="bossRepaymentSubmit" class="btn btn-primary" type="button">登記返還</button></div>
+                </div>
+                <div id="bossRepaymentMsg" class="muted" hidden></div>
+              </div>
               <div id="reportQueryResult" hidden></div>
               <div class="section-card-soft surface-neutral admin-stack-gap">
                 <h3 class="h3 section-title">銷售類型統計</h3>
