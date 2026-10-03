@@ -6655,6 +6655,25 @@ body.admin-page .order-status-stack{
   gap: 5px;
   min-width: 150px;
 }
+body.admin-page .order-quick-status-btn{
+  appearance: none;
+  font: inherit;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: filter .15s ease, transform .15s ease, opacity .15s ease;
+}
+body.admin-page .order-quick-status-btn:hover:not(:disabled){
+  filter: brightness(.94);
+  transform: translateY(-1px);
+}
+body.admin-page .order-quick-status-btn:focus-visible{
+  outline: 2px solid var(--dk-info);
+  outline-offset: 2px;
+}
+body.admin-page .order-quick-status-btn:disabled{
+  cursor: wait;
+  opacity: .55;
+}
 body.admin-page #orderPaymentStatus.payment-status-unpaid{ background: var(--dk-danger-soft); color: var(--dk-danger); border-color: rgba(220,38,38,.28); }
 body.admin-page #orderPaymentStatus.payment-status-partial{ background: var(--dk-orange-soft); color: var(--dk-orange); border-color: rgba(234,88,12,.28); }
 body.admin-page #orderPaymentStatus.payment-status-paid{ background: var(--dk-success-soft); color: var(--dk-success); border-color: rgba(22,163,74,.28); }

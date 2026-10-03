@@ -1556,6 +1556,25 @@ async function stage7UpdateOrder(payload) {
   return stage7FinishOrderWrite(res, payload, payload.id);
 }
 
+async function stage7AssignInboundFunding(ledgerId, owner) {
+  return stage7Rpc("backoffice_assign_inbound_funding", {
+    p_ledger_id: String(ledgerId || ""),
+    p_owner: String(owner || "hala").toLowerCase(),
+  });
+}
+
+async function stage7InventoryFundingSummary() {
+  return stage7Rpc("backoffice_inventory_funding_summary", {});
+}
+
+async function stage7RecordBossRepayment(amount, paidAt, note) {
+  return stage7Rpc("backoffice_record_boss_repayment", {
+    p_amount: Number(amount) || 0,
+    p_paid_at: paidAt ? String(paidAt).slice(0, 10) : null,
+    p_note: note == null ? null : String(note),
+  });
+}
+
 async function stage7SyncProcurementCost(payload) {
   if (!stage7IsAdminRole()) {
     return { ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以回寫訂單採購成本" };
@@ -5537,6 +5556,9 @@ window.DK = {
   stage7PreviewYearProfit,
   stage7SettleMonthlyProfit,
   stage7InboundAmount,
+  stage7AssignInboundFunding,
+  stage7InventoryFundingSummary,
+  stage7RecordBossRepayment,
   stage7CorrectInbound,
   stage7CorrectInboundCost,
   stage7ConfirmInboundCost,
