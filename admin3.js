@@ -2992,6 +2992,14 @@
     return hay.includes(search);
   }
 
+  function compareVendorQuotesNewestFirst(a, b) {
+    const aCreated = Date.parse(String(a?.createdAt || a?.created_at || ""));
+    const bCreated = Date.parse(String(b?.createdAt || b?.created_at || ""));
+    if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) return bCreated - aCreated;
+    if (Number.isFinite(aCreated) !== Number.isFinite(bCreated)) return Number.isFinite(bCreated) ? 1 : -1;
+    return String(b?.date || "").localeCompare(String(a?.date || ""));
+  }
+
   function getFilteredVendorQuotes(allQuotes) {
     const list = Array.isArray(allQuotes) ? allQuotes : loadVendorQuotes();
     const search = getVendorQuoteSearchQuery();
@@ -3000,7 +3008,7 @@
     return list
       .filter((q) => matchVendorQuoteFilters(q, search, vendorFilter, categoryFilter))
       .slice()
-      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+      .sort(compareVendorQuotesNewestFirst);
   }
 
   function populateVendorQuoteFilterSelects(allQuotes) {
@@ -3192,7 +3200,7 @@
       .join("　");
     const recent = (stat.quotes || [])
       .slice()
-      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+      .sort(compareVendorQuotesNewestFirst)
       .slice(0, 10);
     const recentRows = recent.length
       ? recent.map((q) => {
@@ -7160,6 +7168,18 @@
       if (s === "paid" || s === "shipped") return "status-badge status-info";
       return "status-badge status-muted";
     }
+    function orderPaymentStatusMeta(status) {
+      const s = String(status || "unpaid").trim();
+      if (s === "paid") return { label: "已收款", className: "status-success" };
+      if (s === "partial") return { label: "部分收款", className: "status-warning" };
+      return { label: "未收款", className: "status-danger" };
+    }
+    function orderPaymentMethodMeta(method) {
+      const m = String(method || "transfer").trim();
+      if (m === "cash") return { label: "現金", className: "status-success" };
+      if (m === "card") return { label: "刷卡", className: "status-purple" };
+      return { label: "轉帳", className: "status-info" };
+    }
 
     function renderV2Orders() {
       if (!ordersTbody) return;
@@ -7219,6 +7239,8 @@
         const margin = o.gross_margin != null ? (o.gross_margin * 100).toFixed(1) + "%" : "-";
         const statusKey = (o.status && ORDER_STATUS_LABEL[o.status]) ? o.status : "pending";
         const statusClass = orderStatusBadgeClass(statusKey) + " status-pill";
+        const paymentStatus = orderPaymentStatusMeta(o.payment_status);
+        const paymentMethod = orderPaymentMethodMeta(o.payment_method);
         const profitCls = profitNumberClass(o.gross_profit);
         return `<tr>
           <td class="nowrap table-primary">${v2Esc(o.order_no)}</td>
@@ -7234,8 +7256,7 @@
             </div>
           </td>
           <td class="table-number ${profitCls}" data-admin-only>${v2Esc(margin)}</td>
-          <td><span class="${statusClass}">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</span></td>
-          <td><span class="status-badge ${o.payment_status === "paid" ? "status-success" : (o.payment_status === "partial" ? "status-warning" : "status-danger")}">${v2Esc(o.payment_status === "paid" ? "已收款" : (o.payment_status === "partial" ? "部分收款" : "未收款"))}</span></td>
+          <td><div class="order-status-stack"><span class="${statusClass}">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</span><span class="status-badge ${paymentStatus.className}">${v2Esc(paymentStatus.label)}</span><span class="status-badge ${paymentMethod.className}">${v2Esc(paymentMethod.label)}</span></div></td>
           <td><span class="status-badge ${o.delivery_status === "delivered" ? "status-success" : "status-warning"}">${v2Esc(o.delivery_status === "delivered" ? "已交付" : "未交付")}</span></td>
           <td class="nowrap table-secondary">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td>
           <td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td>
@@ -7401,7 +7422,7 @@
       set("orderDeliveryNote", o ? o.delivery_note ?? "" : "");
       set("orderStatus", o ? o.status ?? "negotiating" : "negotiating");
       set("orderQuoteNote", o ? o.quote_note ?? "" : "");
-      applyOrderStatusSelectClass();
+      applyOrderWorkflowSelectClasses();
       renderOrderLineTbody();
       updateOrderTotalsFromLines();
       if (orderLineItems.length) updateOrderTotalsFromLines();
@@ -7437,7 +7458,7 @@
           (hasPendingProcurementCost ? '<div class="muted small" style="margin-top:6px;color:#8a5a00">⚠ 採購成本尚未確認，目前毛利僅為暫估。</div>' : "");
       }
     }
-    function applyOrderStatusSelectClass() {
+    function applyOrderWorkflowSelectClasses() {
       const statusKeys = ["negotiating", "confirmed", "pending", "paid", "shipped", "completed", "refunded"];
       [document.getElementById("orderStatus"), document.getElementById("orderStatusFilter")].forEach((el) => {
         if (!el) return;
@@ -7445,10 +7466,22 @@
         const v = (el.value || "negotiating").trim();
         if (v) el.classList.add("order-status-" + v);
       });
+      const paymentStatusEl = document.getElementById("orderPaymentStatus");
+      if (paymentStatusEl) {
+        ["unpaid", "partial", "paid"].forEach((k) => paymentStatusEl.classList.remove("payment-status-" + k));
+        paymentStatusEl.classList.add("payment-status-" + (paymentStatusEl.value || "unpaid"));
+      }
+      const paymentMethodEl = document.getElementById("orderPayment");
+      if (paymentMethodEl) {
+        ["cash", "transfer", "card"].forEach((k) => paymentMethodEl.classList.remove("payment-method-" + k));
+        paymentMethodEl.classList.add("payment-method-" + (paymentMethodEl.value || "transfer"));
+      }
     }
     ["orderTotalSale", "orderShipping", "orderDiscount", "orderCogs"].forEach((id) => document.getElementById(id)?.addEventListener("input", updateV2OrderGrossDisplay));
-    document.getElementById("orderStatus")?.addEventListener("change", applyOrderStatusSelectClass);
+    document.getElementById("orderStatus")?.addEventListener("change", applyOrderWorkflowSelectClasses);
+    document.getElementById("orderPayment")?.addEventListener("change", applyOrderWorkflowSelectClasses);
     document.getElementById("orderPaymentStatus")?.addEventListener("change", (e) => {
+      applyOrderWorkflowSelectClasses();
       const dateEl = document.getElementById("orderPaymentDate");
       const amountEl = document.getElementById("orderReceivedAmount");
       if (e.target.value === "unpaid") {
