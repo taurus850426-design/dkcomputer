@@ -251,12 +251,20 @@ BEGIN
     RAISE EXCEPTION 'permission denied' USING ERRCODE = '42501';
   END IF;
   SELECT
-    COALESCE(sum(qty_remaining * unit_cost) FILTER (WHERE owner = 'boss'), 0),
-    COALESCE(sum(qty_remaining * unit_cost) FILTER (WHERE owner = 'hala'), 0)
-  INTO v_boss_stock, v_hala_stock FROM public.inventory_funding_lots;
-  SELECT COALESCE(sum((qty - reversed_qty) * unit_cost), 0)
-  INTO v_boss_sold FROM public.inventory_funding_allocations
-  WHERE owner = 'boss' AND repayment_eligible;
+    COALESCE(sum(f.qty_remaining * f.unit_cost) FILTER (WHERE f.owner = 'boss'), 0),
+    COALESCE(sum(f.qty_remaining * f.unit_cost) FILTER (WHERE f.owner = 'hala'), 0)
+  INTO v_boss_stock, v_hala_stock
+  FROM public.inventory_funding_lots f
+  JOIN public.inventory_items i ON i.id = f.item_id
+  WHERE NOT COALESCE(i.exclude_from_inventory_value, false);
+  SELECT COALESCE(sum((a.qty - a.reversed_qty) * a.unit_cost), 0)
+  INTO v_boss_sold
+  FROM public.inventory_funding_allocations a
+  JOIN public.inventory_funding_lots f ON f.id = a.lot_id
+  JOIN public.inventory_items i ON i.id = f.item_id
+  WHERE a.owner = 'boss'
+    AND a.repayment_eligible
+    AND NOT COALESCE(i.exclude_from_inventory_value, false);
   SELECT COALESCE(sum(amount), 0) INTO v_boss_repaid
   FROM public.inventory_funding_repayments WHERE owner = 'boss';
   RETURN pg_catalog.jsonb_build_object(
