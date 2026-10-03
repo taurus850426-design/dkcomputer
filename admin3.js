@@ -6624,6 +6624,7 @@
       const ledgerSearchInp = document.getElementById("ledgerItemIdSearch");
       if (ledgerSearchInp) ledgerSearchInp.value = "";
       document.getElementById("ledgerType").value = "IN";
+      document.getElementById("ledgerFundingOwner").value = "hala";
       document.getElementById("ledgerQty").value = "1";
       document.getElementById("ledgerUnitCost").value = "";
       document.getElementById("ledgerRefType").value = "PURCHASE";
@@ -6633,6 +6634,10 @@
       v2Hide(ledgerMsg);
     });
     document.getElementById("ledgerCancel")?.addEventListener("click", () => { if (ledgerForm) ledgerForm.hidden = true; v2Hide(ledgerMsg); });
+    document.getElementById("ledgerType")?.addEventListener("change", (event) => {
+      const ownerField = document.getElementById("ledgerFundingOwnerField");
+      if (ownerField) ownerField.hidden = event.target.value !== "IN";
+    });
     document.getElementById("ledgerSubmit")?.addEventListener("click", async () => {
       if (!requirePerm("ledger")) return;
       const btn = document.getElementById("ledgerSubmit");
@@ -6644,6 +6649,7 @@
       const refType = document.getElementById("ledgerRefType")?.value || "";
       const refId = document.getElementById("ledgerRefId")?.value || "";
       const note = document.getElementById("ledgerNote")?.value || "";
+      const fundingOwner = document.getElementById("ledgerFundingOwner")?.value || "hala";
       if (!itemId) return v2Show(ledgerMsg, "請選擇品項");
       if (!Number.isFinite(qty) || (type === "IN" && qty <= 0) || (type === "OUT" && qty <= 0)) return v2Show(ledgerMsg, "數量需大於 0");
       if (type === "IN" && unitCost < 0) return v2Show(ledgerMsg, "入庫請填單位成本");
@@ -6660,6 +6666,11 @@
           movement_type: type === "IN" ? "MANUAL_IN" : (type === "OUT" ? "MANUAL_OUT" : undefined),
         });
         if (!result.ok) return v2Show(ledgerMsg, result.error || "失敗");
+        const ledgerId = result.data && (result.data.ledger_id || result.data.id);
+        if (type === "IN" && ledgerId && typeof DK.stage7AssignInboundFunding === "function") {
+          const funding = await DK.stage7AssignInboundFunding(ledgerId, fundingOwner);
+          if (!funding.ok) return v2Show(ledgerMsg, "已入庫，但出資來源登記失敗：" + (funding.error || "請稍後重試"));
+        }
         v2Show(ledgerMsg, "已寫入流水並更新品項");
         showSyncToast({ ok: true }, "流水帳");
         renderV2Ledger();
@@ -7241,6 +7252,16 @@
         const statusClass = orderStatusBadgeClass(statusKey) + " status-pill";
         const paymentStatus = orderPaymentStatusMeta(o.payment_status);
         const paymentMethod = orderPaymentMethodMeta(o.payment_method);
+        const canQuickComplete = statusKey !== "completed" && statusKey !== "refunded";
+        const statusTag = canQuickComplete
+          ? `<button type="button" class="${statusClass} order-quick-status-btn" data-order-quick="complete" data-id="${v2Esc(o.id)}" title="點一下改為已完成">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</button>`
+          : `<span class="${statusClass}">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</span>`;
+        const paymentTag = o.payment_status !== "paid"
+          ? `<button type="button" class="status-badge ${paymentStatus.className} order-quick-status-btn" data-order-quick="payment" data-id="${v2Esc(o.id)}" title="點一下改為已收款">${v2Esc(paymentStatus.label)}</button>`
+          : `<span class="status-badge ${paymentStatus.className}">${v2Esc(paymentStatus.label)}</span>`;
+        const deliveryTag = o.delivery_status !== "delivered"
+          ? `<button type="button" class="status-badge status-warning order-quick-status-btn" data-order-quick="delivery" data-id="${v2Esc(o.id)}" title="點一下改為已交付">未交付</button>`
+          : `<span class="status-badge status-success">已交付</span>`;
         const profitCls = profitNumberClass(o.gross_profit);
         return `<tr>
           <td class="nowrap table-primary">${v2Esc(o.order_no)}</td>
@@ -7256,8 +7277,8 @@
             </div>
           </td>
           <td class="table-number ${profitCls}" data-admin-only>${v2Esc(margin)}</td>
-          <td><div class="order-status-stack"><span class="${statusClass}">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</span><span class="status-badge ${paymentStatus.className}">${v2Esc(paymentStatus.label)}</span><span class="status-badge ${paymentMethod.className}">${v2Esc(paymentMethod.label)}</span></div></td>
-          <td><span class="status-badge ${o.delivery_status === "delivered" ? "status-success" : "status-warning"}">${v2Esc(o.delivery_status === "delivered" ? "已交付" : "未交付")}</span></td>
+          <td><div class="order-status-stack">${statusTag}${paymentTag}<span class="status-badge ${paymentMethod.className}">${v2Esc(paymentMethod.label)}</span></div></td>
+          <td>${deliveryTag}</td>
           <td class="nowrap table-secondary">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td>
           <td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td>
         </tr>`;
@@ -7281,6 +7302,76 @@
         pager.innerHTML = html;
       }
     }
+
+    async function refreshOrdersAfterQuickUpdate() {
+      if (typeof window.fetchV2DataFromSupabase === "function") await window.fetchV2DataFromSupabase();
+      else if (typeof DK.fetchV2DataFromSupabase === "function") await DK.fetchV2DataFromSupabase();
+      renderV2Orders();
+      renderV2Items();
+      renderV2Reports();
+    }
+
+    async function quickCompleteOrderState(orderId, action, button) {
+      if (!requirePerm("orders")) return;
+      const order = (DK.getOrders ? DK.getOrders().map(DK.enrichOrder) : [])
+        .find((item) => String(item.id) === String(orderId));
+      if (!order) return showCenterToast("找不到訂單，請重新整理後再試", "error");
+      if (button?.dataset.saving === "1") return;
+      const row = button?.closest("tr");
+      const rowButtons = row ? Array.from(row.querySelectorAll(".order-quick-status-btn")) : [];
+      rowButtons.forEach((item) => { item.disabled = true; });
+      if (button) button.dataset.saving = "1";
+      try {
+        let res;
+        let successMessage = "訂單已更新";
+        const today = (DK.todayStr && DK.todayStr()) || new Date().toISOString().slice(0, 10);
+        if (action === "payment") {
+          if (typeof DK.setOrderOperations !== "function") throw new Error("收款寫入功能尚未載入");
+          const amountDue = Math.max(0, (Number(order.total_sale) || 0) + (Number(order.shipping_income) || 0) - (Number(order.discount) || 0));
+          res = await DK.setOrderOperations({
+            ...order,
+            order_id: order.id,
+            payment_status: "paid",
+            received_amount: amountDue,
+            payment_date: today,
+          });
+          successMessage = "已改為已收款";
+        } else if (action === "delivery") {
+          if (typeof DK.setOrderOperations !== "function") throw new Error("交貨寫入功能尚未載入");
+          res = await DK.setOrderOperations({
+            ...order,
+            order_id: order.id,
+            delivery_status: "delivered",
+            delivered_at: today,
+          });
+          successMessage = "已改為已交付";
+        } else if (action === "complete") {
+          if (String(order.delivery_status || "pending") !== "delivered") {
+            throw new Error("請先點『未交付』改成已交付，再將訂單改為已完成");
+          }
+          if (typeof DK.updateOrder !== "function") throw new Error("訂單寫入功能尚未載入");
+          res = await DK.updateOrder({ ...order, id: order.id, status: "completed" });
+          successMessage = "訂單已改為已完成";
+        } else {
+          throw new Error("不支援的快速操作");
+        }
+        if (!res || !res.ok) throw new Error((res && res.error) || "更新失敗");
+        await refreshOrdersAfterQuickUpdate();
+        auditAction("快速更新訂單", order.id);
+        showCenterToast(successMessage, "success");
+      } catch (error) {
+        showCenterToast(String(error?.message || error || "更新失敗"), "error");
+      } finally {
+        if (button) button.dataset.saving = "";
+        rowButtons.forEach((item) => { item.disabled = false; });
+      }
+    }
+
+    ordersTbody?.addEventListener("click", (event) => {
+      const button = event.target?.closest?.(".order-quick-status-btn");
+      if (!button) return;
+      quickCompleteOrderState(button.getAttribute("data-id"), button.getAttribute("data-order-quick"), button);
+    });
     orderSearchEl?.addEventListener("input", () => { ordersPage = 1; renderV2Orders(); });
     orderSearchEl?.addEventListener("search", () => { ordersPage = 1; renderV2Orders(); });
     orderDateRangeEl?.addEventListener("change", () => { ordersPage = 1; renderV2Orders(); });
@@ -7794,6 +7885,7 @@
       document.getElementById("restockQty").value = "1";
       document.getElementById("restockUnitCost").value = "";
       document.getElementById("restockInboundDate").value = todayStr();
+      document.getElementById("restockFundingOwner").value = "hala";
       if (restockForm) restockForm.hidden = false;
       v2Hide(restockMsg);
     });
@@ -7806,6 +7898,7 @@
       let unitCost = parseFloat(document.getElementById("restockUnitCost")?.value) || 0;
       if (!canPerm("viewCost")) unitCost = undefined;
       const inboundDate = document.getElementById("restockInboundDate")?.value || "";
+      const fundingOwner = document.getElementById("restockFundingOwner")?.value || "hala";
       if (!itemId) return v2Show(restockMsg, "請選擇品項");
       if (!Number.isFinite(qty) || qty <= 0) return v2Show(restockMsg, "數量需大於 0");
       if (canPerm("viewCost") && unitCost < 0) return v2Show(restockMsg, "請填單位成本");
@@ -7823,6 +7916,11 @@
           movement_type: "MANUAL_IN",
         });
         if (!result.ok) return v2Show(restockMsg, result.error || "入庫失敗");
+        const ledgerId = result.data && (result.data.ledger_id || result.data.id);
+        if (ledgerId && typeof DK.stage7AssignInboundFunding === "function") {
+          const funding = await DK.stage7AssignInboundFunding(ledgerId, fundingOwner);
+          if (!funding.ok) return v2Show(restockMsg, "已入庫，但出資來源登記失敗：" + (funding.error || "請稍後重試"));
+        }
         auditAction("補貨", itemId);
         v2Show(restockMsg, "已入庫，入庫日已更新");
         showSyncToast({ ok: true }, "補貨");
@@ -8551,8 +8649,12 @@
       const inboundPromise = (typeof window.stage7InboundAmount === "function")
         ? window.stage7InboundAmount(params.fromStr, params.toStr)
         : Promise.resolve(null);
+      const fundingPromise = (typeof DK.stage7InventoryFundingSummary === "function")
+        ? DK.stage7InventoryFundingSummary()
+        : Promise.resolve(null);
       let profit = await loadReportProfit(params, live);
       const inboundRes = await inboundPromise;
+      const fundingRes = await fundingPromise;
       if (gen !== reportsRenderGen) return;
 
       const isMonth = !!(params.periodMonth);
@@ -8563,7 +8665,6 @@
       const opsOpex = isMonth ? profit.operatingExpense : numProfit(live.operatingExpenseTotal);
       const opsDist = isMonth ? profit.distributable : numProfit(live.distributableProfit);
       const opsCogs = isMonth ? profit.cogsExpense : numProfit(live.cogsExpenseTotal);
-      const shareTag = isSettled ? "已結算" : (isYear ? "各月份加總" : "預估 / Preview");
       lastReportProfitView = {
         params,
         live,
@@ -8631,9 +8732,6 @@
         if (settleBtn) settleBtn.hidden = true;
       }
 
-      const share35 = isMonth || isYear ? profit.share35 : numProfit(live.share35);
-      const share40 = isMonth || isYear ? profit.share40 : numProfit(live.share40);
-      const company = isMonth || isYear ? profit.company : numProfit(live.companyRetained);
       const invVal = numProfit(profit.inventoryValue != null ? profit.inventoryValue : live.inventoryValue);
       const inboundData = inboundRes && inboundRes.ok && inboundRes.data ? inboundRes.data : null;
       const inboundCoverage = inboundData && inboundData.coverage ? String(inboundData.coverage) : "";
@@ -8654,6 +8752,7 @@
       };
       const elShare = document.getElementById("reportShareKpiGrid");
       if (elShare) {
+        const fs = fundingRes && fundingRes.ok && fundingRes.data ? fundingRes.data : {};
         elShare.innerHTML =
           kpiCard("surface-info", "📥", "入庫金額",
             inboundValueHtml,
@@ -8661,18 +8760,18 @@
           kpiCard("surface-neutral", "📦", "目前庫存總成本",
             '<span class="neutral-number">NT$ ' + v2FmtNum(invVal) + "</span>",
             "目前庫存資產成本（非該月月底快照）") +
-          kpiCard("surface-info", "35", "35% 分潤",
-            '<span class="neutral-number">NT$ ' + v2FmtNum(share35) + "</span>",
-            shareTag) +
-          kpiCard("surface-info", "40", "40% 分潤",
-            '<span class="neutral-number">NT$ ' + v2FmtNum(share40) + "</span>",
-            shareTag) +
-          kpiCard("surface-purple", "25", "公司留存 25%",
-            '<span class="neutral-number">NT$ ' + v2FmtNum(company) + "</span>",
-            shareTag) +
-          kpiCard("surface-success", "🏦", "公司累積留存",
-            '<span class="neutral-number">NT$ ' + v2FmtNum(profit.cumulative) + "</span>",
-            "已結算月份公司 25% 累計（不是銀行餘額）");
+          kpiCard("surface-warning", "🅱️", "BOSS 庫存成本",
+            '<span class="neutral-number">NT$ ' + v2FmtNum(numProfit(fs.boss_inventory_cost)) + "</span>",
+            "舊庫存與選擇 BOSS 出資的剩餘本金") +
+          kpiCard("surface-info", "🅷", "HALA 庫存成本",
+            '<span class="neutral-number">NT$ ' + v2FmtNum(numProfit(fs.hala_inventory_cost)) + "</span>",
+            "未來進貨預設歸 HALA") +
+          kpiCard("surface-danger", "⏳", "BOSS 待返還本金",
+            '<span class="neutral-number">NT$ ' + v2FmtNum(numProfit(fs.boss_pending_principal)) + "</span>",
+            "已售 BOSS 庫存本金 − 已返還") +
+          kpiCard("surface-success", "✅", "BOSS 已返還本金",
+            '<span class="neutral-number">NT$ ' + v2FmtNum(numProfit(fs.boss_repaid_principal)) + "</span>",
+            "只記本金返還，不重複列為營業支出");
       }
 
       const elResult = document.getElementById("reportQueryResult");
@@ -8715,6 +8814,31 @@
     reportMonthYearEl?.addEventListener("change", renderV2Reports);
     reportMonthMonthEl?.addEventListener("change", renderV2Reports);
     reportYearYearEl?.addEventListener("change", renderV2Reports);
+
+    const bossRepaymentDate = document.getElementById("bossRepaymentDate");
+    if (bossRepaymentDate && !bossRepaymentDate.value) bossRepaymentDate.value = todayStr();
+    document.getElementById("bossRepaymentSubmit")?.addEventListener("click", async () => {
+      if (!requirePerm("reports")) return;
+      const btn = document.getElementById("bossRepaymentSubmit");
+      const msg = document.getElementById("bossRepaymentMsg");
+      if (btn && btn.dataset.saving === "1") return;
+      const amount = Number(document.getElementById("bossRepaymentAmount")?.value || 0);
+      const paidAt = document.getElementById("bossRepaymentDate")?.value || todayStr();
+      const note = document.getElementById("bossRepaymentNote")?.value || "";
+      if (!Number.isFinite(amount) || amount <= 0) return v2Show(msg, "請輸入正確的返還金額");
+      if (typeof DK.stage7RecordBossRepayment !== "function") return v2Show(msg, "本金返還功能尚未就緒");
+      if (btn) btn.dataset.saving = "1";
+      try {
+        const result = await DK.stage7RecordBossRepayment(amount, paidAt, note);
+        if (!result.ok) return v2Show(msg, result.error || "登記失敗");
+        document.getElementById("bossRepaymentAmount").value = "";
+        document.getElementById("bossRepaymentNote").value = "";
+        v2Show(msg, "已登記 BOSS 本金返還");
+        await renderV2Reports();
+      } finally {
+        if (btn) btn.dataset.saving = "";
+      }
+    });
 
     document.getElementById("btnSettleMonth")?.addEventListener("click", async () => {
       if (settleInFlight) return;
@@ -8762,9 +8886,6 @@
       const opsOpex = isMonth ? profit.operatingExpense : numProfit(live.operatingExpenseTotal);
       const opsDist = isMonth ? profit.distributable : numProfit(live.distributableProfit);
       const opsCogs = isMonth ? profit.cogsExpense : numProfit(live.cogsExpenseTotal);
-      const share35 = (isMonth || params.period === "customYear") ? profit.share35 : numProfit(live.share35);
-      const share40 = (isMonth || params.period === "customYear") ? profit.share40 : numProfit(live.share40);
-      const company = (isMonth || params.period === "customYear") ? profit.company : numProfit(live.companyRetained);
       const settleStatus = profit.alreadySettled ? "已結算" : (params.period === "customYear" ? "年度加總" : "預估");
       const orders = (DK.getOrdersInDateRange && DK.getOrdersInDateRange(params.fromStr, params.toStr)) || [];
       const enrichedOrders = orders.map((o) => DK.enrichOrder(o));
@@ -8785,7 +8906,7 @@
       const headers = [
         "報表類型", "期間", "營業額", "訂單毛利合計", "訂單筆數",
         "營業支出（OPEX+OTHER）", "COGS支出（不納入分潤）", "可分配淨利",
-        "35%", "40%", "公司25%", "結算狀態", "結算時間", "目前庫存總成本", "公司累積留存",
+        "結算狀態", "結算時間", "目前庫存總成本",
         "入庫金額", "入庫追蹤起始日", "入庫統計說明",
       ];
       const rows = [[
@@ -8797,13 +8918,9 @@
         opsOpex,
         opsCogs,
         opsDist,
-        share35,
-        share40,
-        company,
         settleStatus,
         profit.settledAt || "",
         numProfit(profit.inventoryValue != null ? profit.inventoryValue : live.inventoryValue),
-        numProfit(profit.cumulative),
         inboundAmountOut,
         inboundStart,
         inboundNote,
