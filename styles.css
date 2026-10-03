@@ -6632,6 +6632,38 @@ body.admin-page .order-gross-preview{
   font-size: 15px;
   font-weight: 600;
 }
+body.admin-page .order-status-cluster{
+  padding: 14px;
+  border: 1px solid rgba(29,78,216,0.14);
+  border-radius: 14px;
+  background: rgba(29,78,216,0.035);
+}
+body.admin-page .order-status-cluster__title{
+  margin-bottom: 10px;
+  color: var(--dk-text);
+  font-size: 14px;
+  font-weight: 800;
+}
+body.admin-page .order-status-cluster__grid{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+body.admin-page .order-status-stack{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 150px;
+}
+body.admin-page #orderPaymentStatus.payment-status-unpaid{ background: var(--dk-danger-soft); color: var(--dk-danger); border-color: rgba(220,38,38,.28); }
+body.admin-page #orderPaymentStatus.payment-status-partial{ background: var(--dk-orange-soft); color: var(--dk-orange); border-color: rgba(234,88,12,.28); }
+body.admin-page #orderPaymentStatus.payment-status-paid{ background: var(--dk-success-soft); color: var(--dk-success); border-color: rgba(22,163,74,.28); }
+body.admin-page #orderPayment.payment-method-cash{ background: var(--dk-success-soft); color: var(--dk-success); border-color: rgba(22,163,74,.28); }
+body.admin-page #orderPayment.payment-method-transfer{ background: var(--dk-info-soft); color: var(--dk-info); border-color: rgba(37,99,235,.28); }
+body.admin-page #orderPayment.payment-method-card{ background: var(--dk-purple-soft); color: var(--dk-purple); border-color: rgba(124,58,237,.28); }
+@media (max-width: 720px){
+  body.admin-page .order-status-cluster__grid{ grid-template-columns: 1fr; }
+}
 
 /* Stage 24 | Compact monthly order analysis */
 body.admin-page .order-monthly-analysis{
