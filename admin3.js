@@ -2886,7 +2886,7 @@
             return window.DK.getInventoryCategories() || [];
           }
         } catch (_) {}
-        return ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "螢幕", "鍵盤", "滑鼠", "耳機", "周邊", "其他"];
+        return ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "散熱", "水冷", "螢幕", "鍵盤", "滑鼠", "耳機", "周邊", "其他"];
       },
     };
   } catch (_) {}
@@ -2937,7 +2937,7 @@
     if (!sel) return;
     const cats = DK.getInventoryCategories
       ? DK.getInventoryCategories()
-      : ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "螢幕", "鍵盤", "滑鼠", "耳機", "周邊", "其他"];
+      : ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "散熱", "水冷", "螢幕", "鍵盤", "滑鼠", "耳機", "周邊", "其他"];
     const cur = String(currentValue != null ? currentValue : (sel.value || "")).trim();
     const opts = ['<option value="">請選擇品類</option>'].concat(
       cats.map((c) => `<option value="${vqEsc(c)}">${vqEsc(c)}</option>`),
@@ -5688,7 +5688,7 @@
     }
 
     function fillV2CategoryOptions() {
-      const cats = DK.getInventoryCategories ? DK.getInventoryCategories() : ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "螢幕", "鍵盤", "滑鼠", "耳機", "周邊", "其他"];
+      const cats = DK.getInventoryCategories ? DK.getInventoryCategories() : ["處理器", "主機板", "記憶體", "硬碟", "顯示卡", "電源供應器", "機殼", "散熱", "水冷", "螢幕", "鍵盤", "滑鼠", "耳機", "周邊", "其他"];
       if (itemsCategory) {
         itemsCategory.innerHTML = "<option value=\"\">全部品類</option>" + cats.map((c) => "<option value=\"" + v2Esc(c) + "\">" + v2Esc(c) + "</option>").join("");
       }
