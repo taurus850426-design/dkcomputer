@@ -1,0 +1,31 @@
+name: Apply reconciliation candidate fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 0001-fix-hide-reconciled-purchase-orders-from-candidates.patch
+      - .github/workflows/apply-reconciliation-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply and verify fix
+        run: |
+          git apply 0001-fix-hide-reconciled-purchase-orders-from-candidates.patch
+          node --check admin3.js
+          node --check shared.js
+          rm 0001-fix-hide-reconciled-purchase-orders-from-candidates.patch
+          rm .github/workflows/apply-reconciliation-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add admin3.js shared.js 0001-fix-hide-reconciled-purchase-orders-from-candidates.patch .github/workflows/apply-reconciliation-fix.yml
+          git commit -m "fix: hide reconciled purchase orders from candidates"
+          git push
