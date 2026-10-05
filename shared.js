@@ -1590,6 +1590,13 @@ async function stage7InventoryFundingSummary() {
   return stage7Rpc("backoffice_inventory_funding_summary", {});
 }
 
+async function stage7InventoryItemFunding(itemId, owner) {
+  return stage7Rpc("backoffice_inventory_item_funding", {
+    p_item_id: String(itemId || ""),
+    p_owner: owner === "boss" || owner === "hala" ? owner : null,
+  });
+}
+
 async function stage7RecordBossRepayment(amount, paidAt, note) {
   return stage7Rpc("backoffice_record_boss_repayment", {
     p_amount: Number(amount) || 0,
@@ -2100,6 +2107,7 @@ if (typeof window !== "undefined") {
   window.stage7CorrectInbound = stage7CorrectInbound;
   window.stage7CorrectInboundCost = stage7CorrectInboundCost;
   window.stage7ConfirmInboundCost = stage7ConfirmInboundCost;
+  window.stage7InventoryItemFunding = stage7InventoryItemFunding;
   window.dkNewInboundRequestId = dkNewInboundRequestId;
 }
 
@@ -5581,6 +5589,7 @@ window.DK = {
   stage7InboundAmount,
   stage7AssignInboundFunding,
   stage7InventoryFundingSummary,
+  stage7InventoryItemFunding,
   stage7RecordBossRepayment,
   stage7CorrectInbound,
   stage7CorrectInboundCost,

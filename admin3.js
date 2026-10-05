@@ -5273,6 +5273,7 @@
     const itemEditor = document.getElementById("itemEditor");
     const itemMsg = getItemEditorField("itemMsg");
     let editingV2ItemId = null;
+    let editingV2FundingLoaded = false;
     /** Stage 12：補貨群組快取（不自動建立正式群組） */
     let replenishmentGroupsCache = [];
     let replenishmentAlertsCache = [];
@@ -5955,8 +5956,33 @@
       set("itemQty", item ? item.qty_on_hand : 0);
       set("itemCost", item ? item.cost_unit : (preset.cost != null ? preset.cost : 0));
       set("itemFundingOwner", "hala");
+      const canEditFunding = !!(window.stage7IsAdminRole && window.stage7IsAdminRole());
+      editingV2FundingLoaded = canEditFunding && !item;
       const fundingOwnerField = document.getElementById("itemFundingOwnerField");
-      if (fundingOwnerField) fundingOwnerField.hidden = !!item;
+      const fundingOwnerSelect = getItemEditorField("itemFundingOwner");
+      const fundingOwnerHint = document.getElementById("itemFundingOwnerHint");
+      if (fundingOwnerField) fundingOwnerField.hidden = !canEditFunding;
+      if (fundingOwnerSelect) fundingOwnerSelect.disabled = !canEditFunding || !!item;
+      if (fundingOwnerHint) fundingOwnerHint.textContent = item
+        ? "正在讀取目前剩餘庫存的出資方…"
+        : "新增品項預設 HALA。";
+      if (item && canEditFunding && typeof DK.stage7InventoryItemFunding === "function") {
+        const loadingItemId = String(item.id || "");
+        DK.stage7InventoryItemFunding(loadingItemId, null).then(function (res) {
+          if (String(editingV2ItemId || "") !== loadingItemId) return;
+          const info = res && res.ok && res.data ? res.data : {};
+          const owner = info.owner === "boss" || info.owner === "mixed" ? info.owner : "hala";
+          set("itemFundingOwner", owner);
+          editingV2FundingLoaded = !!(res && res.ok);
+          if (fundingOwnerSelect) fundingOwnerSelect.disabled = !editingV2FundingLoaded;
+          if (fundingOwnerHint) fundingOwnerHint.textContent = owner === "mixed"
+            ? "目前剩餘庫存同時包含 HALA 與 BOSS；選擇其中一方並儲存，可統一目前剩餘庫存的出資方。"
+            : "目前剩餘庫存出資方：" + owner.toUpperCase() + "。";
+        }).catch(function () {
+          if (String(editingV2ItemId || "") !== loadingItemId) return;
+          if (fundingOwnerHint) fundingOwnerHint.textContent = "目前無法讀取出資方；本次儲存不會變更出資來源。";
+        });
+      }
       set("itemPriceList", item ? item.price_list ?? "" : "");
       set("itemPriceFloor", item ? item.price_floor ?? "" : "");
       set("itemInboundDate", item && item.inbound_date ? item.inbound_date.slice(0, 10) : todayStr());
@@ -6393,10 +6419,20 @@
         const prevQty = items[idx].qty_on_hand;
         items[idx] = { ...items[idx], ...payload };
         if (typeof DK.applyQtyArchiveState === "function") DK.applyQtyArchiveState(items[idx], prevQty, payload.qty_on_hand);
-        const syncP = DK.saveItems(items);
-        v2Show(itemMsg, "已更新");
+        const saved = await DK.saveItems(items);
+        if (!saved || !saved.ok) return v2Show(itemMsg, (saved && saved.error) || "品項更新失敗");
+        if (window.stage7IsAdminRole && window.stage7IsAdminRole() && typeof DK.stage7InventoryItemFunding === "function") {
+          const ownerToSave = editingV2FundingLoaded && (fundingOwner === "boss" || fundingOwner === "hala")
+            ? fundingOwner
+            : null;
+          const funding = await DK.stage7InventoryItemFunding(editingV2ItemId, ownerToSave);
+          if (!funding || !funding.ok) {
+            return v2Show(itemMsg, "品項已更新，但出資成本同步失敗：" + ((funding && funding.error) || "請稍後重試"));
+          }
+        }
+        v2Show(itemMsg, "已更新，HALA／BOSS 庫存成本已同步");
         auditAction("編輯庫存", editingV2ItemId);
-        afterSaveSync(syncP, "品項");
+        afterSaveSync(Promise.resolve(saved), "品項");
       } else {
         if (saveBtn) saveBtn.dataset.saving = "1";
         payload.id = "i-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9);
