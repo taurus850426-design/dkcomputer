@@ -5930,7 +5930,7 @@
       const nameSpec = item ? ((item.name === item.spec || !String(item.spec || "").trim()) ? (item.name || item.spec || "") : [item.name, item.spec].filter(Boolean).join(" ").trim()) : (preset.name != null ? String(preset.name) : "");
       set("itemName", nameSpec);
       renderVendorSelect(item ? (item.vendor ?? "") : (preset.vendor ?? ""));
-      set("itemCondition", item ? item.condition : "USED");
+      set("itemCondition", item ? item.condition : "NEW");
       set("itemStatus", item ? item.status : "READY");
       set("itemQty", item ? item.qty_on_hand : 0);
       set("itemCost", item ? item.cost_unit : (preset.cost != null ? preset.cost : 0));
@@ -6039,15 +6039,45 @@
     })();
     document.getElementById("itemCancel")?.addEventListener("click", closeV2ItemEditor);
     /* 不再點空白關閉：僅能按「取消」或「關閉」按鈕關閉，避免誤觸流失資料 */
-    document.getElementById("itemDelete")?.addEventListener("click", () => {
+    document.getElementById("itemDelete")?.addEventListener("click", async () => {
       if (!requirePerm("deleteItem")) return;
       if (!editingV2ItemId) return;
       if (!confirm("確定要刪除此品項？刪除後無法復原。")) return;
-      const items = DK.getItems().filter((x) => x.id !== editingV2ItemId);
-      DK.saveItems(items);
-      v2Show(itemMsg, "已刪除");
-      renderV2Items();
-      setTimeout(closeV2ItemEditor, 500);
+      const deleteBtn = document.getElementById("itemDelete");
+      if (deleteBtn?.dataset.saving === "1") return;
+      if (deleteBtn) {
+        deleteBtn.dataset.saving = "1";
+        deleteBtn.disabled = true;
+      }
+      const deletingId = editingV2ItemId;
+      try {
+        const items = DK.getItems().filter((x) => x.id !== deletingId);
+        const result = await DK.saveItems(items);
+        if (!result || !result.ok) {
+          if (typeof DK.fetchV2DataFromSupabase === "function") await DK.fetchV2DataFromSupabase();
+          renderV2Items();
+          const reason = (result && result.error) || "正式資料刪除失敗";
+          v2Show(itemMsg, "刪除失敗：" + reason);
+          showCenterToast("刪除失敗，正式資料仍保留：" + reason, "error");
+          return;
+        }
+        if (typeof DK.fetchV2DataFromSupabase === "function") await DK.fetchV2DataFromSupabase();
+        if (DK.findItemById(deletingId)) {
+          renderV2Items();
+          v2Show(itemMsg, "刪除未完成：Supabase 仍有這筆品項");
+          showCenterToast("刪除未完成，正式資料仍保留", "error");
+          return;
+        }
+        renderV2Items();
+        v2Show(itemMsg, "已從正式資料刪除");
+        showCenterToast("品項已從正式資料刪除", "success");
+        setTimeout(closeV2ItemEditor, 500);
+      } finally {
+        if (deleteBtn) {
+          deleteBtn.dataset.saving = "";
+          deleteBtn.disabled = false;
+        }
+      }
     });
 
     function setItemScanStatus(text) {
@@ -6557,7 +6587,7 @@
     itemsSearch?.addEventListener("input", () => { itemsPage = 1; renderV2Items(); });
     itemsCategory?.addEventListener("change", () => { itemsPage = 1; renderV2Items(); });
     itemsStatus?.addEventListener("change", () => { itemsStatusTouchedByUser = true; itemsPage = 1; renderV2Items(); });
-    document.getElementById("btnDeleteSelectedItems")?.addEventListener("click", () => {
+    document.getElementById("btnDeleteSelectedItems")?.addEventListener("click", async () => {
       if (!requirePerm("deleteItem")) return;
       const checked = document.querySelectorAll("#itemsTbody .item-row-cb:checked");
       const ids = Array.from(checked).map((cb) => cb.getAttribute("data-id")).filter(Boolean);
@@ -6566,10 +6596,34 @@
         return;
       }
       if (!confirm("確定要刪除所選的 " + ids.length + " 筆品項？刪除後無法復原。")) return;
-      const items = DK.getItems().filter((x) => !ids.includes(x.id));
-      const syncP = DK.saveItems(items);
-      renderV2Items();
-      if (syncP) syncP.then((r) => showSyncToast(r, "品項刪除"));
+      const deleteBtn = document.getElementById("btnDeleteSelectedItems");
+      if (deleteBtn?.dataset.saving === "1") return;
+      if (deleteBtn) {
+        deleteBtn.dataset.saving = "1";
+        deleteBtn.disabled = true;
+      }
+      try {
+        const items = DK.getItems().filter((x) => !ids.includes(x.id));
+        const result = await DK.saveItems(items);
+        if (typeof DK.fetchV2DataFromSupabase === "function") await DK.fetchV2DataFromSupabase();
+        renderV2Items();
+        if (!result || !result.ok) {
+          const reason = (result && result.error) || "正式資料刪除失敗";
+          showCenterToast("部分或全部刪除失敗，已重新載入正式資料：" + reason, "error");
+          return;
+        }
+        const remaining = ids.filter((id) => DK.findItemById(id));
+        if (remaining.length) {
+          showCenterToast("有 " + remaining.length + " 筆未從正式資料刪除，已重新顯示", "error");
+          return;
+        }
+        showCenterToast("已從正式資料刪除 " + ids.length + " 筆品項", "success");
+      } finally {
+        if (deleteBtn) {
+          deleteBtn.dataset.saving = "";
+          deleteBtn.disabled = false;
+        }
+      }
     });
     document.getElementById("itemsSelectAll")?.addEventListener("change", function () {
       itemsTbody?.querySelectorAll(".item-row-cb").forEach((cb) => { cb.checked = this.checked; });
@@ -9032,6 +9086,42 @@
       const name = (active && active.getAttribute("data-v2")) || "items";
       switchV2Tab(name);
     };
+    if (!window.__dkCloudAutoSyncInitialized) {
+      window.__dkCloudAutoSyncInitialized = true;
+      let cloudSyncRunning = false;
+      let lastCloudSyncAt = 0;
+      const AUTO_SYNC_MIN_GAP_MS = 5000;
+      const AUTO_SYNC_INTERVAL_MS = 30000;
+      const syncCloudData = async function (reason) {
+        if (cloudSyncRunning || document.hidden) return;
+        if (!window.DK?.isAdminAuthed?.()) return;
+        if (document.querySelector('[data-saving="1"]')) return;
+        const now = Date.now();
+        if (reason !== "interval" && now - lastCloudSyncAt < AUTO_SYNC_MIN_GAP_MS) return;
+        const fetcher = window.DK?.fetchV2DataFromSupabase || window.fetchV2DataFromSupabase;
+        if (typeof fetcher !== "function") return;
+        cloudSyncRunning = true;
+        try {
+          const result = await fetcher();
+          if (result && typeof result === "object") {
+            lastCloudSyncAt = Date.now();
+            if (typeof window.__adminV2Refresh === "function") window.__adminV2Refresh();
+            try { window.dispatchEvent(new CustomEvent("dk:v2-cloud-refreshed", { detail: { reason } })); } catch (_) {}
+          }
+        } finally {
+          cloudSyncRunning = false;
+        }
+      };
+      window.addEventListener("focus", () => syncCloudData("focus"));
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) syncCloudData("visible");
+      });
+      window.addEventListener("online", () => syncCloudData("online"));
+      window.addEventListener("dk:v2-sync-failed", () => {
+        if (typeof window.__adminV2Refresh === "function") window.__adminV2Refresh();
+      });
+      window.setInterval(() => syncCloudData("interval"), AUTO_SYNC_INTERVAL_MS);
+    }
     fillV2CategoryOptions();
     fillReportPeriodOptions();
     var activeV2 = document.querySelector(".v2-tab.active");

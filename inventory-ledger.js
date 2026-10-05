@@ -64,11 +64,25 @@
     return null;
   }
 
-  function saveItems(items) {
+  async function saveItems(items) {
     const prev = load(KEYS.items);
     save(KEYS.items, items);
-    if (global._suppressV2Sync) return Promise.resolve({ ok: true, skipped: true });
-    return persistItemsSnapshot(items, prev);
+    if (global._suppressV2Sync) return { ok: true, skipped: true };
+    try {
+      const result = await persistItemsSnapshot(items, prev);
+      if (!result || !result.ok) {
+        save(KEYS.items, prev);
+        await refreshFromCloud();
+        try { global.dispatchEvent(new CustomEvent("dk:v2-sync-failed", { detail: { scope: "items", error: result && result.error } })); } catch (_) {}
+      }
+      return result || { ok: false, error: "庫存同步失敗" };
+    } catch (error) {
+      save(KEYS.items, prev);
+      await refreshFromCloud();
+      const message = String(error && error.message ? error.message : error || "庫存同步失敗");
+      try { global.dispatchEvent(new CustomEvent("dk:v2-sync-failed", { detail: { scope: "items", error: message } })); } catch (_) {}
+      return { ok: false, error: message };
+    }
   }
 
   async function persistItemsSnapshot(items, prevItems) {
@@ -388,11 +402,25 @@
     return load(KEYS.orders);
   }
 
-  function saveOrders(orders) {
+  async function saveOrders(orders) {
     const prev = load(KEYS.orders);
     save(KEYS.orders, orders);
-    if (global._suppressV2Sync) return Promise.resolve({ ok: true, skipped: true });
-    return persistOrdersSnapshot(orders, prev);
+    if (global._suppressV2Sync) return { ok: true, skipped: true };
+    try {
+      const result = await persistOrdersSnapshot(orders, prev);
+      if (!result || !result.ok) {
+        save(KEYS.orders, prev);
+        await refreshFromCloud();
+        try { global.dispatchEvent(new CustomEvent("dk:v2-sync-failed", { detail: { scope: "orders", error: result && result.error } })); } catch (_) {}
+      }
+      return result || { ok: false, error: "訂單同步失敗" };
+    } catch (error) {
+      save(KEYS.orders, prev);
+      await refreshFromCloud();
+      const message = String(error && error.message ? error.message : error || "訂單同步失敗");
+      try { global.dispatchEvent(new CustomEvent("dk:v2-sync-failed", { detail: { scope: "orders", error: message } })); } catch (_) {}
+      return { ok: false, error: message };
+    }
   }
 
   async function persistOrdersSnapshot(orders, prevOrders) {

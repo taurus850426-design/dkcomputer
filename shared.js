@@ -1524,7 +1524,26 @@ async function stage7DeleteItem(id) {
   if (!stage7IsAdminRole()) {
     return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
   }
-  return stage7RestJson(`inventory_items?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
+  const res = await stage7RestJson(`inventory_items?id=eq.${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    prefer: "return=representation",
+  });
+  if (!res || !res.ok) {
+    const raw = String((res && res.error) || "刪除失敗");
+    if (/foreign key|still referenced|violates.*constraint|23503/i.test(raw)) {
+      return {
+        ...(res || {}),
+        ok: false,
+        error: "此品項已有入庫、訂單或出資紀錄，不能永久刪除；請將數量調整為 0 並保留封存紀錄",
+      };
+    }
+    return res || { ok: false, error: raw };
+  }
+  const deleted = Array.isArray(res.data) ? res.data : [];
+  if (!deleted.some((row) => String(row && row.id) === String(id))) {
+    return { ok: false, error: "Supabase 未刪除這筆品項，請重新整理後再試", data: res.data };
+  }
+  return { ok: true, data: deleted };
 }
 
 async function stage7CreateOrder(payload) {
