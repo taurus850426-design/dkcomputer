@@ -507,6 +507,62 @@
       && item.procurementStatus !== "received";
   }
 
+  function canRemoveItem(order, item) {
+    if (!order || !item || item.procurementStatus === "received") return false;
+    return order.status === "draft" || order.status === "ordered" || order.status === "partial";
+  }
+
+  async function removePurchaseItem(itemId) {
+    if (!currentOrder) return;
+    const idx = (currentOrder.items || []).findIndex(function (it) { return String(it.id) === String(itemId); });
+    if (idx < 0) return showMsg("找不到要取消的叫貨品項", 3000);
+    const item = currentOrder.items[idx];
+    if (!canRemoveItem(currentOrder, item)) {
+      return showMsg(item.procurementStatus === "received"
+        ? "此品項已登記到貨，不能直接刪除；請先處理入庫紀錄"
+        : "目前狀態不能取消此品項", 4000);
+    }
+    const isAlreadyOrdered = currentOrder.status === "ordered" || currentOrder.status === "partial";
+    if (isAlreadyOrdered && !confirm("確定取消這個已叫貨品項？\n\n請同時向廠商確認取消；系統會從叫貨單移除並清除訂單內的舊採購成本。")) return;
+
+    currentOrder.items.splice(idx, 1);
+    currentOrder.updatedAt = new Date().toISOString();
+    const list = loadOrders();
+    const orderIdx = list.findIndex(function (o) { return String(o.id) === String(currentOrder.id); });
+    const copy = normalizeOrder(JSON.parse(JSON.stringify(currentOrder)));
+    if (orderIdx >= 0) list[orderIdx] = copy;
+    else list.push(copy);
+    if (!saveOrders(list)) return;
+    currentOrder = copy;
+
+    let costWarning = "";
+    if (item.sourceSalesOrderId && item.sourceSalesOrderLineKey) {
+      if (typeof window.stage7ClearProcurementCost !== "function") {
+        costWarning = "；訂單舊採購成本尚未清除";
+      } else {
+        const cleared = await window.stage7ClearProcurementCost({
+          order_id: item.sourceSalesOrderId,
+          line_key: item.sourceSalesOrderLineKey,
+        });
+        if (!cleared || !cleared.ok) costWarning = "；訂單舊採購成本清除失敗：" + String((cleared && cleared.error) || "請稍後重試");
+        else {
+          try {
+            if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") await window.DK.fetchV2DataFromSupabase();
+          } catch (_) {}
+        }
+      }
+    }
+
+    renderItems();
+    renderVendorGroups();
+    refreshVisibleQuoteResults();
+    renderList();
+    renderPurchaseOrdersSyncPanel();
+    syncPurchaseOrderToCloud(copy, "已取消叫貨品項並同步雲端" + costWarning);
+    showMsg("已取消「" + (itemSpec(item) || item.requestText || "叫貨品項") + "」" + costWarning, costWarning ? 6000 : 3500);
+    try { window.dispatchEvent(new CustomEvent("dk:purchase-orders-updated")); } catch (_) {}
+  }
+
   function el(id) {
     return document.getElementById(id);
   }
@@ -913,6 +969,7 @@
       const canEdit = isEditable(currentOrder);
       const canQuote = canUpdateQuote(currentOrder);
       const canReceive = canReceiveItem(currentOrder, it);
+      const canRemove = canRemoveItem(currentOrder, it);
       const quoteLabel = currentOrder.status === "draft" ? "比價／新增報價" : "補廠商報價";
       const receiptBadge = it.procurementStatus === "received"
         ? '<div style="margin-top:4px"><span class="badge ok">已到貨・' + esc(it.receiptDestination === "inventory" ? "一般庫存" : "客戶專用") + '</span></div>'
@@ -922,7 +979,7 @@
         (canQuote ? '<button type="button" class="btn btn-primary btn-sm" data-poi-act="quote" data-id="' + esc(it.id) + '">' + quoteLabel + '</button> ' : "") +
         (canReceive ? '<button type="button" class="btn btn-ghost btn-sm secondary-action" data-poi-act="receive" data-id="' + esc(it.id) + '">登記到貨</button> ' : "") +
         (it.procurementStatus === "received" ? '<button type="button" class="btn btn-ghost btn-sm secondary-action" data-poi-act="destination" data-id="' + esc(it.id) + '">修改用途</button> ' : "") +
-        (canEdit ? '<button type="button" class="btn btn-ghost btn-sm" data-poi-act="rm" data-id="' + esc(it.id) + '">移除</button>' : "");
+        (canRemove ? '<button type="button" class="btn btn-ghost btn-sm danger-action" data-poi-act="rm" data-id="' + esc(it.id) + '">' + (canEdit ? "移除" : "取消叫貨") + '</button>' : "");
       const hl = highlightId && String(it.id) === String(highlightId) ? " ui-enter-soft" : "";
       return (
         '<tr class="' + hl.trim() + '" data-poi-row="' + esc(it.id) + '">' +
@@ -2028,10 +2085,7 @@
         } else if (act === "destination") {
           openDestinationModal(id);
         } else if (act === "rm") {
-          currentOrder.items = currentOrder.items.filter(function (x) { return x.id !== id; });
-          renderItems();
-          renderVendorGroups();
-          refreshVisibleQuoteResults();
+          removePurchaseItem(id);
         } else if (act === "reprice") {
           const it = currentOrder.items.find(function (x) { return x.id === id; });
           if (!it) return;
