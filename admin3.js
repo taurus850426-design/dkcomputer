@@ -5934,6 +5934,9 @@
       set("itemStatus", item ? item.status : "READY");
       set("itemQty", item ? item.qty_on_hand : 0);
       set("itemCost", item ? item.cost_unit : (preset.cost != null ? preset.cost : 0));
+      set("itemFundingOwner", "hala");
+      const fundingOwnerField = document.getElementById("itemFundingOwnerField");
+      if (fundingOwnerField) fundingOwnerField.hidden = !!item;
       set("itemPriceList", item ? item.price_list ?? "" : "");
       set("itemPriceFloor", item ? item.price_floor ?? "" : "");
       set("itemInboundDate", item && item.inbound_date ? item.inbound_date.slice(0, 10) : todayStr());
@@ -6260,8 +6263,10 @@
       };
       reader.readAsDataURL(file);
     }
-    document.getElementById("itemSave")?.addEventListener("click", () => {
+    document.getElementById("itemSave")?.addEventListener("click", async () => {
       if (!requirePerm("editItem")) return;
+      const saveBtn = document.getElementById("itemSave");
+      if (saveBtn && saveBtn.dataset.saving === "1") return;
       const nameSpec = String(getItemEditorField("itemName")?.value || "").trim();
       if (!nameSpec) return v2Show(itemMsg, "名稱／規格必填");
       const items = DK.getItems();
@@ -6269,6 +6274,8 @@
       const sku = editingItem ? editingItem.sku : generateUniqueSKU();
       const costInput = parseFloat(getItemEditorField("itemCost")?.value) || 0;
       const costUnit = canPerm("viewCost") ? costInput : undefined;
+      const initialQty = Math.max(0, parseInt(getItemEditorField("itemQty")?.value, 10) || 0);
+      const fundingOwner = getItemEditorField("itemFundingOwner")?.value || "hala";
       const groupId = (function () {
         const v = String((getItemEditorField("itemReplenishmentGroup") || document.getElementById("itemReplenishmentGroup"))?.value || "").trim();
         return v || null;
@@ -6282,7 +6289,7 @@
         vendor: String(getItemEditorField("itemVendor")?.value || "").trim(),
         condition: getItemEditorField("itemCondition")?.value || "USED",
         status: getItemEditorField("itemStatus")?.value || "READY",
-        qty_on_hand: Math.max(0, parseInt(getItemEditorField("itemQty")?.value, 10) || 0),
+        qty_on_hand: editingItem ? initialQty : 0,
         price_list: parseFloat(getItemEditorField("itemPriceList")?.value) || null,
         price_floor: parseFloat(getItemEditorField("itemPriceFloor")?.value) || null,
         inbound_date: getItemEditorField("itemInboundDate")?.value || null,
@@ -6341,12 +6348,46 @@
         auditAction("編輯庫存", editingV2ItemId);
         afterSaveSync(syncP, "品項");
       } else {
+        if (saveBtn) saveBtn.dataset.saving = "1";
         payload.id = "i-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9);
         payload.last_moved_at = payload.inbound_date ? payload.inbound_date + "T12:00:00Z" : null;
         payload.created_at = nowISO();
         if (typeof DK.applyQtyArchiveState === "function") DK.applyQtyArchiveState(payload, null, payload.qty_on_hand);
         items.unshift(payload);
         const syncP = DK.saveItems(items);
+        const saved = await syncP;
+        if (!saved || !saved.ok) {
+          if (saveBtn) saveBtn.dataset.saving = "";
+          return v2Show(itemMsg, (saved && saved.error) || "新增品項失敗");
+        }
+        if (initialQty > 0) {
+          const inbound = await DK.addLedgerEntry({
+            item_id: payload.id,
+            type: "IN",
+            qty: initialQty,
+            unit_cost: costUnit,
+            ref_type: "PURCHASE",
+            ref_id: "",
+            note: "新增品項初始入庫",
+            inbound_date: payload.inbound_date || undefined,
+            movement_type: "INITIAL_STOCK",
+          });
+          if (!inbound.ok) {
+            if (saveBtn) saveBtn.dataset.saving = "";
+            return v2Show(itemMsg, "品項已建立，但初始入庫失敗：" + (inbound.error || "請稍後重試"));
+          }
+          const inboundRow = inbound.row || inbound.data || {};
+          const ledgerId = inboundRow.ledger_id || inboundRow.id;
+          if (!ledgerId || typeof DK.stage7AssignInboundFunding !== "function") {
+            if (saveBtn) saveBtn.dataset.saving = "";
+            return v2Show(itemMsg, "品項已入庫，但無法取得出資紀錄編號，請至流水帳確認");
+          }
+          const funding = await DK.stage7AssignInboundFunding(ledgerId, fundingOwner);
+          if (!funding.ok) {
+            if (saveBtn) saveBtn.dataset.saving = "";
+            return v2Show(itemMsg, "品項已入庫，但出資來源登記失敗：" + (funding.error || "請稍後重試"));
+          }
+        }
         const pending = window.__dkVqCreatePending;
         window.__dkVqCreatePending = null;
         if (pending) {
@@ -6356,10 +6397,12 @@
           try { if (typeof vqShowMsg === "function") vqShowMsg(label); } catch (_) {}
           setTimeout(() => { try { if (typeof vqShowMsg === "function") vqShowMsg(""); } catch (_) {} }, 3500);
         } else {
-          v2Show(itemMsg, "已新增");
+          v2Show(itemMsg, initialQty > 0 ? "已新增並完成入庫" : "已新增");
         }
         auditAction("新增庫存", payload.id);
-        afterSaveSync(syncP, "品項");
+        showSyncToast({ ok: true }, "品項");
+        refreshReplenishmentUI();
+        if (saveBtn) saveBtn.dataset.saving = "";
       }
       renderV2Items();
       setTimeout(closeV2ItemEditor, 800);
@@ -6666,7 +6709,8 @@
           movement_type: type === "IN" ? "MANUAL_IN" : (type === "OUT" ? "MANUAL_OUT" : undefined),
         });
         if (!result.ok) return v2Show(ledgerMsg, result.error || "失敗");
-        const ledgerId = result.data && (result.data.ledger_id || result.data.id);
+        const ledgerRow = result.row || result.data || {};
+        const ledgerId = ledgerRow.ledger_id || ledgerRow.id;
         if (type === "IN" && ledgerId && typeof DK.stage7AssignInboundFunding === "function") {
           const funding = await DK.stage7AssignInboundFunding(ledgerId, fundingOwner);
           if (!funding.ok) return v2Show(ledgerMsg, "已入庫，但出資來源登記失敗：" + (funding.error || "請稍後重試"));
@@ -7916,7 +7960,8 @@
           movement_type: "MANUAL_IN",
         });
         if (!result.ok) return v2Show(restockMsg, result.error || "入庫失敗");
-        const ledgerId = result.data && (result.data.ledger_id || result.data.id);
+        const ledgerRow = result.row || result.data || {};
+        const ledgerId = ledgerRow.ledger_id || ledgerRow.id;
         if (ledgerId && typeof DK.stage7AssignInboundFunding === "function") {
           const funding = await DK.stage7AssignInboundFunding(ledgerId, fundingOwner);
           if (!funding.ok) return v2Show(restockMsg, "已入庫，但出資來源登記失敗：" + (funding.error || "請稍後重試"));
