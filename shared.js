@@ -1858,6 +1858,12 @@ async function stage7FetchVendorReconciliationItems(reconciliationId) {
   return stage7RestJson(`vendor_reconciliation_items?reconciliation_id=eq.${id}&select=*&order=order_no.asc&limit=${STAGE7_REST_LIMIT}`);
 }
 
+async function stage7FetchAllVendorReconciliationItems() {
+  return stage7RestJson(
+    `vendor_reconciliation_items?select=purchase_order_id,vendor_name,reconciliation_id&limit=${STAGE7_REST_LIMIT}`,
+  );
+}
+
 async function stage7CreateVendorReconciliation(payload) {
   if (!stage7IsAdminRole()) {
     return { ok: false, forbidden: true, permissionDenied: true, error: "你沒有此資料權限" };
@@ -2094,6 +2100,7 @@ if (typeof window !== "undefined") {
   window.stage7SaveVendorSettlementSetting = stage7SaveVendorSettlementSetting;
   window.stage7FetchVendorReconciliations = stage7FetchVendorReconciliations;
   window.stage7FetchVendorReconciliationItems = stage7FetchVendorReconciliationItems;
+  window.stage7FetchAllVendorReconciliationItems = stage7FetchAllVendorReconciliationItems;
   window.stage7CreateVendorReconciliation = stage7CreateVendorReconciliation;
   window.stage7UpdateVendorReconciliation = stage7UpdateVendorReconciliation;
   window.stage7VoidVendorReconciliation = stage7VoidVendorReconciliation;
@@ -5577,6 +5584,7 @@ window.DK = {
   stage7SaveVendorSettlementSetting,
   stage7FetchVendorReconciliations,
   stage7FetchVendorReconciliationItems,
+  stage7FetchAllVendorReconciliationItems,
   stage7CreateVendorReconciliation,
   stage7UpdateVendorReconciliation,
   stage7VoidVendorReconciliation,

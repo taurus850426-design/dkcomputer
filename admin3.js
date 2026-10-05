@@ -9286,6 +9286,7 @@
     let apRows = [];
     let apSettingsByVendor = {};
     let apCandidates = [];
+    let apReconciledPoVendorKeys = new Set();
     let apLoading = false;
     let apCreateBusy = false;
     let apDetailBusy = false;
@@ -9717,6 +9718,7 @@
         const st = String(o.status || "");
         if (st !== "ordered" && st !== "partial" && st !== "received") return false;
         if (!apVendorLines(o, v).length) return false;
+        if (apReconciledPoVendorKeys.has(String(o.id) + "\u001f" + v)) return false;
         const rec = apPoRecognitionDate(o);
         if (!rec || rec < goLive) return false;
         return true;
@@ -9948,10 +9950,10 @@
       }
       if (!apCandidates.length) {
         host.innerHTML = "";
-        apShow(state, "沒有可建立對帳的叫貨單（草稿／已取消／啟用日期前的舊單已排除）");
+        apShow(state, "沒有可建立對帳的叫貨單（已對帳／草稿／已取消／已刪除／啟用日期前已排除）");
         return;
       }
-      apShow(state, "共 " + apCandidates.length + " 張候選叫貨單（草稿／已取消／已刪除／啟用日期前已排除）");
+      apShow(state, "共 " + apCandidates.length + " 張候選叫貨單（已對帳／草稿／已取消／已刪除／啟用日期前已排除）");
       host.innerHTML = apCandidates.map(function (o) {
         const prev = apVendorPreview(o, vendorName);
         const miss = prev.missing > 0
@@ -10553,15 +10555,16 @@
       apRenderList(apRows);
       const fetchSet = window.stage7FetchVendorSettlementSettings || (window.DK && window.DK.stage7FetchVendorSettlementSettings);
       const fetchRec = window.stage7FetchVendorReconciliations || (window.DK && window.DK.stage7FetchVendorReconciliations);
+      const fetchAllItems = window.stage7FetchAllVendorReconciliationItems || (window.DK && window.DK.stage7FetchAllVendorReconciliationItems);
       const pageMsg = apEl("apPageMsg");
-      if (!fetchSet || !fetchRec) {
+      if (!fetchSet || !fetchRec || !fetchAllItems) {
         apLoading = false;
         apShow(pageMsg, "對帳 API 未載入");
         apRenderKpi([]);
         apRenderList([]);
         return;
       }
-      const [setRes, recRes] = await Promise.all([fetchSet(), fetchRec()]);
+      const [setRes, recRes, itemRes] = await Promise.all([fetchSet(), fetchRec(), fetchAllItems()]);
       apLoading = false;
       apSettingsByVendor = {};
       if (setRes && setRes.ok && Array.isArray(setRes.data)) {
@@ -10576,6 +10579,20 @@
       } else {
         apRows = [];
         if (recRes && !recRes.ok) apShow(pageMsg, "對帳列表載入失敗：" + (recRes.error || "未知錯誤"));
+      }
+      apReconciledPoVendorKeys = new Set();
+      if (itemRes && itemRes.ok && Array.isArray(itemRes.data)) {
+        const activeReconIds = new Set(apRows.filter(function (r) {
+          return r && String(r.status || "") !== "VOID";
+        }).map(function (r) { return String(r.id || ""); }));
+        itemRes.data.forEach(function (item) {
+          if (!item || !activeReconIds.has(String(item.reconciliation_id || ""))) return;
+          const poId = String(item.purchase_order_id || "");
+          const vendor = String(item.vendor_name || "").trim();
+          if (poId && vendor) apReconciledPoVendorKeys.add(poId + "\u001f" + vendor);
+        });
+      } else if (itemRes && !itemRes.ok) {
+        apShow(pageMsg, "對帳明細載入失敗：" + (itemRes.error || "未知錯誤"));
       }
       apRenderKpi(apRows);
       apRenderRecent();
