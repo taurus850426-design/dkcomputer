@@ -558,7 +558,7 @@
   const ADMIN_TAB_KEY = "dk_admin_tab";
   const ADMIN_V2_KEY = "dk_admin_active_v2";
   const ADMIN_NAV_LAST_KEY = "dk_admin_nav_last_child";
-  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "ap", "used-market", "used-engine", "used-acquisition", "attendance", "accounts"];
+  const VALID_TABS = ["inv", "publish", "frontend", "vendors", "purchase", "ap", "customers", "used-market", "used-engine", "used-acquisition", "attendance", "accounts"];
   const VALID_V2 = ["items", "ledger", "orders", "expenses", "reports"];
   const NAV_CHILD_PERM = {
     items: "items",
@@ -591,6 +591,22 @@
   function persistV2(name) {
     if (!name || !VALID_V2.includes(name)) return;
     try { localStorage.setItem(ADMIN_V2_KEY, name); } catch (_) {}
+  }
+  function readAdminRouteFromHash() {
+    const raw = (location.hash || "").replace(/^#/, "").trim().toLowerCase();
+    const parts = raw.split("/").filter(Boolean);
+    const tab = VALID_TABS.includes(parts[0]) ? parts[0] : "";
+    const v2 = tab === "inv" && VALID_V2.includes(parts[1]) ? parts[1] : "";
+    return { tab, v2 };
+  }
+  function writeAdminRoute(tabName, v2Name) {
+    if (!VALID_TABS.includes(tabName)) return;
+    const route = tabName === "inv"
+      ? "inv/" + (VALID_V2.includes(v2Name) ? v2Name : readSavedV2())
+      : tabName;
+    try {
+      if ((location.hash || "").replace(/^#/, "") !== route) location.hash = route;
+    } catch (_) {}
   }
   function readNavLast() {
     try {
@@ -681,6 +697,7 @@
       t.classList.toggle("active", (t.getAttribute("data-v2") || "") === v2);
     });
     persistV2(v2);
+    if (currentMainTabName() === "inv") writeAdminRoute("inv", v2);
   }
   function syncAdminNav(tabName) {
     const tab = tabName || currentMainTabName();
@@ -748,7 +765,7 @@
     }
     try { sessionStorage.setItem(ADMIN_TAB_KEY, name); } catch (_) {}
     try { localStorage.setItem("dk_admin_active_tab", name); } catch (_) {}
-    if (VALID_TABS.includes(name)) try { location.hash = name; } catch (_) {}
+    writeAdminRoute(name, name === "inv" ? readSavedV2() : "");
     for (const t of tabs) {
       if (t.getAttribute("data-tab") === name) t.classList.add("active");
       else t.classList.remove("active");
@@ -1295,8 +1312,9 @@
       activateNavGroup(group);
     });
   });
-  /* F5 重新整理後還原上次分頁：優先 localStorage dk_admin_active_tab，再 hash / sessionStorage */
+  /* F5 重新整理後還原上次分頁：網址優先，並保留庫存區的子分頁 */
   function restoreAdminTab() {
+    const fromRoute = readAdminRouteFromHash();
     const fromStorage = (function () { try { return localStorage.getItem("dk_admin_active_tab"); } catch (_) { return null; } })();
     const hasPanel = (name) =>
       (name === "inv" && tabInv) ||
@@ -1311,8 +1329,8 @@
       (name === "used-acquisition" && tabUsedAcquisition) ||
       (name === "attendance" && tabAttendance) ||
       (name === "accounts" && tabAccounts);
-    function restoreV2ForInv() {
-      let v2 = readSavedV2();
+    function restoreV2ForInv(routeV2) {
+      let v2 = (routeV2 && VALID_V2.includes(routeV2)) ? routeV2 : readSavedV2();
       if ((v2 === "ledger" || v2 === "expenses" || v2 === "reports") && !canPerm(v2)) {
         v2 = canPerm("items") ? "items" : "orders";
       }
@@ -1322,13 +1340,15 @@
         try { handler(v2); } catch (_) {}
       }
     }
-    if (fromStorage && VALID_TABS.includes(fromStorage) && hasPanel(fromStorage) && canPerm(fromStorage)) {
-      if (fromStorage === "inv") restoreV2ForInv();
-      switchTab(fromStorage);
+    const preferredTab = (fromRoute.tab && hasPanel(fromRoute.tab) && canPerm(fromRoute.tab))
+      ? fromRoute.tab
+      : ((fromStorage && VALID_TABS.includes(fromStorage) && hasPanel(fromStorage) && canPerm(fromStorage)) ? fromStorage : "");
+    if (preferredTab) {
+      if (preferredTab === "inv") restoreV2ForInv(fromRoute.tab === "inv" ? fromRoute.v2 : "");
+      switchTab(preferredTab);
       return;
     }
-    const fromHash = (location.hash || "").replace(/^#/, "").trim().toLowerCase();
-    const saved = (VALID_TABS.includes(fromHash) ? fromHash : null) || (function () { try { return sessionStorage.getItem(ADMIN_TAB_KEY); } catch (_) { return null; } })();
+    const saved = (function () { try { return sessionStorage.getItem(ADMIN_TAB_KEY); } catch (_) { return null; } })();
     if (saved && VALID_TABS.includes(saved) && canPerm(saved)) {
       if (saved === "inv") restoreV2ForInv();
       switchTab(saved);
@@ -9124,8 +9144,7 @@
     }
     fillV2CategoryOptions();
     fillReportPeriodOptions();
-    var activeV2 = document.querySelector(".v2-tab.active");
-    var currentName = (activeV2 && activeV2.getAttribute("data-v2")) || "items";
+    var currentName = readSavedV2();
     switchV2Tab(currentName);
     window.__adminV2DKInitialized = true;
     return true;
