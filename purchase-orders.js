@@ -1011,6 +1011,14 @@
     return map;
   }
 
+  function vendorCopyNote(note) {
+    return String(note || "").split(/[｜|\r\n]+/).map(function (part) {
+      return part.trim();
+    }).filter(function (part) {
+      return part && !/^來源訂單\s*[:：]/.test(part);
+    }).join("｜");
+  }
+
   function buildVendorText(order, vendorName, items) {
     const lines = [];
     lines.push("DK Computer 叫貨單");
@@ -1019,26 +1027,24 @@
     lines.push("");
     lines.push("廠商：" + vendorName);
     lines.push("");
-    let total = 0;
-    let has = false;
     items.forEach(function (it, i) {
       lines.push((i + 1) + ". " + (itemSpec(it) || it.requestText || "品項"));
       lines.push("   數量：" + it.quantity);
       const p = itemPrice(it);
       if (p != null) {
         lines.push("   參考單價：" + fmtNT(p));
-        total += p * (Number(it.quantity) || 0);
-        has = true;
       } else {
         lines.push("   參考單價：請確認");
       }
-      lines.push("   品項備註：" + (it.itemNote || "＿＿＿"));
+      const note = vendorCopyNote(it.itemNote);
+      if (note) lines.push("   品項備註：" + note);
       lines.push("");
     });
-    lines.push("參考總額：" + (has ? fmtNT(total) : "請確認"));
-    lines.push("");
-    lines.push("整單備註：");
-    lines.push(order.note || "＿＿＿");
+    const note = vendorCopyNote(order.note);
+    if (note) {
+      lines.push("整單備註：");
+      lines.push(note);
+    }
     lines.push("");
     lines.push("請協助確認庫存、實際單價及到貨時間，謝謝。");
     return lines.join("\n");
