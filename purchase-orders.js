@@ -1011,15 +1011,22 @@
     return map;
   }
 
-  function vendorCopyNote(note) {
+  function vendorCopyNote(note, customerNames) {
     return String(note || "").split(/[｜|\r\n]+/).map(function (part) {
       return part.trim();
     }).filter(function (part) {
-      return part && !/^來源訂單\s*[:：]/.test(part);
+      return part && !/^(?:來源訂單|客戶(?:姓名|名稱)?)\s*[:：]/.test(part) && customerNames.indexOf(part) === -1;
     }).join("｜");
   }
 
   function buildVendorText(order, vendorName, items) {
+    const customerNames = [String(order.sourceCustomerName || "").trim()];
+    [order.note].concat((order.items || []).map(function (it) { return it.itemNote; })).forEach(function (note) {
+      String(note || "").split(/[｜|\r\n]+/).forEach(function (part) {
+        const match = part.trim().match(/^客戶(?:姓名|名稱)?\s*[:：]\s*(.+)$/);
+        if (match) customerNames.push(match[1].trim());
+      });
+    });
     const lines = [];
     lines.push("DK Computer 叫貨單");
     lines.push("單號：" + order.orderNo);
@@ -1036,11 +1043,11 @@
       } else {
         lines.push("   參考單價：請確認");
       }
-      const note = vendorCopyNote(it.itemNote);
+      const note = vendorCopyNote(it.itemNote, customerNames);
       if (note) lines.push("   品項備註：" + note);
       lines.push("");
     });
-    const note = vendorCopyNote(order.note);
+    const note = vendorCopyNote(order.note, customerNames);
     if (note) {
       lines.push("整單備註：");
       lines.push(note);
