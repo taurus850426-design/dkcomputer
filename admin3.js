@@ -5035,6 +5035,8 @@
       row.innerHTML = `
         <div class="banner-preview-wrap">
           <div class="banner-preview muted small">預覽</div>
+          <select class="banner-preview-mode" aria-label="取景預覽比例"><option value="mobile">手機取景</option><option value="desktop">電腦取景</option></select>
+          <p class="muted small">拖曳圖片調整顯示範圍，或修改下方 X／Y。手機與電腦共用焦點；預覽比例為示意，實際範圍隨螢幕尺寸改變。調整後請儲存網站設定。</p>
         </div>
         <div class="banner-fields">
           <input type="url" class="banner-image" placeholder="圖片網址（必填）" />
@@ -5064,31 +5066,70 @@
       if (fxInput) fxInput.value = (b && Number.isFinite(Number(b.focusX))) ? String(Number(b.focusX)) : "50";
       if (fyInput) fyInput.value = (b && Number.isFinite(Number(b.focusY))) ? String(Number(b.focusY)) : "50";
 
+      const previewMode = row.querySelector(".banner-preview-mode");
+      let previewImage = null;
+      let drag = null;
+      const focusValue = (input) => Math.max(0, Math.min(100, Number.isFinite(Number(input?.value)) ? Number(input.value) : 50));
+      function applyPreviewFocus() {
+        if (previewImage) previewImage.style.objectPosition = focusValue(fxInput) + "% " + focusValue(fyInput) + "%";
+        safeList[index] = Object.assign({}, safeList[index], {
+          image: (imgInput?.value || "").trim(),
+          link: (linkInput?.value || "").trim(),
+          focusX: focusValue(fxInput),
+          focusY: focusValue(fyInput),
+        });
+      }
       function updatePreview() {
         if (!previewWrap) return;
         const url = (imgInput?.value || "").trim();
         previewWrap.innerHTML = "";
-        previewWrap.className = "banner-preview muted small";
+        previewImage = null;
+        previewWrap.style.cssText = "width:100%;max-width:360px;aspect-ratio:" + (previewMode?.value === "desktop" ? "16/7" : "4/5") + ";overflow:hidden;position:relative;touch-action:none;border-radius:8px;background:#222;cursor:grab;";
         if (!url) {
           previewWrap.textContent = "尚未設定圖片";
+          applyPreviewFocus();
           return;
         }
         const img = document.createElement("img");
         img.src = url;
-        img.alt = "";
-        img.style.cssText = "max-width:160px;max-height:80px;border-radius:8px;object-fit:cover;border:1px solid rgba(0,0,0,0.12);background:#f8f8f8;";
-        img.onload = () => {
-          // 正常載入時維持圖片
-        };
+        img.alt = "拖曳調整首頁圖片取景";
+        img.draggable = false;
+        img.style.cssText = "width:100%;height:100%;max-width:none;max-height:none;display:block;object-fit:cover;user-select:none;";
         img.onerror = () => {
-          previewWrap.innerHTML = "";
+          if (previewImage !== img) return;
           previewWrap.textContent = "預覽失敗";
-          previewWrap.className = "banner-preview muted small";
+          previewImage = null;
         };
+        previewImage = img;
         previewWrap.appendChild(img);
+        applyPreviewFocus();
       }
-
+      previewWrap?.addEventListener("pointerdown", (event) => {
+        if (!previewImage?.naturalWidth || (event.pointerType === "mouse" && event.button !== 0)) return;
+        const rect = previewWrap.getBoundingClientRect();
+        const scale = Math.max(rect.width / previewImage.naturalWidth, rect.height / previewImage.naturalHeight);
+        drag = { id: event.pointerId, x: event.clientX, y: event.clientY,
+          fx: focusValue(fxInput), fy: focusValue(fyInput),
+          overflowX: previewImage.naturalWidth * scale - rect.width,
+          overflowY: previewImage.naturalHeight * scale - rect.height };
+        previewWrap.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      });
+      previewWrap?.addEventListener("pointermove", (event) => {
+        if (!drag || drag.id !== event.pointerId) return;
+        if (drag.overflowX > 0.5) fxInput.value = String(Math.round(Math.max(0, Math.min(100, drag.fx - (event.clientX - drag.x) / drag.overflowX * 100))));
+        if (drag.overflowY > 0.5) fyInput.value = String(Math.round(Math.max(0, Math.min(100, drag.fy - (event.clientY - drag.y) / drag.overflowY * 100))));
+        applyPreviewFocus();
+      });
+      const endDrag = () => { drag = null; };
+      previewWrap?.addEventListener("pointerup", endDrag);
+      previewWrap?.addEventListener("pointercancel", endDrag);
+      previewWrap?.addEventListener("lostpointercapture", endDrag);
+      fxInput?.addEventListener("input", applyPreviewFocus);
+      fyInput?.addEventListener("input", applyPreviewFocus);
+      linkInput?.addEventListener("input", applyPreviewFocus);
       imgInput?.addEventListener("input", updatePreview);
+      previewMode?.addEventListener("change", updatePreview);
       updatePreview();
 
       // 檔案上傳 → 存到 Supabase Storage（site-assets/banner/…）→ 回寫 image 欄位
