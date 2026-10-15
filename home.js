@@ -24,7 +24,25 @@
   let slides = [];
   let heroIndex = 0;
   let heroTimer = null;
+  let heroRevealTimer = null;
   const HERO_INTERVAL_MS = 7000;
+
+  function replayHeroReveal() {
+    if (!hero) return;
+    if (heroRevealTimer) {
+      clearTimeout(heroRevealTimer);
+      heroRevealTimer = null;
+    }
+
+    hero.classList.remove("hero-ready");
+
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    const coverFirstDelay = reducedMotion ? 0 : (window.matchMedia?.("(max-width: 980px)")?.matches ? 900 : 650);
+    heroRevealTimer = window.setTimeout(function () {
+      hero.classList.add("hero-ready");
+      heroRevealTimer = null;
+    }, coverFirstDelay);
+  }
 
   function buildHeroSlides() {
     if (!slidesWrap) return;
@@ -72,7 +90,7 @@
     slides = Array.from(slidesWrap.querySelectorAll(".hero-slide"));
   }
 
-  function updateHeroCarousel(target) {
+  function updateHeroCarousel(target, replayCopy) {
     if (!slides.length || !slidesWrap) return;
     heroIndex = ((target % slides.length) + slides.length) % slides.length;
     slides.forEach(function (el, i) {
@@ -84,12 +102,13 @@
       var dots = Array.from(dotsWrap.querySelectorAll(".hero-dot"));
       dots.forEach(function (d, i) { d.classList.toggle("hero-dot-active", i === heroIndex); });
     }
+    if (replayCopy) replayHeroReveal();
   }
 
   function startHeroAuto() {
     if (heroTimer || slides.length <= 1) return;
     heroTimer = setInterval(() => {
-      updateHeroCarousel(heroIndex + 1);
+      updateHeroCarousel(heroIndex + 1, true);
     }, HERO_INTERVAL_MS);
   }
 
@@ -112,7 +131,7 @@
           dot.setAttribute("aria-label", "切換到第 " + (i + 1) + " 則");
           dot.addEventListener("click", () => {
             stopHeroAuto();
-            updateHeroCarousel(i);
+            updateHeroCarousel(i, true);
             startHeroAuto();
           });
           dotsWrap.appendChild(dot);
@@ -121,12 +140,12 @@
 
       prevBtn?.addEventListener("click", () => {
         stopHeroAuto();
-        updateHeroCarousel(heroIndex - 1);
+        updateHeroCarousel(heroIndex - 1, true);
         startHeroAuto();
       });
       nextBtn?.addEventListener("click", () => {
         stopHeroAuto();
-        updateHeroCarousel(heroIndex + 1);
+        updateHeroCarousel(heroIndex + 1, true);
         startHeroAuto();
       });
 
@@ -146,27 +165,22 @@
           var delta = x - touchStartX;
           if (delta > SWIPE_THRESHOLD) {
             stopHeroAuto();
-            updateHeroCarousel(heroIndex - 1);
+            updateHeroCarousel(heroIndex - 1, true);
             startHeroAuto();
           } else if (delta < -SWIPE_THRESHOLD) {
             stopHeroAuto();
-            updateHeroCarousel(heroIndex + 1);
+            updateHeroCarousel(heroIndex + 1, true);
             startHeroAuto();
           }
         }, { passive: true });
       }
 
-      updateHeroCarousel(0);
+      updateHeroCarousel(0, true);
       startHeroAuto();
       window.addEventListener("resize", function () {
-        if (slides.length && slidesWrap) updateHeroCarousel(heroIndex);
+        if (slides.length && slidesWrap) updateHeroCarousel(heroIndex, false);
       });
     }
-
-    // Hero 進場（僅一次；prefers-reduced-motion 由 CSS 處理）
-    requestAnimationFrame(function () {
-      hero.classList.add("hero-ready");
-    });
   }
 
   /* Hero LINE CTA：沿用 config.line.url；設定晚到時隨 applyConfigToHomePage 同步更新 */

@@ -1049,8 +1049,7 @@
     });
     const note = vendorCopyNote(order.note, customerNames);
     if (note) {
-      lines.push("整單備註：");
-      lines.push(note);
+      lines.push("整單備註：" + note);
     }
     lines.push("");
     lines.push("請協助確認庫存、實際單價及到貨時間，謝謝。");

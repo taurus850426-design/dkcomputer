@@ -3628,6 +3628,8 @@ body.home-page .hero-shade{
   background:
     linear-gradient(90deg, rgba(7,7,11,.92) 0%, rgba(7,7,11,.72) 38%, rgba(7,7,11,.28) 68%, rgba(7,7,11,.45) 100%),
     linear-gradient(180deg, rgba(7,7,11,.35) 0%, transparent 28%, rgba(7,7,11,.55) 100%);
+  opacity: 0;
+  transition: opacity .8s ease;
 }
 body.home-page .hero-copy{
   position: absolute;
@@ -3687,18 +3689,21 @@ body.home-page .hero-anim{
   opacity: 0;
   transform: translateY(16px);
 }
+body.home-page #hero.hero-ready .hero-shade{
+  opacity: 1;
+}
 body.home-page .hero-eyebrow.hero-anim{ transform: none; }
 body.home-page #hero.hero-ready .hero-eyebrow{
-  animation: dkHeroFade .45s ease forwards;
+  animation: dkHeroFade .55s ease .18s forwards;
 }
 body.home-page #hero.hero-ready .hero-title{
-  animation: dkHeroUp .55s ease .12s forwards;
+  animation: dkHeroUp .68s ease .38s forwards;
 }
 body.home-page #hero.hero-ready .hero-lead{
-  animation: dkHeroFade .55s ease .28s forwards;
+  animation: dkHeroFade .62s ease .62s forwards;
 }
 body.home-page #hero.hero-ready .hero-cta{
-  animation: dkHeroFade .6s ease .42s forwards;
+  animation: dkHeroFade .68s ease .84s forwards;
 }
 @keyframes dkHeroFade{
   from{ opacity: 0; }
@@ -4143,6 +4148,7 @@ body.home-page .sticky-bar .btn-primary{
 }
 
 @media (prefers-reduced-motion: reduce){
+  body.home-page .hero-shade,
   body.home-page .hero-anim,
   body.home-page #hero.hero-ready .hero-eyebrow,
   body.home-page #hero.hero-ready .hero-title,
@@ -4151,6 +4157,7 @@ body.home-page .sticky-bar .btn-primary{
     opacity: 1 !important;
     transform: none !important;
     animation: none !important;
+    transition: none !important;
   }
   body.home-page .reveal,
   body.home-page .reveal-child{
