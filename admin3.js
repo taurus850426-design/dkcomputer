@@ -8387,7 +8387,7 @@
       function wrapSpec(text, width) {
         const lines = [];
         let line = "";
-        const tokens = String(text || "").match(/[A-Za-z0-9][A-Za-z0-9.*+_\/-]*|\n|\s+|./gu) || [];
+        const tokens = String(text || "").match(/\([^()\n]*\)|（[^（）\n]*）|[A-Za-z0-9][A-Za-z0-9.*+_\/-]*|\n|\s+|./gu) || [];
         for (const token of tokens) {
           if (token === "\n") { lines.push(line.trimEnd()); line = ""; continue; }
           if (line && ctx.measureText(line + token).width > width) {
