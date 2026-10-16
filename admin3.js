@@ -8309,7 +8309,9 @@
         sale,
         shipping,
         discount,
-        grand: sale + shipping - discount,
+        originalTotal: sale + shipping,
+        cashPrice: Math.max(0, sale + shipping - discount),
+        grand: Math.max(0, sale + shipping - discount),
       };
     }
     function quoteFilename(data) {
@@ -8347,81 +8349,63 @@
     }
     function drawQuoteCanvas(data) {
       const W = 1080;
-      const padX = 48;
+      const H = 1528;
+      const padX = 54;
       const contentW = W - padX * 2;
       const font = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
       const C = {
-        bg: "#FFFFFF",
+        bg: "#ffffff",
         text: "#111827",
-        title: "#111111",
-        muted: "#4b5563",
-        line: "#d1d5db",
+        muted: "#6b7280",
+        faint: "#f7f7f8",
+        line: "#d9dce1",
         pink: "#ff5c7a",
-        purple: "#7c5cff",
-        badgeBg: "#e8e0ff",
-        badgeText: "#3b1fa8",
-        badgeBorder: "#6d4aff",
-        boxBg: "#f9fafb",
-        boxBorder: "#d1d5db",
+        purple: "#7057e8",
       };
-      const LINE_W = 2;
-      const TAG_H = 34;
-      const TAG_GAP = 16;
-      const TITLE_SIZE = 33;
-      const TITLE_LINE_H = 46;
-      const TITLE_TO_QTY = 12;
-      const QTY_H = 32;
-      const AFTER_QTY = 16;
-      const AFTER_DIVIDER = 24;
-      const META_LINE_H = 36;
-      const META_VALUE_X = padX + 148;
-      const META_VALUE_W = W - padX - META_VALUE_X;
-
+      const items = Array.isArray(data.items) ? data.items : [];
+      const anyPrice = items.some((it) => Number(it.unit_price) > 0);
       const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
       const ctx = canvas.getContext("2d");
       ctx.textBaseline = "top";
       ctx.textAlign = "left";
-      ctx.font = "700 " + TITLE_SIZE + "px " + font;
-      const itemBlocks = (data.items || []).map((it, idx) => {
-        const titleLines = wrapCanvasText(ctx, (idx + 1) + ".  " + it.title, contentW);
-        const price = Number(it.unit_price);
-        const hasPrice = Number.isFinite(price) && price > 0;
-        const qty = Number(it.qty) || 0;
-        const category = String(it.category || "").trim();
-        let blockH = 0;
-        if (category) blockH += TAG_H + TAG_GAP;
-        blockH += titleLines.length * TITLE_LINE_H;
-        blockH += TITLE_TO_QTY + QTY_H + AFTER_QTY + LINE_W + AFTER_DIVIDER;
-        return {
-          titleLines,
-          category,
-          qty,
-          hasPrice,
-          priceText: hasPrice ? fmtQuoteMoney(price) : "",
-          subText: hasPrice ? fmtQuoteMoney(qty * price) : "",
-          blockH,
-        };
-      });
-      ctx.font = "600 24px " + font;
-      const noteLines = data.note ? wrapCanvasText(ctx, data.note, contentW) : ["—"];
-      const customerLines = wrapCanvasText(ctx, data.customer || "—", META_VALUE_W);
-      const hasExtra = data.shipping > 0 || data.discount > 0;
-      const summaryH = hasExtra ? 148 : 104;
 
-      let h = 44;
-      h += 68 + 28;
-      h += LINE_W + 32;
-      h += 26 + 12 + 54 + 18;
-      h += META_LINE_H * 2 + customerLines.length * META_LINE_H + 24;
-      h += 26 + 12 + 24;
-      if (!itemBlocks.length) h += 48;
-      else itemBlocks.forEach((b) => { h += b.blockH; });
-      h += 10 + summaryH + 28;
-      h += 26 + 12 + noteLines.length * 32 + 28;
-      h += LINE_W + 28 + 32 + 52;
-      canvas.width = W;
-      canvas.height = h;
-      const H = canvas.height;
+      let titleSize = items.length >= 13 ? 20 : (items.length >= 9 ? 23 : 27);
+      let titleLineH = items.length >= 13 ? 27 : (items.length >= 9 ? 31 : 36);
+      let rowPad = items.length >= 13 ? 7 : (items.length >= 9 ? 9 : 13);
+      const itemStartY = 260;
+      const totalBoxY = H - 224;
+      const itemBottom = totalBoxY - 24;
+      const priceW = anyPrice ? 208 : 0;
+      const titleW = contentW - priceW - (anyPrice ? 24 : 0);
+
+      function buildBlocks() {
+        ctx.font = "700 " + titleSize + "px " + font;
+        return items.map((it, idx) => {
+          const qty = Math.max(0, Number(it.qty) || 0);
+          const category = String(it.category || "").trim();
+          const prefix = (idx + 1) + ". ";
+          const categoryPrefix = category ? category + "｜" : "";
+          const qtySuffix = qty > 1 ? "  × " + qty : "";
+          const lines = wrapCanvasText(ctx, prefix + categoryPrefix + String(it.title || "品項") + qtySuffix, titleW);
+          const price = Number(it.unit_price);
+          const hasPrice = Number.isFinite(price) && price > 0;
+          const rowH = Math.max(lines.length * titleLineH, hasPrice ? 29 : 0) + rowPad * 2;
+          return { lines, hasPrice, priceText: hasPrice ? "單價 " + fmtQuoteMoney(price) : "", rowH };
+        });
+      }
+
+      let blocks = buildBlocks();
+      let usedH = blocks.reduce((sum, block) => sum + block.rowH, 0);
+      const availableH = itemBottom - itemStartY;
+      while (usedH > availableH && titleSize > 16) {
+        titleSize -= 1;
+        titleLineH = Math.max(titleSize + 5, 22);
+        rowPad = Math.max(4, rowPad - 1);
+        blocks = buildBlocks();
+        usedH = blocks.reduce((sum, block) => sum + block.rowH, 0);
+      }
 
       ctx.fillStyle = C.bg;
       ctx.fillRect(0, 0, W, H);
@@ -8429,179 +8413,148 @@
       topGrad.addColorStop(0, C.pink);
       topGrad.addColorStop(1, C.purple);
       ctx.fillStyle = topGrad;
-      ctx.fillRect(0, 0, W, 6);
+      ctx.fillRect(0, 0, W, 8);
 
-      let y = 44;
-      roundRectPath(ctx, padX, y, 68, 68, 16);
+      let y = 38;
+      roundRectPath(ctx, padX, y, 58, 58, 14);
       ctx.fillStyle = topGrad;
       ctx.fill();
       ctx.fillStyle = "#fff";
-      ctx.font = "700 28px " + font;
+      ctx.font = "800 25px " + font;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("DK", padX + 34, y + 35);
+      ctx.fillText("DK", padX + 29, y + 30);
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillStyle = C.title;
-      ctx.font = "800 36px " + font;
-      ctx.fillText("DK Computer", padX + 88, y + 8);
+      ctx.fillStyle = C.text;
+      ctx.font = "800 31px " + font;
+      ctx.fillText("DK Computer", padX + 76, y + 1);
       ctx.fillStyle = C.muted;
-      ctx.font = "600 22px " + font;
-      ctx.fillText("電腦整機｜中古電腦｜維修服務", padX + 88, y + 48);
-      y += 68 + 28;
+      ctx.font = "600 18px " + font;
+      ctx.fillText("電腦整機｜中古電腦｜維修服務", padX + 76, y + 39);
+      ctx.textAlign = "right";
+      ctx.fillStyle = C.text;
+      ctx.font = "800 39px " + font;
+      ctx.fillText("報價單", W - padX, y + 1);
+      ctx.fillStyle = C.pink;
+      ctx.font = "700 15px " + font;
+      ctx.fillText("QUOTATION", W - padX, y + 45);
+      ctx.textAlign = "left";
+
+      y = 118;
       ctx.strokeStyle = C.line;
-      ctx.lineWidth = LINE_W;
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(padX, y);
       ctx.lineTo(W - padX, y);
       ctx.stroke();
-      y += LINE_W + 32;
-      ctx.fillStyle = C.pink;
-      ctx.font = "700 18px " + font;
-      ctx.fillText("QUOTATION", padX, y);
-      y += 26 + 12;
-      ctx.fillStyle = C.title;
-      ctx.font = "800 48px " + font;
-      ctx.fillText("報價單", padX, y);
-      y += 54 + 18;
+
+      const metaY = 138;
       const meta = [
         ["報價編號", data.orderNo || "（尚未編號）"],
-        ["日期", data.date || ""],
+        ["日期", data.date || "—"],
+        ["客戶", data.customer || "—"],
       ];
-      meta.forEach((row) => {
-        ctx.font = "600 24px " + font;
+      const metaWidths = [0, 350, 550];
+      meta.forEach((row, idx) => {
+        const x = padX + metaWidths[idx];
         ctx.fillStyle = C.muted;
-        ctx.fillText(row[0], padX, y);
+        ctx.font = "600 17px " + font;
+        ctx.fillText(row[0], x, metaY);
         ctx.fillStyle = C.text;
-        ctx.fillText(row[1], META_VALUE_X, y);
-        y += META_LINE_H;
+        ctx.font = "700 19px " + font;
+        const valueLines = wrapCanvasText(ctx, row[1], idx === 2 ? 420 : 270).slice(0, 2);
+        valueLines.forEach((line, lineIdx) => ctx.fillText(line, x, metaY + 26 + lineIdx * 24));
       });
-      ctx.font = "600 24px " + font;
-      ctx.fillStyle = C.muted;
-      ctx.fillText("客戶", padX, y);
-      ctx.fillStyle = C.text;
-      customerLines.forEach((ln) => {
-        ctx.fillText(ln, META_VALUE_X, y);
-        y += META_LINE_H;
-      });
-      y += 24;
+
+      y = 222;
       ctx.fillStyle = C.purple;
-      ctx.font = "700 22px " + font;
-      ctx.fillText("商品明細", padX, y);
-      y += 26;
+      ctx.font = "800 20px " + font;
+      ctx.fillText("類別／項目", padX, y);
+      if (anyPrice) {
+        ctx.textAlign = "right";
+        ctx.fillText("單價", W - padX, y);
+        ctx.textAlign = "left";
+      }
+      y = itemStartY - 8;
       ctx.strokeStyle = C.purple;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(padX, y);
-      ctx.lineTo(padX + 80, y);
+      ctx.lineTo(W - padX, y);
       ctx.stroke();
-      y += 12 + 12;
-      if (!itemBlocks.length) {
+      y = itemStartY;
+
+      if (!blocks.length) {
         ctx.fillStyle = C.muted;
-        ctx.font = "600 24px " + font;
-        ctx.fillText("尚未加入品項", padX, y);
-        y += 48;
+        ctx.font = "600 21px " + font;
+        ctx.fillText("尚未加入品項", padX, y + 14);
       }
-      itemBlocks.forEach((b) => {
-        if (b.category) {
-          ctx.font = "700 18px " + font;
-          const tagPadX = 14;
-          const tagW = Math.ceil(ctx.measureText(b.category).width) + tagPadX * 2;
-          roundRectPath(ctx, padX, y, tagW, TAG_H, 10);
-          ctx.fillStyle = C.badgeBg;
-          ctx.fill();
-          ctx.strokeStyle = C.badgeBorder;
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-          ctx.fillStyle = C.badgeText;
-          ctx.textBaseline = "middle";
-          ctx.fillText(b.category, padX + tagPadX, y + TAG_H / 2);
-          ctx.textBaseline = "top";
-          y += TAG_H + TAG_GAP;
+      blocks.forEach((block, idx) => {
+        if (idx % 2 === 1) {
+          ctx.fillStyle = C.faint;
+          ctx.fillRect(padX, y, contentW, block.rowH);
         }
-        ctx.fillStyle = C.title;
-        ctx.font = "700 " + TITLE_SIZE + "px " + font;
-        b.titleLines.forEach((ln) => {
-          ctx.fillText(ln, padX, y);
-          y += TITLE_LINE_H;
+        ctx.fillStyle = C.text;
+        ctx.font = "700 " + titleSize + "px " + font;
+        block.lines.forEach((line, lineIdx) => {
+          ctx.fillText(line, padX + 10, y + rowPad + lineIdx * titleLineH);
         });
-        y += TITLE_TO_QTY;
-        ctx.font = "600 24px " + font;
-        ctx.fillStyle = C.muted;
-        ctx.fillText(b.hasPrice ? ("數量：" + b.qty + " × " + b.priceText) : ("數量：" + b.qty), padX, y);
-        if (b.hasPrice && b.subText) {
+        if (block.hasPrice) {
           ctx.textAlign = "right";
-          ctx.fillStyle = C.title;
-          ctx.font = "700 26px " + font;
-          ctx.fillText(b.subText, W - padX, y);
+          ctx.fillStyle = C.text;
+          ctx.font = "700 20px " + font;
+          ctx.fillText(block.priceText, W - padX - 10, y + rowPad + 2);
           ctx.textAlign = "left";
         }
-        y += QTY_H + AFTER_QTY;
+        y += block.rowH;
         ctx.strokeStyle = C.line;
-        ctx.lineWidth = LINE_W;
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(padX, y);
         ctx.lineTo(W - padX, y);
         ctx.stroke();
-        y += LINE_W + AFTER_DIVIDER;
       });
-      y += 10;
-      roundRectPath(ctx, padX, y, contentW, summaryH, 14);
-      ctx.fillStyle = C.boxBg;
+
+      roundRectPath(ctx, padX, totalBoxY, contentW, 126, 15);
+      ctx.fillStyle = C.faint;
       ctx.fill();
-      ctx.strokeStyle = C.boxBorder;
-      ctx.lineWidth = LINE_W;
-      ctx.stroke();
-      const sumInnerTop = y + 30;
-      ctx.font = "700 24px " + font;
-      ctx.fillStyle = C.muted;
-      ctx.fillText("合計", padX + 28, sumInnerTop);
-      ctx.textAlign = "right";
-      ctx.fillStyle = C.title;
-      ctx.font = "800 40px " + font;
-      ctx.fillText(fmtQuoteMoney(data.sale), W - padX - 28, sumInnerTop - 6);
-      ctx.textAlign = "left";
-      if (hasExtra) {
-        ctx.font = "600 22px " + font;
-        ctx.fillStyle = C.muted;
-        const extra = [];
-        if (data.shipping > 0) extra.push("運費 " + fmtQuoteMoney(data.shipping));
-        if (data.discount > 0) extra.push("折扣 −" + fmtQuoteMoney(data.discount));
-        ctx.fillText(extra.join("　"), padX + 28, sumInnerTop + 48);
-        ctx.fillStyle = C.pink;
-        ctx.font = "700 24px " + font;
-        ctx.fillText("總計", padX + 28, sumInnerTop + 86);
-        ctx.textAlign = "right";
-        ctx.fillStyle = C.title;
-        ctx.font = "800 36px " + font;
-        ctx.fillText(fmtQuoteMoney(data.grand), W - padX - 28, sumInnerTop + 80);
-        ctx.textAlign = "left";
-      }
-      y += summaryH + 28;
-      ctx.fillStyle = C.purple;
-      ctx.font = "700 22px " + font;
-      ctx.fillText("備註", padX, y);
-      y += 26 + 12;
-      ctx.fillStyle = C.muted;
-      ctx.font = "600 24px " + font;
-      noteLines.forEach((ln) => {
-        ctx.fillText(ln, padX, y);
-        y += 32;
-      });
-      y += 28;
       ctx.strokeStyle = C.line;
-      ctx.lineWidth = LINE_W;
-      ctx.beginPath();
-      ctx.moveTo(padX, y);
-      ctx.lineTo(W - padX, y);
+      ctx.lineWidth = 2;
       ctx.stroke();
-      y += LINE_W + 28;
       ctx.fillStyle = C.muted;
-      ctx.font = "600 24px " + font;
-      ctx.fillText("官方 LINE", padX, y);
-      ctx.fillStyle = C.pink;
+      ctx.font = "700 19px " + font;
+      ctx.fillText("原價", padX + 28, totalBoxY + 24);
+      ctx.textAlign = "right";
+      ctx.fillStyle = C.text;
       ctx.font = "700 26px " + font;
-      ctx.fillText("@315PEPPL", padX + 150, y);
+      ctx.fillText(fmtQuoteMoney(Number.isFinite(Number(data.originalTotal)) ? data.originalTotal : data.grand), W - padX - 28, totalBoxY + 18);
+      ctx.textAlign = "left";
+      ctx.fillStyle = C.pink;
+      ctx.font = "800 22px " + font;
+      ctx.fillText("現金優惠價", padX + 28, totalBoxY + 76);
+      ctx.textAlign = "right";
+      ctx.fillStyle = C.text;
+      ctx.font = "800 36px " + font;
+      ctx.fillText(fmtQuoteMoney(Number.isFinite(Number(data.cashPrice)) ? data.cashPrice : data.grand), W - padX - 28, totalBoxY + 68);
+      ctx.textAlign = "left";
+
+      const footerY = H - 70;
+      ctx.strokeStyle = C.line;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padX, footerY - 16);
+      ctx.lineTo(W - padX, footerY - 16);
+      ctx.stroke();
+      ctx.fillStyle = C.muted;
+      ctx.font = "600 17px " + font;
+      const note = String(data.note || "").trim();
+      ctx.fillText(note ? "備註｜" + note : "DK Computer", padX, footerY);
+      ctx.textAlign = "right";
+      ctx.fillStyle = C.pink;
+      ctx.font = "700 18px " + font;
+      ctx.fillText("官方 LINE  @315PEPPL", W - padX, footerY);
+      ctx.textAlign = "left";
       return canvas;
     }
     async function buildQuoteCanvas() {
