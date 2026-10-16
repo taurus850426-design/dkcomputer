@@ -8378,21 +8378,47 @@
       const totalBoxY = H - 224;
       const itemBottom = totalBoxY - 24;
       const priceW = anyPrice ? 208 : 0;
-      const titleW = contentW - priceW - (anyPrice ? 24 : 0);
+      const numberW = 42;
+      const categoryW = 156;
+      const specX = padX + numberW + categoryW + 14;
+      const titleW = W - padX - specX - priceW - (anyPrice ? 20 : 0) - 10;
+
+      // Keep specification tokens such as DDR5 / 6000 / RTX together when they fit.
+      function wrapSpec(text, width) {
+        const lines = [];
+        let line = "";
+        const tokens = String(text || "").match(/\([^()\n]*\)|（[^（）\n]*）|[A-Za-z0-9][A-Za-z0-9.*+_\/-]*|\n|\s+|./gu) || [];
+        for (const token of tokens) {
+          if (token === "\n") { lines.push(line.trimEnd()); line = ""; continue; }
+          if (line && ctx.measureText(line + token).width > width) {
+            lines.push(line.trimEnd());
+            line = "";
+          }
+          if (!line && !token.trim()) continue;
+          if (ctx.measureText(token).width > width) {
+            const parts = wrapCanvasText(ctx, token, width);
+            lines.push(...parts.slice(0, -1));
+            line = parts[parts.length - 1];
+          } else {
+            line += token;
+          }
+        }
+        if (line.trim() || !lines.length) lines.push(line.trimEnd());
+        return lines;
+      }
 
       function buildBlocks() {
         ctx.font = "700 " + titleSize + "px " + font;
         return items.map((it, idx) => {
           const qty = Math.max(0, Number(it.qty) || 0);
           const category = String(it.category || "").trim();
-          const prefix = (idx + 1) + ". ";
-          const categoryPrefix = category ? category + "｜" : "";
+          const categoryLines = wrapSpec(category || "—", categoryW - 12);
           const qtySuffix = qty > 1 ? "  × " + qty : "";
-          const lines = wrapCanvasText(ctx, prefix + categoryPrefix + String(it.title || "品項") + qtySuffix, titleW);
+          const lines = wrapSpec(String(it.title || "品項") + qtySuffix, titleW);
           const price = Number(it.unit_price);
           const hasPrice = Number.isFinite(price) && price > 0;
-          const rowH = Math.max(lines.length * titleLineH, hasPrice ? 29 : 0) + rowPad * 2;
-          return { lines, hasPrice, priceText: hasPrice ? "單價 " + fmtQuoteMoney(price) : "", rowH };
+          const rowH = Math.max(lines.length * titleLineH, categoryLines.length * titleLineH, hasPrice ? 29 : 0) + rowPad * 2;
+          return { lines, categoryLines, hasPrice, priceText: hasPrice ? fmtQuoteMoney(price) : "", rowH };
         });
       }
 
@@ -8470,7 +8496,8 @@
       y = 222;
       ctx.fillStyle = C.purple;
       ctx.font = "800 20px " + font;
-      ctx.fillText("類別／項目", padX, y);
+      ctx.fillText("類別", padX + numberW, y);
+      ctx.fillText("規格／項目", specX, y);
       if (anyPrice) {
         ctx.textAlign = "right";
         ctx.fillText("單價", W - padX, y);
@@ -8497,8 +8524,12 @@
         }
         ctx.fillStyle = C.text;
         ctx.font = "700 " + titleSize + "px " + font;
+        ctx.fillText(String(idx + 1) + ".", padX + 4, y + rowPad);
+        block.categoryLines.forEach((line, lineIdx) => {
+          ctx.fillText(line, padX + numberW, y + rowPad + lineIdx * titleLineH);
+        });
         block.lines.forEach((line, lineIdx) => {
-          ctx.fillText(line, padX + 10, y + rowPad + lineIdx * titleLineH);
+          ctx.fillText(line, specX, y + rowPad + lineIdx * titleLineH);
         });
         if (block.hasPrice) {
           ctx.textAlign = "right";
