@@ -1432,7 +1432,7 @@ function stage7ItemPayload(item) {
 }
 
 function stage7OrderLinesPayload(lines, headerTotal) {
-  const mapped = (Array.isArray(lines) ? lines : []).map((l) => ({
+  const mapped = (Array.isArray(lines) ? lines : []).filter((l) => l && typeof l === "object").map((l) => ({
     line_key: String(l.line_key || l.lineKey || l.id || ""),
     fulfillment_type: String(l.fulfillment_type || l.fulfillmentType || (l.item_id || l.id ? "inventory" : "service")),
     item_id: l.item_id || (l.fulfillment_type === "inventory" ? l.id : null) || null,

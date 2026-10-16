@@ -7585,6 +7585,7 @@
     }
     function renderOrderLineTbody() {
       if (!orderLineTbody) return;
+      orderLineItems = (Array.isArray(orderLineItems) ? orderLineItems : []).filter((line) => line && typeof line === "object");
       orderLineTbody.innerHTML = orderLineItems.map((line, i) => {
         const costUnit = Number(line.cost_unit) || 0;
         const cogsSub = costUnit * (Number(line.qty) || 0);
@@ -7653,7 +7654,7 @@
     function openV2OrderEditor(id) {
       editingV2OrderId = id || null;
       const o = id ? DK.getOrders().find((x) => x.id === id) : null;
-      orderLineItems = (Array.isArray(o?.items) ? o.items : []).map((l) => {
+      orderLineItems = (Array.isArray(o?.items) ? o.items : []).filter((l) => l && typeof l === "object").map((l) => {
         const itemId = l.item_id || null;
         const inventoryItem = itemId ? DK.findItemById(itemId) : null;
         let costUnit;
@@ -7816,7 +7817,80 @@
     (function initManualOrderLine() {
       const box = document.getElementById("orderManualBox");
       const vendor = document.getElementById("orderManualVendor");
-      function close() { if (box) box.hidden = true; editingManualOrderLineIndex = -1; const add = document.getElementById("orderManualAdd"); if (add) add.textContent = "加入訂單"; }
+      const nameInput = document.getElementById("orderManualName");
+      const categoryInput = document.getElementById("orderManualCategory");
+      const quoteHistory = document.getElementById("orderManualQuoteHistory");
+      let quoteHistoryTimer = 0;
+
+      function quoteNorm(value) {
+        return String(value || "").toLowerCase()
+          .replace(/[‐‑‒–—―−﹣－]/g, "-")
+          .replace(/ddr\s*([345])/g, "ddr$1")
+          .replace(/(\d+(?:\.\d+)?)\s*(gb|g)\b/g, "$1g")
+          .replace(/(\d+(?:\.\d+)?)\s*(tb|t)\b/g, "$1t")
+          .replace(/[^a-z0-9\u4e00-\u9fff.\-\s]/g, " ")
+          .replace(/\s+/g, " ").trim();
+      }
+
+      function quoteDateAge(date) {
+        const d = new Date(String(date || "").slice(0, 10) + "T00:00:00");
+        if (Number.isNaN(d.getTime())) return null;
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        return Math.floor((now.getTime() - d.getTime()) / 86400000);
+      }
+
+      function renderRecentManualQuotes() {
+        if (!quoteHistory) return;
+        const query = String(nameInput?.value || "").trim();
+        const category = String(categoryInput?.value || "").trim();
+        if (query.length < 3) {
+          quoteHistory.hidden = true;
+          quoteHistory.innerHTML = "";
+          return;
+        }
+        const norm = quoteNorm(query);
+        const tokens = norm.split(/[\s-]+/).filter((token) => token.length >= 2 || /^\d/.test(token));
+        const bridge = window.DKPurchaseBridge;
+        const quotes = bridge && typeof bridge.loadVendorQuotes === "function" ? bridge.loadVendorQuotes() : [];
+        const rows = (Array.isArray(quotes) ? quotes : []).filter((q) => {
+          const age = quoteDateAge(q?.date);
+          if (age == null || age < 0 || age > 30) return false;
+          if (!(Number(q?.price) > 0)) return false;
+          if (category && String(q?.category || "").trim() && String(q.category).trim() !== category) return false;
+          const name = bridge && typeof bridge.getVendorQuoteDisplayName === "function"
+            ? bridge.getVendorQuoteDisplayName(q)
+            : [q?.brand, q?.spec].filter(Boolean).join(" ");
+          const hay = quoteNorm(name);
+          const hayTokens = hay.split(/[\s-]+/);
+          return tokens.length > 0 && tokens.every((token) => /\d/.test(token) ? hayTokens.includes(token) : hay.includes(token));
+        }).sort((a, b) => Number(a.price) - Number(b.price) || String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 8);
+        if (!rows.length) {
+          quoteHistory.hidden = false;
+          quoteHistory.innerHTML = '<strong>近 30 天報價：</strong><span class="muted">沒有找到相符紀錄</span>';
+          return;
+        }
+        const lowest = Number(rows[0].price);
+        quoteHistory.hidden = false;
+        quoteHistory.innerHTML = '<div style="font-weight:700;margin-bottom:8px">近 30 天報價（共 ' + rows.length + ' 筆）</div>' + rows.map((q) => {
+          const isLow = Number(q.price) === lowest;
+          return '<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line)">' +
+            '<span style="flex:1"><strong>' + v2Esc(q.vendor || "未填廠商") + '</strong>｜NT$ ' + v2Esc(Number(q.price).toLocaleString("zh-TW")) + '｜' + v2Esc(String(q.date || "").slice(0, 10)) + (isLow ? ' <span class="badge ok">最低</span>' : '') + '</span>' +
+            '<button type="button" class="btn btn-ghost btn-sm order-manual-quote-apply" data-vendor="' + v2Esc(q.vendor || "") + '">套用廠商</button></div>';
+        }).join("");
+      }
+
+      function scheduleRecentManualQuotes() {
+        window.clearTimeout(quoteHistoryTimer);
+        quoteHistoryTimer = window.setTimeout(renderRecentManualQuotes, 280);
+      }
+      function close() {
+        if (box) box.hidden = true;
+        if (quoteHistory) { quoteHistory.hidden = true; quoteHistory.innerHTML = ""; }
+        editingManualOrderLineIndex = -1;
+        const add = document.getElementById("orderManualAdd");
+        if (add) add.textContent = "加入訂單";
+      }
       function refreshVendors() {
         if (!vendor) return;
         const list = (window.DKPurchaseBridge && typeof window.DKPurchaseBridge.getVendors === "function") ? window.DKPurchaseBridge.getVendors() : [];
@@ -7826,6 +7900,16 @@
         refreshVendors();
         fillV2CategoryOptions();
         if (box) box.hidden = !box.hidden;
+        scheduleRecentManualQuotes();
+      });
+      nameInput?.addEventListener("input", scheduleRecentManualQuotes);
+      categoryInput?.addEventListener("change", scheduleRecentManualQuotes);
+      quoteHistory?.addEventListener("click", (event) => {
+        const button = event.target?.closest?.(".order-manual-quote-apply");
+        if (!button || !vendor) return;
+        const value = String(button.getAttribute("data-vendor") || "");
+        if (value && !Array.from(vendor.options).some((option) => option.value === value)) vendor.add(new Option(value, value));
+        vendor.value = value;
       });
       document.getElementById("orderManualCancel")?.addEventListener("click", close);
       document.getElementById("orderManualType")?.addEventListener("change", (e) => {
@@ -7883,6 +7967,7 @@
         const customerSource = String(document.getElementById("orderCustomerSource")?.value || "").trim();
         if (!salesType) return v2Show(orderMsg, "請選擇銷售類型");
         if (!customerSource) return v2Show(orderMsg, "請選擇客戶來源");
+        orderLineItems = (Array.isArray(orderLineItems) ? orderLineItems : []).filter((line) => line && typeof line === "object");
         const missingCategory = orderLineItems.find((line) => !String(line.category || "").trim() && !line.historical_missing);
         if (missingCategory) return v2Show(orderMsg, "訂單品項「" + String(missingCategory.name || missingCategory.spec || "未命名品項") + "」尚未選擇品類");
         const payload = {

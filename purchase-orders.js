@@ -378,10 +378,15 @@
 
   function tokenize(norm) {
     return String(norm || "")
-      .split(/\s+/)
+      .split(/[\s-]+/)
       .filter(function (t) {
         return t && (t.length >= 2 || /^\d/.test(t));
       });
+  }
+
+  function searchTokenMatches(hay, token) {
+    if (/\d/.test(token)) return tokenize(hay).indexOf(token) !== -1;
+    return hay.indexOf(token) !== -1;
   }
 
   function quoteHaystack(q) {
@@ -408,17 +413,15 @@
 
     const qCap = tokens.filter(function (t) { return /^\d+(?:\.\d+)?[gt]$/.test(t); });
     for (let i = 0; i < qCap.length; i++) {
-      if (hay.indexOf(qCap[i]) === -1) {
+      if (!searchTokenMatches(hay, qCap[i])) {
         // 容量不符：不得高度符合（例 32g vs 16g）
-        const hit = tokens.filter(function (t) { return hay.indexOf(t) !== -1; }).length;
+        const hit = tokens.filter(function (t) { return searchTokenMatches(hay, t); }).length;
         if (hit >= Math.ceil(tokens.length * 0.5)) return "partial";
         return "other";
       }
     }
 
-    if (hay.indexOf(qn) !== -1 || qn.indexOf(hay) !== -1) return "high";
-
-    const hits = tokens.filter(function (t) { return hay.indexOf(t) !== -1; });
+    const hits = tokens.filter(function (t) { return searchTokenMatches(hay, t); });
     if (hits.length === tokens.length) return "high";
     if (hits.length >= Math.ceil(tokens.length * 0.6)) return "partial";
     if (hits.length > 0) return "other";
@@ -1438,23 +1441,86 @@
     const box = el("poQuoteHistory");
     if (!box) return;
     const query = itemSpec(item) || item.requestText || "";
+    const category = String(item.category || "").trim();
     const rows = loadQuotes().map(function (q) {
-      return { quote: q, level: matchLevel(query, q), price: toNum(q.price) };
+      return { quote: q, level: matchLevel(query, q), price: toNum(q.price), days: daysAgo(q.date) };
     }).filter(function (row) {
-      return row.level === "high" && row.price != null && row.price > 0;
+      const quoteCategory = String(row.quote.category || "").trim();
+      return row.level === "high" && row.price != null && row.price > 0 && row.days != null && row.days >= 0 && row.days <= 30 && (!category || !quoteCategory || quoteCategory === category);
     }).sort(function (a, b) {
       if (a.price !== b.price) return a.price - b.price;
       return String(b.quote.date || "").localeCompare(String(a.quote.date || ""));
     });
     if (!rows.length) {
       box.hidden = false;
-      box.innerHTML = '<strong>既有比價：</strong><span class="muted">目前沒有相符的歷史報價</span>';
+      box.innerHTML = '<strong>近 30 天比價：</strong><span class="muted">目前沒有相符的歷史報價，可在下方連續新增多家廠商。</span>';
       return;
     }
-    const best = rows[0];
+    const bestPrice = rows[0].price;
     box.hidden = false;
-    box.innerHTML = '<strong>既有比價：</strong>共 ' + esc(String(rows.length)) + " 筆｜目前最低 " +
-      esc(best.quote.vendor || "未填廠商") + " " + esc(fmtNT(best.price)) + "（" + esc(fmtDate(best.quote.date)) + "）";
+    box.innerHTML = '<div style="font-weight:700;margin-bottom:8px">近 30 天相符報價（共 ' + esc(String(rows.length)) + ' 筆）</div>' +
+      '<div class="table-wrap"><table class="table table-compact"><thead><tr><th>廠商</th><th>日期</th><th style="text-align:right">報價</th><th>庫存</th><th style="text-align:right">操作</th></tr></thead><tbody>' +
+      rows.slice(0, 12).map(function (row) {
+        const q = row.quote;
+        const selected = item.selectedQuoteId && String(item.selectedQuoteId) === String(q.id);
+        const low = row.price === bestPrice;
+        return '<tr><td>' + esc(q.vendor || "未填廠商") + (low ? ' <span class="badge ok">最低</span>' : '') + '</td>' +
+          '<td>' + esc(fmtDate(q.date)) + '</td><td style="text-align:right">' + esc(fmtNT(row.price)) + '</td>' +
+          '<td>' + (q.inStock ? '<span class="badge ok">現貨</span>' : '<span class="badge">未確認</span>') + '</td>' +
+          '<td style="text-align:right"><button type="button" class="btn btn-sm ' + (selected ? 'btn-primary' : 'btn-ghost') + '" data-poq-apply="' + esc(q.id) + '"' + (selected ? ' disabled' : '') + '>' + (selected ? '已採用' : '採用') + '</button></td></tr>';
+      }).join("") + '</tbody></table></div><div class="muted small" style="margin-top:8px">最低價只作提示；請依現貨、運送與到貨時間決定最後採用廠商。</div>';
+  }
+
+  async function applyQuoteToModalItem(quoteId) {
+    if (!currentOrder || !quoteModalItemId || !canUpdateQuote(currentOrder)) return quoteModalMessage("找不到可更新的叫貨品項", true);
+    const idx = currentOrder.items.findIndex(function (x) { return String(x.id) === String(quoteModalItemId); });
+    if (idx < 0) return quoteModalMessage("找不到可更新的叫貨品項", true);
+    const q = loadQuotes().find(function (row) { return String(row.id) === String(quoteId); });
+    if (!q || !(toNum(q.price) > 0)) return quoteModalMessage("找不到可採用的廠商報價", true);
+    const original = currentOrder.items[idx];
+    const updated = normalizeItem(Object.assign({}, original, {
+      category: String(q.category || original.category || ""),
+      selectedVendor: String(q.vendor || ""),
+      selectedQuoteId: String(q.id),
+      selectedSpec: displayName(q),
+      selectedUnitPrice: toNum(q.price),
+      quotedAt: String(q.date || "").slice(0, 10),
+      manualVendor: "",
+      manualUnitPrice: null,
+      quoteStatus: "quoted",
+    }));
+    currentOrder.items[idx] = updated;
+    let costSyncWarning = "";
+    if (updated.sourceSalesOrderId && updated.sourceSalesOrderLineKey) {
+      if (typeof window.stage7SyncProcurementCost !== "function") {
+        costSyncWarning = "；訂單成本同步功能尚未部署";
+      } else {
+        const costSync = await window.stage7SyncProcurementCost({
+          order_id: updated.sourceSalesOrderId,
+          line_key: updated.sourceSalesOrderLineKey,
+          unit_cost: updated.selectedUnitPrice,
+          vendor: updated.selectedVendor,
+          quote_id: updated.selectedQuoteId,
+          quoted_at: updated.quotedAt,
+        });
+        if (costSync && costSync.ok) {
+          updated.costSyncedAt = new Date().toISOString();
+          try {
+            if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") {
+              await window.DK.fetchV2DataFromSupabase();
+            }
+          } catch (_) {}
+        }
+        else costSyncWarning = "；訂單成本尚未同步：" + String((costSync && costSync.error) || "請確認 Supabase Stage 23 已更新");
+      }
+    }
+    lastAddedItemId = updated.id;
+    renderCurrentPick(updated);
+    renderItems();
+    renderVendorGroups();
+    renderQuoteModalHistory(updated);
+    persistCurrent({ quoteOnly: true });
+    quoteModalMessage("已採用 " + updated.selectedVendor + " " + fmtNT(updated.selectedUnitPrice) + (updated.costSyncedAt ? "，並同步訂單成本" : "") + costSyncWarning, !!costSyncWarning);
   }
 
   function openQuoteModal(itemId) {
@@ -1599,60 +1665,24 @@
       if (!result || !result.ok || !result.quote) {
         return quoteModalMessage("報價儲存失敗：" + String((result && result.error) || "未知錯誤"), true);
       }
-      const original = currentOrder.items[idx];
       const q = result.quote;
-      const updated = normalizeItem(Object.assign({}, original, {
-        category: String(q.category || category || original.category || ""),
-        selectedVendor: String(q.vendor || vendor),
-        selectedQuoteId: String(q.id),
-        selectedSpec: displayName(q),
-        selectedUnitPrice: toNum(q.price),
-        quotedAt: String(q.date || date).slice(0, 10),
-        manualVendor: "",
-        manualUnitPrice: null,
-        quoteStatus: "quoted",
-      }));
-      currentOrder.items[idx] = updated;
-      let costSyncWarning = "";
-      if (updated.sourceSalesOrderId && updated.sourceSalesOrderLineKey) {
-        if (typeof window.stage7SyncProcurementCost !== "function") {
-          costSyncWarning = "；訂單成本同步功能尚未部署";
-        } else {
-          const costSync = await window.stage7SyncProcurementCost({
-            order_id: updated.sourceSalesOrderId,
-            line_key: updated.sourceSalesOrderLineKey,
-            unit_cost: updated.selectedUnitPrice,
-            vendor: updated.selectedVendor,
-            quote_id: updated.selectedQuoteId,
-            quoted_at: updated.quotedAt,
-          });
-          if (costSync && costSync.ok) {
-            updated.costSyncedAt = new Date().toISOString();
-            try {
-              if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") {
-                await window.DK.fetchV2DataFromSupabase();
-              }
-            } catch (_) {}
-          } else {
-            costSyncWarning = "；訂單成本尚未同步：" + String((costSync && costSync.error) || "請確認 Supabase Stage 23 已更新");
-          }
-        }
-      }
-      lastAddedItemId = updated.id;
-      closeQuoteModal();
-      renderCurrentPick(updated);
-      renderItems();
-      renderVendorGroups();
-      searchQuotes(updated.selectedSpec || updated.requestText || "");
-      persistCurrent({ quoteOnly: true });
+      renderQuoteModalHistory(Object.assign({}, currentOrder.items[idx], { selectedSpec: spec, category: category }));
+      if (el("poQuoteVendor")) el("poQuoteVendor").value = "";
+      if (el("poQuotePrice")) el("poQuotePrice").value = "";
+      if (el("poQuoteWarranty")) el("poQuoteWarranty").value = "";
+      if (el("poQuoteInStock")) el("poQuoteInStock").checked = false;
+      if (el("poQuoteTaxIncluded")) el("poQuoteTaxIncluded").checked = false;
+      if (el("poQuoteShippingIncluded")) el("poQuoteShippingIncluded").checked = false;
+      if (el("poQuoteNote")) el("poQuoteNote").value = "";
       const cloudWarning = result.cloud && !result.cloud.ok ? "；廠商報價雲端同步失敗，已保留本機資料" : "";
-      showMsg("報價已同步到廠商比價、叫貨品項" + (updated.costSyncedAt ? "及訂單成本" : "") + cloudWarning + costSyncWarning, 6000);
+      quoteModalMessage("已新增「" + String(q.vendor || vendor) + "」報價並同步到廠商報價紀錄" + cloudWarning + "。可繼續新增下一家，最後再從上方按『採用』。", !!cloudWarning);
+      try { if (el("poQuoteVendor")) el("poQuoteVendor").focus(); } catch (_) {}
     } catch (e) {
       quoteModalMessage("報價儲存失敗：" + String((e && e.message) || e || "未知錯誤"), true);
     } finally {
       if (button) {
         button.disabled = false;
-        button.textContent = "儲存報價並更新叫貨品項";
+        button.textContent = "新增這筆廠商報價";
       }
     }
   }
@@ -1970,9 +2000,26 @@
     el("poQuoteCloseBtn") && el("poQuoteCloseBtn").addEventListener("click", closeQuoteModal);
     el("poQuoteCancelBtn") && el("poQuoteCancelBtn").addEventListener("click", closeQuoteModal);
     el("poQuoteSaveBtn") && el("poQuoteSaveBtn").addEventListener("click", saveQuoteModal);
+  el("poQuoteHistory") && el("poQuoteHistory").addEventListener("click", function (e) {
+    const button = e.target && e.target.closest ? e.target.closest("[data-poq-apply]") : null;
+    if (!button) return;
+    button.disabled = true;
+    applyQuoteToModalItem(button.getAttribute("data-poq-apply")).catch(function (err) {
+      quoteModalMessage("採用報價失敗：" + String((err && err.message) || err || "未知錯誤"), true);
+      button.disabled = false;
+    });
+  });
     el("poQuoteCoolpcBtn") && el("poQuoteCoolpcBtn").addEventListener("click", lookupCoolpcForQuoteModal);
-    el("poQuoteSpec") && el("poQuoteSpec").addEventListener("input", resetQuoteModalLookup);
-    el("poQuoteCategory") && el("poQuoteCategory").addEventListener("change", resetQuoteModalLookup);
+  el("poQuoteSpec") && el("poQuoteSpec").addEventListener("input", function () {
+    resetQuoteModalLookup();
+    const item = currentOrder && (currentOrder.items || []).find(function (row) { return String(row.id) === String(quoteModalItemId); });
+    if (item) renderQuoteModalHistory(Object.assign({}, item, { selectedSpec: String(el("poQuoteSpec").value || "") }));
+  });
+  el("poQuoteCategory") && el("poQuoteCategory").addEventListener("change", function () {
+    resetQuoteModalLookup();
+    const item = currentOrder && (currentOrder.items || []).find(function (row) { return String(row.id) === String(quoteModalItemId); });
+    if (item) renderQuoteModalHistory(Object.assign({}, item, { category: String(el("poQuoteCategory").value || "") }));
+  });
     el("poQuoteCoolpcResults") && el("poQuoteCoolpcResults").addEventListener("click", function (e) {
       const button = e.target && e.target.closest ? e.target.closest("[data-poq-coolpc-price]") : null;
       if (!button || button.disabled) return;
