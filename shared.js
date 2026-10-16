@@ -1097,10 +1097,14 @@ async function stage7RestJson(path, opts) {
   if (opts && opts.body != null) headers["Content-Type"] = "application/json";
   if (opts && opts.prefer) headers.Prefer = opts.prefer;
   const url = `${SUPABASE_URL}/rest/v1/${path}`;
+  const controller = new AbortController();
+  let timer;
   try {
+    return await Promise.race([(async () => {
     const res = await fetch(url, {
       method,
       headers,
+      signal: controller.signal,
       body: opts && opts.body != null ? JSON.stringify(opts.body) : undefined,
     });
     const text = await res.text();
@@ -1111,6 +1115,9 @@ async function stage7RestJson(path, opts) {
     if (!res.ok) {
       const kind = vpRestClassifyHttp(res.status, text);
       const errMsg = typeof data === "object" && data && data.message ? data.message : String(text || "").slice(0, 160);
+      if (data && data.code === "PGRST202" && /backoffice_(purchase_operation|(?:create|update)_order_checked|set_order_operations_checked)/.test(path)) {
+        return { ok: false, migrationRequired: true, error: "安全更新尚未安裝（Stage 36）；未寫入雲端，請先完成資料庫更新", data: null };
+      }
       if (kind === "not_authenticated") {
         return { ok: false, notAuthenticated: true, error: "請先登入後台", data: null };
       }
@@ -1120,9 +1127,16 @@ async function stage7RestJson(path, opts) {
       return { ok: false, error: errMsg || ("HTTP " + res.status), data: null, status: res.status };
     }
     return { ok: true, data: data };
+    })(), new Promise((resolve) => {
+      timer = setTimeout(() => {
+        resolve({ ok: false, timedOut: true, resultUnknown: method !== "GET", data: null,
+          error: method === "GET" ? "讀取逾時，請稍後重試" : "連線逾時，寫入結果待確認；請重新載入原單核對，勿直接重複建立或入庫" });
+        controller.abort();
+      }, 30000);
+    })]);
   } catch (e) {
-    return { ok: false, error: String(e && e.message ? e.message : e || "網路連線失敗"), data: null };
-  }
+    return { ok: false, resultUnknown: method !== "GET", error: (method !== "GET" ? "連線中斷，寫入結果待確認；請重新載入原單核對，勿直接重送。" : "") + String(e && e.message ? e.message : e || "網路連線失敗"), data: null };
+  } finally { clearTimeout(timer); }
 }
 
 async function stage7Rpc(fnName, args) {
@@ -1443,6 +1457,7 @@ function stage7OrderLinesPayload(lines, headerTotal) {
     preferred_vendor: String(l.preferred_vendor || l.preferredVendor || ""),
     qty: Number(l.qty) || 0,
     unit_price: Number(l.unit_price != null ? l.unit_price : l.unitPrice) || 0,
+    ...(Object.prototype.hasOwnProperty.call(l, "quote_unit_price") ? { quote_unit_price: Number(l.quote_unit_price) || 0 } : {}),
   }));
   if (!mapped.length) return mapped;
   const lineSum = mapped.reduce((s, l) => s + (Number(l.unit_price) || 0) * (Number(l.qty) || 0), 0);
@@ -1547,36 +1562,19 @@ async function stage7DeleteItem(id) {
 }
 
 async function stage7CreateOrder(payload) {
-  const res = await stage7Rpc("backoffice_create_order_v2", {
-    p_order_no: payload.order_no,
-    p_customer_name: payload.customer_name || "",
-    p_sales_type: payload.salesType || payload.sales_type || "",
-    p_shipping_income: Number(payload.shipping_income) || 0,
-    p_discount: Number(payload.discount) || 0,
-    p_payment_method: payload.payment_method || "transfer",
-    p_status: payload.status || "pending",
-    p_customer_phone: payload.customer_phone || "",
-    p_customer_line: payload.customer_line || "",
-    p_lines: stage7OrderLinesPayload(payload.items || payload.lines || [], payload.total_sale),
-  });
-  return stage7FinishOrderWrite(res, payload, null);
+  return stage7MapOrderWriteError(await stage7Rpc("backoffice_create_order_checked", {
+    p_payload: { ...payload, sales_type: payload.salesType || payload.sales_type || "",
+      items: stage7OrderLinesPayload(payload.items || payload.lines || [], payload.total_sale) },
+  }));
 }
 
 async function stage7UpdateOrder(payload) {
-  const res = await stage7Rpc("backoffice_update_order_v2", {
-    p_order_id: payload.id,
-    p_order_no: payload.order_no,
-    p_customer_name: payload.customer_name || "",
-    p_sales_type: payload.salesType || payload.sales_type || "",
-    p_shipping_income: Number(payload.shipping_income) || 0,
-    p_discount: Number(payload.discount) || 0,
-    p_payment_method: payload.payment_method || "transfer",
-    p_status: payload.status || "pending",
-    p_customer_phone: payload.customer_phone || "",
-    p_customer_line: payload.customer_line || "",
-    p_lines: stage7OrderLinesPayload(payload.items || payload.lines || [], payload.total_sale),
+  const result = await stage7Rpc("backoffice_update_order_checked", {
+    p_expected_updated_at: payload.expected_updated_at ?? payload.updated_at ?? null,
+    p_payload: { ...payload, sales_type: payload.salesType || payload.sales_type || "",
+      items: stage7OrderLinesPayload(payload.items || payload.lines || [], payload.total_sale) },
   });
-  return stage7FinishOrderWrite(res, payload, payload.id);
+  return stage7MapOrderWriteError(result);
 }
 
 async function stage7AssignInboundFunding(ledgerId, owner) {
@@ -1637,63 +1635,29 @@ async function stage7ClearProcurementCost(payload) {
 }
 
 async function stage7ReceivePurchaseItem(payload) {
-  if (!stage7IsAdminRole()) {
-    return { ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以登記採購到貨" };
-  }
-  const src = payload && typeof payload === "object" ? payload : {};
-  const qty = Math.max(1, Number(src.qty) || 1);
-  const unitCost = Number(src.unit_cost != null ? src.unit_cost : src.unitCost);
-  const category = String(src.category || "").trim();
-  if (!String(src.purchase_order_id || "").trim() || !String(src.purchase_item_id || "").trim()) {
-    return { ok: false, error: "缺少叫貨單或叫貨品項識別碼" };
-  }
-  if (!String(src.name || "").trim()) return { ok: false, error: "品項／完整規格必填" };
-  if (!category) return { ok: false, error: "品類必填" };
-  if (!Number.isFinite(unitCost) || unitCost <= 0) return { ok: false, error: "到貨成本必須大於 0" };
-  return stage7Rpc("backoffice_receive_purchase_item", {
-    p_order_id: String(src.order_id || ""),
-    p_line_key: String(src.line_key || ""),
-    p_purchase_order_id: String(src.purchase_order_id || ""),
-    p_purchase_item_id: String(src.purchase_item_id || ""),
-    p_inventory_item_id: String(src.inventory_item_id || ""),
-    p_name: String(src.name || ""),
-    p_category: category,
-    p_qty: qty,
-    p_unit_cost: unitCost,
-    p_vendor: String(src.vendor || ""),
-    p_received_at: src.received_at || null,
-    p_note: String(src.note || ""),
+  if (!stage7IsAdminRole()) return { ok: false, forbidden: true, error: "只有管理員可以登記採購到貨" };
+  if (!payload?.purchase_order) return { ok: false, error: "缺少原叫貨單版本，請重新載入" };
+  return upsertPurchaseOrderToSupabase(payload.purchase_order, {
+    type: "receive", purchase_item_id: payload.purchase_item_id,
+    destination: payload.destination, inventory_item_id: payload.inventory_item_id || "",
+    received_at: payload.received_at, note: payload.note || "",
   });
 }
 
 async function stage7SetPurchaseReceiptDestination(payload) {
-  if (!stage7IsAdminRole()) {
-    return { ok: false, forbidden: true, permissionDenied: true, error: "只有管理員可以修改到貨用途" };
-  }
-  const src = payload && typeof payload === "object" ? payload : {};
-  const destination = String(src.destination || "").trim();
-  if (destination !== "customer" && destination !== "inventory") return { ok: false, error: "到貨用途不正確" };
-  return stage7Rpc("backoffice_set_purchase_receipt_destination", {
-    p_order_id: String(src.order_id || ""),
-    p_line_key: String(src.line_key || ""),
-    p_purchase_order_id: String(src.purchase_order_id || ""),
-    p_purchase_item_id: String(src.purchase_item_id || ""),
-    p_destination: destination,
-    p_note: String(src.note || ""),
+  if (!stage7IsAdminRole()) return { ok: false, forbidden: true, error: "只有管理員可以修改到貨用途" };
+  if (!payload?.purchase_order) return { ok: false, error: "缺少原叫貨單版本，請重新載入" };
+  return upsertPurchaseOrderToSupabase(payload.purchase_order, {
+    type: "destination", purchase_item_id: payload.purchase_item_id,
+    destination: payload.destination, note: payload.note || "",
   });
 }
 
 async function stage7SetOrderOperations(payload) {
-  const src = payload && typeof payload === "object" ? payload : {};
-  return stage7Rpc("backoffice_set_order_operations", {
-    p_order_id: String(src.order_id || src.id || ""),
-    p_payment_status: String(src.payment_status || "unpaid"),
-    p_received_amount: Number(src.received_amount) || 0,
-    p_payment_date: src.payment_date || null,
-    p_payment_reference: String(src.payment_reference || ""),
-    p_delivery_status: String(src.delivery_status || "pending"),
-    p_delivered_at: src.delivered_at || null,
-    p_delivery_note: String(src.delivery_note || ""),
+  const src = payload || {};
+  return stage7Rpc("backoffice_set_order_operations_checked", {
+    p_expected_updated_at: src.expected_updated_at ?? src.updated_at ?? null,
+    p_payload: { ...src, id: String(src.order_id || src.id || "") },
   });
 }
 
@@ -1743,40 +1707,32 @@ async function stage7FinishOrderWrite(res, payload, fallbackId) {
       quoteNoteWarning: "訂單已儲存，但無法取得訂單 ID，報價備註尚未儲存",
     };
   }
+  const outcome = { ...res };
   const noteRes = await stage7Rpc("backoffice_set_order_quote_note", {
     p_order_id: orderId,
     p_quote_note: payload && payload.quote_note != null ? String(payload.quote_note) : "",
   });
   if (!noteRes || !noteRes.ok) {
-    return {
-      ...res,
-      quoteNoteFailed: true,
-      quoteNoteWarning: "訂單已儲存，但報價備註儲存失敗；請勿重複建立訂單",
-    };
+    outcome.quoteNoteFailed = true;
+    outcome.quoteNoteWarning = "訂單已儲存，但報價備註儲存失敗；請勿重複建立訂單";
   }
   const sourceRes = await stage7Rpc("backoffice_set_order_customer_source", {
     p_order_id: orderId,
     p_customer_source: payload && payload.customer_source != null ? String(payload.customer_source) : "",
   });
   if (!sourceRes || !sourceRes.ok) {
-    return {
-      ...res,
-      customerSourceFailed: true,
-      customerSourceWarning: "訂單已儲存，但客戶來源儲存失敗；請勿重複建立訂單",
-    };
+    outcome.customerSourceFailed = true;
+    outcome.customerSourceWarning = "訂單已儲存，但客戶來源儲存失敗；請勿重複建立訂單";
   }
   const operationsRes = await stage7SetOrderOperations({
     ...(payload || {}),
     order_id: orderId,
   });
   if (!operationsRes || !operationsRes.ok) {
-    return {
-      ...res,
-      operationsFailed: true,
-      operationsWarning: "訂單已儲存，但收款／交貨資料儲存失敗；請重新開啟訂單確認",
-    };
+    outcome.operationsFailed = true;
+    outcome.operationsWarning = "訂單已儲存，但收款／交貨資料儲存失敗；請重新開啟訂單確認";
   }
-  return res;
+  return outcome;
 }
 
 async function stage7SaveExpense(row) {
@@ -3759,6 +3715,7 @@ function cloudRowToPurchaseOrder(row) {
   return {
     ...j,
     id: String(row.id || j.id || ""),
+    cloudUpdatedAt: row.updated_at == null ? "legacy:null" : String(row.updated_at),
     orderNo: row.order_no != null ? String(row.order_no) : String(j.orderNo || j.order_no || ""),
     status: row.status != null ? String(row.status) : String(j.status || "draft"),
     createdAt: row.created_at || j.createdAt || j.created_at || null,
@@ -3797,37 +3754,19 @@ function vpRestDeniedResult(authOrKind, extra) {
 }
 
 async function vpRestFetchAll(tableName) {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return { ok: false, notEnabled: true, notAuthenticated: false, forbidden: false, error: "Supabase 未設定", rows: [] };
-  }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return { ok: false, notEnabled: true, error: "Supabase 未設定", rows: [] };
   const gate = vpRequireVerifiedAdminCloudAccess();
-  if (!gate.ok) return gate;
-  const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
-  if (!auth.ok) {
-    return vpRestDeniedResult(auth, { rows: [] });
+  if (!gate.ok) return { ...gate, rows: [] };
+  const rows = [];
+  // Continue until empty rather than assuming the server's configured row limit.
+  while (rows.length < 100000) {
+    const result = await stage7RestJson(tableName + "?select=*&order=id.asc&limit=500&offset=" + rows.length);
+    if (!result?.ok) return { ...result, notEnabled: result?.status === 404, rows: [] };
+    if (!Array.isArray(result.data)) return { ok: false, error: "雲端回傳格式不正確，未合併部分資料", rows: [] };
+    if (!result.data.length) return { ok: true, rows };
+    rows.push(...result.data);
   }
-  const url = `${SUPABASE_URL}/rest/v1/${tableName}?select=*&order=updated_at.desc.nullslast`;
-  let res;
-  try {
-    res = await fetch(url, {
-      headers: auth.headers,
-    });
-  } catch (e) {
-    return { ok: false, notEnabled: false, notAuthenticated: false, forbidden: false, error: String(e?.message || e || "網路錯誤"), rows: [] };
-  }
-  const errText = res.ok ? "" : await res.text();
-  if (!res.ok) {
-    const kind = vpRestClassifyHttp(res.status, errText);
-    if (kind === "not_enabled") {
-      return { ok: false, notEnabled: true, notAuthenticated: false, forbidden: false, error: errText.slice(0, 200) || ("HTTP " + res.status), rows: [] };
-    }
-    if (kind === "not_authenticated" || kind === "forbidden") {
-      return vpRestDeniedResult(kind);
-    }
-    return { ok: false, notEnabled: false, notAuthenticated: false, forbidden: false, error: errText.slice(0, 200) || ("HTTP " + res.status), rows: [] };
-  }
-  const rows = await res.json();
-  return { ok: true, notEnabled: false, notAuthenticated: false, forbidden: false, error: null, rows: Array.isArray(rows) ? rows : [] };
+  return { ok: false, error: "資料量超過單次同步上限，未合併部分資料", rows: [] };
 }
 
 async function vpRestUpsertRows(tableName, rows) {
@@ -3836,67 +3775,30 @@ async function vpRestUpsertRows(tableName, rows) {
   }
   const list = Array.isArray(rows) ? rows : [];
   if (!list.length) return { ok: true, notEnabled: false, notAuthenticated: false, forbidden: false, error: null, success: 0, failed: 0 };
+  if (tableName === SUPABASE_PURCHASE_ORDERS_TABLE) {
+    let success = 0;
+    for (const row of list) {
+      const order = { ...cloudRowToPurchaseOrder(row), cloudUpdatedAt: row.data_json?.cloudUpdatedAt ?? null };
+      const result = await upsertPurchaseOrderToSupabase(order);
+      if (!result?.ok) return { ...result, success, failed: list.length - success };
+      success++;
+    }
+    return { ok: true, success, failed: 0 };
+  }
   const gate = vpRequireVerifiedAdminCloudAccess();
   if (!gate.ok) {
     return vpRestDeniedResult(gate, { failed: list.length });
   }
-  const auth = await getSupabaseRestAuthHeaders({ requireUser: true });
-  if (!auth.ok) {
-    return vpRestDeniedResult(auth, { failed: list.length });
-  }
-  const url = `${SUPABASE_URL}/rest/v1/${tableName}?on_conflict=id`;
-  const chunkSize = 40;
   let success = 0;
-  let failed = 0;
-  let lastError = null;
-  let notEnabled = false;
-  let notAuthenticated = false;
-  let forbidden = false;
-  for (let i = 0; i < list.length; i += chunkSize) {
-    const chunk = list.slice(i, i + chunkSize);
-    let res;
-    try {
-      res = await fetch(url, {
-        method: "POST",
-        headers: {
-          apikey: auth.headers.apikey,
-          Authorization: auth.headers.Authorization,
-          "Content-Type": "application/json",
-          Prefer: "return=representation,resolution=merge-duplicates",
-        },
-        body: JSON.stringify(chunk),
-      });
-    } catch (e) {
-      failed += chunk.length;
-      lastError = String(e?.message || e || "網路錯誤");
-      continue;
-    }
-    if (!res.ok) {
-      const errText = await res.text();
-      const kind = vpRestClassifyHttp(res.status, errText);
-      failed += chunk.length;
-      if (kind === "not_authenticated") {
-        notAuthenticated = true;
-        lastError = "請先登入後台";
-        break;
-      }
-      if (kind === "forbidden") {
-        forbidden = true;
-        lastError = "你沒有此資料權限";
-        break;
-      }
-      if (kind === "not_enabled") notEnabled = true;
-      lastError = errText.slice(0, 200) || ("HTTP " + res.status);
-      if (notEnabled) break;
-      continue;
-    }
+  for (let i = 0; i < list.length; i += 40) {
+    const chunk = list.slice(i, i + 40);
+    const result = await stage7RestJson(tableName + "?on_conflict=id", {
+      method: "POST", body: chunk, prefer: "return=representation,resolution=merge-duplicates",
+    });
+    if (!result?.ok) return { ...result, notEnabled: result?.status === 404, success, failed: list.length - success };
     success += chunk.length;
   }
-  if (notAuthenticated) return { ok: false, notEnabled: false, notAuthenticated: true, forbidden: false, error: lastError || "請先登入後台", success, failed };
-  if (forbidden) return { ok: false, notEnabled: false, notAuthenticated: false, forbidden: true, error: lastError || "你沒有此資料權限", success, failed };
-  if (notEnabled) return { ok: false, notEnabled: true, notAuthenticated: false, forbidden: false, error: lastError || "雲端尚未啟用", success, failed };
-  if (failed > 0) return { ok: false, notEnabled: false, notAuthenticated: false, forbidden: false, error: lastError || "部分寫入失敗", success, failed };
-  return { ok: true, notEnabled: false, notAuthenticated: false, forbidden: false, error: null, success, failed: 0 };
+  return { ok: true, success, failed: 0 };
 }
 
 function vpDispatch(name, detail) {
@@ -4121,6 +4023,21 @@ async function pullPurchaseOrdersFromCloud(opts) {
       return { ok: true, emptyCloud: true, meta, changed: false };
     }
     const merged = vpMergeByUpdatedAt(localAll, cloudList);
+    if (options.preferCloudId) {
+      const id = String(options.preferCloudId);
+      const remote = cloudList.find((o) => String(o.id) === id);
+      if (!remote) return { ok: false, error: "雲端找不到原單，未清除本機資料" };
+      // Backup first; quota/error must stop replacement, never discard an unsynced draft.
+      try {
+        const key = "dk_po_conflict_drafts_v1";
+        const backups = JSON.parse(localStorage.getItem(key) || "[]");
+        if (!Array.isArray(backups)) throw new Error("草稿備份格式不正確");
+        backups.push({ savedAt: vpNowISO(), order: options.localDraft || localAll.find((o) => String(o.id) === id) });
+        localStorage.setItem(key, JSON.stringify(backups));
+      } catch (e) { return { ok: false, error: "無法備份本機草稿，未替換單據：" + String(e?.message || e) }; }
+      merged.list = merged.list.filter((o) => String(o.id) !== id).concat([remote]);
+    }
+
     __dkVpSyncGuard.applyingCloud = true;
     try {
       savePurchaseOrdersRaw(merged.list, { source: "cloud" });
@@ -4422,48 +4339,36 @@ async function upsertVendorQuoteToSupabase(quote) {
   return { ok: true };
 }
 
-async function upsertPurchaseOrderToSupabase(order) {
-  if (__dkVpSyncGuard.applyingCloud) return { ok: true, skipped: true };
-  if (!order || !order.id) return { ok: false, error: "缺少 id" };
-  const stamped = vpEnsureTimestamps(order, { forceUpdated: false });
-  const result = await vpRestUpsertRows(SUPABASE_PURCHASE_ORDERS_TABLE, [purchaseOrderToCloudRow(stamped)]);
-  if (result.notEnabled) {
-    vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
-      status: "not_enabled",
-      cloudEnabled: false,
-      lastError: result.error || "雲端尚未啟用",
+const purchaseWritesInFlight = new Set();
+async function upsertPurchaseOrderToSupabase(order, action) {
+  if (__dkVpSyncGuard.applyingCloud) return { ok: false, error: "正在載入雲端資料，請稍後重試" };
+  if (!order?.id) return { ok: false, error: "缺少 id" };
+  const id = String(order.id);
+  if (purchaseWritesInFlight.has(id)) return { ok: false, error: "此叫貨單前一筆同步尚未完成；請稍後重新核對" };
+  purchaseWritesInFlight.add(id);
+  const snapshot = vpEnsureTimestamps(JSON.parse(JSON.stringify(order)), { forceUpdated: false });
+  try {
+    const result = await stage7Rpc("backoffice_purchase_operation", {
+      p_row: purchaseOrderToCloudRow(snapshot),
+      p_expected_updated_at: snapshot.cloudUpdatedAt ?? null,
+      p_action: action || { type: "save" },
     });
-    return { ok: false, notEnabled: true, error: result.error || "雲端尚未啟用" };
-  }
-  if (result.notAuthenticated || result.forbidden) {
-    const msg = vpCloudUserMessage(result) || result.error;
-    vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
-      status: "failed",
-      cloudEnabled: false,
-      lastError: msg,
-    });
-    return {
-      ok: false,
-      notAuthenticated: !!result.notAuthenticated,
-      forbidden: !!result.forbidden,
-      error: msg,
-    };
-  }
-  if (!result.ok) {
-    vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
-      status: "failed",
-      lastError: result.error || "寫入失敗",
-    });
-    return { ok: false, error: result.error || "寫入失敗" };
-  }
-  vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, {
-    status: "synced",
-    cloudEnabled: true,
-    lastSyncAt: vpNowISO(),
-    lastError: null,
-    source: "local",
-  });
-  return { ok: true };
+    if (!result?.ok || !result.data?.purchase_order) {
+      vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, { status: "failed", lastError: result?.error || "同步結果待確認" });
+      return result?.ok ? { ok: false, error: "同步結果待確認，請重新載入原單" } : result;
+    }
+    const saved = cloudRowToPurchaseOrder(result.data.purchase_order);
+    const all = loadPurchaseOrdersRaw(true);
+    const index = all.findIndex((x) => String(x.id) === id);
+    if (index < 0) all.push(saved);
+    else if (all[index].updatedAt === snapshot.updatedAt) all[index] = saved;
+    else return { ok: false, cloudSaved: true, error: "雲端已儲存，但本機有更新的草稿；請核對後重新載入，未覆蓋草稿" };
+    savePurchaseOrdersRaw(all, { skipEvent: true, source: "cloud" });
+    Object.assign(order, saved);
+    vpSaveMeta(VP_STORAGE_KEYS.purchaseOrdersMeta, { status: "synced", cloudEnabled: true,
+      lastSyncAt: vpNowISO(), lastError: null, source: "local" });
+    return { ok: true, data: result.data.operation || {}, order: saved };
+  } finally { purchaseWritesInFlight.delete(id); }
 }
 
 /** soft delete：寫入 deletedAt 並 upsert（不硬刪雲端列） */

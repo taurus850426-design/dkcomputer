@@ -54,21 +54,22 @@ test('observation attributes escape quotes and reject script URLs', () => {
   assert.equal(ctx.helpers.safeUrl('https://example.com/'), 'https://example.com/');
 });
 
-test('completing an existing order writes delivery first and stops on failure', async () => {
+test('completing an existing order submits delivery and completion atomically with its displayed version', async () => {
   const source = read('admin3.js');
   const start = source.indexOf('        let res;\n        if (editingV2OrderId)');
   assert.ok(start > 0);
   const finish = source.indexOf('        } else {', start);
   const code = source.slice(start, finish) + '\n} return res;';
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-  const run = new AsyncFunction('DK', 'payload', 'previousOrder', 'editingV2OrderId', 'v2Show', 'orderMsg', code);
+  const run = new AsyncFunction('DK', 'payload', 'editingV2OrderId', 'editingV2OrderVersion', 'v2Show', 'orderMsg', code);
   for (const success of [true, false]) {
     const calls = [];
     const dk = {
-      setOrderOperations: async () => { calls.push('delivery'); return { ok: success, error: 'failed' }; },
-      updateOrder: async () => { calls.push('complete'); return { ok: true }; },
+      setOrderOperations: async () => { throw new Error('must not partially persist delivery'); },
+      updateOrder: async (p) => { calls.push(p); return { ok: success, error: 'failed' }; },
     };
-    await run(dk, { status: 'completed', delivery_status: 'delivered' }, { delivery_status: 'pending' }, 'order-1', () => {}, {});
-    assert.deepEqual(calls, success ? ['delivery', 'complete'] : ['delivery']);
+    const result = await run(dk, { status: 'completed', delivery_status: 'delivered' }, 'order-1', 'displayed-version', () => {}, {});
+    assert.deepEqual(calls, [{status:'completed',delivery_status:'delivered',id:'order-1',expected_updated_at:'displayed-version'}]);
+    assert.equal(result.ok, success);
   }
 });

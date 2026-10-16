@@ -5214,8 +5214,14 @@
     addBtn.addEventListener("click", () => {
       const cfg = window.DK?.getConfig?.() || {};
       const fe = cfg.frontend || {};
-      const banners = Array.isArray(fe.homeBanners) ? fe.homeBanners.slice() : [];
-      banners.push({ image: "", link: "" });
+      const rows = Array.from(listEl.querySelectorAll(".banner-row"));
+      const banners = rows.length ? rows.map((row) => ({
+        image: row.querySelector(".banner-image")?.value || "",
+        link: row.querySelector(".banner-link")?.value || "",
+        focusX: Number(row.querySelector(".banner-focus-x")?.value ?? 50),
+        focusY: Number(row.querySelector(".banner-focus-y")?.value ?? 50),
+      })) : (Array.isArray(fe.homeBanners) ? fe.homeBanners.slice() : []);
+      banners.push({ image: "", link: "", focusX: 50, focusY: 50 });
       renderHomeBanners(listEl, banners);
     });
   })();
@@ -7095,6 +7101,7 @@
     const orderLineTbody = document.getElementById("orderLineTbody");
     const orderLineItemSelect = document.getElementById("orderLineItem");
     let editingV2OrderId = null;
+    let editingV2OrderVersion = null;
     let orderLineItems = [];
     let editingManualOrderLineIndex = -1;
     const orderReceivedAmountEl = document.getElementById("orderReceivedAmount");
@@ -7619,7 +7626,7 @@
         const cogsText = pendingCost ? "—" : v2FmtNum(cogsSub);
         const editButton = line.fulfillment_type !== "inventory" ? `<button type="button" class="btn btn-ghost btn-sm order-line-edit-manual" data-i="${i}">編輯</button> ` : "";
         const categoryText = String(line.category || "").trim() || "未分類";
-        return `<tr><td class="table-primary">${v2Esc(line.name || "")}${historicalBadge}<div class="muted small">品類：${v2Esc(categoryText)}｜${v2Esc(typeLabel + vendorLabel)}</div></td><td class="table-secondary">${v2Esc(spec)}</td><td class="table-number neutral-number">${line.qty}</td><td class="table-number neutral-number">${v2FmtNum(line.unit_price)}</td><td class="table-number neutral-number" data-admin-only>${costText}</td><td class="table-number neutral-number" data-admin-only>${cogsText}</td><td class="table-actions">${editButton}<button type="button" class="btn btn-ghost btn-sm tertiary-action order-line-remove" data-i="${i}"${removeDisabled}>移除</button></td></tr>`;
+        return `<tr><td class="table-primary">${v2Esc(line.name || "")}${historicalBadge}<div class="muted small">品類：${v2Esc(categoryText)}｜${v2Esc(typeLabel + vendorLabel)}</div></td><td class="table-secondary">${v2Esc(spec)}</td><td class="table-number neutral-number">${line.qty}</td><td class="table-number neutral-number">${v2FmtNum(line.quote_unit_price ?? line.unit_price)}</td><td class="table-number neutral-number" data-admin-only>${costText}</td><td class="table-number neutral-number" data-admin-only>${cogsText}</td><td class="table-actions">${editButton}<button type="button" class="btn btn-ghost btn-sm tertiary-action order-line-remove" data-i="${i}"${removeDisabled}>移除</button></td></tr>`;
       }).join("");
       orderLineTbody.querySelectorAll(".order-line-remove").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -7640,7 +7647,7 @@
           set("orderManualCategory", line.category || "");
           set("orderManualName", line.name || line.spec || "");
           set("orderManualQty", line.qty || 1);
-          set("orderManualPrice", line.unit_price || 0);
+          set("orderManualPrice", line.quote_unit_price ?? line.unit_price ?? 0);
           const vendor = document.getElementById("orderManualVendor");
           if (vendor) {
             const vendors = (window.DKPurchaseBridge && typeof window.DKPurchaseBridge.getVendors === "function") ? window.DKPurchaseBridge.getVendors() : [];
@@ -7701,6 +7708,7 @@
       });
       fillOrderLineItemSelect();
       const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
+      editingV2OrderVersion = o?.updated_at ?? null;
       set("orderNo", o ? o.order_no : DK.nextOrderNo());
       const orderNoEl = document.getElementById("orderNo");
       if (orderNoEl) orderNoEl.readOnly = !!o;
@@ -7823,7 +7831,7 @@
       if (!Number.isFinite(onHand) || onHand <= 0) return v2Show(orderMsg, "該品項目前沒有可用庫存，無法加入訂單");
       const alreadyInOrder = orderLineItems.filter((l) => l.item_id === itemId).reduce((s, l) => s + (Number(l.qty) || 0), 0);
       if (alreadyInOrder + qty > onHand) return v2Show(orderMsg, "庫存不足：" + item.sku + " 現有 " + onHand + "，明細已選 " + alreadyInOrder + "，再加 " + qty + " 會超過");
-      const line = { line_key: "line_" + Date.now() + "_" + Math.random().toString(16).slice(2), fulfillment_type: "inventory", item_id: item.id, sku: item.sku, name: item.name, spec: item.spec || "", category, qty: qty, unit_price: unitPrice };
+      const line = { line_key: "line_" + Date.now() + "_" + Math.random().toString(16).slice(2), fulfillment_type: "inventory", item_id: item.id, sku: item.sku, name: item.name, spec: item.spec || "", category, qty: qty, unit_price: unitPrice, quote_unit_price: unitPrice };
       if (canPerm("viewCost") && item.cost_unit != null && item.cost_unit !== "") {
         line.cost_unit = Number(item.cost_unit) || 0;
       }
@@ -7952,8 +7960,10 @@
           category,
           preferred_vendor: type === "procurement" ? String(vendor?.value || "") : "",
           qty,
-          unit_price: price,
-          cost_unit: 0,
+          unit_price: previous && Object.prototype.hasOwnProperty.call(previous, "quote_unit_price") && price === Number(previous.quote_unit_price)
+            ? Number(previous.unit_price) || 0 : price,
+          quote_unit_price: price,
+          cost_unit: previous?.cost_unit || 0,
         };
         if (editingManualOrderLineIndex >= 0) orderLineItems[editingManualOrderLineIndex] = nextLine;
         else orderLineItems.push(nextLine);
@@ -8019,6 +8029,7 @@
             preferred_vendor: l.preferred_vendor || "",
             qty: Number(l.qty) || 0,
             unit_price: Number(l.unit_price != null ? l.unit_price : l.unitPrice) || 0,
+            ...(Object.prototype.hasOwnProperty.call(l, "quote_unit_price") ? { quote_unit_price: Number(l.quote_unit_price) || 0 } : {}),
           })),
         };
         if (orderReceivedAmountEl) orderReceivedAmountEl.value = String(payload.received_amount);
@@ -8073,14 +8084,7 @@
         let res;
         if (editingV2OrderId) {
           if (typeof DK.updateOrder !== "function") return v2Show(orderMsg, "Stage 7 寫入未載入");
-          if (payload.status === "completed" && previousOrder?.delivery_status !== "delivered") {
-            if (typeof DK.setOrderOperations !== "function") return v2Show(orderMsg, "收款／交貨寫入功能尚未載入");
-            const operationsRes = await DK.setOrderOperations({ ...payload, order_id: editingV2OrderId });
-            if (!operationsRes || !operationsRes.ok) {
-              return v2Show(orderMsg, (operationsRes && operationsRes.error) || "交付狀態儲存失敗，訂單尚未設為已完成");
-            }
-          }
-          res = await DK.updateOrder({ ...payload, id: editingV2OrderId });
+          res = await DK.updateOrder({ ...payload, id: editingV2OrderId, expected_updated_at: editingV2OrderVersion });
         } else {
           for (const line of payload.items.filter((x) => x.fulfillment_type === "inventory")) {
             const item = DK.findItemById(line.item_id);
@@ -8294,7 +8298,7 @@
           title,
           category,
           qty: Number(l.qty) || 0,
-          unit_price: Number(l.unit_price) || 0,
+          unit_price: Number(l.quote_unit_price ?? l.unit_price) || 0,
         };
       });
       const linesSum = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unit_price) || 0), 0);
@@ -8432,6 +8436,8 @@
         blocks = buildBlocks();
         usedH = blocks.reduce((sum, block) => sum + block.rowH, 0);
       }
+
+      if (usedH > availableH) throw new Error("規格內容超過一張 A4 可讀範圍，請縮短規格文字或分張報價；未產生不完整圖片");
 
       ctx.fillStyle = C.bg;
       ctx.fillRect(0, 0, W, H);
@@ -8684,7 +8690,7 @@
     }
     document.getElementById("orderQuotePreview")?.addEventListener("click", () => {
       if (!requirePerm("quoteImage")) return;
-      openQuotePreview().catch(() => v2Show(orderMsg, "報價單預覽失敗"));
+      openQuotePreview().catch((e) => v2Show(orderMsg, "報價單預覽失敗：" + String(e?.message || e)));
     });
     document.getElementById("orderQuoteDownload")?.addEventListener("click", () => {
       if (!requirePerm("quoteImage")) return;
