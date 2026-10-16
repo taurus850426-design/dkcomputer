@@ -5307,6 +5307,26 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
   gap: 8px 14px;
   font-weight: 700;
 }
+.po-items-table-wrap .table{
+  min-width: 1120px;
+}
+.po-items-table-wrap .table th:nth-child(8),
+.po-items-table-wrap .table td:nth-child(8){
+  min-width: 126px;
+}
+.po-items-table-wrap .table td:nth-child(8) .badge{
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.po-items-table-wrap .table th:nth-child(9),
+.po-items-table-wrap .table td:nth-child(9){
+  min-width: 110px;
+}
+.po-items-table-wrap .table th:nth-child(10),
+.po-items-table-wrap .table td:nth-child(10){
+  min-width: 286px;
+}
 .po-vendor-card .h3{ font-size: 14px; }
 .po-sticky-cart{
   position: sticky;

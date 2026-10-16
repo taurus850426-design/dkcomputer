@@ -7387,6 +7387,20 @@
       return { label: "轉帳", className: "status-info" };
     }
 
+    function orderProcurementStatusMeta(order, purchaseOrders) {
+      const lines = (Array.isArray(order?.items) ? order.items : []).filter((line) => line && typeof line === "object");
+      const procurementLines = lines.filter((line) => String(line.fulfillment_type || line.fulfillmentType || "") === "procurement");
+      if (!procurementLines.length) return { label: "不需叫貨", className: "status-muted" };
+      const sourceId = String(order?.id || "");
+      const po = (Array.isArray(purchaseOrders) ? purchaseOrders : []).find((row) => row && String(row.sourceSalesOrderId || row.source_sales_order_id || "") === sourceId);
+      if (!po) return { label: "未叫貨", className: "status-danger" };
+      const status = String(po.status || "draft");
+      if (status === "received") return { label: "已到貨", className: "status-success" };
+      if (status === "partial") return { label: "部分到貨", className: "status-warning" };
+      if (status === "ordered") return { label: "已叫貨", className: "status-info" };
+      return { label: "未叫貨", className: "status-danger" };
+    }
+
     function renderV2Orders() {
       if (!ordersTbody) return;
       const list = getFilteredOrders();
@@ -7394,6 +7408,7 @@
       ordersPage = pageInfo.page;
       const todayStr = (DK.todayStr && DK.todayStr()) || new Date().toISOString().slice(0, 10);
       const allOrders = (DK.getOrders && DK.getOrders().map(DK.enrichOrder)) || [];
+      const purchaseOrders = (DK.loadPurchaseOrdersRaw && DK.loadPurchaseOrdersRaw(false)) || [];
       const todayOrders = allOrders.filter((o) => getOrderDateStr(o) === todayStr && o.status === "completed");
       const todayRevenue = todayOrders.reduce((s, o) => s + (Number(o.total_sale) || 0), 0);
       const todayProfit = todayOrders.reduce((s, o) => s + (Number(o.gross_profit) || 0), 0);
@@ -7447,6 +7462,7 @@
         const statusClass = orderStatusBadgeClass(statusKey) + " status-pill";
         const paymentStatus = orderPaymentStatusMeta(o.payment_status);
         const paymentMethod = orderPaymentMethodMeta(o.payment_method);
+        const procurementStatus = orderProcurementStatusMeta(o, purchaseOrders);
         const canQuickComplete = statusKey !== "completed" && statusKey !== "refunded";
         const statusTag = canQuickComplete
           ? `<button type="button" class="${statusClass} order-quick-status-btn" data-order-quick="complete" data-id="${v2Esc(o.id)}" title="點一下改為已完成">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</button>`
@@ -7473,6 +7489,7 @@
           </td>
           <td class="table-number ${profitCls}" data-admin-only>${v2Esc(margin)}</td>
           <td><div class="order-status-stack">${statusTag}${paymentTag}<span class="status-badge ${paymentMethod.className}">${v2Esc(paymentMethod.label)}</span></div></td>
+          <td><span class="status-badge ${procurementStatus.className}">${v2Esc(procurementStatus.label)}</span></td>
           <td>${deliveryTag}</td>
           <td class="nowrap table-secondary">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td>
           <td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action btn-edit-order" data-id="${v2Esc(o.id)}">編輯</button></td>
@@ -7571,6 +7588,7 @@
     orderSearchEl?.addEventListener("search", () => { ordersPage = 1; renderV2Orders(); });
     orderDateRangeEl?.addEventListener("change", () => { ordersPage = 1; renderV2Orders(); });
     orderStatusFilterEl?.addEventListener("change", () => { applyOrderStatusSelectClass(); ordersPage = 1; renderV2Orders(); });
+    window.addEventListener("dk:purchase-orders-updated", () => renderV2Orders());
 
     function fillOrderLineItemSelect() {
       if (!orderLineItemSelect) return;
