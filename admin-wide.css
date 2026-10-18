@@ -386,3 +386,24 @@
     max-width: none;
   }
 }
+
+/* The item renderer has inline nowrap; stack actions inside the fixed column. */
+@media screen and (min-width: 901px) {
+  body.admin-page #panel #poEditorView .po-items-table-wrap td:last-child {
+    white-space: normal !important;
+  }
+  body.admin-page #panel #poEditorView .po-items-table-wrap td:last-child .btn {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    margin: 0 0 6px;
+  }
+  body.admin-page #panel #poEditorView .po-items-table-wrap td:last-child .btn:last-child {
+    margin-bottom: 0;
+  }
+}
