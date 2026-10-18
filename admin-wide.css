@@ -234,7 +234,7 @@
   }
   body.admin-page #panel .toolbar,
   body.admin-page #panel .form-grid {
-    max-width: 1120px;
+    max-width: 100%;
     margin-left: 0;
     margin-right: 0;
     box-sizing: border-box;
@@ -246,7 +246,7 @@
   body.admin-page #panel :is(.kpi-grid, .order-monthly-stat-grid,
     .vendor-card-grid, .publish-web-grid, .att-stat-grid,
     .uv-active-grid, .uv-auto-stats, .ue-active-grid, .ue-preview-grid) {
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 260px));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
     justify-content: start;
   }
   body.admin-page #panel :is(.uv-batch-list, .ue-rule-list, .ua-case-list) {
@@ -275,34 +275,34 @@
   }
 }
 
-/* Compact the actual frames and data tables, not only their headings. */
+/* One bounded page column keeps all outer frames aligned from top to bottom. */
 @media screen and (min-width: 901px) {
   body.admin-page #panel > section.card {
-    width: fit-content;
-    min-width: min(100%, 640px);
-    max-width: min(100%, 1480px);
+    width: 100%;
+    min-width: 0;
+    max-width: 1280px;
     margin-left: 0;
     margin-right: 0;
     box-sizing: border-box;
   }
   body.admin-page #panel :is(.section-card, .section-card-soft, .admin-maintenance-panel, .attendance-card),
   body.admin-page #panel .card:not(section):not([role="dialog"]) {
-    width: fit-content;
-    min-width: min(100%, 360px);
-    max-width: min(100%, 1120px);
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     margin-left: 0;
     margin-right: 0;
     box-sizing: border-box;
   }
   body.admin-page #panel .table-wrap {
-    width: fit-content;
+    width: 100%;
     max-width: 100%;
     margin-left: 0;
     margin-right: 0;
     box-sizing: border-box;
   }
   body.admin-page #panel .table-wrap > .table {
-    width: auto;
+    width: 100%;
     max-width: 100%;
     table-layout: auto;
   }
@@ -332,7 +332,7 @@
     box-sizing: border-box;
   }
   body.admin-page #panel .pagination {
-    width: fit-content;
+    width: 100%;
     max-width: 100%;
     justify-content: flex-start;
     gap: 16px;
