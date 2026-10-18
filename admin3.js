@@ -5294,6 +5294,8 @@
     const v2Tabs = document.querySelectorAll(".v2-tab");
     const v2Panels = ["items", "ledger", "orders", "expenses", "reports"];
     function switchV2Tab(name) {
+      // Initial restoration and background refresh must wait for the verified profile.
+      if (window.__dkAuthBootPending || window.DK?.isAdminAuthed?.() !== true) return;
       if ((name === "ledger" || name === "expenses" || name === "reports") && !canPerm(name)) {
         requirePerm(name);
         return;
