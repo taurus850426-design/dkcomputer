@@ -274,3 +274,85 @@
     max-width: none;
   }
 }
+
+/* Compact the actual frames and data tables, not only their headings. */
+@media screen and (min-width: 901px) {
+  body.admin-page #panel > section.card {
+    width: fit-content;
+    min-width: min(100%, 640px);
+    max-width: min(100%, 1480px);
+    margin-left: 0;
+    margin-right: 0;
+    box-sizing: border-box;
+  }
+  body.admin-page #panel :is(.section-card, .section-card-soft, .admin-maintenance-panel, .attendance-card),
+  body.admin-page #panel .card:not(section):not([role="dialog"]) {
+    width: fit-content;
+    min-width: min(100%, 360px);
+    max-width: min(100%, 1120px);
+    margin-left: 0;
+    margin-right: 0;
+    box-sizing: border-box;
+  }
+  body.admin-page #panel .table-wrap {
+    width: fit-content;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    box-sizing: border-box;
+  }
+  body.admin-page #panel .table-wrap > .table {
+    width: auto;
+    max-width: 100%;
+    table-layout: auto;
+  }
+  body.admin-page #panel .table-wrap > .table :is(th, td) {
+    max-width: 360px;
+  }
+  body.admin-page #panel .orders-table th {
+    width: auto;
+  }
+  body.admin-page #panel :is(.filters, .po-toolbar, .vq-toolbar) {
+    justify-content: flex-start;
+    max-width: 100%;
+  }
+  body.admin-page #panel .filters > :is(select, input),
+  body.admin-page #panel :is(.po-toolbar, .vq-toolbar) > .field {
+    flex: 0 1 auto !important; /* Existing search fields have inline flex:1. */
+    width: min(100%, 240px);
+    min-width: 0 !important;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  body.admin-page #panel :is(.po-toolbar, .vq-toolbar) > .field:has(input[type="search"]) {
+    width: min(100%, 420px);
+  }
+  body.admin-page #panel .search {
+    width: min(100%, 420px);
+    box-sizing: border-box;
+  }
+  body.admin-page #panel .pagination {
+    width: fit-content;
+    max-width: 100%;
+    justify-content: flex-start;
+    gap: 16px;
+  }
+  /* Editing needs room for long specifications and its separate preview column. */
+  body.admin-page #panel > section.card:has(#orderForm:not([hidden])),
+  body.admin-page #panel #orderForm,
+  body.admin-page #panel :is(.order-workspace-layout, .po-workspace-layout) :is(.section-card, .section-card-soft, .table-wrap),
+  body.admin-page #panel #poEditorView :is(.card, .section-card, .section-card-soft, .table-wrap) {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+  body.admin-page #panel :is(.order-workspace-layout, #poEditorView) .table-wrap > .table {
+    width: 100%;
+  }
+  body.admin-page #panel :is(.order-workspace-layout, #poEditorView) .table-wrap > .table :is(th, td) {
+    max-width: none;
+  }
+  body.admin-page #panel .po-items-table-wrap > .table {
+    table-layout: fixed;
+  }
+}
