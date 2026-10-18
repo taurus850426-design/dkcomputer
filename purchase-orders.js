@@ -20,6 +20,7 @@
   };
 
   let currentOrder = null;
+  let purchaseOperationBusy = false;
   let editingItemId = null;
   let searchTimer = null;
   let lastSearchRows = [];
@@ -173,7 +174,9 @@
   function syncPurchaseOrderToCloud(order, okMsg) {
     if (!order || !window.DK || typeof window.DK.upsertPurchaseOrderToSupabase !== "function") return;
     if (window.DK.isVpApplyingCloud && window.DK.isVpApplyingCloud()) return;
+    const dispatchedAt = order.updatedAt;
     window.DK.upsertPurchaseOrderToSupabase(order).then(function (res) {
+      if (res?.ok && currentOrder?.id === order.id && currentOrder.updatedAt === dispatchedAt) currentOrder = normalizeOrder(order);
       renderPurchaseOrdersSyncPanel();
       const authMsg = window.DK.vpCloudUserMessage ? window.DK.vpCloudUserMessage(res) : null;
       if (res && res.ok) showMsg(okMsg || "已同步到雲端", 2500);
@@ -190,6 +193,7 @@
     const r = it && typeof it === "object" ? it : {};
     const qty = Math.max(1, Math.floor(Number(r.quantity) || 1));
     return {
+      ...r,
       id: String(r.id || uid("poi")),
       requestText: String(r.requestText || ""),
       category: String(r.category || ""),
@@ -223,10 +227,12 @@
     let status = String(r.status || "draft");
     if (!STATUS_LABEL[status]) status = "draft";
     const out = {
+      ...r,
       id: String(r.id || uid("po")),
       orderNo: String(r.orderNo || ""),
       createdAt: String(r.createdAt || new Date().toISOString()),
       updatedAt: String(r.updatedAt || new Date().toISOString()),
+      cloudUpdatedAt: r.cloudUpdatedAt ?? null,
       status: status,
       supplierOrderDate: String(r.supplierOrderDate || ""),
       expectedDate: String(r.expectedDate || ""),
@@ -241,6 +247,7 @@
   }
 
   async function syncFromSalesOrder(salesOrder) {
+    if (purchaseOperationBusy) return showMsg("前一筆採購作業處理中，請稍候", 3500);
     const src = salesOrder && typeof salesOrder === "object" ? salesOrder : null;
     if (!src || !src.id) return { ok: false, error: "缺少來源訂單 ID" };
     const sourceId = String(src.id);
@@ -275,6 +282,17 @@
       const old = existingByKey.get(lineKey) || null;
       const desiredVendor = String(line.preferred_vendor || line.preferredVendor || "").trim();
       const locked = old && (old.procurementStatus === "ordered" || old.procurementStatus === "received" || String(src.status || "") === "completed");
+      if (locked) {
+        const changed = Math.max(1, Number(line.qty) || 1) !== old.quantity
+          || String(line.name || line.spec || "") !== old.requestText
+          || String(line.spec || line.name || "") !== old.selectedSpec
+          || desiredVendor !== itemVendor(old);
+        if (changed) warnings.push("「" + (old.selectedSpec || old.requestText) + "」已叫貨／到貨，保留原廠商、價格、數量與規格；訂單變更請另向廠商確認。");
+        nextLinked.push(old);
+        existingByKey.delete(lineKey);
+        return;
+      }
+
       const oldVendor = old ? itemVendor(old) : "";
       const vendorChanged = !!old && desiredVendor !== oldVendor;
       let vendor = desiredVendor;
@@ -288,8 +306,13 @@
         manualUnitPrice: null,
         quotedAt: "",
         quoteStatus: "pending",
+        costSyncedAt: "",
       } : {};
       if (vendorChanged && !locked && old && old.sourceSalesOrderLineKey) costKeysToClear.push(String(old.sourceSalesOrderLineKey));
+      const keepQuotedSpec = !!old && !vendorChanged && (!!old.selectedQuoteId || itemPrice(old) > 0);
+      if (keepQuotedSpec && String(line.spec || line.name || "") !== old.selectedSpec) {
+        warnings.push("「" + (old.requestText || old.selectedSpec) + "」需求規格已變更，保留原採用報價規格與價格；請確認廠商報價是否仍適用。");
+      }
       const next = normalizeItem(Object.assign({}, old || {}, quoteReset, {
         id: old ? old.id : ("poi-sales-" + lineKey),
         requestText: String(line.name || line.spec || ""),
@@ -297,9 +320,9 @@
         quantity: Math.max(1, Number(line.qty) || 1),
         selectedVendor: vendor,
         manualVendor: vendor,
-        selectedSpec: String(line.spec || line.name || ""),
+        selectedSpec: keepQuotedSpec ? old.selectedSpec : String(line.spec || line.name || ""),
         quoteStatus: vendorChanged && !locked ? "pending" : (old ? old.quoteStatus : "pending"),
-        itemNote: "來源訂單：" + String(src.order_no || src.orderNo || "") + "｜客戶：" + String(src.customer_name || src.customerName || ""),
+        itemNote: old ? old.itemNote : ("來源訂單：" + String(src.order_no || src.orderNo || "") + "｜客戶：" + String(src.customer_name || src.customerName || "")),
         sourceSalesOrderId: sourceId,
         sourceSalesOrderLineKey: lineKey,
       }));
@@ -320,27 +343,16 @@
     order.updatedAt = new Date().toISOString();
     order.sourceSalesOrderNo = String(src.order_no || src.orderNo || order.sourceSalesOrderNo || "");
     order.sourceCustomerName = String(src.customer_name || src.customerName || order.sourceCustomerName || "");
-    order.note = order.sourceCustomerName + "｜來源訂單：" + order.sourceSalesOrderNo;
+    // Preserve the existing free-text PO note; source metadata has its own fields.
 
     const idx = all.findIndex(function (o) { return String(o.id) === String(order.id); });
     if (idx >= 0) all[idx] = order; else all.unshift(order);
     if (!saveOrders(all)) return { ok: false, error: "叫貨單本機儲存失敗" };
-    if (costKeysToClear.length) {
-      if (typeof window.stage7ClearProcurementCost !== "function") {
-        warnings.push("舊廠商成本尚未清除；請確認 Supabase Stage 23 已更新。");
-      } else {
-        for (const lineKey of Array.from(new Set(costKeysToClear))) {
-          const cleared = await window.stage7ClearProcurementCost({ order_id: sourceId, line_key: lineKey });
-          if (!cleared || !cleared.ok) warnings.push("品項成本清除失敗：" + String((cleared && cleared.error) || lineKey));
-        }
-        try {
-          if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") await window.DK.fetchV2DataFromSupabase();
-        } catch (_) {}
-      }
-    }
-    syncPurchaseOrderToCloud(order, warnings.length ? "叫貨單已更新，但有項目需要人工確認" : "草稿叫貨單已同步");
-    try { window.dispatchEvent(new CustomEvent("dk:purchase-orders-updated")); } catch (_) {}
-    return { ok: true, order: order, warnings: warnings };
+    const result = window.DK?.upsertPurchaseOrderToSupabase
+      ? await window.DK.upsertPurchaseOrderToSupabase(order) : { ok: false, error: "雲端同步功能未載入" };
+    if (!result?.ok) warnings.push("訂單已儲存，但叫貨單雲端同步未完成：" + String(result?.error || "請核對原單"));
+    try { window.dispatchEvent(new CustomEvent("dk:purchase-orders-updated", { detail: { source: "sales-sync" } })); } catch (_) {}
+    return { ok: !!result?.ok, order: order, warnings: warnings };
   }
 
   window.DKPurchaseOrderSync = window.DKPurchaseOrderSync || {};
@@ -516,6 +528,7 @@
   }
 
   async function removePurchaseItem(itemId) {
+    if (purchaseOperationBusy) return showMsg("前一筆採購作業處理中，請稍候", 3500);
     if (!currentOrder) return;
     const idx = (currentOrder.items || []).findIndex(function (it) { return String(it.id) === String(itemId); });
     if (idx < 0) return showMsg("找不到要取消的叫貨品項", 3000);
@@ -538,24 +551,7 @@
     if (!saveOrders(list)) return;
     currentOrder = copy;
 
-    let costWarning = "";
-    if (item.sourceSalesOrderId && item.sourceSalesOrderLineKey) {
-      if (typeof window.stage7ClearProcurementCost !== "function") {
-        costWarning = "；訂單舊採購成本尚未清除";
-      } else {
-        const cleared = await window.stage7ClearProcurementCost({
-          order_id: item.sourceSalesOrderId,
-          line_key: item.sourceSalesOrderLineKey,
-        });
-        if (!cleared || !cleared.ok) costWarning = "；訂單舊採購成本清除失敗：" + String((cleared && cleared.error) || "請稍後重試");
-        else {
-          try {
-            if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") await window.DK.fetchV2DataFromSupabase();
-          } catch (_) {}
-        }
-      }
-    }
-
+    const costWarning = "";
     renderItems();
     renderVendorGroups();
     refreshVisibleQuoteResults();
@@ -918,7 +914,33 @@
     return true;
   }
 
+  // Async callbacks persist the captured document, even after navigating to another one.
+  async function persistAsyncPurchaseOrder(order) {
+    if (loadOrdersAll().some(function (o) { return String(o.id) === String(order.id) && poIsDeleted(o); })) {
+      return { ok: false, error: "原叫貨單已刪除，未重新建立；請核對已完成的庫存作業" };
+    }
+    const copy = normalizeOrder(JSON.parse(JSON.stringify(order)));
+    copy.updatedAt = new Date().toISOString();
+    const list = loadOrders();
+    const index = list.findIndex(function (o) { return String(o.id) === String(copy.id); });
+    if (index >= 0) list[index] = copy; else list.push(copy);
+    if (!saveOrders(list)) return { ok: false, error: "本機保存失敗，請重新載入原單核對作業結果" };
+    if (currentOrder && String(currentOrder.id) === String(copy.id)) currentOrder = copy;
+    let result;
+    try {
+      result = window.DK && typeof window.DK.upsertPurchaseOrderToSupabase === "function"
+        ? await window.DK.upsertPurchaseOrderToSupabase(copy) : { ok: false, error: "雲端同步功能未載入" };
+    } catch (e) { result = { ok: false, error: String(e?.message || e) }; }
+    if (result?.ok && currentOrder && String(currentOrder.id) === String(copy.id)) currentOrder = normalizeOrder(copy);
+    renderList();
+    renderPurchaseOrdersSyncPanel();
+    if (currentOrder && String(currentOrder.id) === String(copy.id)) { renderItems(); renderVendorGroups(); }
+    return result && result.ok ? result : { ok: false, localSaved: true,
+      error: "本機已保留，但叫貨單雲端同步未完成：" + String(result?.error || "請重新核對原單") };
+  }
+
   function persistCurrent(options) {
+    if (purchaseOperationBusy) return showMsg("前一筆採購作業處理中，請稍候", 3500);
     if (!currentOrder) return;
     const quoteOnly = !!(options && options.quoteOnly);
     if (!quoteOnly && readEditorMetaIntoCurrent() === false) return;
@@ -970,7 +992,7 @@
             ? '<span class="badge warn">過期參考</span>'
             : '<span class="badge ok">已報價／待確認</span>'));
       const canEdit = isEditable(currentOrder);
-      const canQuote = canUpdateQuote(currentOrder);
+      const canQuote = canUpdateQuote(currentOrder) && it.procurementStatus !== "received";
       const canReceive = canReceiveItem(currentOrder, it);
       const canRemove = canRemoveItem(currentOrder, it);
       const quoteLabel = currentOrder.status === "draft" ? "比價／新增報價" : "補廠商報價";
@@ -1297,6 +1319,7 @@
   }
 
   function pickQuote(quoteId) {
+    if (purchaseOperationBusy) return showMsg("前一筆採購作業處理中，請稍候", 3500);
     if (!currentOrder || !isEditable(currentOrder)) {
       showMsg("僅編輯中可加入／變更品項");
       return;
@@ -1345,6 +1368,7 @@
   }
 
   function addManualItem() {
+    if (purchaseOperationBusy) return showMsg("前一筆採購作業處理中，請稍候", 3500);
     if (!currentOrder || !isEditable(currentOrder)) {
       showMsg("僅編輯中可加入品項");
       return;
@@ -1467,17 +1491,21 @@
         return '<tr><td>' + esc(q.vendor || "未填廠商") + (low ? ' <span class="badge ok">最低</span>' : '') + '</td>' +
           '<td>' + esc(fmtDate(q.date)) + '</td><td style="text-align:right">' + esc(fmtNT(row.price)) + '</td>' +
           '<td>' + (q.inStock ? '<span class="badge ok">現貨</span>' : '<span class="badge">未確認</span>') + '</td>' +
-          '<td style="text-align:right"><button type="button" class="btn btn-sm ' + (selected ? 'btn-primary' : 'btn-ghost') + '" data-poq-apply="' + esc(q.id) + '"' + (selected ? ' disabled' : '') + '>' + (selected ? '已採用' : '採用') + '</button></td></tr>';
+          '<td style="text-align:right"><button type="button" class="btn btn-sm ' + (selected ? 'btn-primary' : 'btn-ghost') + '" data-poq-apply="' + esc(q.id) + '"' + (selected || purchaseOperationBusy ? ' disabled' : '') + '>' + (selected ? '已採用' : '採用') + '</button></td></tr>';
       }).join("") + '</tbody></table></div><div class="muted small" style="margin-top:8px">最低價只作提示；請依現貨、運送與到貨時間決定最後採用廠商。</div>';
   }
 
   async function applyQuoteToModalItem(quoteId) {
+    if (purchaseOperationBusy) return quoteModalMessage("前一筆採用處理中，請稍候", true);
     if (!currentOrder || !quoteModalItemId || !canUpdateQuote(currentOrder)) return quoteModalMessage("找不到可更新的叫貨品項", true);
     const idx = currentOrder.items.findIndex(function (x) { return String(x.id) === String(quoteModalItemId); });
     if (idx < 0) return quoteModalMessage("找不到可更新的叫貨品項", true);
     const q = loadQuotes().find(function (row) { return String(row.id) === String(quoteId); });
     if (!q || !(toNum(q.price) > 0)) return quoteModalMessage("找不到可採用的廠商報價", true);
-    const original = currentOrder.items[idx];
+    const targetOrder = currentOrder;
+    const targetItemId = quoteModalItemId;
+    const original = targetOrder.items[idx];
+    if (original.procurementStatus === "received") return quoteModalMessage("已到貨品項不可重新採用報價", true);
     const updated = normalizeItem(Object.assign({}, original, {
       category: String(q.category || original.category || ""),
       selectedVendor: String(q.vendor || ""),
@@ -1488,45 +1516,34 @@
       manualVendor: "",
       manualUnitPrice: null,
       quoteStatus: "quoted",
+      costSyncedAt: "",
     }));
-    currentOrder.items[idx] = updated;
-    let costSyncWarning = "";
-    if (updated.sourceSalesOrderId && updated.sourceSalesOrderLineKey) {
-      if (typeof window.stage7SyncProcurementCost !== "function") {
-        costSyncWarning = "；訂單成本同步功能尚未部署";
-      } else {
-        const costSync = await window.stage7SyncProcurementCost({
-          order_id: updated.sourceSalesOrderId,
-          line_key: updated.sourceSalesOrderLineKey,
-          unit_cost: updated.selectedUnitPrice,
-          vendor: updated.selectedVendor,
-          quote_id: updated.selectedQuoteId,
-          quoted_at: updated.quotedAt,
-        });
-        if (costSync && costSync.ok) {
-          updated.costSyncedAt = new Date().toISOString();
-          try {
-            if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") {
-              await window.DK.fetchV2DataFromSupabase();
-            }
-          } catch (_) {}
-        }
-        else costSyncWarning = "；訂單成本尚未同步：" + String((costSync && costSync.error) || "請確認 Supabase Stage 23 已更新");
-      }
+    purchaseOperationBusy = true;
+    renderQuoteModalHistory(original);
+    const notify = function (text, danger) {
+      if (currentOrder && currentOrder.id === targetOrder.id && quoteModalItemId === targetItemId) quoteModalMessage(text, danger);
+      else showMsg(targetOrder.orderNo + "：" + text, 6000);
+    };
+    try {
+      targetOrder.items[idx] = updated;
+      const saved = await persistAsyncPurchaseOrder(targetOrder);
+      if (!saved.ok) return notify("雲端採用結果未確認，請核對原單；" + saved.error, true);
+      notify("已採用 " + updated.selectedVendor + " " + fmtNT(updated.selectedUnitPrice) + (updated.sourceSalesOrderId ? "，並同步訂單成本" : ""), false);
+      try { if (window.DK?.fetchV2DataFromSupabase) await window.DK.fetchV2DataFromSupabase(); } catch (_) {}
+    } catch (e) {
+      notify("採用結果待確認，請重新載入原單核對：" + String(e?.message || e), true);
+    } finally {
+      purchaseOperationBusy = false;
+      const shown = currentOrder?.items?.find(function (it) { return String(it.id) === String(quoteModalItemId); });
+      if (shown) { renderCurrentPick(shown); renderQuoteModalHistory(shown); }
     }
-    lastAddedItemId = updated.id;
-    renderCurrentPick(updated);
-    renderItems();
-    renderVendorGroups();
-    renderQuoteModalHistory(updated);
-    persistCurrent({ quoteOnly: true });
-    quoteModalMessage("已採用 " + updated.selectedVendor + " " + fmtNT(updated.selectedUnitPrice) + (updated.costSyncedAt ? "，並同步訂單成本" : "") + costSyncWarning, !!costSyncWarning);
   }
 
   function openQuoteModal(itemId) {
     if (!currentOrder || !canUpdateQuote(currentOrder)) return showMsg("此訂單狀態不可補報價");
     const item = (currentOrder.items || []).find(function (x) { return String(x.id) === String(itemId); });
     if (!item) return showMsg("找不到叫貨品項");
+    if (item.procurementStatus === "received") return showMsg("已到貨品項不可重新採用報價", 3500);
     quoteModalItemId = String(item.id);
     const linkedQuote = loadQuotes().find(function (q) {
       return item.selectedQuoteId && String(q.id) === String(item.selectedQuoteId);
@@ -1584,6 +1601,8 @@
   }
 
   async function lookupCoolpcForQuoteModal() {
+    const targetId = currentOrder?.id;
+    const targetItemId = quoteModalItemId;
     const spec = String((el("poQuoteSpec") && el("poQuoteSpec").value) || "").trim();
     const category = String((el("poQuoteCategory") && el("poQuoteCategory").value) || "").trim();
     if (!spec) return quoteModalMessage("請先填品牌／型號／規格", true);
@@ -1605,13 +1624,16 @@
     }
     try {
       const result = await window.DK.lookupCoolpcPrices({ query: spec, category: category });
+      if (currentOrder?.id !== targetId || quoteModalItemId !== targetItemId
+        || String(el("poQuoteSpec")?.value || "").trim() !== spec
+        || String(el("poQuoteCategory")?.value || "").trim() !== category) return;
       if (!result || !result.ok) {
         if (msg) msg.textContent = String((result && result.error) || "原價屋查價失敗");
         return;
       }
       renderQuoteModalCoolpcCandidates(result);
     } catch (e) {
-      if (msg) msg.textContent = "原價屋查價失敗：" + String((e && e.message) || e || "未知錯誤");
+      if (currentOrder?.id === targetId && quoteModalItemId === targetItemId && String(el("poQuoteSpec")?.value || "").trim() === spec && msg) msg.textContent = "原價屋查價失敗：" + String((e && e.message) || e || "未知錯誤");
     } finally {
       if (button) {
         button.disabled = false;
@@ -1621,6 +1643,7 @@
   }
 
   async function saveQuoteModal() {
+    if (purchaseOperationBusy) return showMsg("前一筆採購作業處理中，請稍候", 3500);
     if (!currentOrder || !quoteModalItemId || !canUpdateQuote(currentOrder)) {
       return quoteModalMessage("找不到可更新的叫貨品項", true);
     }
@@ -1641,6 +1664,13 @@
     const createQuote = bridge().createVendorQuote;
     if (typeof createQuote !== "function") return quoteModalMessage("廠商報價模組尚未載入，請重新整理後再試", true);
 
+    const targetOrder = currentOrder;
+    const targetItemId = quoteModalItemId;
+    const notify = function (text, danger) {
+      if (currentOrder?.id === targetOrder.id && quoteModalItemId === targetItemId) quoteModalMessage(text, danger);
+      else showMsg(targetOrder.orderNo + "：" + text, 6000);
+    };
+    purchaseOperationBusy = true;
     const button = el("poQuoteSaveBtn");
     if (button) {
       button.disabled = true;
@@ -1663,9 +1693,13 @@
         note: sourceNote,
       });
       if (!result || !result.ok || !result.quote) {
-        return quoteModalMessage("報價儲存失敗：" + String((result && result.error) || "未知錯誤"), true);
+        return notify("報價儲存失敗：" + String((result && result.error) || "未知錯誤"), true);
       }
       const q = result.quote;
+      if (!currentOrder || currentOrder.id !== targetOrder.id || quoteModalItemId !== targetItemId) {
+        return showMsg(targetOrder.orderNo + "：已新增廠商報價" + (result.cloud?.ok ? "並同步雲端" : "，雲端同步未確認，請到廠商報價檢查"), 6000);
+      }
+
       renderQuoteModalHistory(Object.assign({}, currentOrder.items[idx], { selectedSpec: spec, category: category }));
       if (el("poQuoteVendor")) el("poQuoteVendor").value = "";
       if (el("poQuotePrice")) el("poQuotePrice").value = "";
@@ -1674,12 +1708,13 @@
       if (el("poQuoteTaxIncluded")) el("poQuoteTaxIncluded").checked = false;
       if (el("poQuoteShippingIncluded")) el("poQuoteShippingIncluded").checked = false;
       if (el("poQuoteNote")) el("poQuoteNote").value = "";
-      const cloudWarning = result.cloud && !result.cloud.ok ? "；廠商報價雲端同步失敗，已保留本機資料" : "";
+      const cloudWarning = !result.cloud?.ok ? "；廠商報價雲端同步失敗，已保留本機資料" : "";
       quoteModalMessage("已新增「" + String(q.vendor || vendor) + "」報價並同步到廠商報價紀錄" + cloudWarning + "。可繼續新增下一家，最後再從上方按『採用』。", !!cloudWarning);
       try { if (el("poQuoteVendor")) el("poQuoteVendor").focus(); } catch (_) {}
     } catch (e) {
-      quoteModalMessage("報價儲存失敗：" + String((e && e.message) || e || "未知錯誤"), true);
+      notify("報價儲存失敗：" + String((e && e.message) || e || "未知錯誤"), true);
     } finally {
+      purchaseOperationBusy = false;
       if (button) {
         button.disabled = false;
         button.textContent = "新增這筆廠商報價";
@@ -1774,12 +1809,19 @@
   }
 
   async function saveReceiveModal() {
-    if (!currentOrder || !receiveModalItemId) return receiveModalMessage("找不到叫貨品項", true);
-    const idx = currentOrder.items.findIndex(function (it) { return String(it.id) === String(receiveModalItemId); });
+    if (purchaseOperationBusy) return receiveModalMessage("前一筆採購作業處理中，請稍候", true);
+    const targetOrder = currentOrder;
+    const targetItemId = receiveModalItemId;
+    const notify = function (text, danger) {
+      if (currentOrder && currentOrder.id === targetOrder?.id && receiveModalItemId === targetItemId) receiveModalMessage(text, danger);
+      else showMsg((targetOrder?.orderNo || "原單") + "：" + text, 6000);
+    };
+    if (!targetOrder || !receiveModalItemId) return receiveModalMessage("找不到叫貨品項", true);
+    const idx = targetOrder.items.findIndex(function (it) { return String(it.id) === String(receiveModalItemId); });
     if (idx < 0) return receiveModalMessage("找不到叫貨品項", true);
-    const original = currentOrder.items[idx];
+    const original = targetOrder.items[idx];
     if (receiveModalMode === "destination") return saveDestinationModal(original, idx);
-    if (!canReceiveItem(currentOrder, original)) return receiveModalMessage("此品項已登記到貨", true);
+    if (!canReceiveItem(targetOrder, original)) return receiveModalMessage("此品項已登記到貨", true);
     const receivedAt = String((el("poReceiveDate") && el("poReceiveDate").value) || "").trim();
     const destination = String((el("poReceiveDestination") && el("poReceiveDestination").value) || "customer");
     const selectedInventoryItemId = String((el("poReceiveInventoryItem") && el("poReceiveInventoryItem").value) || "__auto__").trim();
@@ -1791,14 +1833,17 @@
       return receiveModalMessage("此品項沒有來源訂單，請改選「入一般庫存」", true);
     }
     const button = el("poReceiveSaveBtn");
+    purchaseOperationBusy = true;
     if (button) { button.disabled = true; button.textContent = "處理中…"; }
-    receiveModalMessage(destination === "inventory" ? "正在自動建立／更新庫存…" : "正在入庫並綁定原訂單…");
+    notify(destination === "inventory" ? "正在自動建立／更新庫存…" : "正在入庫並綁定原訂單…");
     try {
-      if (typeof window.stage7ReceivePurchaseItem !== "function") return receiveModalMessage("自動入庫功能尚未載入，請先完成 Stage 25 更新", true);
+      if (typeof window.stage7ReceivePurchaseItem !== "function") return notify("自動入庫功能尚未載入，請先完成 Stage 25 更新", true);
       const stockResult = await window.stage7ReceivePurchaseItem({
         order_id: destination === "customer" ? original.sourceSalesOrderId : "",
         line_key: destination === "customer" ? original.sourceSalesOrderLineKey : "",
-        purchase_order_id: currentOrder.id,
+        purchase_order: targetOrder,
+        destination: destination,
+        purchase_order_id: targetOrder.id,
         purchase_item_id: original.id,
         inventory_item_id: destination === "inventory" ? inventoryItemId : "",
         name: itemSpec(original),
@@ -1810,38 +1855,37 @@
         note: note,
       });
       if (!stockResult || !stockResult.ok) {
-        return receiveModalMessage("入庫失敗：" + String((stockResult && stockResult.error) || "未知錯誤"), true);
+        return notify("入庫失敗：" + String((stockResult && stockResult.error) || "未知錯誤"), true);
       }
       const resultData = stockResult.data && typeof stockResult.data === "object" ? stockResult.data : {};
 
-      currentOrder.items[idx] = normalizeItem(Object.assign({}, original, {
-        procurementStatus: "received",
-        receivedAt: receivedAt,
-        receiptDestination: destination,
-        receiptInventoryItemId: String(resultData.item_id || inventoryItemId || ""),
-        receiptLedgerId: String(resultData.ledger_id || ""),
-        receiptNote: note,
-      }));
-      const allReceived = currentOrder.items.length > 0 && currentOrder.items.every(function (it) { return it.procurementStatus === "received"; });
-      const anyReceived = currentOrder.items.some(function (it) { return it.procurementStatus === "received"; });
-      currentOrder.status = allReceived ? "received" : (anyReceived ? "partial" : "ordered");
-      if (el("poStatus")) el("poStatus").value = currentOrder.status;
-      closeReceiveModal();
-      renderItems();
-      renderVendorGroups();
-      persistCurrent({ quoteOnly: true });
+      if (currentOrder && currentOrder.id === targetOrder.id) {
+        currentOrder = normalizeOrder(targetOrder);
+        if (el("poStatus")) el("poStatus").value = currentOrder.status;
+        if (receiveModalItemId === targetItemId) closeReceiveModal();
+        renderItems(); renderVendorGroups();
+      }
+      renderList(); renderPurchaseOrdersSyncPanel();
       try {
         if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") await window.DK.fetchV2DataFromSupabase();
       } catch (_) {}
       showMsg("已登記到貨：" + (resultData.reserved_for_order ? "已自動入庫並綁定原訂單，不會重複扣庫存" : "已自動加入一般庫存"), 6000);
     } catch (e) {
-      receiveModalMessage("到貨處理失敗：" + String((e && e.message) || e || "未知錯誤"), true);
+      notify("到貨處理失敗：" + String((e && e.message) || e || "未知錯誤"), true);
     } finally {
+      purchaseOperationBusy = false;
       if (button) { button.disabled = false; button.textContent = "確認到貨"; }
     }
   }
 
   async function saveDestinationModal(original, idx) {
+    if (purchaseOperationBusy) return receiveModalMessage("前一筆採購作業處理中，請稍候", true);
+    const targetOrder = currentOrder;
+    const targetItemId = receiveModalItemId;
+    const notify = function (text, danger) {
+      if (currentOrder && currentOrder.id === targetOrder?.id && receiveModalItemId === targetItemId) receiveModalMessage(text, danger);
+      else showMsg((targetOrder?.orderNo || "原單") + "：" + text, 6000);
+    };
     const destination = String((el("poReceiveDestination") && el("poReceiveDestination").value) || "customer");
     const note = String((el("poReceiveNote") && el("poReceiveNote").value) || "").trim();
     if (destination === "customer" && (!original.sourceSalesOrderId || !original.sourceSalesOrderLineKey)) {
@@ -1852,41 +1896,43 @@
       return showMsg("到貨用途沒有變更", 2500);
     }
     const button = el("poReceiveSaveBtn");
+    purchaseOperationBusy = true;
     if (button) { button.disabled = true; button.textContent = "處理中…"; }
-    receiveModalMessage("正在調整庫存用途與訂單綁定…");
+    notify("正在調整庫存用途與訂單綁定…");
     try {
       if (typeof window.stage7SetPurchaseReceiptDestination !== "function") {
-        return receiveModalMessage("修改用途功能尚未載入，請先完成 Stage 25.1 SQL 更新", true);
+        return notify("修改用途功能尚未載入，請先完成 Stage 25.1 SQL 更新", true);
       }
       const result = await window.stage7SetPurchaseReceiptDestination({
         order_id: original.sourceSalesOrderId,
         line_key: original.sourceSalesOrderLineKey,
-        purchase_order_id: currentOrder.id,
-        purchase_item_id: original.id,
+        purchase_order: targetOrder,
         destination: destination,
+        purchase_order_id: targetOrder.id,
+        purchase_item_id: original.id,
         note: note,
       });
       if (!result || !result.ok) {
         let error = String((result && result.error) || "未知錯誤");
         if (/finalized order/i.test(error)) error = "訂單已出貨、完成或退款，不能再修改用途";
         else if (/insufficient stock/i.test(error)) error = "一般庫存數量不足，可能已被其他單據使用，無法改成客戶專用";
-        return receiveModalMessage("修改失敗：" + error, true);
+        return notify("修改失敗：" + error, true);
       }
-      currentOrder.items[idx] = normalizeItem(Object.assign({}, original, {
-        receiptDestination: destination,
-        receiptNote: note,
-      }));
-      closeReceiveModal();
-      renderItems();
-      renderVendorGroups();
-      persistCurrent({ quoteOnly: true });
+      if (currentOrder && currentOrder.id === targetOrder.id) {
+        currentOrder = normalizeOrder(targetOrder);
+        if (el("poStatus")) el("poStatus").value = currentOrder.status;
+        if (receiveModalItemId === targetItemId) closeReceiveModal();
+        renderItems(); renderVendorGroups();
+      }
+      renderList(); renderPurchaseOrdersSyncPanel();
       try {
         if (window.DK && typeof window.DK.fetchV2DataFromSupabase === "function") await window.DK.fetchV2DataFromSupabase();
       } catch (_) {}
       showMsg("已改為「" + (destination === "customer" ? "客戶訂單專用" : "一般庫存") + "」，庫存數量不會重複增加", 6000);
     } catch (e) {
-      receiveModalMessage("修改失敗：" + String((e && e.message) || e || "未知錯誤"), true);
+      notify("修改失敗：" + String((e && e.message) || e || "未知錯誤"), true);
     } finally {
+      purchaseOperationBusy = false;
       if (button) { button.disabled = false; button.textContent = receiveModalMode === "destination" ? "儲存用途" : "確認到貨"; }
     }
   }
@@ -2260,16 +2306,26 @@
     if (window.__dkPoSyncPanelBound) return;
     window.__dkPoSyncPanelBound = true;
 
-    const syncNow = async function () {
+    const syncNow = async function (event) {
+      if (purchaseOperationBusy) return poSyncSetMsg("前一筆作業處理中，請稍候再同步");
+      let options = {};
+      if (event?.currentTarget?.id === "poSyncPullBtn" && currentOrder) {
+        if (!confirm("重新載入目前叫貨單的雲端版本？\n\n會先保留目前草稿備份，再替換此單的本機顯示；不會改寫雲端。可按『下載草稿備份』保留檔案。")) return;
+        options = { preferCloudId: currentOrder.id, localDraft: { ...currentOrder,
+          status: String(el("poStatus")?.value || currentOrder.status),
+          supplierOrderDate: String(el("poSupplierOrderDate")?.value || ""),
+          expectedDate: String(el("poExpectedDate")?.value || ""), note: String(el("poNote")?.value ?? currentOrder.note) } };
+      }
       poSyncSetMsg("同步中…");
       renderPurchaseOrdersSyncPanel();
       if (!window.DK || typeof window.DK.pullPurchaseOrdersFromCloud !== "function") {
         poSyncSetMsg("同步模組未載入");
         return;
       }
-      const res = await window.DK.pullPurchaseOrdersFromCloud();
+      const editorId = currentOrder?.id;
+      const res = await window.DK.pullPurchaseOrdersFromCloud(options);
       renderList();
-      if (currentOrder) {
+      if (res?.ok && currentOrder && currentOrder.id === editorId) {
         const fresh = loadOrders().find(function (o) { return o.id === currentOrder.id; });
         if (fresh) {
           currentOrder = fresh;
@@ -2281,11 +2337,20 @@
       else if (window.DK && window.DK.vpCloudUserMessage && window.DK.vpCloudUserMessage(res)) poSyncSetMsg(window.DK.vpCloudUserMessage(res));
       else if (res && res.emptyCloud) poSyncSetMsg("雲端為空，已保留本機資料（未覆蓋）");
       else if (res && res.ok) poSyncSetMsg("已從雲端合併完成");
-      else poSyncSetMsg("同步失敗，本機資料已保留");
+      else poSyncSetMsg("同步失敗，本機資料已保留" + (res?.error ? "：" + res.error : ""));
     };
 
     document.getElementById("poSyncNowBtn") && document.getElementById("poSyncNowBtn").addEventListener("click", syncNow);
     document.getElementById("poSyncPullBtn") && document.getElementById("poSyncPullBtn").addEventListener("click", syncNow);
+    el("poDraftBackupBtn")?.addEventListener("click", function () {
+      const raw = localStorage.getItem("dk_po_conflict_drafts_v1");
+      if (!raw) return poSyncSetMsg("目前沒有重新載入前的草稿備份");
+      const url = URL.createObjectURL(new Blob([raw], { type: "application/json" }));
+      const link = document.createElement("a"); link.href = url; link.download = "DK-叫貨單草稿備份.json";
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+    });
+
 
     document.getElementById("poSyncUploadBtn") && document.getElementById("poSyncUploadBtn").addEventListener("click", async function () {
       if (!window.DK || !window.DK.previewPurchaseOrdersUpload || !window.DK.uploadLocalPurchaseOrdersToCloud) {
@@ -2306,7 +2371,7 @@
           "雲端筆數（未刪除）：" + preview.cloudCount + "\n" +
           "預計新增：" + preview.toInsert + "\n" +
           "預計更新：" + preview.toUpdate + "\n\n" +
-          "將依 id upsert，不會刪除雲端其他資料。\n" +
+          "會檢查單據版本；遇到衝突會停止，不會覆蓋較新的雲端資料。\n" +
           "僅管理員可寫入雲端。"
       );
       if (!ok) {
@@ -2336,14 +2401,10 @@
           renderList();
           renderPurchaseOrdersSyncPanel();
           if (currentOrder) {
-            const fresh = loadOrders().find(function (o) { return o.id === currentOrder.id; });
-            if (fresh) {
-              currentOrder = fresh;
-              fillEditor(false);
-            } else if (poIsDeleted(currentOrder) || !loadOrders().some(function (o) { return o.id === currentOrder.id; })) {
-              // 被 soft delete 後離開編輯
-              currentOrder = null;
-              setListVisible(true);
+            // A background pull must not replace the editor's unsaved draft or its baseline.
+            const fresh = loadOrdersAll().find(function (o) { return o.id === currentOrder.id; });
+            if (fresh && (fresh.cloudUpdatedAt !== currentOrder.cloudUpdatedAt || poIsDeleted(fresh))) {
+              showMsg("雲端單據有更新，目前編輯草稿已保留；請核對後按『重新從雲端抓取』。", 7000);
             }
           }
         } catch (_) {}

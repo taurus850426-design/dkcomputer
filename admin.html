@@ -1370,10 +1370,11 @@
                   <span id="poSyncStatusBadge" class="dk-sync-badge">檢查中…</span>
                 </div>
                 <p id="poSyncDetail" class="dk-sync-panel__detail muted small">本機先顯示；雲端表未建立前不會假裝已同步。</p>
-                <p class="dk-sync-panel__risk muted small">安全風險：目前使用公開 anon 寫入，沒有 Supabase Auth，不是多人帳號系統。</p>
+                <p class="dk-sync-panel__risk muted small">同步失敗時請先核對原單；遇到版本衝突，可保留草稿後重新載入雲端版本。</p>
                 <div class="dk-sync-panel__actions">
                   <button type="button" class="btn btn-ghost btn-sm" id="poSyncNowBtn">立即同步</button>
                   <button type="button" class="btn btn-ghost btn-sm" id="poSyncPullBtn">重新從雲端抓取</button>
+                  <button type="button" class="btn btn-ghost btn-sm" id="poDraftBackupBtn">下載草稿備份</button>
                   <button type="button" class="btn btn-primary btn-sm" id="poSyncUploadBtn" hidden>上傳本機資料</button>
                 </div>
                 <div id="poSyncExtraMsg" class="muted small" style="margin-top:8px" hidden></div>
@@ -3625,17 +3626,17 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20261016multiquote1"></script>
+    <script src="./shared.js?v=20261017integrity36"></script>
     <script src="./inventory-ledger.js?v=20260927stage34"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20261016quotecolumns"></script>
+    <script src="./admin3.js?v=20261017integrity36"></script>
     <script src="./used-valuation-admin.js?v=20260927stage32"></script>
     <script src="./used-market-auto-admin.js?v=20260929stage35"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
     <script src="./used-acquisition-admin.js?v=20260927stage32"></script>
-    <script src="./purchase-orders.js?v=20261016multiquote1"></script>
+    <script src="./purchase-orders.js?v=20261017integrity36"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260913s20"></script>
   </body>
