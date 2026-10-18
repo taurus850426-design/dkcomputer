@@ -12,7 +12,7 @@
     />
             <link rel="stylesheet" href="./styles.css?v=20261016quotestatus1" />
     <link rel="stylesheet" href="./admin-wide.css?v=20261018poactions1" />
-    <link rel="stylesheet" href="./admin-theme.css?v=20261018navhover1" />
+    <link rel="stylesheet" href="./admin-theme.css?v=20261018trend1" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet" />
   </head>
   <body class="theme-apple admin-page">
@@ -276,13 +276,14 @@
                 </div>
               </div>
               <div id="orderTodayKpi" class="kpi-grid ui-enter admin-stack-gap"></div>
-              <section id="orderMonthlyAnalysis" class="order-monthly-analysis section-card-soft surface-neutral admin-stack-gap" aria-label="本月訂單分析">
+              <section id="orderMonthlyAnalysis" class="order-monthly-analysis section-card-soft surface-neutral admin-stack-gap" aria-label="訂單分析">
                 <div class="order-monthly-analysis__head">
-                  <div><h3 class="h3 section-title">本月訂單分析</h3><p class="muted small">統計本月非退貨訂單</p></div>
+                  <div><h3 class="h3 section-title">訂單分析</h3><p class="muted small">上方為本月非退貨訂單筆數；點選分類切換近 12 個月曲線</p></div>
                 </div>
                 <div id="orderMonthlyTypeStats" class="order-monthly-stat-grid"></div>
+                <div id="orderMonthlyTrend" class="order-trend"></div>
                 <div class="order-monthly-source-wrap">
-                  <div class="muted small">客戶來源</div>
+                  <div class="muted small">本月客戶來源</div>
                   <div id="orderMonthlySourceStats" class="order-monthly-source-list"></div>
                 </div>
               </section>
@@ -3633,7 +3634,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./admin3.js?v=20261018authrestore1"></script>
+    <script src="./admin-order-trend.js?v=20261018trend1"></script>
+    <script src="./admin3.js?v=20261018trend1"></script>
     <script src="./used-valuation-admin.js?v=20260927stage32"></script>
     <script src="./used-market-auto-admin.js?v=20260929stage35"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>

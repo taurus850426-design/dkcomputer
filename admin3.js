@@ -7457,9 +7457,10 @@
       });
       const typeHost = document.getElementById("orderMonthlyTypeStats");
       if (typeHost) {
-        const rows = [["整機", typeCounts.machine], ["維修", typeCounts.repair], ["零件升級", typeCounts.upgrade], ["其他", typeCounts.other]];
-        typeHost.innerHTML = rows.map((r) => '<div class="order-monthly-stat"><div class="order-monthly-stat__label">' + v2Esc(r[0]) + '</div><div class="order-monthly-stat__value">' + r[1] + ' <span class="muted small">筆</span></div></div>').join("");
+        const rows = [["總訂單", monthOrders.length, "total"], ["整機", typeCounts.machine, "machine"], ["維修", typeCounts.repair, "repair"], ["零件升級", typeCounts.upgrade, "upgrade"], ["其他", typeCounts.other, "other"]];
+        typeHost.innerHTML = rows.map((r) => '<button type="button" class="order-monthly-stat" data-order-series="' + r[2] + '" aria-pressed="false"><span class="order-monthly-stat__label">' + v2Esc(r[0]) + '</span><span class="order-monthly-stat__value">' + r[1] + ' <span class="muted small">筆</span></span></button>').join("");
       }
+      window.DKOrderTrend?.render(document.getElementById("orderMonthlyTrend"), allOrders, { today: todayStr, dateOf: getOrderDateStr });
       const sourceCounts = new Map();
       monthOrders.forEach((o) => {
         const source = String(o.customer_source || "未填寫").trim() || "未填寫";
