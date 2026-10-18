@@ -1,0 +1,95 @@
+/* Desktop backoffice only. Keep print documents and mobile layouts independent. */
+@media screen and (min-width: 901px) {
+  body.admin-page .admin-shell {
+    padding: 20px 0 32px;
+  }
+  body.admin-page .admin-shell > .container {
+    width: calc(100% - 32px);
+    max-width: none;
+    min-width: 0;
+    --container: 100%;
+  }
+  body.admin-page .admin-shell > .container > *,
+  body.admin-page .order-workspace-main,
+  body.admin-page .po-workspace-main,
+  body.admin-page .table-wrap {
+    min-width: 0;
+    max-width: 100%;
+  }
+  body.admin-page .table-wrap > .table {
+    width: 100%;
+    min-width: 0;
+  }
+  body.admin-page .table-wrap > .table th,
+  body.admin-page .table-wrap > .table td {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+  body.admin-page .table-wrap .badge,
+  body.admin-page .table-wrap .status-badge,
+  body.admin-page .po-items-table-wrap .btn {
+    max-width: 100%;
+    box-sizing: border-box;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  body.admin-page .table-wrap input,
+  body.admin-page .table-wrap select {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  body.admin-page .orders-table {
+    table-layout: fixed;
+  }
+  body.admin-page .orders-table th:first-child {
+    width: 12%;
+  }
+  body.admin-page .orders-table th:nth-child(2) {
+    width: 9%;
+  }
+  body.admin-page .orders-table th:nth-child(9) {
+    width: 11%;
+  }
+  body.admin-page .order-status-stack {
+    min-width: 0;
+  }
+  body.admin-page .table-actions .btn {
+    max-width: 100%;
+    white-space: normal;
+  }
+  body.admin-page .po-items-table-wrap .table {
+    table-layout: fixed;
+  }
+  body.admin-page .po-items-table-wrap .table th:nth-child(1),
+  body.admin-page .po-items-table-wrap .table th:nth-child(2) {
+    width: 18%;
+  }
+  body.admin-page .po-items-table-wrap .table th:nth-child(10) {
+    width: 16%;
+  }
+  body.admin-page .po-items-table-wrap .table td:nth-child(8) .badge {
+    white-space: normal;
+  }
+}
+
+/* Give the form most of the width; the preview occupies its own column. */
+@media screen and (min-width: 1760px) {
+  body.admin-page .order-workspace-layout,
+  body.admin-page .po-workspace-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 24%);
+    align-items: start;
+    gap: 20px;
+  }
+  body.admin-page .desktop-live-preview {
+    position: sticky;
+    top: 16px;
+    right: auto;
+    width: 100%;
+    height: calc(100dvh - 32px);
+    min-width: 0;
+    box-sizing: border-box;
+  }
+}
