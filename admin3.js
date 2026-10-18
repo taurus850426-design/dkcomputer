@@ -737,6 +737,11 @@
     if (toTab !== "inv" && itemModal && !itemModal.hidden) {
       if (!confirm("品項編輯尚未儲存，確定要離開？")) return false;
     }
+    const poEditor = document.getElementById("poEditorView");
+    if (toTab !== "purchase" && tabPurchase && !tabPurchase.hidden && poEditor && !poEditor.hidden) {
+      if (!confirm("叫貨單仍在編輯，離開會放棄尚未儲存的表單內容。\n已送出的採用／到貨作業不會取消。確定離開？")) return false;
+      document.getElementById("poBackToListBtn")?.click();
+    }
     return true;
   }
   function firstPermittedChildInGroup(group) {
