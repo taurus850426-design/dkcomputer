@@ -9,6 +9,16 @@
     min-width: 0;
     --container: 100%;
   }
+  body.admin-page #tab-purchase.card:hover {
+    transform: none;
+  }
+  body.admin-page #poEditorView:not([hidden]) {
+    inset: 16px;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    box-sizing: border-box;
+  }
   body.admin-page .admin-shell > .container > *,
   body.admin-page .order-workspace-main,
   body.admin-page .po-workspace-main,
