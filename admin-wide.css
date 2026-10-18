@@ -155,3 +155,60 @@
     left: 208px;
   }
 }
+
+/* Keep short action cards close to their content instead of spanning the workspace. */
+@media screen and (min-width: 901px) {
+  body.admin-page .inv-alert-list:not(.inv-alert-empty) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 10px;
+  }
+  body.admin-page .inv-alert-list > .inv-alert-row {
+    flex: 0 1 auto;
+    width: max-content;
+    max-width: min(100%, 480px);
+    min-width: 0;
+    box-sizing: border-box;
+    justify-content: flex-start;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 16px;
+    padding: 12px 14px;
+    border: 1px solid rgba(234, 179, 8, 0.28);
+  }
+  body.admin-page .inv-alert-row > div {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  body.admin-page .inv-alert-row > .btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+}
+
+@media screen and (min-width: 1100px) {
+  body.admin-page nav.admin-nav .admin-nav-groups.tabs::before,
+  body.admin-page nav.admin-nav .admin-nav-children.tabs::before {
+    display: block;
+    padding: 4px 8px 8px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #334155;
+    letter-spacing: 0.08em;
+  }
+  body.admin-page nav.admin-nav .admin-nav-groups.tabs::before {
+    content: "工作區";
+  }
+  body.admin-page nav.admin-nav .admin-nav-children.tabs {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 3px solid #94a3b8;
+    background: #f1f5f9;
+    border-radius: 0 0 10px 10px;
+    padding-bottom: 8px;
+  }
+  body.admin-page nav.admin-nav .admin-nav-children.tabs::before {
+    content: "功能選單";
+  }
+}
