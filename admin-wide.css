@@ -107,15 +107,15 @@
 /* Keep the existing navigation, permissions and palette; change its desktop placement. */
 @media screen and (min-width: 1100px) {
   body.admin-page .admin-shell > .container:has(> #panel:not([hidden])) {
-    padding-left: 192px;
+    padding-left: 212px;
     box-sizing: border-box;
   }
   body.admin-page nav.admin-nav {
     position: fixed;
     inset: 16px auto 16px 16px;
     z-index: 60;
-    width: 176px;
-    max-width: 176px;
+    width: 196px;
+    max-width: 196px;
     margin: 0;
     padding: 10px;
     box-sizing: border-box;
@@ -152,7 +152,7 @@
     padding: 10px 8px;
   }
   body.admin-page #poEditorView:not([hidden]) {
-    left: 208px;
+    left: 228px;
   }
 }
 
@@ -354,5 +354,35 @@
   }
   body.admin-page #panel .po-items-table-wrap > .table {
     table-layout: fixed;
+  }
+}
+
+/* Give the fixed navigation a little more breathing room. */
+@media screen and (min-width: 1100px) {
+  body.admin-page nav.admin-nav .admin-nav-groups .admin-nav-group {
+    font-size: 15px;
+    min-height: 44px;
+  }
+  body.admin-page nav.admin-nav .admin-nav-children .admin-nav-child {
+    font-size: 14px;
+    min-height: 38px;
+  }
+}
+
+/* Status labels are atomic; long product specifications may still wrap. */
+@media screen and (min-width: 901px) {
+  body.admin-page #panel #poListTable :is(th, td):nth-child(3) {
+    min-width: 88px;
+    width: 88px;
+    white-space: nowrap;
+  }
+  body.admin-page #panel #poListTable > tbody > tr > td:nth-child(3) > :is(.badge, .status-badge) {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: keep-all;
+    flex-shrink: 0;
+    max-width: none;
   }
 }
