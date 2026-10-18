@@ -212,3 +212,65 @@
     content: "功能選單";
   }
 }
+
+/* Desktop controls stay together; spare workspace remains on the right. */
+@media screen and (min-width: 901px) {
+  body.admin-page #panel .section-head,
+  body.admin-page #panel .inv-section-head,
+  body.admin-page #panel .order-monthly-analysis__head,
+  body.admin-page #panel .filters,
+  body.admin-page #panel .section-actions,
+  body.admin-page #panel .uv-price-head,
+  body.admin-page #panel .ap-item-head,
+  body.admin-page #panel .ap-po-card-head,
+  body.admin-page #panel .ap-recon-card-head,
+  body.admin-page #panel .ap-recent-card-head {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  body.admin-page #panel .section-head > .section-actions {
+    margin-left: 0;
+  }
+  body.admin-page #panel .toolbar,
+  body.admin-page #panel .form-grid {
+    max-width: 1120px;
+    margin-left: 0;
+    margin-right: 0;
+    box-sizing: border-box;
+  }
+  body.admin-page #panel .toolbar > .search {
+    width: min(100%, 420px);
+    box-sizing: border-box;
+  }
+  body.admin-page #panel :is(.kpi-grid, .order-monthly-stat-grid,
+    .vendor-card-grid, .publish-web-grid, .att-stat-grid,
+    .uv-active-grid, .uv-auto-stats, .ue-active-grid, .ue-preview-grid) {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 260px));
+    justify-content: start;
+  }
+  body.admin-page #panel :is(.uv-batch-list, .ue-rule-list, .ua-case-list) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 12px;
+  }
+  body.admin-page #panel :is(.uv-batch-card, .ue-rule-card, .ua-case-card) {
+    flex: 0 1 auto;
+    width: max-content;
+    max-width: min(100%, 680px);
+    min-width: 0;
+    box-sizing: border-box;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
+  }
+  body.admin-page #panel :is(.uv-batch-card, .ue-rule-card, .ua-case-card) > div {
+    min-width: 0;
+    max-width: 100%;
+  }
+  /* Dense order and purchase editors retain the room needed by their fields. */
+  body.admin-page #panel :is(.order-workspace-layout, .po-workspace-layout, #poEditorView) .form-grid {
+    max-width: none;
+  }
+}
