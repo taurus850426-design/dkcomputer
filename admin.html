@@ -276,6 +276,12 @@
                   <button id="btnNewOrder" class="btn btn-primary primary-action" type="button">新增訂單</button>
                 </div>
               </div>
+              <details id="webShopOrders" class="section-card-soft admin-stack-gap" data-admin-only style="padding:16px">
+                <summary>網站訂購待確認（獨立佇列）</summary>
+                <p class="muted">官網訂購尚未正式啟用。確認供貨前，請核對可售數量；本區不會自動變更原有訂單與財務。</p>
+                <button id="webShopRefresh" class="btn btn-ghost" type="button">載入／更新網站訂購</button>
+                <p id="webShopMessage" role="status"></p><div id="webShopList"></div>
+              </details>
               <div id="orderTodayKpi" class="kpi-grid ui-enter admin-stack-gap"></div>
               <section id="orderMonthlyAnalysis" class="order-monthly-analysis section-card-soft surface-neutral admin-stack-gap" aria-label="訂單分析">
                 <div class="order-monthly-analysis__head">
@@ -3658,6 +3664,7 @@
     <script src="./admin-order-trend.js?v=20261018trend1"></script>
     <script src="./admin-inventory-funding.js?v=20261019funding1"></script>
     <script src="./purchase-receive-batch.js?v=20261019batch1"></script>
+    <script src="./shop-admin.js?v=20261019shop1"></script>
     <script src="./admin3.js?v=20261019batch1"></script>
     <script src="./used-valuation-admin.js?v=20260927stage32"></script>
     <script src="./used-market-auto-admin.js?v=20260929stage35"></script>

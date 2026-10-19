@@ -26,3 +26,7 @@ verify_jwt = true
 
 [functions.used-market-collector]
 verify_jwt = true
+
+# Public checkout/webhook; handler verifies admin JWT and gateway signatures.
+[functions.shop-checkout]
+verify_jwt = false
