@@ -5938,6 +5938,7 @@
           <td><span class="status-badge status-muted">${v2Esc(STATUS_LABEL[x.status] || x.status)}</span></td>
           <td class="table-number">${qtyBadge}</td>
           <td class="table-number cost-muted-num" data-admin-only>${v2FmtNum(x.cost_unit)}</td>
+          <td class="table-secondary" data-admin-only data-funding-item="${v2Esc(x.id)}">讀取中…</td>
           <td class="table-number price-list-num">${v2FmtNum(x.price_list)}</td>
           <td class="table-number neutral-number">${v2FmtNum(x.price_floor)}</td>
           <td class="table-secondary">${v2Esc((x.inbound_date || "").toString().slice(0, 10))}</td>
@@ -5948,6 +5949,7 @@
           <td class="table-actions"><button type="button" class="btn btn-ghost btn-sm tertiary-action btn-edit-item" data-id="${v2Esc(x.id)}">編輯</button></td>
         </tr>`;
       }).join("");
+      window.DKInventoryFunding?.populate(itemsTbody, DK, () => !!window.stage7IsAdminRole?.());
       itemsTbody.querySelectorAll(".btn-edit-item").forEach((btn) => {
         btn.addEventListener("click", () => openV2ItemEditor(btn.getAttribute("data-id")));
       });
@@ -9062,13 +9064,7 @@
             "舊庫存與選擇 BOSS 出資的剩餘本金") +
           kpiCard("surface-info", "🅷", "HALA 庫存成本",
             '<span class="neutral-number">NT$ ' + v2FmtNum(numProfit(fs.hala_inventory_cost)) + "</span>",
-            "未來進貨預設歸 HALA") +
-          kpiCard("surface-danger", "⏳", "BOSS 待返還本金",
-            '<span class="neutral-number">NT$ ' + v2FmtNum(numProfit(fs.boss_pending_principal)) + "</span>",
-            "已售 BOSS 庫存本金 − 已返還") +
-          kpiCard("surface-success", "✅", "BOSS 已返還本金",
-            '<span class="neutral-number">NT$ ' + v2FmtNum(numProfit(fs.boss_repaid_principal)) + "</span>",
-            "只記本金返還，不重複列為營業支出");
+            "未來進貨預設歸 HALA");
       }
 
       const elResult = document.getElementById("reportQueryResult");
