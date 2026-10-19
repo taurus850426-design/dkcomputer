@@ -21,6 +21,7 @@
 
   let currentOrder = null;
   let purchaseOperationBusy = false;
+  let bulkReceiveSnapshot = null;
   let editingItemId = null;
   let searchTimer = null;
   let lastSearchRows = [];
@@ -965,6 +966,18 @@
     const sum = el("poItemsSummary");
     if (!tbody || !currentOrder) return;
     const items = currentOrder.items || [];
+    const bulkBtn = el("poReceiveAllBtn");
+    if (bulkBtn) {
+      bulkBtn.hidden = !window.stage7IsAdminRole?.() || !["ordered", "partial"].includes(currentOrder.status);
+      bulkBtn.disabled = purchaseOperationBusy || !items.some(function(it){ return canReceiveItem(currentOrder,it); });
+    }
+    const warning = el("poCompletedSourceWarning");
+    if (warning) {
+      const sources = window.DK?.getOrders?.() || [];
+      const mismatch = items.some(function(it){ return it.procurementStatus !== "received" && sources.some(function(o){ return String(o.id) === String(it.sourceSalesOrderId || currentOrder.sourceSalesOrderId || "") && o.status === "completed"; }); });
+      warning.hidden = !mismatch;
+      warning.textContent = mismatch ? "來源訂單已完成，但仍有品項未登記到貨。請先核對是否已用其他方式入庫，再補登到貨，避免重複增加庫存。" : "";
+    }
     const tot = orderTotals(currentOrder);
     if (sum) {
       sum.innerHTML =
@@ -1759,6 +1772,86 @@
     if (field) field.hidden = receiveModalMode === "destination" || destination !== "inventory";
   }
 
+  function bulkReceiveMessage(text) {
+    const node = el("poBulkReceiveMsg");
+    if (node) node.textContent = text || "";
+  }
+  function bulkReceivePlan() {
+    return window.DKPurchaseBatch.plan(currentOrder, {
+      destination: el("poBulkReceiveDestination").value, priceOf: itemPrice,
+      orders: window.DK?.getOrders?.() || [], allowCompleted: el("poBulkReceiveReviewed").checked,
+    });
+  }
+  function renderBulkReceivePlan() {
+    if (!currentOrder || !bulkReceiveSnapshot) return;
+    const batch = bulkReceivePlan();
+    el("poBulkReceiveRows").innerHTML = batch.ready.map(function (row) {
+      return '<li>' + esc(row.name) + ' × ' + esc(row.quantity) + '｜' + (row.destination === "customer" ? "客戶訂單專用" : "一般庫存（自動建立品項）") + '</li>';
+    }).join("");
+    el("poBulkReceiveReviewField").hidden = !batch.reviews.length;
+    el("poBulkReceiveSaveBtn").disabled = purchaseOperationBusy || !!batch.issues.length;
+    el("poBulkReceiveSummary").textContent = currentOrder.orderNo + "｜本次 " + batch.ready.length + " 項｜已到貨 " + batch.alreadyReceived + " 項不重複處理";
+    bulkReceiveMessage(batch.issues.join("；"));
+  }
+  function openBulkReceiveModal() {
+    if (purchaseOperationBusy || !currentOrder || !window.stage7IsAdminRole?.()) return;
+    if (!window.DKPurchaseBatch) return showMsg("統一到貨功能尚未載入，請重新整理");
+    bulkReceiveSnapshot = { id: currentOrder.id, fingerprint: JSON.stringify(currentOrder) };
+    el("poBulkReceiveDate").value = todayYMD();
+    el("poBulkReceiveDestination").value = "auto";
+    el("poBulkReceiveNote").value = "";
+    el("poBulkReceiveReviewed").checked = false;
+    el("poBulkReceiveSaveBtn").hidden = false;
+    el("poBulkReceiveCloseBtn").textContent = "取消";
+    renderBulkReceivePlan();
+    el("poBulkReceiveModal").hidden = false;
+    document.body.classList.add("po-quote-modal-open");
+    el("poBulkReceiveCloseBtn").focus();
+  }
+  function closeBulkReceiveModal() {
+    if (purchaseOperationBusy) return;
+    el("poBulkReceiveModal").hidden = true;
+    document.body.classList.remove("po-quote-modal-open");
+    bulkReceiveSnapshot = null;
+  }
+  async function saveBulkReceiveModal() {
+    if (purchaseOperationBusy || !bulkReceiveSnapshot || !window.stage7IsAdminRole?.()) return;
+    if (!currentOrder || currentOrder.id !== bulkReceiveSnapshot.id || JSON.stringify(currentOrder) !== bulkReceiveSnapshot.fingerprint)
+      return bulkReceiveMessage("單據已變更，請關閉視窗後重新核對");
+    const batch = bulkReceivePlan();
+    if (batch.issues.length) return bulkReceiveMessage(batch.issues.join("；"));
+    const date = el("poBulkReceiveDate").value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(new Date(date + "T00:00:00Z").getTime()) || new Date(date + "T00:00:00Z").toISOString().slice(0,10) !== date)
+      return bulkReceiveMessage("請選擇有效到貨日期");
+    if (typeof window.stage7ReceivePurchaseItem !== "function") return bulkReceiveMessage("到貨功能尚未載入，請重新整理");
+    const targetOrder = currentOrder;
+    purchaseOperationBusy = true;
+    ["poBulkReceiveSaveBtn", "poBulkReceiveCloseBtn", "poBulkReceiveDate", "poBulkReceiveDestination", "poBulkReceiveReviewed", "poBulkReceiveNote"].forEach(function(id){ el(id).disabled = true; });
+    bulkReceiveMessage("正在處理，請勿關閉或重新整理…");
+    try {
+      const result = await window.DKPurchaseBatch.run(targetOrder, batch, {
+        date: date, note: el("poBulkReceiveNote").value.trim(), receive: window.stage7ReceivePurchaseItem,
+        progress: function(done,total){ bulkReceiveMessage("已完成 " + done + "／" + total + " 項，請稍候…"); },
+      });
+      if (currentOrder && currentOrder.id === targetOrder.id) {
+        currentOrder = normalizeOrder(targetOrder);
+        fillEditor(false);
+      }
+      renderList(); renderPurchaseOrdersSyncPanel();
+      const message = "本次已登記 " + result.completed.length + " 項。" + (result.error ? "其餘已停止：" + result.error + "。已成功項目保留；請同步核對後再繼續。" : "所有待到貨品項已完成登記。");
+      bulkReceiveMessage(message);
+      el("poBulkReceiveSaveBtn").hidden = true;
+      el("poBulkReceiveCloseBtn").textContent = "關閉";
+      showMsg(targetOrder.orderNo + "：" + message, 10000);
+      try { await window.DK?.fetchV2DataFromSupabase?.(); } catch (_) {}
+    } catch(e) { bulkReceiveMessage("處理中斷，請同步核對已到貨項目：" + String(e?.message || e)); el("poBulkReceiveSaveBtn").hidden = true; }
+    finally {
+      purchaseOperationBusy = false;
+      if (currentOrder?.id === targetOrder.id) renderItems();
+      ["poBulkReceiveSaveBtn", "poBulkReceiveCloseBtn", "poBulkReceiveDate", "poBulkReceiveDestination", "poBulkReceiveReviewed", "poBulkReceiveNote"].forEach(function(id){ el(id).disabled = false; });
+    }
+  }
+
   function openReceiveModal(itemId) {
     if (!currentOrder) return;
     const item = (currentOrder.items || []).find(function (it) { return String(it.id) === String(itemId); });
@@ -2079,6 +2172,15 @@
     });
     el("poReceiveCloseBtn") && el("poReceiveCloseBtn").addEventListener("click", closeReceiveModal);
     el("poReceiveCancelBtn") && el("poReceiveCancelBtn").addEventListener("click", closeReceiveModal);
+    window.addEventListener("beforeunload", function(e) {
+      if (bulkReceiveSnapshot && purchaseOperationBusy) { e.preventDefault(); e.returnValue = ""; }
+    });
+    el("poReceiveAllBtn")?.addEventListener("click", openBulkReceiveModal);
+    el("poBulkReceiveSaveBtn")?.addEventListener("click", saveBulkReceiveModal);
+    el("poBulkReceiveCloseBtn")?.addEventListener("click", closeBulkReceiveModal);
+    el("poBulkReceiveDestination")?.addEventListener("change", renderBulkReceivePlan);
+    el("poBulkReceiveReviewed")?.addEventListener("change", renderBulkReceivePlan);
+    el("poBulkReceiveModal")?.addEventListener("click", function(e){ if(e.target === el("poBulkReceiveModal")) closeBulkReceiveModal(); });
     el("poReceiveSaveBtn") && el("poReceiveSaveBtn").addEventListener("click", saveReceiveModal);
     el("poReceiveDestination") && el("poReceiveDestination").addEventListener("change", toggleReceiveInventoryField);
     el("poReceiveModal") && el("poReceiveModal").addEventListener("click", function (e) {
@@ -2089,6 +2191,7 @@
     window.addEventListener("resize", schedulePurchasePreview);
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && el("poQuoteModal") && !el("poQuoteModal").hidden) closeQuoteModal();
+      if (e.key === "Escape" && el("poBulkReceiveModal") && !el("poBulkReceiveModal").hidden) closeBulkReceiveModal();
       if (e.key === "Escape" && el("poReceiveModal") && !el("poReceiveModal").hidden) closeReceiveModal();
     });
     el("poStickyViewBtn") && el("poStickyViewBtn").addEventListener("click", function () {
@@ -2413,6 +2516,7 @@
   }
 
   window.__dkPurchaseOrdersOnShow = onShow;
+  window.__dkPurchaseOrdersOpen = function(id) { if (!window.DK?.canPermission?.("purchase")) return; onShow(); openOrder(id, false); };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {

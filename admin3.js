@@ -7403,7 +7403,16 @@
       return { label: "轉帳", className: "status-info" };
     }
 
+    function pendingLinkedPurchases(orderId) {
+      return window.DKPurchaseBatch?.pendingForOrder(orderId, DK.loadPurchaseOrdersRaw?.(false) || []) || [];
+    }
+    function pendingPurchaseMessage(rows) {
+      return "叫貨單「" + rows.map(row => row.order.orderNo || row.order.id).join("、") + "」仍有 " + rows.reduce((n,row) => n + row.items.length, 0) + " 項未登記到貨，請先核對並登記到貨，再完成訂單。";
+    }
+
     function orderProcurementStatusMeta(order, purchaseOrders) {
+      if (order?.status === "completed" && window.DKPurchaseBatch?.pendingForOrder(order.id, purchaseOrders).length)
+        return { label: "已完成・到貨待核對", className: "status-warning" };
       const lines = (Array.isArray(order?.items) ? order.items : []).filter((line) => line && typeof line === "object");
       const procurementLines = lines.filter((line) => String(line.fulfillment_type || line.fulfillmentType || "") === "procurement");
       if (!procurementLines.length) return { label: "不需叫貨", className: "status-muted" };
@@ -7575,6 +7584,12 @@
           });
           successMessage = "已改為已交付";
         } else if (action === "complete") {
+          const pendingPurchases = pendingLinkedPurchases(order.id);
+          if (pendingPurchases.length) {
+            const go = window.confirm(pendingPurchaseMessage(pendingPurchases) + "\n\n是否前往第一張叫貨單核對？本次不會變更訂單狀態。");
+            if (go && canPerm("purchase")) { switchTab("purchase"); window.__dkPurchaseOrdersOpen?.(pendingPurchases[0].order.id); }
+            return;
+          }
           if (String(order.delivery_status || "pending") !== "delivered") {
             throw new Error("請先點『未交付』改成已交付，再將訂單改為已完成");
           }
@@ -8053,6 +8068,10 @@
         if (payload.payment_status !== "unpaid" && !payload.payment_date) return v2Show(orderMsg, "請填寫收款日期");
         if (payload.delivery_status === "delivered" && !payload.delivered_at) return v2Show(orderMsg, "請填寫交付日期");
         if (payload.status === "completed") {
+          if (previousOrder?.status !== "completed") {
+            const pendingPurchases = pendingLinkedPurchases(editingV2OrderId);
+            if (pendingPurchases.length) return v2Show(orderMsg, pendingPurchaseMessage(pendingPurchases));
+          }
           const pendingReceipt = orderLineItems.find((line) =>
             String(line.fulfillment_type || "") === "procurement"
           );

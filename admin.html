@@ -1504,7 +1504,9 @@
                   <div class="po-items-head">
                     <h3 class="h3">叫貨清單</h3>
                     <div id="poItemsSummary" class="po-items-summary"></div>
+                    <button id="poReceiveAllBtn" class="btn btn-primary btn-sm" type="button" data-admin-only hidden>全部登記到貨</button>
                   </div>
+                  <p id="poCompletedSourceWarning" class="section-card-soft surface-warning" role="status" hidden></p>
                   <div class="table-wrap po-items-table-wrap" style="margin-top:10px">
                     <table class="table">
                       <thead>
@@ -3591,6 +3593,24 @@
         </div>
       </div>
     </div>
+    <div id="poBulkReceiveModal" class="po-quote-modal" hidden>
+      <div class="po-quote-modal__card" role="dialog" aria-modal="true" aria-labelledby="poBulkReceiveTitle">
+        <div class="po-quote-modal__head"><h3 id="poBulkReceiveTitle" class="h3">確認統一登記到貨</h3></div>
+        <div class="po-quote-modal__body">
+          <p id="poBulkReceiveSummary"></p>
+          <div class="form-grid">
+            <div class="field"><label for="poBulkReceiveDate">到貨日期</label><input id="poBulkReceiveDate" type="date" /></div>
+            <div class="field"><label for="poBulkReceiveDestination">統一到貨用途</label><select id="poBulkReceiveDestination"><option value="auto">依來源判斷：有訂單者專用，其餘入一般庫存</option><option value="customer">全部客戶訂單專用</option><option value="inventory">全部入一般庫存（自動建立品項）</option></select></div>
+            <div class="field full"><label for="poBulkReceiveNote">到貨備註</label><input id="poBulkReceiveNote" type="text" /></div>
+          </div>
+          <ul id="poBulkReceiveRows"></ul>
+          <label id="poBulkReceiveReviewField" hidden><input id="poBulkReceiveReviewed" type="checkbox" /> 來源訂單已完成：我已核對這些未到貨品項，確認本次品項尚未以其他方式入庫，同意補登。</label>
+          <p class="form-hint">請確認本次列出的商品已全部實際收到。按下同意後會逐項入庫並依用途綁定訂單；已到貨品項不重複處理。中途失敗會停止，已成功項目保留，請核對後再繼續。</p>
+          <p id="poBulkReceiveMsg" role="status" aria-live="polite"></p>
+        </div>
+        <div class="po-quote-modal__actions"><button id="poBulkReceiveSaveBtn" class="btn btn-primary" type="button">同意並登記到貨</button><button id="poBulkReceiveCloseBtn" class="btn btn-ghost" type="button">取消</button></div>
+      </div>
+    </div>
     <div id="poReceiveModal" class="po-quote-modal" hidden>
       <div class="po-quote-modal__card po-receive-modal__card" role="dialog" aria-modal="true" aria-labelledby="poReceiveModalTitle">
         <div class="po-quote-modal__head">
@@ -3637,12 +3657,13 @@
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script src="./admin-order-trend.js?v=20261018trend1"></script>
     <script src="./admin-inventory-funding.js?v=20261019funding1"></script>
-    <script src="./admin3.js?v=20261019funding1"></script>
+    <script src="./purchase-receive-batch.js?v=20261019batch1"></script>
+    <script src="./admin3.js?v=20261019batch1"></script>
     <script src="./used-valuation-admin.js?v=20260927stage32"></script>
     <script src="./used-market-auto-admin.js?v=20260929stage35"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
     <script src="./used-acquisition-admin.js?v=20260927stage32"></script>
-    <script src="./purchase-orders.js?v=20261017integrity36"></script>
+    <script src="./purchase-orders.js?v=20261019batch1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260913s20"></script>
   </body>
