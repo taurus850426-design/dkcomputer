@@ -144,6 +144,7 @@
   }
 
   function renderProduct(item) {
+    window.DKShopUI?.product(item);
     if (!item) return;
 
     if (titleEl) titleEl.textContent = item.name || "商品";
