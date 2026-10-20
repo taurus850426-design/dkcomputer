@@ -8717,9 +8717,22 @@
       if (previewDownload) previewDownload.textContent = isMobileQuoteDevice() ? "分享／儲存圖片" : "下載圖片";
       if (quoteModal) quoteModal.hidden = false;
     }
-    document.getElementById("orderQuotePreview")?.addEventListener("click", () => {
-      if (!requirePerm("quoteImage")) return;
-      openQuotePreview().catch((e) => v2Show(orderMsg, "報價單預覽失敗：" + String(e?.message || e)));
+    let quotePrintBusy = false;
+    document.getElementById("orderQuotePreview")?.addEventListener("click", async () => {
+      if (!requirePerm("quoteImage") || quotePrintBusy) return;
+      const button = document.getElementById("orderQuotePreview");
+      quotePrintBusy = true;
+      if (button) { button.disabled = true; button.textContent = "準備列印…"; }
+      try {
+        const { canvas, filename } = await buildQuoteCanvas();
+        if (typeof window.DKQuotePrint !== "function") throw new Error("列印功能尚未載入，請重新整理後再試");
+        await window.DKQuotePrint(canvas, filename);
+      } catch (e) {
+        v2Show(orderMsg, "報價單列印失敗：" + String(e?.message || e));
+      } finally {
+        quotePrintBusy = false;
+        if (button) { button.disabled = false; button.textContent = "列印報價單"; }
+      }
     });
     document.getElementById("orderQuoteDownload")?.addEventListener("click", () => {
       if (!requirePerm("quoteImage")) return;
