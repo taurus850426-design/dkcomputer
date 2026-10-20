@@ -24,6 +24,7 @@ for(const longText of [false,true])test('purchase print preserves physical font 
   await page.emulateMedia({media:'print'});
   const target=fs.mkdtempSync(path.join(os.tmpdir(),'dk-purchase-print-'));
   const pdf=path.join(target,'purchase.pdf');await page.pdf({path:pdf,preferCSSPageSize:true});
+  if(!longText)assert.match(execFileSync('pdfinfo',[pdf],{encoding:'utf8'}),/Pages:\s+1\b/,'a short order must not add a blank page from the admin shell height');
   const xml=execFileSync('pdftohtml',['-xml','-stdout','-i',pdf],{encoding:'utf8'});
   // pdftohtml reports pixels at 108dpi: 12pt text must remain about 18px.
   const sizes=[...xml.matchAll(/<fontspec[^>]*size="([\d.]+)"/g)].map(x=>Number(x[1]));
