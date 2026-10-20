@@ -11,6 +11,7 @@
   for(const line of normalizeCart(cart)){
    const item=catalog.find(x=>String(x.id)===line.id);
    if(!item){errors.push('有商品已下架，請移除後再繼續');continue;}
+   if(item.requires_quote||['售完','售出','停售','缺貨'].includes(item.stock_status)){errors.push(item.name+'：請先聯絡確認型號與供貨');continue;}
    const price=Number(item.price),available=Number(item.qty);
    if(item.price==null||!Number.isSafeInteger(price)||price<=0){errors.push(item.name+'：需先確認價格');continue;}
    if(item.qty==null||!Number.isInteger(available)||available<line.qty){errors.push(item.name+'：數量不足或待確認');continue;}
@@ -26,7 +27,7 @@
   if(!['pickup','delivery'].includes(customer.fulfillment))throw Error('請選擇取貨方式');
   if(customer.fulfillment==='delivery'&&(customer.address.length<8||customer.address.length>300))throw Error('請填寫完整收件地址');
   if(customer.note.length>500)throw Error('備註請勿超過500字');
-  if(!['credit','transfer','store'].includes(customer.payment))throw Error('請選擇付款方式');
+  if(!['transfer','store'].includes(customer.payment))throw Error('目前僅提供銀行轉帳或到店付款');
   if(customer.payment==='store'&&customer.fulfillment!=='pickup')throw Error('到店付款僅適用到店自取');
   if(customer.fulfillment==='pickup')customer.address='';
   return customer;

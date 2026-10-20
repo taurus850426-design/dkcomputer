@@ -277,9 +277,11 @@
                 </div>
               </div>
               <details id="webShopOrders" class="section-card-soft admin-stack-gap" data-admin-only style="padding:16px">
-                <summary>網站訂購待確認（獨立佇列）</summary>
-                <p class="muted">官網訂購尚未正式啟用。確認供貨前，請核對可售數量；本區不會自動變更原有訂單與財務。</p>
+                <summary>網站訂購｜接單、收款與交付</summary>
+                <p class="muted">確認供貨前請核對可售數量，並填寫客人可見的付款／取貨說明。此區獨立管理網站單，原後台零件庫存與財務仍需依現行流程登記。</p>
                 <button id="webShopRefresh" class="btn btn-ghost" type="button">載入／更新網站訂購</button>
+                <button id="webShopPrev" class="btn btn-ghost" type="button" disabled>上一頁</button>
+                <button id="webShopNext" class="btn btn-ghost" type="button" disabled>下一頁</button>
                 <p id="webShopMessage" role="status"></p><div id="webShopList"></div>
               </details>
               <div id="orderTodayKpi" class="kpi-grid ui-enter admin-stack-gap"></div>
@@ -3672,7 +3674,7 @@
     <script src="./admin-order-trend.js?v=20261018trend1"></script>
     <script src="./admin-inventory-funding.js?v=20261019funding1"></script>
     <script src="./purchase-receive-batch.js?v=20261019batch1"></script>
-    <script src="./shop-admin.js?v=20261019shop1"></script>
+    <script src="./shop-admin.js?v=20261021launch1"></script>
     <script src="./admin-quote-print.js?v=20261020quoteprint1"></script>
     <script src="./admin3.js?v=20261020quoteprint1"></script>
     <script src="./admin-item-coolpc.js?v=20261020itemprice1"></script>
