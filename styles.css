@@ -5545,6 +5545,7 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
     min-width: 0 !important;
     max-width: none !important;
     height: auto !important;
+    min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
     border: none !important;
@@ -5584,9 +5585,12 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
     margin: 0 0 8pt;
   }
   body.po-printing .po-print-inner h3{
+    font-size: 13pt;
+    margin: 10pt 0 4pt;
     break-after: avoid;
     page-break-after: avoid;
   }
+  body.po-printing .po-print-inner p{ margin: 6pt 0; }
   body.po-printing .po-print-inner table{
     width: 100%;
     min-width: 0;
