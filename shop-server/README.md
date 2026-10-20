@@ -1,56 +1,39 @@
-# DK 官網購物與信用卡介接（尚未正式啟用）
+# DK 官網購物：轉帳與到店付款
 
-新增 `shop.html`、商品詳情購物車入口、後台訂單頁「網站訂購待確認」獨立佇列，以及 ECPay AIO 信用卡一次付清介接。預設關閉，未部署服務時仍可預覽購物車。
+公開入口為 `/dkcomputer/shop.html`。客人送出訂購需求後，由管理員確認供貨、運費及付款／取貨說明。信用卡入口與後端支付操作均停用，不能使用綠界或藍新刷卡。
 
-## 與現有資料的關係
+## 接單方式
 
-- 安裝只新增 shop_orders 與 shop_* RPC，不重寫既有訂單、叫貨單、報價、庫存或財務資料。
-- 網站商品來自 public.inventory，並未連到後台 inventory_items。新網站單不自動變成原 orders，也不自動入帳。
-- 店家批准網站訂購時，核對最新價格與官網可售數量，保留該數量；實際出貨按鈕才扣 public.inventory.qty。後台實體庫存與財務仍依原流程登記，須用 WEB 單號核對避免重複。
-- 測試單不占正式單保留數量，不能出貨或扣庫存。
-- 本機測試使用隔離資料庫，未建立正式測試訂單或修改正式資料。
+1. 後台「營運 → 訂單 → 網站訂購」查看新需求，可分頁查看與複製資料。
+2. 確認供貨時填入給客人的銀行帳號、匯款注意事項，或到店時間／地址。宅配須填運費；自取運費固定為零。客人從私人查單連結查看內容。本版沒有自動通知信或 LINE 推播，請另行聯絡客人。
+3. 轉帳單確認後保留48小時。客人回報轉出帳號末五碼後，進入待核款狀態；回報不代表已付款。逾期未回報會取消保留，如已匯款須人工核對。到店單須人工追蹤與取消，不自動到期。
+4. 管理員實際核實收款後，填寫核對憑據，才能登記收款。交付後再登記完成，扣除官網上架數量。
 
-## 操作流程
+## 與原有訂單及庫存的關係
 
-客人選購 → 送出聯絡資訊與訂購需求 → 管理員確認供貨及運費 → 客人在同一瀏覽器按查詢進度 → 開啟綠界刷卡頁 → 綠界伺服器通知驗簽、商店與金額核對 → 顯示已付款 → 管理員核對出貨並扣官網上架量。
+- 網站單存於獨立的 `shop_orders`，不修改既有 `orders`、叫貨單、廠商報價、`inventory_items` 或財務紀錄，也不自動計入原業績報表。須用 WEB 單號另行登記、核對，避免重複入帳。
+- 官網商品來自 `public.inventory`，尚未與後台零件庫存配對。確認供貨會保留官網可售量，登記交付才扣 `public.inventory.qty`，不扣零件庫存。修改官網上架數量時須考慮既有保留量。
+- `WEB-014` 同時列出2060／3060 Ti，價格尚未區分，透過 `shop_product_rules.requires_quote` 限制為先詢價，未改動原商品內容。其餘符合價格、數量條件的商品可下單。
+- 本版沒有線上退款、信用卡、電子發票、物流 API、會員登入或自動通知。取消後如有款項，須人工處理退款與聯絡。
 
-轉帳／到店付款須管理員實際核實款項後，填寫核對憑據。這不會自動寫入舊財務系統。
+## 部署與開關
 
-## 安裝與設定
+- 原始基礎 schema：`supabase/migrations/20261019115248_shop_checkout_queue.sql`（`schema.sql` 為便讀副本，擇一安裝）。再安裝 `supabase/migrations/20261020232114_shop_manual_launch.sql`。
+- 部署 `supabase/functions/shop-checkout/index.ts` 及其相對依賴 `manual.mjs`。使用內建 Supabase 伺服器環境變數，私鑰不進入公開程式。`SHOP_ORIGIN` 預設為 `https://taurus850426-design.github.io`。
+- Edge 的 `verify_jwt=false` 讓公開查單與送單可達；管理操作由函式驗證 JWT、`profiles.role=admin` 及 `enabled=true`。公開查單須持有隨機私人憑證。資料表及 RPC 不直接授權 anon／authenticated。
+- 接單開關以 `public.shop_settings.enabled` 為準。前端 `shop-config.js` 的 enabled 只控制商品入口，不足以開啟後端。關閉接單仍可查詢舊單與回報已完成轉帳。
+- `shop-checkout` 的刷卡操作與通知端點固定回410，不讀取舊 ECPay 設定；舊信用卡函式沒有公開權限。將來開啟刷卡必須另做正式串接與驗收。
 
-1. Review `supabase/migrations/20261019115248_shop_checkout_queue.sql`。依專案規則，由使用者手動執行。`schema.sql` 為相同內容的便讀副本，擇一執行即可。
-2. 在 Supabase Edge Secrets 設定下列變數。正式金鑰只可存伺服器 Secrets，禁止放到任何公開 HTML、JS 或 Git。
-3. 部署 `shop-checkout` Edge Function；`supabase/config.toml` 設 verify_jwt=false，公開 checkout/webhook 可達；管理操作仍由函式驗證管理員 JWT、profiles.role 與 enabled，刷卡通知另驗簽。
-4. 先用 test 模式與官方測試帳號，管理員登入同一網站後測試。核對回呼、重新整理、重送、拒付、金額異常、出貨扣量與權限。
-5. 正式金流帳號核准後，換正式憑證、設定 live 防機器人、正式付款／退貨與隱私說明，確認可售數量，再設 SHOP_LIVE_APPROVED=true、ECPAY_MODE=live、SHOP_ENABLED=true。
-6. 最後將 shop-config.js 的 enabled 改為 true 並加入官網導覽購物入口。未完成前保持 false，不能宣稱正式收款已開放。
+## 驗證與故障處理
 
-| 變數 | 用途 |
-| --- | --- |
-| SHOP_ENABLED | 預設 false，true 才能建立需求、批准與開始刷卡 |
-| SHOP_ORIGIN | 官網精確 origin，例如 https://taurus850426-design.github.io；不含 /dkcomputer |
-| SHOP_BACK_URL | 同 origin 完整回站網址，例如 https://taurus850426-design.github.io/dkcomputer/shop.html |
-| ECPAY_MODE | test 或 live |
-| ECPAY_MERCHANT_ID / ECPAY_HASH_KEY / ECPAY_HASH_IV | 該環境商店憑證 |
-| SHOP_LIVE_APPROVED | live 必須為 true，且禁止使用官方測試憑證 |
-| SHOP_TURNSTILE_SITE_KEY / SHOP_TURNSTILE_SECRET | live 必填；網站驗證 hostname 要符合 SHOP_ORIGIN |
-| SHOP_IP_HASH_SALT | live 必填的隨機伺服器秘密，用於短期網路來源限流雜湊 |
+伺服器重算價格，確認供貨時再核價核量。版本檢查避免不同管理員覆寫；重送使用冪等鍵，斷線重開可找回已建立的單。查單連結持久保存在同裝置，最多20筆，也可複製至其他裝置。請勿公開分享連結。
 
-Supabase 內建 SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY、SUPABASE_ANON_KEY 由環境提供。公開瀏覽器不接觸 service role。
+公開送單有簽名挑戰、來源限制、隱藏欄位及短期雜湊限流；這些不等同第三方 CAPTCHA。後續若遭大量濫用，可先關閉接單並加強驗證。
 
-## 已處理的情境與限制
+本機隔離測試：
 
-- 金額以伺服器商品資料重算，前端改價格無效。供貨批准會重新核價、核量；版本不一致須更新，避免互相覆蓋。
-- 重送需求使用 idempotency key；付款只允許啟動一次；通知驗簽並核對金額、商店、單號、環境。重複成功通知不重複扣量；失敗通知不能把已付款或已出貨單降回未付款。
-- 模擬付款不能成為正式已付款。沒有可信通知不能以回到官網或截圖判定收款。
-- 付款開始後如離開刷卡頁、失敗或通知延遲，先保留數量並人工查金流後台。本版不提供自動重新刷卡、解鎖、退款或交易查詢 API；不應直接改資料庫強行取消。
-- 客人狀態憑證存 sessionStorage，本版只追蹤同分頁最近一筆，尚無會員歷史查詢、通知信、LINE 自動通知、發票或物流介接。關閉分頁後請用 WEB 單號聯絡店家；若正式營運需要長期自助查單，須補上安全查詢／通知再開放。
-- 後台顯示最近50筆；超過規模須補分頁與搜尋。私人資料由服務端驗證管理員後返回，anon/authenticated 無直接 table SELECT 或 RPC 權限。
-- 管理員仍能在原商品管理修改上架數量，必須包含既有待付款保留量，不能把官網數量視為實體庫存的自動同步。
-- 尚未完成部署環境端到端刷卡、正式金流驗收或真實瀏覽器視覺驗收，不能當作正式可營運承諾。
+```sh
+node --test tests/shop-checkout.cjs tests/shop-edge.cjs tests/shop-manual-db.cjs tests/shop-ui.cjs
+```
 
-## 本機驗證
-
-`NODE_PATH=/workspace/scratch/fb551fc01fe4/test-deps/node_modules node --test tests/shop-checkout.cjs tests/shop-ui.cjs tests/shop-edge.cjs`
-
-官方介接依據：綠界開發者 AIO 建立訂單 https://developers.ecpay.com.tw/2862/ 、檢查碼 https://developers.ecpay.com.tw/2902/ 、付款通知 https://developers.ecpay.com.tw/2878/ 。
+測試依賴 jsdom 與 @electric-sql/pglite。覆蓋權限、伺服器計價、重送與斷線恢復、保留量、逾期、轉帳待核對、版本衝突與單次交付。正式上線另須確認 Pages 檔案及公開 Edge 實際可達；不能僅以合併或部署成功宣稱已能下單。
