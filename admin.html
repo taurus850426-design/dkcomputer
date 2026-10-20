@@ -3539,8 +3539,16 @@
             <span>不納入庫存金額<span class="form-hint" style="display:block;font-weight:400;margin-top:4px">勾選後，此品項仍可正常管理與銷售，但不計入財務報表的庫存總成本。</span></span>
           </label>
         </div>
-        <div class="field"><label for="itemPriceList">建議售價</label><input id="itemPriceList" type="number" min="0" step="1" /></div>
+        <div class="field">
+          <label for="itemPriceList">建議售價</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input id="itemPriceList" type="number" min="0" step="1" style="flex:1;min-width:80px;width:0" />
+            <button id="itemCoolpcLookupBtn" class="btn btn-ghost btn-sm secondary-action" type="button" data-admin-only>查原價屋</button>
+          </div>
+          <div id="itemCoolpcLookupMsg" class="muted form-hint" role="status" hidden></div>
+        </div>
         <div class="field"><label for="itemPriceFloor">最低價</label><input id="itemPriceFloor" type="number" min="0" step="1" /></div>
+        <div id="itemCoolpcLookupResults" class="field full" hidden aria-live="polite"></div>
         <div class="field"><label for="itemInboundDate">入庫日</label><input id="itemInboundDate" type="date" /></div>
         <div class="field"><label for="itemReplenishmentGroup">補貨規格群組</label><select id="itemReplenishmentGroup"><option value="">不納入補貨</option></select></div>
         <div id="itemReplenishmentWarn" class="field full" hidden>
@@ -3666,6 +3674,7 @@
     <script src="./purchase-receive-batch.js?v=20261019batch1"></script>
     <script src="./shop-admin.js?v=20261019shop1"></script>
     <script src="./admin3.js?v=20261019batch1"></script>
+    <script src="./admin-item-coolpc.js?v=20261020itemprice1"></script>
     <script src="./used-valuation-admin.js?v=20260927stage32"></script>
     <script src="./used-market-auto-admin.js?v=20260929stage35"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
