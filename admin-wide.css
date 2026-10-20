@@ -407,3 +407,35 @@
     margin-bottom: 0;
   }
 }
+
+/* Keep identifiers, dates and amounts intact in the purchase overview. */
+@media screen and (min-width: 901px) {
+  body.admin-page #panel #poListTable > thead > tr > th,
+  body.admin-page #panel #poListTable > tbody > .po-list-row > td:not(:nth-child(4)):not(:last-child) {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+  body.admin-page #panel #poListTable > thead > tr > th,
+  body.admin-page #panel #poListTable > tbody > .po-list-row > td {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+  body.admin-page #panel #poListTable .po-list-note {
+    min-width: 0;
+    width: 12ch;
+    max-width: 180px;
+  }
+  body.admin-page #panel #poListTable > thead > tr > th:last-child {
+    width: 144px !important; /* Overrides the existing inline 220px action width. */
+  }
+  body.admin-page #panel #poListTable > tbody > .po-list-row > td:last-child {
+    white-space: normal !important;
+  }
+  body.admin-page #panel #poListTable > tbody > .po-list-row > td:last-child .btn {
+    white-space: nowrap;
+    padding: 6px 10px;
+    min-height: 32px;
+    margin-bottom: 4px;
+  }
+}
