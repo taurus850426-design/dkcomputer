@@ -5542,6 +5542,7 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
     position: static !important;
     float: none !important;
     width: auto !important;
+    min-width: 0 !important;
     max-width: none !important;
     height: auto !important;
     margin: 0 !important;
@@ -5572,6 +5573,10 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
   }
   body.po-printing .po-print-inner{
     font-size: 12pt;
+    line-height: 1.45;
+    width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
     color: #000;
   }
   body.po-printing .po-print-inner h1{
@@ -5584,9 +5589,18 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
   }
   body.po-printing .po-print-inner table{
     width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+    font-size: inherit;
     border-collapse: collapse;
     margin: 8pt 0;
   }
+  body.po-printing .po-print-inner thead{ display: table-header-group; }
+  body.po-printing .po-print-inner th:nth-child(1){ width: 36%; }
+  body.po-printing .po-print-inner th:nth-child(2){ width: 7%; }
+  body.po-printing .po-print-inner th:nth-child(3),
+  body.po-printing .po-print-inner th:nth-child(4){ width: 14%; }
+  body.po-printing .po-print-inner th:nth-child(5){ width: 29%; }
   body.po-printing .po-print-inner tr{
     break-inside: avoid;
     page-break-inside: avoid;
@@ -5595,6 +5609,10 @@ body.machine-page .sticky-inner{ padding: 10px 0; }
   body.po-printing .po-print-inner td{
     border: 1px solid #333;
     padding: 4pt 6pt;
+    font-size: inherit;
+    vertical-align: top;
+    white-space: normal;
+    overflow-wrap: anywhere;
     text-align: left;
   }
 }
