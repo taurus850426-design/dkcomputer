@@ -12,8 +12,8 @@ function setup(answer){
  const guard=run(document,()=>{prompts++;return answer},tabPurchase,null,null);
  return {guard,editor,tabPurchase,closes:()=>closes,prompts:()=>prompts};
 }
-test('cancel sidebar navigation keeps the unsaved purchase editor open',()=>{
- const s=setup(false);assert.equal(s.guard('inv'),false);assert.equal(s.editor.hidden,false);assert.equal(s.closes(),0);
+test('legacy navigation no longer warns merely because purchase editor is open',()=>{
+ const s=setup(false);assert.equal(s.guard('inv'),true);assert.equal(s.closes(),1);assert.equal(s.prompts(),0);
 });
 test('confirmed navigation closes editor through the existing close button',()=>{
  const s=setup(true);assert.equal(s.guard('vendors'),true);assert.equal(s.closes(),1);assert.equal(s.editor.hidden,true);

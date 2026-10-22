@@ -20,6 +20,40 @@
   };
 
   let currentOrder = null;
+  let purchaseUnsyncedId = null;
+  let purchaseSavePromise = null;
+  let quoteDraftBaseline = null;
+  function quoteDraftSnapshot() {
+    return ["poQuoteVendor", "poQuoteDate", "poQuoteCategory", "poQuoteSpec", "poQuotePrice", "poQuoteMarketPrice", "poQuoteTaxIncluded", "poQuoteShippingIncluded", "poQuoteWarranty", "poQuoteInStock", "poQuoteNote"].map(id => {
+      const field = el(id); return field?.type === "checkbox" ? field.checked : field?.value || "";
+    });
+  }
+  function pendingQuoteDraft() {
+    return !el("poQuoteModal")?.hidden && quoteDraftBaseline !== null && JSON.stringify(quoteDraftSnapshot()) !== quoteDraftBaseline;
+  }
+  function pendingPurchaseItem() {
+    return !el("poManualBox")?.hidden && !!String(el("poRequestText")?.value || "").trim();
+  }
+  function purchaseDraft(order, fromEditor) {
+    if (!order) return null;
+    return {
+      id: order.id, orderNo: order.orderNo, items: order.items,
+      status: fromEditor ? el("poStatus")?.value || order.status : order.status,
+      supplierOrderDate: fromEditor ? el("poSupplierOrderDate")?.value || "" : order.supplierOrderDate || "",
+      expectedDate: fromEditor ? el("poExpectedDate")?.value || "" : order.expectedDate || "",
+      note: fromEditor ? el("poNote")?.value || "" : order.note || "",
+      manual: fromEditor && pendingPurchaseItem() ? ["poRequestText", "poItemCategory", "poItemQty", "poManualVendor", "poItemNote"].map(id => el(id)?.value || "") : null,
+      quote: fromEditor && pendingQuoteDraft() ? quoteDraftSnapshot() : null
+    };
+  }
+  const purchaseGuard = window.DKUnsaved?.register("purchase", {
+    label: "叫貨單", root: el("poEditorView"),
+    read: () => purchaseDraft(currentOrder, true),
+    pending: () => !!currentOrder && purchaseUnsyncedId === currentOrder.id,
+    busy: () => purchaseOperationBusy || !!purchaseSavePromise,
+    save: () => purchaseSavePromise || persistCurrent(),
+    discard: () => { closeQuoteModal(); currentOrder = null; purchaseGuard?.reset(); setListVisible(true); renderList(); }
+  });
   let purchaseOperationBusy = false;
   let bulkReceiveSnapshot = null;
   let editingItemId = null;
@@ -173,20 +207,26 @@
   }
 
   function syncPurchaseOrderToCloud(order, okMsg) {
-    if (!order || !window.DK || typeof window.DK.upsertPurchaseOrderToSupabase !== "function") return;
-    if (window.DK.isVpApplyingCloud && window.DK.isVpApplyingCloud()) return;
+    if (!order || !window.DK || typeof window.DK.upsertPurchaseOrderToSupabase !== "function") return Promise.resolve({ ok: false });
+    if (window.DK.isVpApplyingCloud && window.DK.isVpApplyingCloud()) return Promise.resolve({ ok: false });
     const dispatchedAt = order.updatedAt;
-    window.DK.upsertPurchaseOrderToSupabase(order).then(function (res) {
-      if (res?.ok && currentOrder?.id === order.id && currentOrder.updatedAt === dispatchedAt) currentOrder = normalizeOrder(order);
+    const dispatchedDraft = JSON.stringify(purchaseDraft(order, false));
+    return Promise.resolve().then(() => window.DK.upsertPurchaseOrderToSupabase(order)).then(function (res) {
+      if (res?.ok && currentOrder?.id === order.id && currentOrder.updatedAt === dispatchedAt) {
+        if (JSON.stringify(purchaseDraft(currentOrder, false)) === dispatchedDraft) currentOrder = normalizeOrder(order);
+        purchaseGuard?.clean(dispatchedDraft);
+      }
       renderPurchaseOrdersSyncPanel();
       const authMsg = window.DK.vpCloudUserMessage ? window.DK.vpCloudUserMessage(res) : null;
       if (res && res.ok) showMsg(okMsg || "已同步到雲端", 2500);
       else if (res && res.notEnabled) showMsg("本機已儲存。雲端尚未啟用。", 3500);
       else if (authMsg) showMsg("本機已儲存。" + authMsg, 3500);
       else showMsg("本機已儲存，雲端同步失敗" + (res && res.error ? "：" + res.error : ""), 3500);
+      return res;
     }).catch(function () {
       renderPurchaseOrdersSyncPanel();
       showMsg("本機已儲存，雲端同步失敗", 3500);
+      return { ok: false };
     });
   }
 
@@ -810,6 +850,7 @@
     editingItemId = null;
     fillEditor(forceView || currentOrder.status !== "draft");
     setListVisible(false);
+    purchaseGuard?.clean();
   }
 
   function newOrder() {
@@ -825,6 +866,7 @@
     editingItemId = null;
     fillEditor(false);
     setListVisible(false);
+    purchaseGuard?.clean();
     showMsg("已建立叫貨單（記得按儲存）", 2500);
   }
 
@@ -933,6 +975,7 @@
         ? await window.DK.upsertPurchaseOrderToSupabase(copy) : { ok: false, error: "雲端同步功能未載入" };
     } catch (e) { result = { ok: false, error: String(e?.message || e) }; }
     if (result?.ok && currentOrder && String(currentOrder.id) === String(copy.id)) currentOrder = normalizeOrder(copy);
+    if (result?.ok && currentOrder?.id === copy.id) purchaseGuard?.clean(JSON.stringify(purchaseDraft(normalizeOrder(copy), false)));
     renderList();
     renderPurchaseOrdersSyncPanel();
     if (currentOrder && String(currentOrder.id) === String(copy.id)) { renderItems(); renderVendorGroups(); }
@@ -940,9 +983,12 @@
       error: "本機已保留，但叫貨單雲端同步未完成：" + String(result?.error || "請重新核對原單") };
   }
 
-  function persistCurrent(options) {
+  async function persistCurrent(options) {
+    if (purchaseSavePromise) return purchaseSavePromise;
     if (purchaseOperationBusy) return showMsg("前一筆採購作業處理中，請稍候", 3500);
     if (!currentOrder) return;
+    if (pendingQuoteDraft()) { showMsg("廠商報價表單尚未送出，請先完成或取消報價輸入，再儲存叫貨單。", 5000); return false; }
+    if (pendingPurchaseItem()) { showMsg("手動品項尚未加入叫貨單，請先加入或取消該筆輸入，再儲存。", 5000); return false; }
     const quoteOnly = !!(options && options.quoteOnly);
     if (!quoteOnly && readEditorMetaIntoCurrent() === false) return;
     currentOrder.updatedAt = new Date().toISOString();
@@ -953,12 +999,19 @@
     else list.push(copy);
     if (!saveOrders(list)) return;
     currentOrder = copy;
+    purchaseUnsyncedId = copy.id;
+    purchaseGuard?.clean(JSON.stringify(purchaseDraft(copy, false)));
     showMsg("已儲存 " + currentOrder.orderNo + "（本機）", 2000);
     fillEditor(false);
     renderList();
     renderPurchaseOrdersSyncPanel();
-    syncPurchaseOrderToCloud(copy, "已儲存並同步 " + copy.orderNo);
     schedulePurchasePreview();
+    purchaseSavePromise = syncPurchaseOrderToCloud(copy, "已儲存並同步 " + copy.orderNo);
+    try {
+      const result = await purchaseSavePromise;
+      if (result?.ok && purchaseUnsyncedId === copy.id) purchaseUnsyncedId = null;
+      return !!result?.ok;
+    } finally { purchaseSavePromise = null; }
   }
 
   function renderItems() {
@@ -1440,6 +1493,7 @@
   }
 
   function closeQuoteModal() {
+    quoteDraftBaseline = null;
     const modal = el("poQuoteModal");
     if (modal) modal.hidden = true;
     document.body.classList.remove("po-quote-modal-open");
@@ -1580,6 +1634,7 @@
     const modal = el("poQuoteModal");
     if (modal) modal.hidden = false;
     document.body.classList.add("po-quote-modal-open");
+    quoteDraftBaseline = JSON.stringify(quoteDraftSnapshot());
     try { if (el("poQuotePrice")) el("poQuotePrice").focus(); } catch (_) {}
   }
 
@@ -1721,6 +1776,7 @@
       if (el("poQuoteTaxIncluded")) el("poQuoteTaxIncluded").checked = false;
       if (el("poQuoteShippingIncluded")) el("poQuoteShippingIncluded").checked = false;
       if (el("poQuoteNote")) el("poQuoteNote").value = "";
+      if (result.cloud?.ok) quoteDraftBaseline = JSON.stringify(quoteDraftSnapshot());
       const cloudWarning = !result.cloud?.ok ? "；廠商報價雲端同步失敗，已保留本機資料" : "";
       quoteModalMessage("已新增「" + String(q.vendor || vendor) + "」報價並同步到廠商報價紀錄" + cloudWarning + "。可繼續新增下一家，最後再從上方按『採用』。", !!cloudWarning);
       try { if (el("poQuoteVendor")) el("poQuoteVendor").focus(); } catch (_) {}
@@ -1836,6 +1892,7 @@
       if (currentOrder && currentOrder.id === targetOrder.id) {
         currentOrder = normalizeOrder(targetOrder);
         fillEditor(false);
+        purchaseGuard?.clean(JSON.stringify(purchaseDraft(currentOrder, false)));
       }
       renderList(); renderPurchaseOrdersSyncPanel();
       const message = "本次已登記 " + result.completed.length + " 項。" + (result.error ? "其餘已停止：" + result.error + "。已成功項目保留；請同步核對後再繼續。" : "所有待到貨品項已完成登記。");
@@ -1955,6 +2012,7 @@
       if (currentOrder && currentOrder.id === targetOrder.id) {
         currentOrder = normalizeOrder(targetOrder);
         if (el("poStatus")) el("poStatus").value = currentOrder.status;
+        purchaseGuard?.clean(JSON.stringify(purchaseDraft(currentOrder, false)));
         if (receiveModalItemId === targetItemId) closeReceiveModal();
         renderItems(); renderVendorGroups();
       }
@@ -2014,6 +2072,7 @@
       if (currentOrder && currentOrder.id === targetOrder.id) {
         currentOrder = normalizeOrder(targetOrder);
         if (el("poStatus")) el("poStatus").value = currentOrder.status;
+        purchaseGuard?.clean(JSON.stringify(purchaseDraft(currentOrder, false)));
         if (receiveModalItemId === targetItemId) closeReceiveModal();
         renderItems(); renderVendorGroups();
       }
@@ -2433,6 +2492,7 @@
         if (fresh) {
           currentOrder = fresh;
           fillEditor(false);
+          purchaseGuard?.clean();
         }
       }
       renderPurchaseOrdersSyncPanel();
