@@ -1588,6 +1588,10 @@ async function stage7InventoryFundingSummary() {
   return stage7Rpc("backoffice_inventory_funding_summary", {});
 }
 
+async function stage7OrderFunding(orderId, lines) {
+  return stage7Rpc("backoffice_order_funding", { p_order_id: orderId || null, p_lines: lines });
+}
+
 async function stage7InventoryItemFunding(itemId, owner) {
   return stage7Rpc("backoffice_inventory_item_funding", {
     p_item_id: String(itemId || ""),
@@ -5502,6 +5506,7 @@ window.DK = {
   stage7InboundAmount,
   stage7AssignInboundFunding,
   stage7InventoryFundingSummary,
+  stage7OrderFunding,
   stage7InventoryItemFunding,
   stage7RecordBossRepayment,
   stage7CorrectInbound,

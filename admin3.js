@@ -739,7 +739,6 @@
     }
     const poEditor = document.getElementById("poEditorView");
     if (toTab !== "purchase" && tabPurchase && !tabPurchase.hidden && poEditor && !poEditor.hidden) {
-      if (!confirm("叫貨單仍在編輯，離開會放棄尚未儲存的表單內容。\n已送出的採用／到貨作業不會取消。確定離開？")) return false;
       document.getElementById("poBackToListBtn")?.click();
     }
     return true;
@@ -5314,7 +5313,7 @@
       if (name === "orders") renderV2Orders();
       if (name === "expenses") renderV2Expenses();
       if (name === "reports") renderV2Reports();
-      syncAdminNav("inv");
+      if (!document.getElementById("tab-inv")?.hidden) syncAdminNav("inv");
     }
     if (typeof window.__adminV2TabSwitch === "function") window.__adminV2TabSwitch(switchV2Tab);
 
@@ -7113,6 +7112,27 @@
     let editingV2OrderVersion = null;
     let orderLineItems = [];
     let editingManualOrderLineIndex = -1;
+    let orderEditorGeneration = 0;
+    const orderDraftFields = ["orderNo", "orderDate", "orderCustomer", "orderCustomerPhone", "orderCustomerLine", "orderSalesType", "orderCustomerSource", "orderTotalSale", "orderShipping", "orderDiscount", "orderCogs", "orderStatus", "orderPaymentStatus", "orderPayment", "orderReceivedAmount", "orderPaymentDate", "orderPaymentReference", "orderDeliveryStatus", "orderDeliveredAt", "orderDeliveryNote", "orderQuoteNote"];
+    function pendingOrderLine() {
+      return !document.getElementById("orderManualBox")?.hidden && !!String(document.getElementById("orderManualName")?.value || "").trim();
+    }
+    function closeOrderEditor() {
+      orderEditorGeneration++;
+      if (orderForm) orderForm.hidden = true;
+      document.body.classList.remove("order-workspace-open");
+      editingV2OrderId = null;
+      orderGuard?.reset();
+      clearPendingCustomerOrderLink();
+      v2Hide(orderMsg);
+    }
+    const orderGuard = window.DKUnsaved?.register("order", {
+      label: "訂單", root: orderForm,
+      read: () => ({ fields: orderDraftFields.map(id => document.getElementById(id)?.value || ""), lines: orderLineItems,
+        manual: pendingOrderLine() ? ["orderManualName", "orderManualCategory", "orderManualVendor", "orderManualQty", "orderManualPrice", "orderManualType"].map(id => document.getElementById(id)?.value || "") : null }),
+      busy: () => document.getElementById("orderSave")?.dataset.saving === "1",
+      save: () => saveV2Order(), discard: closeOrderEditor
+    });
     const orderReceivedAmountEl = document.getElementById("orderReceivedAmount");
     orderReceivedAmountEl?.addEventListener("blur", function () {
       const amount = Number(orderReceivedAmountEl.value);
@@ -7651,8 +7671,9 @@
         const cogsText = pendingCost ? "—" : v2FmtNum(cogsSub);
         const editButton = line.fulfillment_type !== "inventory" ? `<button type="button" class="btn btn-ghost btn-sm order-line-edit-manual" data-i="${i}">編輯</button> ` : "";
         const categoryText = String(line.category || "").trim() || "未分類";
-        return `<tr><td class="table-primary">${v2Esc(line.name || "")}${historicalBadge}<div class="muted small">品類：${v2Esc(categoryText)}｜${v2Esc(typeLabel + vendorLabel)}</div></td><td class="table-secondary">${v2Esc(spec)}</td><td class="table-number neutral-number">${line.qty}</td><td class="table-number neutral-number">${v2FmtNum(line.quote_unit_price ?? line.unit_price)}</td><td class="table-number neutral-number" data-admin-only>${costText}</td><td class="table-number neutral-number" data-admin-only>${cogsText}</td><td class="table-actions">${editButton}<button type="button" class="btn btn-ghost btn-sm tertiary-action order-line-remove" data-i="${i}"${removeDisabled}>移除</button></td></tr>`;
+        return `<tr><td class="table-primary">${v2Esc(line.name || "")}${historicalBadge}<div class="muted small">品類：${v2Esc(categoryText)}｜${v2Esc(typeLabel + vendorLabel)}</div></td><td class="table-secondary">${v2Esc(spec)}</td><td class="table-number neutral-number">${line.qty}</td><td class="table-number neutral-number">${v2FmtNum(line.quote_unit_price ?? line.unit_price)}</td><td class="table-number neutral-number" data-admin-only>${costText}</td><td class="table-number neutral-number" data-admin-only>${cogsText}</td><td data-admin-only><span data-order-funding="${i}">讀取中…</span></td><td class="table-actions">${editButton}<button type="button" class="btn btn-ghost btn-sm tertiary-action order-line-remove" data-i="${i}"${removeDisabled}>移除</button></td></tr>`;
       }).join("");
+      window.DKOrderFunding?.populate(orderLineTbody, DK, editingV2OrderId, orderLineItems, () => canPerm("items") && window.stage7IsAdminRole?.() === true);
       orderLineTbody.querySelectorAll(".order-line-remove").forEach((btn) => {
         btn.addEventListener("click", () => {
           orderLineItems.splice(parseInt(btn.getAttribute("data-i"), 10), 1);
@@ -7702,6 +7723,7 @@
     }
 
     function openV2OrderEditor(id) {
+      orderEditorGeneration++;
       editingV2OrderId = id || null;
       const o = id ? DK.getOrders().find((x) => x.id === id) : null;
       orderLineItems = (Array.isArray(o?.items) ? o.items : []).filter((l) => l && typeof l === "object").map((l) => {
@@ -7774,6 +7796,7 @@
       document.body.classList.add("order-workspace-open");
       scheduleLiveQuotePreview();
       v2Hide(orderMsg);
+      orderGuard?.clean();
     }
     function updateV2OrderGrossDisplay() {
       const sale = parseFloat(document.getElementById("orderTotalSale")?.value) || 0;
@@ -7837,11 +7860,7 @@
       setTimeout(consumeCreateOrderFromCustomerIfAny, 0);
     });
     document.getElementById("orderCancel")?.addEventListener("click", () => {
-      if (orderForm) orderForm.hidden = true;
-      document.body.classList.remove("order-workspace-open");
-      editingV2OrderId = null;
-      clearPendingCustomerOrderLink();
-      v2Hide(orderMsg);
+      closeOrderEditor();
     });
     document.getElementById("orderLineAdd")?.addEventListener("click", () => {
       const itemId = orderLineItemSelect?.value;
@@ -8000,17 +8019,21 @@
         v2Hide(orderMsg);
       });
     })();
-    document.getElementById("orderSave")?.addEventListener("click", async () => {
+    async function saveV2Order() {
       if (!requirePerm("orders")) return;
       const saveBtn = document.getElementById("orderSave");
       if (saveBtn && saveBtn.dataset.saving === "1") return;
       let savedOk = false;
+      const wasEditing = !!editingV2OrderId;
+      const savingGeneration = orderEditorGeneration;
+      const savingSnapshot = orderGuard?.snapshot();
       try {
         if (saveBtn) {
           saveBtn.dataset.saving = "1";
           saveBtn.disabled = true;
         }
         const orderNo = String(document.getElementById("orderNo")?.value || "").trim();
+        if (pendingOrderLine()) { v2Show(orderMsg, "手動規格尚未加入訂單，請先按「加入訂單」或取消該筆輸入，再儲存。"); return false; }
         if (!orderNo) { v2Show(orderMsg, "訂單編號必填"); return; }
         if (!orderLineItems.length) { v2Show(orderMsg, "請至少加入一筆明細"); return; }
         const orders = DK.getOrders();
@@ -8136,6 +8159,13 @@
           v2Show(orderMsg, res.error || "訂單已寫入，但畫面重新載入失敗。請重新整理頁面，不要再按一次儲存。");
           return;
         }
+        orderGuard?.clean(savingSnapshot);
+        editingV2OrderId = savedId || editingV2OrderId;
+        editingV2OrderVersion = DK.getOrders().find(row => row.id === savedId)?.updated_at ?? null;
+        if (orderGuard?.dirty()) {
+          v2Show(orderMsg, "送出的版本已儲存；儲存期間新填的資料尚未儲存，請核對後再儲存。");
+          return false;
+        }
         const quoteNoteWarning = res.quoteNoteFailed ? (" " + (res.quoteNoteWarning || "報價備註尚未儲存。")) : "";
         const customerSourceWarning = res.customerSourceFailed ? (" " + (res.customerSourceWarning || "客戶來源尚未儲存。")) : "";
         const operationsWarning = res.operationsFailed ? (" " + (res.operationsWarning || "收款／交貨資料尚未儲存。")) : "";
@@ -8161,8 +8191,12 @@
           if (purchaseSync && Array.isArray(purchaseSync.warnings) && purchaseSync.warnings.length) purchaseWarning = " " + purchaseSync.warnings.join(" ");
           else if (!purchaseSync || !purchaseSync.ok) purchaseWarning = " 叫貨單同步失敗，請勿重複新增；請到叫貨單檢查。";
         }
-        v2Show(orderMsg, (editingV2OrderId ? "訂單已更新。" : "訂單已新增。") + quoteNoteWarning + customerSourceWarning + operationsWarning + purchaseWarning);
-        if (!editingV2OrderId) tryUpdateLinkedCustomerStatus(payload.status);
+        if (orderGuard?.dirty()) {
+          v2Show(orderMsg, "訂單已儲存；後續新填的內容尚未儲存，請核對後再儲存。" + purchaseWarning);
+          return false;
+        }
+        v2Show(orderMsg, (wasEditing ? "訂單已更新。" : "訂單已新增。") + quoteNoteWarning + customerSourceWarning + operationsWarning + purchaseWarning);
+        if (!wasEditing) tryUpdateLinkedCustomerStatus(payload.status);
         else clearPendingCustomerOrderLink();
         showSyncToast({ ok: true }, "訂單");
         renderV2Orders();
@@ -8170,15 +8204,13 @@
         renderV2Reports();
         savedOk = true;
         setTimeout(() => {
-          if (orderForm) orderForm.hidden = true;
-          document.body.classList.remove("order-workspace-open");
-          editingV2OrderId = null;
-          v2Hide(orderMsg);
+          if (savingGeneration === orderEditorGeneration && !orderGuard?.dirty()) closeOrderEditor();
           if (saveBtn) {
             saveBtn.dataset.saving = "";
             saveBtn.disabled = false;
           }
         }, 800);
+        return true;
       } catch (e) {
         v2Show(orderMsg, String(e && e.message ? e.message : e || "訂單寫入失敗"));
       } finally {
@@ -8187,7 +8219,8 @@
           saveBtn.disabled = false;
         }
       }
-    });
+    }
+    document.getElementById("orderSave")?.addEventListener("click", saveV2Order);
 
     makeSearchableItemSelect("orderLineItem", "orderLineItemSearch", "orderLineItemDropdown", { showQty: true, showCost: true, sellableOnly: true });
     makeSearchableItemSelect("ledgerItemId", "ledgerItemIdSearch", "ledgerItemIdDropdown");
@@ -9308,9 +9341,21 @@
     });
 
     window.__adminV2Refresh = function () {
+      // A delayed cloud response must not restore navigation from an inactive module.
+      if (tabInv?.hidden || window.__dkAuthBootPending || window.DK?.isAdminAuthed?.() !== true) return;
       const active = document.querySelector(".v2-tab.active");
       const name = (active && active.getAttribute("data-v2")) || "items";
-      switchV2Tab(name);
+      if (!canPerm(name)) return;
+      // Refresh content only: never rewrite the route, active menu or saved tab here.
+      ["items", "ledger", "orders", "expenses", "reports"].forEach(panelName => {
+        const panel = document.getElementById("v2-" + panelName);
+        if (panel) panel.hidden = panelName !== name;
+      });
+      if (name === "items") { renderV2Items(); refreshReplenishmentUI(); }
+      if (name === "ledger") renderV2Ledger();
+      if (name === "orders") renderV2Orders();
+      if (name === "expenses") renderV2Expenses();
+      if (name === "reports") renderV2Reports();
     };
     if (!window.__dkCloudAutoSyncInitialized) {
       window.__dkCloudAutoSyncInitialized = true;
