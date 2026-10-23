@@ -12,11 +12,34 @@
   {key:'psu',category:15,title:'電源供應器',plain:'供應整台電腦用電，瓦數、品質與接頭都要核對。'}
  ];
  const money=n=>'NT$ '+Number(n||0).toLocaleString('zh-TW');
+ function safeProductUrl(value){
+  try{const u=new URL(String(value||'').trim());return ['https:','http:'].includes(u.protocol)&&u.hostname&&!u.username&&!u.password?u.href:'';}catch(_){return '';}
+ }
+ function cleanOtherDraft(raw){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return {name:'',url:'',mode:'request',photo:null};
+  const text=(value,max)=>typeof value==='string'?value.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,max):'';
+  const photo=raw.photo;let cleanPhoto=null;
+  if(photo&&typeof photo.dataUrl==='string'&&photo.dataUrl.length<=120000&&/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(photo.dataUrl))cleanPhoto={dataUrl:photo.dataUrl,name:text(photo.name,100)||'商品照片'};
+  return {name:text(raw.name,180),url:text(raw.url,2000),mode:raw.mode==='owned'?'owned':'request',photo:cleanPhoto};
+ }
+ function normalizeOthers(raw,drafts=false){
+  const out={};for(const slot of slots){const value=raw?.[slot.key];if(!value)continue;const v=cleanOtherDraft(value);if(!drafts)v.url=safeProductUrl(v.url);
+   if(v.name||v.url||v.photo)out[slot.key]=v;
+  }return out;
+ }
+ function otherItem(slot,raw){
+  const value=normalizeOthers({[slot.key]:raw})[slot.key];if(!value)return null;
+  return {id:'other:'+slot.key,category:slot.category,name:value.name||(value.photo?'未提供型號（附照片）':'未提供型號（附商品連結）'),price:null,facts:{},isCustom:true,custom:value};
+ }
+
  function isPart(item,key){const f=item.facts||{};if(item.category!==slots.find(s=>s.key===key)?.category)return false;
   return {cpu:!!f.socket&&!!f.cores,board:!!f.socket&&!!f.ddr&&!!f.form,ram:f.desktop===true&&!!f.ddr&&!!f.capacityGB,ssd:f.nvme===true&&!!f.capacityGB,gpu:!!f.gpuModel,cooler:f.air===true,case:!!f.form&&!f.restricted,psu:!!f.watts&&!f.compact}[key]===true;
  }
  function check(item,key,selected){
-  const f=item.facts||{}, reasons=[],pending=[];const p=selected||{};
+  const f=item.facts||{}, reasons=[],pending=[];const p={...(selected||{})};
+  if(item.isCustom)return {state:'pending',reasons:['自填零件的規格、相容性與供貨待確認']};
+  const related={cpu:['board','cooler','psu'],board:['cpu','ram','ssd','case'],ram:['board','cooler'],ssd:['board'],gpu:['case','psu'],cooler:['cpu','ram','case'],case:['board','gpu','cooler','psu'],psu:['cpu','gpu','case']};
+  for(const slot of slots){if(!p[slot.key]?.isCustom)continue;if((related[key]||[]).includes(slot.key))pending.push('已選自填'+slot.title+'，需先確認規格才能判斷相容性');delete p[slot.key];}
   if(!isPart(item,key))return {state:'pending',reasons:['商品規格尚未足以自動判斷']};
   const cpu=key==='cpu'?item:p.cpu,board=key==='board'?item:p.board,ram=key==='ram'?item:p.ram,gpu=key==='gpu'?item:p.gpu,cooler=key==='cooler'?item:p.cooler,box=key==='case'?item:p.case;
   if(['cpu','board'].includes(key)&&cpu&&board&&cpu.facts.socket!==board.facts.socket)reasons.push('處理器與主機板插槽不同');
@@ -29,16 +52,16 @@
   if(key==='psu'&&f.watts<450)pending.push('需另行核算整機功耗');
   return {state:reasons.length?'incompatible':pending.length?'pending':'basic',reasons:reasons.length?reasons:pending};
  }
- function resolve(ids,products){const selected={};for(const s of slots){const p=products.find(p=>p.id===ids?.[s.key]&&isPart(p,s.key));if(p)selected[s.key]=p;}return selected;}
+ function resolve(ids,products,others={}){const selected={};for(const s of slots){const custom=otherItem(s,others[s.key]);if(custom){selected[s.key]=custom;continue;}const p=products.find(p=>p.id===ids?.[s.key]&&isPart(p,s.key));if(p)selected[s.key]=p;}return selected;}
  function validate(selected,needs={}){
-  const errors=[],pending=[];let total=0;
-  for(const s of slots){const p=selected[s.key];if(!p){if(s.key==='gpu'&&selected.cpu?.facts.integrated&&!needs.usages?.includes('game'))continue;if(s.key==='cooler'&&selected.cpu?.facts.stockCooler)continue;pending.push('尚未選擇'+s.title);continue;}if(!Number.isSafeInteger(p.price)||p.price<=0){errors.push(s.title+'價格無效');continue;}total+=p.price;pending.push(...requirementReasons(p,s.key,needs));const c=check(p,s.key,selected);if(c.state==='incompatible')errors.push(...c.reasons);else if(c.state==='pending')pending.push(...c.reasons);}
-  if(needs.usages?.includes('game')&&!selected.gpu)pending.push('遊戲用途需確認顯示效能');
-  if(selected.ram&&selected.ram.facts.capacityGB<Number(needs.ramGB||16))pending.push('記憶體容量低於本次需求目標');
+  const errors=[],pending=[];let total=0,customCount=0,unpricedCount=0,ownedCount=0;
+  for(const s of slots){const p=selected[s.key];if(!p){if(s.key==='gpu'&&selected.cpu?.facts.integrated&&!needs.usages?.includes('game'))continue;if(s.key==='cooler'&&selected.cpu?.facts.stockCooler)continue;pending.push('尚未選擇'+s.title);continue;}if(p.isCustom){customCount++;if(p.custom.mode==='owned'){ownedCount++;pending.push(s.title+'為自備零件，規格與相容性待確認；安裝／檢測費用另確認');}else{unpricedCount++;pending.push(s.title+'為自填商品，價格、規格、相容性與供貨待確認，尚未計價');}continue;}if(!Number.isSafeInteger(p.price)||p.price<=0){errors.push(s.title+'價格無效');continue;}total+=p.price;pending.push(...requirementReasons(p,s.key,needs));const c=check(p,s.key,selected);if(c.state==='incompatible')errors.push(...c.reasons);else if(c.state==='pending')pending.push(...c.reasons);}
+  if(needs.usages?.includes('game')&&(!selected.gpu||selected.gpu.isCustom))pending.push('遊戲用途需確認顯示效能');
+  if(selected.ram&&!selected.ram.isCustom&&selected.ram.facts.capacityGB<Number(needs.ramGB||16))pending.push('記憶體容量低於本次需求目標');
   pending.push(...(needs.unmapped||[]));
   pending.push('需由 DK 確認 CPU 支援清單／BIOS、記憶體相容性、SSD 插槽、散熱、電源瓦數與接頭、供貨及最終價格');
   if(needs.usages?.some(x=>['game','create','stream'].includes(x)))pending.push('遊戲畫質／幀數與軟體效能尚未完成配置實測核對');
-  return {total,overBudget:Math.max(0,total-Number(needs.budget||0)),errors:[...new Set(errors)],pending:[...new Set(pending)]};
+  return {total,customCount,unpricedCount,ownedCount,overBudget:Math.max(0,total-Number(needs.budget||0)),errors:[...new Set(errors)],pending:[...new Set(pending)]};
  }
  function colorOf(item){
   const text=String(item.name||'').replace(/白金|白牌|白名單/g,'');
@@ -111,9 +134,15 @@
   return {ids:Object.fromEntries(Object.entries(best.selected).map(([k,p])=>[k,p.id])),total:best.cost,missing:best.missing,warnings,hasGameRule:!!needs.hasGameRule,overBudget:Math.max(0,best.cost-Number(needs.budget||0))};
  }
  function suggest(products,needs){return plan(products,needs).ids;}
+ function partSummary(slot,item){
+  if(!item)return slot.title+'：待確認／未選';
+  if(!item.isCustom)return slot.title+'：'+item.name+'｜'+money(item.price);
+  const value=item.custom,mode=value.mode==='owned'?'自備零件（不計入採購小計，安裝／檢測費用另確認）':'希望 DK 代購（待報價，尚未計價）';
+  return slot.title+'：'+item.name+'｜'+mode+'｜規格與相容性待確認'+(value.url?'\n商品連結：'+value.url:'')+(value.photo?'\n附照片：'+value.photo.name+'（照片僅存在本裝置，請另傳官方 LINE）':'');
+ }
  function summary(needs,selected,catalog){
   const q=validate(selected,needs),usages={office:'文書／日常',game:'遊戲',create:'剪輯／設計',stream:'直播',unsure:'請 DK 協助'};
-  return ['【DK 配單需求草稿】','用途：'+(needs.usages||[]).map(x=>usages[x]||x).join('、'),'遊戲／軟體：'+(needs.appNames||[]).join('、'),'遊玩目標：'+(needs.targets||[]).join('；'),'主機預算：'+money(needs.budget),'螢幕：'+({unknown:'解析度待確認','1080p':'1080P','1440p':'2K／1440P','4k':'4K'}[needs.resolution]||'待確認')+'；'+({existing:'已有螢幕',buy:'需另購螢幕',unknown:'安排待確認'}[needs.monitor]||'待確認'),'外觀：'+({any:'不限',white:'白色機殼',black:'黑色機殼',allwhite:'全白搭配（可見零件與電源）'}[needs.color]||'不限'),...(needs.ruleSources||[]).map(url=>'效能選配參考：'+url),'價格資料：'+catalog.updatedAt,...slots.map(s=>s.title+'：'+(selected[s.key]?selected[s.key].name+'｜'+money(selected[s.key].price):'待確認／未選')),'參考零件小計：'+money(q.total),'小計不含未選零件、組裝服務、作業系統與周邊；未確認為 DK 正式報價。',...q.errors.map(x=>'需更正：'+x),...q.pending.map(x=>'待確認：'+x)].join('\n');
+  return ['【DK 配單需求草稿】','用途：'+(needs.usages||[]).map(x=>usages[x]||x).join('、'),'遊戲／軟體：'+(needs.appNames||[]).join('、'),'遊玩目標：'+(needs.targets||[]).join('；'),'主機預算：'+money(needs.budget),'螢幕：'+({unknown:'解析度待確認','1080p':'1080P','1440p':'2K／1440P','4k':'4K'}[needs.resolution]||'待確認')+'；'+({existing:'已有螢幕',buy:'需另購螢幕',unknown:'安排待確認'}[needs.monitor]||'待確認'),'外觀：'+({any:'不限',white:'白色機殼',black:'黑色機殼',allwhite:'全白搭配（可見零件與電源）'}[needs.color]||'不限'),...(needs.ruleSources||[]).map(url=>'效能選配參考：'+url),'價格資料：'+catalog.updatedAt,...slots.map(s=>partSummary(s,selected[s.key])),'已計價零件參考小計：'+money(q.total),...(q.unpricedCount?['尚有 '+q.unpricedCount+' 項待報價，未計入小計；目前不是完整主機總價。']:[]),...(q.ownedCount?['另有 '+q.ownedCount+' 項自備零件，不計入採購小計；安裝／檢測費用待確認。']:[]),'小計不含未選零件、組裝服務、作業系統與周邊；未確認為 DK 正式報價。',...q.errors.map(x=>'需更正：'+x),...q.pending.map(x=>'待確認：'+x)].join('\n');
  }
- return {slots,money,isPart,check,resolve,validate,suggest,summary,colorOf,compileNeeds,requirementReasons,plan};
+ return {slots,money,isPart,check,resolve,validate,suggest,summary,colorOf,compileNeeds,requirementReasons,plan,safeProductUrl,cleanOtherDraft,normalizeOthers};
 });
