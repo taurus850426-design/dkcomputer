@@ -32,36 +32,88 @@
  function resolve(ids,products){const selected={};for(const s of slots){const p=products.find(p=>p.id===ids?.[s.key]&&isPart(p,s.key));if(p)selected[s.key]=p;}return selected;}
  function validate(selected,needs={}){
   const errors=[],pending=[];let total=0;
-  for(const s of slots){const p=selected[s.key];if(!p){if(s.key==='gpu'&&selected.cpu?.facts.integrated&&!needs.usages?.includes('game'))continue;if(s.key==='cooler'&&selected.cpu?.facts.stockCooler)continue;pending.push('尚未選擇'+s.title);continue;}if(!Number.isSafeInteger(p.price)||p.price<=0){errors.push(s.title+'價格無效');continue;}total+=p.price;const c=check(p,s.key,selected);if(c.state==='incompatible')errors.push(...c.reasons);else if(c.state==='pending')pending.push(...c.reasons);}
+  for(const s of slots){const p=selected[s.key];if(!p){if(s.key==='gpu'&&selected.cpu?.facts.integrated&&!needs.usages?.includes('game'))continue;if(s.key==='cooler'&&selected.cpu?.facts.stockCooler)continue;pending.push('尚未選擇'+s.title);continue;}if(!Number.isSafeInteger(p.price)||p.price<=0){errors.push(s.title+'價格無效');continue;}total+=p.price;pending.push(...requirementReasons(p,s.key,needs));const c=check(p,s.key,selected);if(c.state==='incompatible')errors.push(...c.reasons);else if(c.state==='pending')pending.push(...c.reasons);}
   if(needs.usages?.includes('game')&&!selected.gpu)pending.push('遊戲用途需確認顯示效能');
   if(selected.ram&&selected.ram.facts.capacityGB<Number(needs.ramGB||16))pending.push('記憶體容量低於本次需求目標');
+  pending.push(...(needs.unmapped||[]));
   pending.push('需由 DK 確認 CPU 支援清單／BIOS、記憶體相容性、SSD 插槽、散熱、電源瓦數與接頭、供貨及最終價格');
   if(needs.usages?.some(x=>['game','create','stream'].includes(x)))pending.push('遊戲畫質／幀數與軟體效能尚未完成配置實測核對');
   return {total,overBudget:Math.max(0,total-Number(needs.budget||0)),errors:[...new Set(errors)],pending:[...new Set(pending)]};
  }
- function suggest(products,needs){
-  // Budget draft only. No claim of a verified game target, and no hidden relaxation of filters.
-  const selected={},budget=Number(needs.budget)||30000,game=needs.usages?.some(x=>['game','create','stream'].includes(x));
-  const share=game?{cpu:.18,board:.12,ram:.13,ssd:.1,gpu:.32,cooler:.03,case:.05,psu:.07}:{cpu:.26,board:.19,ram:.2,ssd:.15,gpu:0,cooler:.03,case:.08,psu:.09};
-  for(const s of slots){
-   if(s.key==='gpu'&&!game&&selected.cpu?.facts.integrated)continue;
-   if(s.key==='cooler'&&selected.cpu?.facts.stockCooler)continue;
-   let list=products.filter(p=>isPart(p,s.key)&&check(p,s.key,selected).state==='basic');
-   if(s.key==='cpu'&&game){const stock=list.filter(p=>p.facts.stockCooler);if(stock.length)list=stock;}
-   if(s.key==='case')list=list.filter(p=>p.facts.maxCoolerMM>=160);
-   if(s.key==='cpu'&&!game)list=list.filter(p=>p.facts.integrated);
-   if(s.key==='ram')list=list.filter(p=>p.facts.capacityGB>=Number(needs.ramGB||16));
-   if(s.key==='ssd')list=list.filter(p=>p.facts.capacityGB>=500);
-   if(s.key==='psu')list=list.filter(p=>p.facts.watts>=650&&p.facts.atx3);
-   if(s.key==='case'&&needs.color!=='any')list=list.filter(p=>p.name.includes(needs.color==='white'?'白':'黑'));
-   list.sort((a,b)=>Math.abs(a.price-budget*share[s.key])-Math.abs(b.price-budget*share[s.key])||a.price-b.price);
-   if(list[0])selected[s.key]=list[0];
-  }
-  return Object.fromEntries(Object.entries(selected).map(([k,p])=>[k,p.id]));
+ function colorOf(item){
+  const text=String(item.name||'').replace(/白金|白牌|白名單/g,'');
+  const white=/白|\bWHITE\b|\bSNOW\b/i.test(text),black=/黑|\bBLACK\b/i.test(text);
+  return white&&!black?'white':black&&!white?'black':'unknown';
  }
+ function modelMatch(name,model){
+  const normalized=String(name||'').normalize('NFKC').toUpperCase();
+  const token=String(model).toUpperCase().replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  return new RegExp('(^|[^A-Z0-9])'+token+'([^A-Z0-9]|$)').test(normalized);
+ }
+ function compileNeeds(raw,games){
+  const needs={...raw,cpuModels:null,gpuModels:null,ruleSources:[],ruleNotes:[],unmapped:[],ramGB:raw.usages?.includes('create')?32:16,ssdGB:500,ramModules:1,ramSpeedMT:0,minPsuWatts:650,hasGameRule:false};
+  if(!raw.usages?.includes('game'))return needs;
+  const intersect=(a,b)=>a===null?[...b]:a.filter(x=>b.includes(x));
+  for(const name of raw.appNames||[]){
+   const game=games.find(g=>g.name===name);if(!game){needs.unmapped.push(name+'：尚無效能選配資料');continue;}
+   const target=game.targets.find(t=>t.id===raw.gameTargets?.[game.id]);
+   if(!target){needs.unmapped.push(name+'：請先選遊玩目標');continue;}
+   needs.ramGB=Math.max(needs.ramGB,Number(target.ramGB)||0);
+   if(target.resolution&&raw.resolution!=='unknown'&&raw.resolution!==target.resolution){needs.unmapped.push(name+'：遊玩目標與螢幕解析度不同，請確認要以哪個解析度執行');continue;}
+   const resolution=target.resolution||raw.resolution;
+   const rule=(target.selectionRules||[]).find(r=>r.resolutions.includes(resolution));
+   if(!rule){needs.unmapped.push(name+'：此畫質／解析度尚無現售型號對照');continue;}
+   needs.hasGameRule=true;needs.cpuModels=intersect(needs.cpuModels,rule.cpuModels);needs.gpuModels=intersect(needs.gpuModels,rule.gpuModels.map(x=>x.replace(/\s+/g,'').toUpperCase()));
+   needs.ramGB=Math.max(needs.ramGB,rule.ramGB||0);needs.ramModules=Math.max(needs.ramModules,rule.ramModules||1);needs.ramSpeedMT=Math.max(needs.ramSpeedMT,rule.ramSpeedMT||0);needs.ssdGB=Math.max(needs.ssdGB,rule.ssdGB||0);needs.minPsuWatts=Math.max(needs.minPsuWatts,rule.minPsuWatts||0);
+   needs.ruleSources.push(...rule.sourceUrls);needs.ruleNotes.push(rule.basis);
+  }
+  needs.ruleSources=[...new Set(needs.ruleSources)];needs.ruleNotes=[...new Set(needs.ruleNotes)];
+  if(needs.cpuModels?.length===0||needs.gpuModels?.length===0)needs.unmapped.push('多款遊戲的參考型號沒有共同選項，需由 DK 另行搭配');
+  return needs;
+ }
+ function requirementReasons(item,key,needs={}){
+  const f=item.facts||{},out=[];
+  if(key==='cpu'&&Array.isArray(needs.cpuModels)&&!needs.cpuModels.some(m=>modelMatch(item.name,m)))out.push('不在這次遊戲目標的參考處理器清單');
+  if(key==='gpu'&&Array.isArray(needs.gpuModels)&&!needs.gpuModels.includes(String(f.gpuModel||'').replace(/\s+/g,'').toUpperCase()))out.push('不在這次遊戲目標的參考顯示卡清單');
+  if(key==='ram'&&(f.capacityGB||0)<(needs.ramGB||16))out.push('記憶體容量低於需求目標');
+  if(key==='ram'&&(f.modules||0)<(needs.ramModules||0))out.push('需選擇已明示條數的雙條記憶體組');
+  if(key==='ram'&&(f.speedMT||0)<(needs.ramSpeedMT||0))out.push('記憶體標示速度低於參考條件，或尚未建檔');
+  if(key==='ssd'&&(f.capacityGB||0)<(needs.ssdGB||500))out.push('儲存容量低於需求目標');
+  if(key==='psu'&&(f.watts||0)<(needs.minPsuWatts||650))out.push('電源瓦數低於目前規劃下限');
+  if(needs.color==='allwhite'&&['board','ram','gpu','cooler','case','psu'].includes(key)&&colorOf(item)!=='white')out.push('尚未確認為白色款式');
+  if(['white','black'].includes(needs.color)&&key==='case'&&colorOf(item)!==needs.color)out.push('機殼顏色與偏好不同');
+  return out;
+ }
+ function plan(products,needs){
+  // Explicit model sets are test-based selection references, not a numerical FPS prediction.
+  const game=needs.usages?.some(x=>['game','create','stream'].includes(x));if(needs.usages?.includes('game')&&(!needs.hasGameRule||needs.unmapped?.length))return {ids:{},total:0,missing:slots.map(s=>s.title),warnings:[...(needs.unmapped||[]),'遊戲效能對照尚未完整，沒有自動填入處理器與顯示卡；可調整目標或請 DK 協助'],hasGameRule:false,overBudget:0};let beam=[{selected:{},cost:0,missing:[]}];
+  for(const slot of slots){const next=[];
+   for(const state of beam){
+    const skip=slot.key==='gpu'&&!game&&state.selected.cpu?.facts.integrated||slot.key==='cooler'&&state.selected.cpu?.facts.stockCooler&&needs.color!=='allwhite';
+    if(skip){next.push(state);continue;}
+    let list=products.filter(p=>Number.isSafeInteger(p.price)&&p.price>0&&isPart(p,slot.key)&&check(p,slot.key,state.selected).state==='basic'&&!requirementReasons(p,slot.key,needs).length);
+    if(slot.key==='cpu'&&!game)list=list.filter(p=>p.facts.integrated);
+    if(slot.key==='case')list=list.filter(p=>p.facts.maxCoolerMM>=160);
+    if(slot.key==='psu')list=list.filter(p=>p.facts.atx3);
+    list.sort((a,b)=>a.price-b.price||a.id.localeCompare(b.id));
+    // Keep several CPU/platform alternatives; select support parts by total cost, not budget share.
+    for(const item of list.slice(0,slot.key==='cpu'?12:6))next.push({selected:{...state.selected,[slot.key]:item},cost:state.cost+item.price,missing:state.missing});
+    if(!list.length)next.push({...state,missing:[...state.missing,slot.title]});
+   }
+   next.sort((a,b)=>a.missing.length-b.missing.length||a.cost-b.cost);beam=next.slice(0,32);
+  }
+  const best=beam[0]||{selected:{},cost:0,missing:slots.map(s=>s.title)};
+  const warnings=[...(needs.unmapped||[])];
+  if(best.missing.length)warnings.push('目前找不到可確認符合條件的'+best.missing.join('、')+'，已保留空缺；小計不是完整主機價格');
+  if(best.cost>Number(needs.budget))warnings.push('目前候選組合超出預算 '+money(best.cost-Number(needs.budget))+'；不會自動降低遊玩目標或改用非白色零件');
+  if(game&&!needs.hasGameRule)warnings.push('此需求尚無現售型號效能對照，本次僅為基本規格草稿');
+  warnings.push(...(needs.ruleNotes||[]));
+  return {ids:Object.fromEntries(Object.entries(best.selected).map(([k,p])=>[k,p.id])),total:best.cost,missing:best.missing,warnings,hasGameRule:!!needs.hasGameRule,overBudget:Math.max(0,best.cost-Number(needs.budget||0))};
+ }
+ function suggest(products,needs){return plan(products,needs).ids;}
  function summary(needs,selected,catalog){
   const q=validate(selected,needs),usages={office:'文書／日常',game:'遊戲',create:'剪輯／設計',stream:'直播',unsure:'請 DK 協助'};
-  return ['【DK 配單需求草稿】','用途：'+(needs.usages||[]).map(x=>usages[x]||x).join('、'),'遊戲／軟體：'+(needs.appNames||[]).join('、'),'遊玩目標：'+(needs.targets||[]).join('；'),'主機預算：'+money(needs.budget),'螢幕：'+(needs.resolution||'待確認')+'；'+(needs.monitor||'待確認'),'外觀：'+({any:'不限',white:'白色',black:'黑色'}[needs.color]||'不限'),'價格資料：'+catalog.updatedAt,...slots.map(s=>s.title+'：'+(selected[s.key]?selected[s.key].name+'｜'+money(selected[s.key].price):'待確認／未選')),'參考零件小計：'+money(q.total),'小計不含未選零件、組裝服務、作業系統與周邊；未確認為 DK 正式報價。',...q.errors.map(x=>'需更正：'+x),...q.pending.map(x=>'待確認：'+x)].join('\n');
+  return ['【DK 配單需求草稿】','用途：'+(needs.usages||[]).map(x=>usages[x]||x).join('、'),'遊戲／軟體：'+(needs.appNames||[]).join('、'),'遊玩目標：'+(needs.targets||[]).join('；'),'主機預算：'+money(needs.budget),'螢幕：'+({unknown:'解析度待確認','1080p':'1080P','1440p':'2K／1440P','4k':'4K'}[needs.resolution]||'待確認')+'；'+({existing:'已有螢幕',buy:'需另購螢幕',unknown:'安排待確認'}[needs.monitor]||'待確認'),'外觀：'+({any:'不限',white:'白色機殼',black:'黑色機殼',allwhite:'全白搭配（可見零件與電源）'}[needs.color]||'不限'),...(needs.ruleSources||[]).map(url=>'效能選配參考：'+url),'價格資料：'+catalog.updatedAt,...slots.map(s=>s.title+'：'+(selected[s.key]?selected[s.key].name+'｜'+money(selected[s.key].price):'待確認／未選')),'參考零件小計：'+money(q.total),'小計不含未選零件、組裝服務、作業系統與周邊；未確認為 DK 正式報價。',...q.errors.map(x=>'需更正：'+x),...q.pending.map(x=>'待確認：'+x)].join('\n');
  }
- return {slots,money,isPart,check,resolve,validate,suggest,summary};
+ return {slots,money,isPart,check,resolve,validate,suggest,summary,colorOf,compileNeeds,requirementReasons,plan};
 });

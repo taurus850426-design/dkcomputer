@@ -11,3 +11,9 @@ test('explicit source dimensions and restrictive bundles are extracted conservat
  assert.equal(factsFor(12,'RTX5060 /25.5cm/雙風扇','').lengthMM,255);assert.equal(factsFor(14,'顯卡長42.5(41)/CPU高15.6(5.2)/M-ATX','').maxGpuMM,undefined);assert.equal(factsFor(14,'卡40/U高17/ATX','').maxCoolerMM,170);
  assert.equal(factsFor(14,'M-ATX/內附400W電源','').restricted,true);assert.equal(factsFor(15,'750W/SFX-L','').compact,true);assert.equal(exclusionReason('原價屋限定'),'exclusive');
 });
+test('reviewed cooler brackets are overlaid by exact ID without changing the source price',()=>{
+ const a=parseCatalog(html('<option>已核對散熱器, $1000</option>')),p=a.products.find(x=>x.name==='已核對散熱器'),b=parseCatalog(html('<option>已核對散熱器, $1000</option>'),{specOverrides:{[p.id]:{supportedSockets:['AM5'],heightMM:157,price:1}}});const updated=b.products.find(x=>x.id===p.id);assert.deepEqual(updated.facts.supportedSockets,['AM5']);assert.equal(updated.price,1000);
+});
+test('dual-module memory count and rated transfer speed come from explicit source text',()=>{
+ const f=factsFor(6,'32G(雙通16G*2)D5-5600 白','桌上型記憶體 DDR5 雙通道');assert.equal(f.modules,2);assert.equal(f.speedMT,5600);assert.equal(f.capacityGB,32);assert.equal(factsFor(6,'單條16GB DDR5-6000','桌上型').modules,1);
+});

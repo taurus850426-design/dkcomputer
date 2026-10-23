@@ -18,7 +18,7 @@ export function factsFor(category,title,group) {
   const sockets=[...text.matchAll(/\b(AM[45]|LGA\s*1[278]00|1851|1700|1200|1151|1150|sTR5|sTRX4)\b/gi)].map(x=>x[1].toUpperCase().replace(/LGA|\s/g,''));
   if(new Set(sockets).size===1)f.socket=sockets[0];
   m=text.match(/DDR\s*([345])|\bD([45])[-\s]/i);if(m)f.ddr='DDR'+(m[1]||m[2]);
-  if(category===6){f.desktop=/桌上型|桌機/.test(group)&&!/筆電|SO-DIMM|伺服器|ECC|RDIMM/i.test(text);m=title.match(/(?:單條|雙通道)?\s*(\d+)\s*G(?:B)?\b/i);if(m)f.capacityGB=Number(m[1]);}
+  if(category===6){m=title.match(/(?:\d+\s*G(?:B)?\s*[x*×]\s*)([24])\b/i);if(m)f.modules=Number(m[1]);else if(/單條/.test(text))f.modules=1;m=title.match(/(?:DDR[345]|D[45])[-\s]*(\d{4})/i);if(m)f.speedMT=Number(m[1]);f.desktop=/桌上型|桌機/.test(group)&&!/筆電|SO-DIMM|伺服器|ECC|RDIMM/i.test(text);m=title.match(/(?:單條|雙通道)?\s*(\d+)\s*G(?:B)?\b/i);if(m)f.capacityGB=Number(m[1]);}
   if(category===4){m=title.match(/【(\d+)核/);if(m)f.cores=Number(m[1]);f.integrated=/具內顯|含內顯|內顯Xe|UHD\d|RDNA\s*\d?內顯/i.test(title)&&!/無內顯/.test(title);f.stockCooler=/含風扇/.test(title)&&!/不含|無風扇/.test(title);}
   if(category===5||category===14){m=title.match(/\b(Mini[- ]?ITX|M[- ]ATX|Micro[- ]?ATX|E[- ]ATX|ATX|ITX)\b/i);if(m)f.form=m[1].toUpperCase().replace(/MINI[- ]?ITX/,'ITX').replace(/MICRO[- ]?ATX|M[- ]ATX/,'MATX').replace(/E[- ]ATX/,'EATX');}
   if(category===14){f.restricted=/僅支援|內附.*電源|含.*電源|附\d{3,4}W|\+.*(?:水冷|電源|風扇)/i.test(title);m=title.match(/(?:顯卡長|卡)(\d+(?:\.\d+)?)(?![\d.(])/);if(m&&!title.slice(m.index+m[0].length).startsWith('('))f.maxGpuMM=Math.round(Number(m[1])*10);m=title.match(/(?:CPU高|U高)(\d+(?:\.\d+)?)(?![\d.(])/i);if(m&&!title.slice(m.index+m[0].length).startsWith('('))f.maxCoolerMM=Math.round(Number(m[1])*10);}
@@ -46,8 +46,8 @@ export function parseCatalog(html,overrides={}) {
       last={id,category,name,group,price,facts:factsFor(category,name,group)};products.push(last);categoryCounts[category]++;
     }
   }
-  if(Object.keys(categoryCounts).length!==30||products.length<1000)throw Error('來源分類或商品數異常，保留既有資料');
+  if(Object.keys(categoryCounts).length!==30||Object.values(categoryCounts).some(n=>n===0)||products.length<1000)throw Error('來源分類或商品數異常，保留既有資料');
   const kept=[];const ids=new Set();
-  for(const p of products){const reason=p.exclusiveNote?'exclusive':exclusionReason(p.name+' '+p.group);delete p.exclusiveNote;if(reason){counts[reason]++;continue;}if(overrides.blockedIds?.includes(p.id)){counts.blocked++;continue;}if(ids.has(p.id))continue;ids.add(p.id);kept.push(p);}
+  for(const p of products){const reason=p.exclusiveNote?'exclusive':exclusionReason(p.name+' '+p.group);delete p.exclusiveNote;if(reason){counts[reason]++;continue;}if(overrides.blockedIds?.includes(p.id)){counts.blocked++;continue;}if(ids.has(p.id))continue;ids.add(p.id);const spec=overrides.specOverrides?.[p.id];if(spec){for(const key of ['supportedSockets','heightMM','specSource','specCheckedAt'])if(spec[key]!==undefined)p.facts[key]=spec[key];}kept.push(p);}
   return {schemaVersion:1,sourceUrl:SOURCE_URL,updatedAt:new Date().toISOString(),categories:CATEGORIES.map((name,i)=>({id:i+1,name})),excluded:counts,products:kept};
 }

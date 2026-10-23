@@ -1,4 +1,48 @@
 {
   "blockedIds": [],
-  "note": "將 DK 無法供貨或確認為原價屋獨家的商品 ID 加入 blockedIds，重新執行同步後排除。ID 依完整商品名稱建立，不使用會隨來源排序改變的 option 序號。"
+  "note": "將 DK 無法供貨或確認為原價屋獨家的商品 ID 加入 blockedIds，重新執行同步後排除。ID 依完整商品名稱建立，不使用會隨來源排序改變的 option 序號。",
+  "specOverrides": {
+    "cp-10-861ffb1376a0ec43837b": {
+      "supportedSockets": [
+        "AM5",
+        "AM4",
+        "1851",
+        "1700",
+        "1200",
+        "1151",
+        "1150"
+      ],
+      "heightMM": 157,
+      "specSource": "https://www.idcooling.com/product/detail?id=496",
+      "specCheckedAt": "2026-10-23"
+    },
+    "cp-10-9bb1f6cde53f20adc51e": {
+      "supportedSockets": [
+        "AM5",
+        "AM4",
+        "1851",
+        "1700",
+        "1200",
+        "1151",
+        "1150"
+      ],
+      "heightMM": 157,
+      "specSource": "https://www.idcooling.com/product/detail?id=525",
+      "specCheckedAt": "2026-10-23"
+    },
+    "cp-10-cdfbd4e1de3480a7ef6a": {
+      "supportedSockets": [
+        "AM5",
+        "AM4",
+        "1851",
+        "1700",
+        "1200",
+        "1151",
+        "1150"
+      ],
+      "heightMM": 157,
+      "specSource": "https://www.idcooling.com/product/detail?id=541",
+      "specCheckedAt": "2026-10-23"
+    }
+  }
 }
