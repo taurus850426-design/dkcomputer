@@ -54,3 +54,22 @@ test('multiple game references intersect models instead of silently using the ea
 test('no white GPU or confirmed cooler means an explicit missing slot, not a substituted black part',()=>{
  const needs=valorant({color:'allwhite'}),products=catalog.products.filter(p=>!(p.category===12&&r.colorOf(p)==='white'));const plan=r.plan(products,needs);assert.ok(plan.missing.includes('顯示卡'));assert.equal(plan.ids.gpu,undefined);assert.ok(plan.warnings.some(x=>/不是完整主機價格/.test(x)));
 });
+test('custom requests and owned parts never inherit prices or claims of compatibility',()=>{
+ const others={cpu:{name:'Customer CPU',mode:'request',url:'https://example.com/cpu',price:1,facts:{socket:'AM5'}},gpu:{name:'My GPU',mode:'owned',price:1}};
+ const p=r.resolve({cpu:cpu.id},[cpu],others),q=r.validate(p,{budget:10000});assert.equal(p.cpu.price,null);assert.deepEqual(p.cpu.facts,{});assert.equal(q.total,0);assert.equal(q.unpricedCount,1);assert.equal(q.ownedCount,1);assert.equal(q.errors.length,0);assert.equal(r.check(p.cpu,'cpu',{}).state,'pending');
+});
+test('unknown custom sockets make related selections pending rather than compatible or falsely incompatible',()=>{
+ const p=r.resolve({},[],{cpu:{name:'Unknown CPU',mode:'owned'}});assert.equal(r.check(board,'board',p).state,'pending');assert.match(r.check(board,'board',p).reasons.join(' '),/自填處理器/);
+ const mix={...p,board:{...board,facts:{...board.facts,ddr:'DDR4'}}};assert.equal(r.check(ram,'ram',mix).state,'incompatible');
+});
+test('custom summary includes links and quote/ownership status, real line breaks and no embedded photo payload',()=>{
+ const photo={dataUrl:'data:image/jpeg;base64,YWJj',name:'part.jpg'},p=r.resolve({},[],{cpu:{name:'My CPU',mode:'owned',photo},gpu:{name:'Other GPU',mode:'request',url:'https://example.com/gpu'}}),text=r.summary({budget:10000},p,catalog);
+ assert.match(text,/https:\/\/example.com\/gpu/);assert.match(text,/待報價/);assert.match(text,/自備零件/);assert.match(text,/另傳官方 LINE/);assert.ok(text.split('\n').length>10);assert.ok(!text.includes('data:image'));assert.ok(!text.includes('\\n'));
+});
+test('custom inputs reject active URLs, credentials, unknown slots, overlong photos and injected specifications',()=>{
+ for(const url of ['javascript:alert(1)','data:text/html,hi','https://user:password@example.com'])assert.equal(r.safeProductUrl(url),'');
+ const parts=r.normalizeOthers({cpu:{name:'X',url:'javascript:alert(1)',photo:{dataUrl:'data:image/svg+xml;base64,YWJj'},mode:'admin'},otherSlot:{name:'bad'}});assert.deepEqual(Object.keys(parts),['cpu']);assert.equal(parts.cpu.url,'');assert.equal(parts.cpu.photo,null);assert.equal(parts.cpu.mode,'request');assert.equal(r.cleanOtherDraft({photo:{dataUrl:'data:image/jpeg;base64,'+'a'.repeat(300000)}}).photo,null);
+});
+test('mixed catalogue, requested and owned parts total only confirmed catalogue prices',()=>{
+ const known=part(12,{gpuModel:'RTX 5060',lengthMM:250},12345,'known-gpu'),p=r.resolve({gpu:known.id},[known],{cpu:{name:'Own CPU',mode:'owned'},case:{name:'Requested case',mode:'request'}}),q=r.validate(p,{budget:50000});assert.equal(q.total,12345);assert.equal(q.unpricedCount,1);assert.equal(q.ownedCount,1);assert.equal(q.errors.length,0);assert.ok(q.pending.some(x=>/機殼/.test(x)));
+});

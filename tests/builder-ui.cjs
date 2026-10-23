@@ -40,3 +40,30 @@ test('unknown game mapping preserves an existing draft instead of replacing it w
 test('all-white insufficient-budget result remains white and manual CPU options respect the game reference',async()=>{
  const s=await setup({draft:{version:1,step:3,needs:{usages:['game'],appNames:['特戰英豪（VALORANT）'],gameTargets:{valorant:'1080p-high-144'},resolution:'1080p',color:'allwhite',budget:10000},ids:{},updatedAt:catalog.updatedAt}});s.click('suggestBuild');assert.match(s.el('stepMessage').textContent,/超出預算/);const d=JSON.parse(s.w.localStorage.getItem('dk_builder_draft_v1'));assert.ok(d.ids.cooler);for(const k of ['board','ram','gpu','cooler','case','psu'])assert.equal(s.w.DKBuilder.colorOf(catalog.products.find(p=>p.id===d.ids[k])),'white');next(s);assert.ok(!s.el('partProducts').textContent.includes('3400G'));s.dom.window.close();
 });
+function fillOther(s,{name='Other model',url='',mode='request'}={}){s.el('otherPart').open=true;for(const [id,value]of Object.entries({otherName:name,otherUrl:url})){s.el(id).value=value;s.el(id).dispatchEvent(new s.w.Event('input',{bubbles:true}));}s.change('otherMode',mode);}
+const cpuDraft=()=>({version:1,step:4,needs:{usages:['office'],budget:30000},ids:{},updatedAt:catalog.updatedAt});
+test('every part step offers custom entry; requests show unpriced total and preserve link in inquiry',async()=>{
+ const s=await setup({draft:cpuDraft()});fillOther(s,{name:'Custom CPU',url:'https://example.com/cpu'});s.click('applyOther');assert.equal(s.el('buildTotal').textContent,'待報價');assert.match(s.el('budgetStatus').textContent,/不是整台總價/);const d=JSON.parse(s.w.localStorage.getItem('dk_builder_draft_v1'));assert.equal(d.others.cpu.name,'Custom CPU');assert.equal(d.ids.cpu,undefined);
+ for(let i=0;i<7;i++){next(s);assert.ok(s.el('otherPart'));}s.click('toSummary');assert.match(s.el('summaryText').value,/https:\/\/example.com\/cpu/);assert.match(s.el('summaryText').value,/待報價/);assert.equal(s.errors.length,0);s.dom.window.close();
+});
+test('owned parts are distinguished from missing purchase prices and survive reload',async()=>{
+ const s=await setup({draft:cpuDraft()});fillOther(s,{name:'My CPU',mode:'owned'});s.click('applyOther');assert.match(s.el('budgetStatus').textContent,/自備零件/);const d=JSON.parse(s.w.localStorage.getItem('dk_builder_draft_v1'));s.dom.window.close();const restored=await setup({draft:d});assert.equal(restored.el('otherName').value,'My CPU');assert.equal(restored.el('otherMode').value,'owned');assert.match(restored.el('buildItems').textContent,/自備零件/);restored.dom.window.close();
+});
+test('typing a custom draft without applying preserves current selection and restores unfinished fields',async()=>{
+ const cpu=catalog.products.find(p=>p.category===4&&p.facts.socket),s=await setup({draft:{...cpuDraft(),ids:{cpu:cpu.id}}});fillOther(s,{name:'Unfinished model',url:'not-yet-a-valid-link'});const draft=JSON.parse(s.w.localStorage.getItem('dk_builder_draft_v1'));assert.equal(draft.ids.cpu,cpu.id);assert.equal(draft.others.cpu,undefined);s.dom.window.close();const restored=await setup({draft});assert.equal(restored.el('otherName').value,'Unfinished model');assert.equal(restored.el('otherUrl').value,'not-yet-a-valid-link');restored.dom.window.close();
+});
+test('empty or unsafe custom entries cannot replace a selected catalogue part',async()=>{
+ const cpu=catalog.products.find(p=>p.category===4&&p.facts.socket),s=await setup({draft:{...cpuDraft(),ids:{cpu:cpu.id}}});s.click('applyOther');assert.match(s.el('otherMessage').textContent,/至少/);fillOther(s,{name:'Bad URL model',url:'javascript:alert(1)'});s.click('applyOther');assert.match(s.el('otherMessage').textContent,/完整/);assert.equal(JSON.parse(s.w.localStorage.getItem('dk_builder_draft_v1')).ids.cpu,cpu.id);assert.equal(s.calls.length,2);s.dom.window.close();
+});
+test('catalogue selection replaces a custom item without losing its editable draft or double-counting',async()=>{
+ const s=await setup({draft:cpuDraft()});fillOther(s);s.click('applyOther');const b=s.el('partProducts').querySelector('[data-part]'),id=b.dataset.part;b.click();const draft=JSON.parse(s.w.localStorage.getItem('dk_builder_draft_v1'));assert.equal(draft.others.cpu,undefined);assert.equal(draft.ids.cpu,id);assert.equal(draft.otherDrafts.cpu.name,'Other model');assert.equal(s.el('buildTotal').textContent,s.w.DKBuilder.money(catalog.products.find(p=>p.id===id).price));s.dom.window.close();
+});
+test('custom HTML is inert and resetting clears selected and unfinished custom data',async()=>{
+ const s=await setup({draft:cpuDraft()});fillOther(s,{name:'<img src=x onerror=alert(1)>'});s.click('applyOther');assert.equal(s.el('buildItems').querySelector('img'),null);s.click('toSummary');assert.equal(s.el('stepBody').querySelector('img'),null);assert.match(s.el('summaryText').value,/<img/);s.click('restart');const draft=JSON.parse(s.w.localStorage.getItem('dk_builder_draft_v1'));assert.deepEqual(draft.others,{});assert.deepEqual(draft.otherDrafts,{});s.dom.window.close();
+});
+test('automatic recommendation never overwrites a customer-supplied part',async()=>{
+ const s=await setup({draft:cpuDraft()});fillOther(s,{mode:'owned'});s.click('applyOther');s.click('previous');s.click('suggestBuild');assert.match(s.el('stepMessage').textContent,/已保留你的配單/);assert.equal(JSON.parse(s.w.localStorage.getItem('dk_builder_draft_v1')).others.cpu.mode,'owned');s.dom.window.close();
+});
+test('a photo still being processed protects against leaving before it is saved',async()=>{
+ const s=await setup({draft:cpuDraft()});s.w.createImageBitmap=()=>new Promise(()=>{});const file=new s.w.File(['jpeg'],'photo.jpg',{type:'image/jpeg'});Object.defineProperty(s.el('otherPhotoInput'),'files',{value:[file]});s.el('otherPhotoInput').dispatchEvent(new s.w.Event('change',{bubbles:true}));await wait();assert.equal(s.el('applyOther').disabled,true);const event=new s.w.Event('beforeunload',{cancelable:true});s.w.dispatchEvent(event);assert.equal(event.defaultPrevented,true);s.dom.window.close();
+});
