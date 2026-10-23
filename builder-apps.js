@@ -1,0 +1,45 @@
+/* Discovery names only. Appearing here does not imply verified performance data. */
+(function(root,factory){const a=factory();if(typeof module==='object'&&module.exports)module.exports=a;else root.DKBuilderApps=a;})(typeof window==='object'?window:globalThis,function(){
+ 'use strict';
+ const rows=[
+  ['英雄聯盟（LOL）','game','競技／射擊','lol league of legends 英雄聯盟'],
+  ['特戰英豪（VALORANT）','game','競技／射擊','valorant 瓦羅蘭 特戰英豪'],
+  ['Counter-Strike 2','game','競技／射擊','cs2 csgo 絕對武力'],
+  ['Apex Legends','game','競技／射擊','apex 英雄'],
+  ['鬥陣特攻 2','game','競技／射擊','overwatch ow2 鬥陣特攻'],
+  ['Fortnite','game','競技／射擊','堡壘之夜'],
+  ['PUBG','game','競技／射擊','絕地求生 battlegrounds'],
+  ['電馭叛客 2077','game','角色扮演／動作','cyberpunk 2077 電馭叛客'],
+  ['艾爾登法環','game','角色扮演／動作','elden ring 法環'],
+  ['黑神話：悟空','game','角色扮演／動作','black myth wukong 黑神話 悟空'],
+  ['魔物獵人 荒野','game','角色扮演／動作','monster hunter wilds 魔物獵人荒野'],
+  ['原神','game','角色扮演／動作','genshin impact'],
+  ['崩壞：星穹鐵道','game','角色扮演／動作','honkai star rail 星穹鐵道'],
+  ['鳴潮','game','角色扮演／動作','wuthering waves'],
+  ['暗黑破壞神 IV','game','角色扮演／動作','diablo 4 diablo iv 暗黑4'],
+  ['Minecraft','game','沙盒／模擬','我的世界 麥塊'],
+  ['模擬市民 4','game','沙盒／模擬','the sims 4 模擬市民'],
+  ['Cities: Skylines II','game','沙盒／模擬','都市天際線2 城市天際線2'],
+  ['模擬農場 25','game','沙盒／模擬','farming simulator 25'],
+  ['魔獸世界','game','線上／多人','world of warcraft wow'],
+  ['Final Fantasy XIV','game','線上／多人','ff14 ffxiv 太空戰士14 最終幻想14'],
+  ['黑色沙漠','game','線上／多人','black desert'],
+  ['Microsoft Word','software','文書／日常','word 微軟文書'],
+  ['Microsoft Excel','software','文書／日常','excel 試算表'],
+  ['Microsoft PowerPoint','software','文書／日常','powerpoint ppt 簡報'],
+  ['Google Chrome','software','文書／日常','chrome 瀏覽器'],
+  ['Adobe Photoshop','software','剪輯／設計','photoshop ps 修圖'],
+  ['Adobe Illustrator','software','剪輯／設計','illustrator ai 向量'],
+  ['Adobe Premiere Pro','software','剪輯／設計','premiere pr 剪輯'],
+  ['DaVinci Resolve','software','剪輯／設計','davinci 達芬奇 調色'],
+  ['剪映／CapCut','software','剪輯／設計','剪映 capcut'],
+  ['Blender','software','3D／工程','blender 建模'],
+  ['AutoCAD','software','3D／工程','autocad cad 繪圖'],
+  ['SketchUp','software','3D／工程','sketchup 室內設計'],
+  ['OBS Studio','software','直播／通訊','obs 直播 錄影'],
+  ['Discord','software','直播／通訊','discord dc 語音'],
+  ['Microsoft Teams','software','直播／通訊','teams 視訊'],
+  ['Zoom','software','直播／通訊','zoom 視訊']
+ ];
+ return rows.map(([name,kind,category,aliases])=>({name,kind,category,aliases}));
+});
