@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-10-23",
+  "games": [
+    {
+      "id": "lol",
+      "name": "英雄聯盟（LOL）",
+      "sourceUrl": "https://support.riotgames.com/zh-tw/league-of-legends/performance/minimum-and-recommended-system-requirements-league-of-legends/",
+      "targets": [
+        {
+          "id": "high1080",
+          "label": "1080P／高畫質",
+          "resolution": "1080p",
+          "quality": "高",
+          "fps": null,
+          "cpu": "Core i5-8250 或 Ryzen 3 1200",
+          "gpu": "GeForce 560、Radeon HD 6950 或 UHD 630",
+          "ramGB": 4,
+          "note": "官方建議規格沒有承諾特定幀數。"
+        }
+      ]
+    },
+    {
+      "id": "valorant",
+      "name": "特戰英豪（VALORANT）",
+      "sourceUrl": "https://playvalorant.com/zh-tw/specs/",
+      "targets": [
+        {
+          "id": "60",
+          "label": "官方建議／60 幀目標",
+          "resolution": null,
+          "quality": null,
+          "fps": 60,
+          "cpu": "Core i3-4150 或 Ryzen 3 1200",
+          "gpu": "GT 730 或 Radeon R7 240",
+          "ramGB": 4,
+          "note": "官方此表未指定解析度與畫質，不能當成 2K／高畫質 60 幀保證。",
+          "selectionRules": [
+            {
+              "resolutions": [
+                "1080p",
+                "1440p"
+              ],
+              "cpuModels": [
+                "7500F",
+                "7700",
+                "7800X3D",
+                "9800X3D"
+              ],
+              "gpuModels": [
+                "RTX5050",
+                "RTX5060"
+              ],
+              "ramGB": 16,
+              "ssdGB": 1000,
+              "minPsuWatts": 650,
+              "basis": "依獨立 CPU／GPU 測試挑選現售型號，組合效能仍需整機核對，不把不同測試平台的幀數相加或套用。",
+              "sourceUrls": [
+                "https://chimolog.co/bto-valorant-specs/"
+              ],
+              "checkedAt": "2026-10-23",
+              "ramModules": 2,
+              "ramSpeedMT": 5200
+            }
+          ]
+        },
+        {
+          "id": "144",
+          "label": "官方高規格／144 幀以上目標",
+          "resolution": null,
+          "quality": null,
+          "fps": 144,
+          "cpu": "Core i5-9400F 或 Ryzen 5 2600X",
+          "gpu": "GTX 1050 Ti、Radeon R7 370 或 Arc A310",
+          "ramGB": 4,
+          "note": "Windows 11 需啟用 TPM 2.0 與 UEFI 安全開機；解析度與畫質需另行確認。",
+          "selectionRules": [
+            {
+              "resolutions": [
+                "1080p",
+                "1440p"
+              ],
+              "cpuModels": [
+                "7500F",
+                "7700",
+                "7800X3D",
+                "9800X3D"
+              ],
+              "gpuModels": [
+                "RTX5050",
+                "RTX5060"
+              ],
+              "ramGB": 16,
+              "ssdGB": 1000,
+              "minPsuWatts": 650,
+              "basis": "依獨立 CPU／GPU 測試挑選現售型號，組合效能仍需整機核對，不把不同測試平台的幀數相加或套用。",
+              "sourceUrls": [
+                "https://chimolog.co/bto-valorant-specs/"
+              ],
+              "checkedAt": "2026-10-23",
+              "ramModules": 2,
+              "ramSpeedMT": 5200
+            }
+          ]
+        },
+        {
+          "id": "1080p-high-144",
+          "label": "1080P／高畫質／144 幀目標（實測參考選配）",
+          "resolution": "1080p",
+          "quality": "高",
+          "fps": 144,
+          "cpu": "Ryzen 5 7500F 等已建檔參考型號",
+          "gpu": "RTX 5050 或 RTX 5060",
+          "ramGB": 16,
+          "sourceUrl": "https://chimolog.co/bto-valorant-specs/",
+          "sourceLabel": "查看第三方原始測試",
+          "note": "以來源的最高畫質／MSAA 4x 測試與現售型號整理選配範圍；屬選配推論，並非 DK 已實測的完整主機，不保證最低幀或每個場景幀數。",
+          "selectionRules": [
+            {
+              "resolutions": [
+                "1080p"
+              ],
+              "cpuModels": [
+                "7500F",
+                "7700",
+                "7800X3D",
+                "9800X3D"
+              ],
+              "gpuModels": [
+                "RTX5050",
+                "RTX5060"
+              ],
+              "ramGB": 16,
+              "ssdGB": 1000,
+              "minPsuWatts": 650,
+              "basis": "依獨立 CPU／GPU 測試挑選現售型號，組合效能仍需整機核對，不把不同測試平台的幀數相加或套用。",
+              "sourceUrls": [
+                "https://chimolog.co/bto-valorant-specs/"
+              ],
+              "checkedAt": "2026-10-23",
+              "ramModules": 2,
+              "ramSpeedMT": 5200
+            }
+          ]
+        },
+        {
+          "id": "1440p-high-144",
+          "label": "2K／1440P／高畫質／144 幀目標（實測參考選配）",
+          "resolution": "1440p",
+          "quality": "高",
+          "fps": 144,
+          "cpu": "Ryzen 5 7500F 等已建檔參考型號",
+          "gpu": "RTX 5050 或 RTX 5060",
+          "ramGB": 16,
+          "sourceUrl": "https://chimolog.co/bto-valorant-specs/",
+          "sourceLabel": "查看第三方原始測試",
+          "note": "以來源的最高畫質／MSAA 4x 測試與現售型號整理選配範圍；屬選配推論，並非 DK 已實測的完整主機，不保證最低幀或每個場景幀數。",
+          "selectionRules": [
+            {
+              "resolutions": [
+                "1440p"
+              ],
+              "cpuModels": [
+                "7500F",
+                "7700",
+                "7800X3D",
+                "9800X3D"
+              ],
+              "gpuModels": [
+                "RTX5050",
+                "RTX5060"
+              ],
+              "ramGB": 16,
+              "ssdGB": 1000,
+              "minPsuWatts": 650,
+              "basis": "依獨立 CPU／GPU 測試挑選現售型號，組合效能仍需整機核對，不把不同測試平台的幀數相加或套用。",
+              "sourceUrls": [
+                "https://chimolog.co/bto-valorant-specs/"
+              ],
+              "checkedAt": "2026-10-23",
+              "ramModules": 2,
+              "ramSpeedMT": 5200
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cyberpunk",
+      "name": "電馭叛客 2077",
+      "sourceUrl": "https://www.cyberpunk.net/en/news/48271/update-to-pc-system-requirements",
+      "targets": [
+        {
+          "id": "high1080",
+          "label": "1080P／高畫質／60 幀目標（不開光追）",
+          "resolution": "1080p",
+          "quality": "高",
+          "fps": 60,
+          "cpu": "Core i7-12700 或 Ryzen 7 7800X3D",
+          "gpu": "RTX 2060 SUPER、RX 5700 XT 或 Arc A770",
+          "ramGB": 16,
+          "note": "官方測試目標；實際表現會隨場景、版本與設定改變。"
+        },
+        {
+          "id": "ultra4k",
+          "label": "4K／極高畫質／60 幀目標（不開光追）",
+          "resolution": "4k",
+          "quality": "極高",
+          "fps": 60,
+          "cpu": "Core i9-12900 或 Ryzen 9 7900X",
+          "gpu": "RTX 3080 或 RX 7900 XTX",
+          "ramGB": 20,
+          "note": "官方列出的顯示記憶體需求為 12GB；不能把所有 RTX 3080 版本視為相同。"
+        }
+      ]
+    }
+  ],
+  "reviewedRecipes": []
+}
