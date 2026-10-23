@@ -1595,7 +1595,11 @@
       targetOrder.items[idx] = updated;
       const saved = await persistAsyncPurchaseOrder(targetOrder);
       if (!saved.ok) return notify("雲端採用結果未確認，請核對原單；" + saved.error, true);
-      notify("已採用 " + updated.selectedVendor + " " + fmtNT(updated.selectedUnitPrice) + (updated.sourceSalesOrderId ? "，並同步訂單成本" : ""), false);
+      const successMessage = "已採用 " + updated.selectedVendor + " " + fmtNT(updated.selectedUnitPrice) + (updated.sourceSalesOrderId ? "，並同步訂單成本" : "");
+      if (currentOrder?.id === targetOrder.id && quoteModalItemId === targetItemId) {
+        closeQuoteModal();
+        showMsg(successMessage, 3500);
+      } else notify(successMessage, false);
       try { if (window.DK?.fetchV2DataFromSupabase) await window.DK.fetchV2DataFromSupabase(); } catch (_) {}
     } catch (e) {
       notify("採用結果待確認，請重新載入原單核對：" + String(e?.message || e), true);
