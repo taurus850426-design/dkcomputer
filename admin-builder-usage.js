@@ -6,7 +6,7 @@
  const dialog=document.createElement('dialog');dialog.setAttribute('aria-label','配單服務每月用量');dialog.style.cssText='max-width:560px;width:calc(100% - 40px);border:1px solid #aaa;border-radius:16px;padding:24px;color:#111;background:#fff';
  const title=document.createElement('h2');title.textContent='配單服務用量';const body=document.createElement('p');body.style.whiteSpace='pre-line';body.setAttribute('role','status');const close=document.createElement('button');close.type='button';close.className='btn';close.textContent='關閉';close.onclick=()=>dialog.close();dialog.append(title,body,close);document.body.append(dialog);
  let requested=false;
- async function load(show=false){if(typeof callBackofficeEdgeFunction!=='function')return;if(show){body.textContent='正在讀取…';dialog.showModal();}
+ async function load(show=false){if(window.DKBuilderServiceConfig?.enabled===false){if(show){body.textContent='外部搜尋與用量服務尚未啟用；常見遊戲的自動配單仍可正常使用。';dialog.showModal();}return;}if(typeof callBackofficeEdgeFunction!=='function')return;if(show){body.textContent='正在讀取…';dialog.showModal();}
   const r=await callBackofficeEdgeFunction('builder-research',{action:'usage'});const u=r.data?.usage;
   if(!r.ok||!u){if(show)body.textContent=r.status===403?'只有管理員可以查看。':'用量服務尚未啟用或暫時無法讀取。';return;}
   button.textContent=u.warning?'配單用量・接近上限':'配單服務用量';
