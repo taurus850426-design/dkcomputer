@@ -84,6 +84,32 @@
   }
 }
 
+/* Give the orders overview the available desktop space without resizing its editor preview. */
+@media screen and (min-width: 901px) {
+  body.admin-page #panel > #tab-inv:has(#v2-orders:not([hidden])):has(#orderForm[hidden]) {
+    max-width: 1600px;
+  }
+  body.admin-page #panel .orders-table-wrap {
+    overflow-x: auto;
+  }
+  body.admin-page #panel .orders-table > thead > tr > th,
+  body.admin-page #panel .orders-table > tbody > tr > td:not(:nth-child(2)),
+  body.admin-page #panel .orders-table .status-badge,
+  body.admin-page #panel .orders-table .status-pill,
+  body.admin-page #panel .orders-table .btn {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+  body.admin-page #panel .orders-table > thead > tr > th:first-child {
+    min-width: 155px;
+  }
+  body.admin-page #panel .orders-table > tbody > tr > td:nth-child(2) {
+    min-width: 100px;
+    max-width: 220px;
+  }
+}
+
 /* Give the form most of the width; the preview occupies its own column. */
 @media screen and (min-width: 1760px) {
   body.admin-page .order-workspace-layout,
