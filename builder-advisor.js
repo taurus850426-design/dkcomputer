@@ -8,7 +8,7 @@
   {match:/^Montech XR (?:黑|白) /i,style:'showcase',fans:3,layout:'側面 2 顆 120mm 進氣、後方 1 顆 120mm 排氣',source:'https://www.montechpc.com/xr',pwm:true}
  ].map(c=>({...c,checkedAt:'2026-10-24'}));
  function normalize(raw){const n={advisorVersion:1};for(const [k,values]of Object.entries(labels))n[k]=Object.hasOwn(values,raw[k])?raw[k]:({budgetMode:'balanced',allocation:'balanced'}[k]||Object.keys(values)[0]);n.storageGB=Number(n.storageGB);if(n.primaryUse!=='auto'&&!raw.usages?.includes(n.primaryUse))n.primaryUse='auto';return n;}
- function caseProfile(p){return p&&!p.isCustom?cases.find(c=>c.match.test(p.name)):null;}
+ function caseProfile(p){return p&&!p.isCustom&&!p.facts?.restricted?cases.find(c=>c.match.test(p.name)):null;}
  function caseAllowed(p,n){const c=caseProfile(p);return !!c&&(n.lookStyle==='any'||c.style===n.lookStyle);}
  function thermal(parts,n,products=[]){
   if(n.advisorVersion!==1)return {total:0,items:[],pending:[],unpriced:false};

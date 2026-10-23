@@ -97,7 +97,7 @@ test('source images appear for common RAM and SSD, while unsafe mappings cannot 
 });
 test('advisor options persist, explain individual effects, and replace the cancelled 3D preview',async()=>{
  const s=await setup({draft:{version:1,step:2,needs:{usages:['game'],appNames:['PUBG'],budget:100000,resolution:'1440p'},ids:{}}});
- assert.equal(s.el('buildPreview'),null);assert.equal(s.w.document.querySelector('script[src*="builder-preview"]'),null);assert.equal(s.w.document.querySelectorAll('.case-style-gallery article').length,3);
+ assert.equal(s.el('buildPreview'),null);assert.equal(s.w.document.querySelector('script[src*="builder-preview"]'),null);assert.equal(s.w.document.querySelectorAll('.case-style-gallery article').length,3);assert.doesNotMatch(s.w.document.querySelector('.case-style-gallery').textContent,/GAMMA|現省/);
  s.change('storageGB','4000');s.change('network','wifi');s.change('noise','quiet');s.w.document.querySelector('[data-look-style="showcase"]').click();next(s);
  const d=JSON.parse(s.w.localStorage.getItem('dk_builder_draft_v1'));assert.equal(d.needs.storageGB,4000);assert.equal(d.needs.lookStyle,'showcase');assert.match(s.el('stepBody').textContent,/你的選擇如何影響配置/);assert.match(s.el('stepBody').textContent,/預算與需求，一起看/);assert.match(s.el('buildItems').textContent,/原廠附 3 顆風扇/);assert.doesNotMatch(s.w.document.body.textContent,/原價屋|CoolPC/i);assert.equal(s.w.document.querySelector('a[href*="coolpc"][class="source"]'),null);assert.deepEqual(s.errors,[]);s.dom.window.close();
  const restored=await setup({draft:d});assert.equal(JSON.parse(restored.w.localStorage.getItem('dk_builder_draft_v1')).needs.storageGB,4000);assert.match(restored.el('stepBody').textContent,/全景展示/);assert.deepEqual(restored.errors,[]);restored.dom.window.close();
