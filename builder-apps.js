@@ -41,5 +41,9 @@
   ['Microsoft Teams','software','直播／通訊','teams 視訊'],
   ['Zoom','software','直播／通訊','zoom 視訊']
  ];
- return rows.map(([name,kind,category,aliases])=>({name,kind,category,aliases}));
+ const base=rows.map(([name,kind,category,aliases])=>({name,kind,category,aliases}));
+ const policy=typeof module==='object'&&module.exports?require('./builder-policy.js'):rootPolicy();
+ function rootPolicy(){return typeof window==='object'?window.DKBuilderPolicy:null;}
+ for(const p of policy?.profiles||[])if(!base.some(a=>a.name===p.name))base.push({name:p.name,kind:p.kind,category:p.category,aliases:p.aliases});
+ return base;
 });
