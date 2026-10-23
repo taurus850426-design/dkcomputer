@@ -23,6 +23,7 @@
   needs=core.compileNeeds(needs,games);
  }
  function refreshSummary(){const p=selected(),q=core.validate(p,needs);
+  window.DKBuilderPreview?.update(p);
   $('buildItems').innerHTML=core.slots.map((s,i)=>'<div class="summary-line"><span>'+s.title+'</span><button type="button" data-step="'+(4+i)+'">'+esc(p[s.key]?.name||'尚未選擇')+'</button>'+(p[s.key]?esc(p[s.key].isCustom?(p[s.key].custom.mode==='owned'?'自備零件 · 相容性待確認':'待報價 · 相容性待確認'):core.money(p[s.key].price)):'')+'</div>').join('');
   const totalLabel=q.total===0&&q.customCount?(q.unpricedCount?'待報價':'費用待確認'):core.money(q.total);$('buildTotal').textContent=totalLabel;$('mobileTotal').textContent=totalLabel;$('budgetStatus').textContent=q.overBudget?'目前小計超出預算 '+core.money(q.overBudget):'主機預算 '+core.money(needs.budget)+'；未選項目仍需預留費用。';if(q.unpricedCount)$('budgetStatus').textContent+=' 尚有 '+q.unpricedCount+' 項待報價，未計入小計；目前不是整台總價。';if(q.ownedCount)$('budgetStatus').textContent+=' 另有 '+q.ownedCount+' 項自備零件，安裝／檢測費用待確認。';$('budgetStatus').className=q.overBudget||q.unpricedCount?'error':'muted small';
  }
