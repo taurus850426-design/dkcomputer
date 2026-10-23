@@ -5,7 +5,7 @@ async function setup({draft,fail=false,storageFail=false}={}){
  const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));const dom=new JSDOM(read('builder.html'),{url:'https://example.test/dkcomputer/builder.html',runScripts:'outside-only',virtualConsole:vc}),w=dom.window;
  w.AbortSignal=AbortSignal;w.confirm=()=>true;w.HTMLElement.prototype.scrollIntoView=()=>{};if(draft)w.localStorage.setItem('dk_builder_draft_v1',JSON.stringify(draft));
  if(storageFail)w.Storage.prototype.setItem=()=>{throw Error('quota')};const calls=[];
- w.fetch=async(url,options)=>{calls.push({url,options});if(fail)throw Error('offline');return {ok:true,json:async()=>url.includes('games')?games:url.includes('requirements')?facts:catalog};};w.eval(read('builder-policy.js'));w.eval(read('builder-core.js'));w.eval(read('builder-apps.js'));w.eval(read('builder.js'));await wait();
+ w.fetch=async(url,options)=>{calls.push({url,options});if(fail)throw Error('offline');return {ok:true,json:async()=>url.includes('games')?games:url.includes('requirements')?facts:catalog};};w.eval(read('builder-policy.js'));w.eval(read('builder-core.js'));w.eval(read('builder-apps.js'));w.eval(read('builder-media.js'));w.eval(read('builder.js'));await wait();
  const el=id=>w.document.getElementById(id),click=id=>el(id).click(),change=(id,value)=>{el(id).value=value;el(id).dispatchEvent(new w.Event('change',{bubbles:true}));};return {dom,w,el,click,change,calls,errors};
 }
 function next(s){s.el('builderForm').dispatchEvent(new s.w.Event('submit',{bubbles:true,cancelable:true}));}
@@ -80,4 +80,10 @@ test('automatic recommendation never overwrites a customer-supplied part',async(
 });
 test('a photo still being processed protects against leaving before it is saved',async()=>{
  const s=await setup({draft:cpuDraft()});s.w.createImageBitmap=()=>new Promise(()=>{});const file=new s.w.File(['jpeg'],'photo.jpg',{type:'image/jpeg'});Object.defineProperty(s.el('otherPhotoInput'),'files',{value:[file]});s.el('otherPhotoInput').dispatchEvent(new s.w.Event('change',{bubbles:true}));await wait();assert.equal(s.el('applyOther').disabled,true);const event=new s.w.Event('beforeunload',{cancelable:true});s.w.dispatchEvent(event);assert.equal(event.defaultPrevented,true);s.dom.window.close();
+});
+
+test('category facets narrow known specs without changing selection, and exact product photos open locally',async()=>{
+ const cpu=catalog.products.find(p=>/AMD R5 7500F MPK/.test(p.name)),board=catalog.products.find(p=>p.id==='cp-5-59d5182a38de3f0d23a8');
+ const s=await setup({draft:{version:1,step:5,needs:{usages:['game'],appNames:['英雄聯盟（LOL）'],resolution:'1080p'},ids:{cpu:cpu.id,board:board.id}}});
+ assert.ok(s.el('partFilters').querySelector('[data-facet=dimm]'));const photo=s.el('partProducts').querySelector('img');assert.ok(photo);assert.match(photo.src,/msi-pro-b650m-b.webp$/);const filter=s.el('partFilters').querySelector('[data-facet=brand]');filter.value='MSI';filter.dispatchEvent(new s.w.Event('change',{bubbles:true}));assert.ok([...s.el('partProducts').querySelectorAll('h3')].every(h=>/微星|MSI/i.test(h.textContent)));assert.equal(JSON.parse(s.w.localStorage.getItem('dk_builder_draft_v1')).ids.board,board.id);assert.deepEqual(s.errors,[]);s.dom.window.close();
 });
