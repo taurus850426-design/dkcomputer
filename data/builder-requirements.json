@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "name": "Grand Theft Auto V Enhanced",
+      "kind": "game",
+      "version": "Steam app 3240220",
+      "sourceUrl": "https://store.steampowered.com/app/3240220/",
+      "cpu": "Intel Core i5-9600K | AMD Ryzen 5 3600",
+      "gpu": "NVIDIA GeForce RTX 3060 (8GB VRAM) | AMD Radeon RX 6600XT (8GB VRAM)",
+      "ramGB": 16,
+      "storageGB": 105,
+      "requirementLevel": "recommended",
+      "checkedAt": "2026-10-23T06:47:47.949Z",
+      "storeName": "Grand Theft Auto V Enhanced"
+    },
+    {
+      "name": "Grand Theft Auto V Legacy",
+      "kind": "game",
+      "version": "Steam app 271590",
+      "sourceUrl": "https://store.steampowered.com/app/271590/",
+      "cpu": "Intel Core i5 3470 @ 3.2GHz (4 CPUs) / AMD X8 FX-8350 @ 4GHz (8 CPUs)",
+      "gpu": "NVIDIA GTX 660 2GB / AMD HD 7870 2GB",
+      "ramGB": 8,
+      "storageGB": 125,
+      "requirementLevel": "recommended",
+      "checkedAt": "2026-10-23T06:47:48.156Z",
+      "storeName": "Grand Theft Auto V Legacy"
+    },
+    {
+      "name": "Counter-Strike 2",
+      "kind": "game",
+      "version": "Steam app 730",
+      "sourceUrl": "https://store.steampowered.com/app/730/",
+      "cpu": "4 hardware CPU threads - Intel Core i5 750 or higher",
+      "gpu": "Video card must be 1 GB or more and should be a DirectX 11-compatible with support for Shader Model 5.0",
+      "ramGB": 8,
+      "storageGB": 85,
+      "requirementLevel": "minimum",
+      "checkedAt": "2026-10-23T06:47:48.380Z",
+      "storeName": "Counter-Strike 2"
+    },
+    {
+      "name": "Apex Legends",
+      "kind": "game",
+      "version": "Steam app 1172470",
+      "sourceUrl": "https://store.steampowered.com/app/1172470/",
+      "cpu": "Ryzen 5 CPU or Equivalent",
+      "gpu": "AMD Radeon R9 290, NVIDIA GeForce GTX 970",
+      "ramGB": 8,
+      "storageGB": 75,
+      "requirementLevel": "recommended",
+      "checkedAt": "2026-10-23T06:47:48.610Z",
+      "storeName": "Apex LegendsTM"
+    },
+    {
+      "name": "PUBG",
+      "kind": "game",
+      "version": "Steam app 578080",
+      "sourceUrl": "https://store.steampowered.com/app/578080/",
+      "cpu": "Intel Core i5-6600K / AMD Ryzen 5 1600",
+      "gpu": "NVIDIA GeForce GTX 1060 3GB / AMD Radeon RX 580 4GB",
+      "ramGB": 16,
+      "storageGB": 50,
+      "requirementLevel": "recommended",
+      "checkedAt": "2026-10-23T06:47:48.851Z",
+      "storeName": "PUBG: BATTLEGROUNDS"
+    },
+    {
+      "name": "電馭叛客 2077",
+      "kind": "game",
+      "version": "Steam app 1091500",
+      "sourceUrl": "https://store.steampowered.com/app/1091500/",
+      "cpu": "Core i7-12700 or Ryzen 7 7800X3D",
+      "gpu": "GeForce RTX 2060 SUPER or Radeon RX 5700 XT or Arc A770",
+      "ramGB": 16,
+      "storageGB": 70,
+      "requirementLevel": "recommended",
+      "checkedAt": "2026-10-23T06:47:48.995Z",
+      "storeName": "Cyberpunk 2077"
+    },
+    {
+      "name": "艾爾登法環",
+      "kind": "game",
+      "version": "Steam app 1245620",
+      "sourceUrl": "https://store.steampowered.com/app/1245620/",
+      "cpu": "INTEL CORE I7-8700K or AMD RYZEN 5 3600X",
+      "gpu": "NVIDIA GEFORCE GTX 1070 8 GB or AMD RADEON RX VEGA 56 8 GB",
+      "ramGB": 16,
+      "storageGB": 60,
+      "requirementLevel": "recommended",
+      "checkedAt": "2026-10-23T06:47:49.202Z",
+      "storeName": "ELDEN RING"
+    },
+    {
+      "name": "黑神話：悟空",
+      "kind": "game",
+      "version": "Steam app 2358720",
+      "sourceUrl": "https://store.steampowered.com/app/2358720/",
+      "cpu": "Intel Core i7-9700 / AMD Ryzen 5 5500",
+      "gpu": "NVIDIA GeForce RTX 2060 / AMD Radeon RX 5700 XT / INTEL Arc A750",
+      "ramGB": 16,
+      "storageGB": 130,
+      "requirementLevel": "recommended",
+      "checkedAt": "2026-10-23T06:47:49.382Z",
+      "storeName": "Black Myth: Wukong"
+    },
+    {
+      "name": "魔物獵人 荒野",
+      "kind": "game",
+      "version": "Steam app 2246340",
+      "sourceUrl": "https://store.steampowered.com/app/2246340/",
+      "cpu": "Intel Core i5-10400 or Intel Core i3-12100 or AMD Ryzen 5 3600",
+      "gpu": "NVIDIA GeForce RTX 2060 Super(VRAM 8GB) or AMD Radeon RX 6600(VRAM 8GB)",
+      "ramGB": 16,
+      "storageGB": 75,
+      "requirementLevel": "recommended",
+      "checkedAt": "2026-10-23T06:47:49.628Z",
+      "storeName": "Monster Hunter Wilds"
+    }
+  ]
+}

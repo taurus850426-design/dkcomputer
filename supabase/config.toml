@@ -30,3 +30,7 @@ verify_jwt = true
 # Public checkout/webhook; handler verifies admin JWT and gateway signatures.
 [functions.shop-checkout]
 verify_jwt = false
+
+# Public research is rate/budget limited in SQL. Refresh requires a server secret; usage also permits a verified admin JWT.
+[functions.builder-research]
+verify_jwt = false
