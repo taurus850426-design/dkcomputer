@@ -73,6 +73,34 @@
   const token=String(model).toUpperCase().replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   return new RegExp('(^|[^A-Z0-9])'+token+'([^A-Z0-9]|$)').test(normalized);
  }
+ const experienceLabels={smooth:'流暢優先',balanced:'畫面與流暢兼顧',visual:'畫面優先',unsure:'不清楚，幫我推薦'};
+ function compileExperience(raw,games,apps=[]){
+  const names=raw.appNames||[],gameNames=names.filter(name=>{const app=apps.find(a=>a.name===name);return app?app.kind==='game':raw.appKinds?.[name]==='game'||(!raw.appKinds?.[name]&&raw.usages?.includes('game'));});
+  if(gameNames.length&&!raw.usages?.includes('game'))raw={...raw,usages:[...(raw.usages||[]),'game']};
+  const targets={},targetsText=[],notes=[],sourceUrls=[],sourceNotes=[];
+  for(const name of gameNames){const game=games.find(g=>g.name===name);
+   if(!game){notes.push(name+'：尚無效能選配資料，需由 DK 確認');continue;}
+   // Select only a source-labelled target with an explicit matching resolution.
+   // A global preference is not a benchmark or a reason to invent a higher FPS tier.
+   const t=game.targets.find(t=>t.resolution===raw.resolution&&t.selectionRules?.some(r=>r.resolutions.includes(raw.resolution)))||game.targets.find(t=>t.resolution===raw.resolution);
+   if(t){targets[game.id]=t.id;targetsText.push(name+'：'+t.label);if(t.sourceUrl||game.sourceUrl)sourceUrls.push(t.sourceUrl||game.sourceUrl);if(t.note)sourceNotes.push(name+'：'+t.note);}else notes.push(name+'：'+(raw.resolution==='unknown'?'請先確認螢幕解析度':'此解析度尚無已建檔的對應目標')+'，需由 DK 確認');
+  }
+  const n=compileNeeds({...raw,appNames:gameNames,gameTargets:targets},games);
+  n.appNames=names;n.gameTargets=targets;n.targets=targetsText;n.experience=Object.hasOwn(experienceLabels,raw.experience)?raw.experience:'unsure';
+  n.ruleSources=[...new Set([...n.ruleSources,...sourceUrls])];n.ruleNotes=[...new Set([...n.ruleNotes,...sourceNotes])];
+  n.unmapped=[...notes,...n.unmapped.filter(x=>!notes.some(t=>t.startsWith(x.split('：')[0]+'：')))];
+  for(const name of names.filter(x=>!gameNames.includes(x)))n.unmapped.push(name+'：軟體版本與實際工作量需由 DK 確認，尚無已驗證的自動選配對照');
+  if(raw.usages?.includes('game')&&!gameNames.length)n.unmapped.push('尚未加入遊戲，請補充遊戲名稱');
+  if(raw.usages?.some(x=>['create','stream'].includes(x)))n.unmapped.push('創作／直播的工作量與同時執行需求，需由 DK 核對');
+  if(raw.simultaneous==='yes')n.unmapped.push('會同時執行遊戲與其他程式，需核對整體負載');
+  if(raw.workload?.trim())n.unmapped.push('已補充實際工作量／版本／模組，需由 DK 確認後搭配');
+  if(raw.advancedNotes?.trim())n.unmapped.push('另有進階需求，請由 DK 核對後搭配');
+  if(raw.refreshRate&&raw.refreshRate!=='unknown')n.ruleNotes.push('螢幕更新率 '+raw.refreshRate+'Hz 為設備資料，不代表所有遊戲均可達到相同幀數。');
+  if(n.experience==='smooth'||n.experience==='visual')n.ruleNotes.push('整體偏好：'+experienceLabels[n.experience]+'；目前採用已建檔目標作參考，未驗證的更高幀數、極高畫質及光追另確認。');
+  n.requiresReview=n.unmapped.length>0;
+  n.ruleNotes.push('各遊戲分別採用有資料支持的參考條件，不要求所有遊戲達到相同幀數。');
+  return n;
+ }
  function compileNeeds(raw,games){
   const needs={...raw,cpuModels:null,gpuModels:null,ruleSources:[],ruleNotes:[],unmapped:[],ramGB:raw.usages?.includes('create')?32:16,ssdGB:500,ramModules:1,ramSpeedMT:0,minPsuWatts:650,hasGameRule:false};
   if(!raw.usages?.includes('game'))return needs;
@@ -109,7 +137,7 @@
  }
  function plan(products,needs){
   // Explicit model sets are test-based selection references, not a numerical FPS prediction.
-  const game=needs.usages?.some(x=>['game','create','stream'].includes(x));if(needs.usages?.includes('game')&&(!needs.hasGameRule||needs.unmapped?.length))return {ids:{},total:0,missing:slots.map(s=>s.title),warnings:[...(needs.unmapped||[]),'遊戲效能對照尚未完整，沒有自動填入處理器與顯示卡；可調整目標或請 DK 協助'],hasGameRule:false,overBudget:0};let beam=[{selected:{},cost:0,missing:[]}];
+  const game=needs.usages?.some(x=>['game','create','stream'].includes(x));if(needs.requiresReview||needs.usages?.includes('game')&&(!needs.hasGameRule||needs.unmapped?.length))return {ids:{},total:0,missing:slots.map(s=>s.title),warnings:[...(needs.unmapped||[]),'需求效能對照尚未完整，已保留現有配單；請 DK 協助確認後推薦'],hasGameRule:false,overBudget:0};let beam=[{selected:{},cost:0,missing:[]}];
   for(const slot of slots){const next=[];
    for(const state of beam){
     const skip=slot.key==='gpu'&&!game&&state.selected.cpu?.facts.integrated||slot.key==='cooler'&&state.selected.cpu?.facts.stockCooler&&needs.color!=='allwhite';
@@ -140,9 +168,14 @@
   const value=item.custom,mode=value.mode==='owned'?'自備零件（不計入採購小計，安裝／檢測費用另確認）':'希望 DK 代購（待報價，尚未計價）';
   return slot.title+'：'+item.name+'｜'+mode+'｜規格與相容性待確認'+(value.url?'\n商品連結：'+value.url:'')+(value.photo?'\n附照片：'+value.photo.name+'（照片僅存在本裝置，請另傳官方 LINE）':'');
  }
- function summary(needs,selected,catalog){
+ function baseSummary(needs,selected,catalog){
   const q=validate(selected,needs),usages={office:'文書／日常',game:'遊戲',create:'剪輯／設計',stream:'直播',unsure:'請 DK 協助'};
   return ['【DK 配單需求草稿】','用途：'+(needs.usages||[]).map(x=>usages[x]||x).join('、'),'遊戲／軟體：'+(needs.appNames||[]).join('、'),'遊玩目標：'+(needs.targets||[]).join('；'),'主機預算：'+money(needs.budget),'螢幕：'+({unknown:'解析度待確認','1080p':'1080P','1440p':'2K／1440P','4k':'4K'}[needs.resolution]||'待確認')+'；'+({existing:'已有螢幕',buy:'需另購螢幕',unknown:'安排待確認'}[needs.monitor]||'待確認'),'外觀：'+({any:'不限',white:'白色機殼',black:'黑色機殼',allwhite:'全白搭配（可見零件與電源）'}[needs.color]||'不限'),...(needs.ruleSources||[]).map(url=>'效能選配參考：'+url),'價格資料：'+catalog.updatedAt,...slots.map(s=>partSummary(s,selected[s.key])),'已計價零件參考小計：'+money(q.total),...(q.unpricedCount?['尚有 '+q.unpricedCount+' 項待報價，未計入小計；目前不是完整主機總價。']:[]),...(q.ownedCount?['另有 '+q.ownedCount+' 項自備零件，不計入採購小計；安裝／檢測費用待確認。']:[]),'小計不含未選零件、組裝服務、作業系統與周邊；未確認為 DK 正式報價。',...q.errors.map(x=>'需更正：'+x),...q.pending.map(x=>'待確認：'+x)].join('\n');
  }
- return {slots,money,isPart,check,resolve,validate,suggest,summary,colorOf,compileNeeds,requirementReasons,plan,safeProductUrl,cleanOtherDraft,normalizeOthers};
+ function summary(needs,selected,catalog){
+  const lines=baseSummary(needs,selected,catalog).split('\n');
+  if(needs.experienceVersion===1)lines.splice(4,0,'整體偏好：'+(experienceLabels[needs.experience]||experienceLabels.unsure),'螢幕型號：'+(needs.monitorModel||'未提供')+'；更新率：'+(needs.refreshRate&&needs.refreshRate!=='unknown'?needs.refreshRate+'Hz':'待確認'),'同時執行：'+({yes:'會同時開遊戲／其他程式',no:'主要分開使用',unknown:'待確認'}[needs.simultaneous]||'待確認'),'工作量／版本／模組：'+(needs.workload||'未補充'),'進階需求：'+(needs.advancedNotes||'未補充'),...(needs.legacyTargets?['舊版個別遊玩目標（保留供 DK 核對）：'+needs.legacyTargets]:[]),'遊玩目標為來源支持的參考條件，不承諾每款遊戲都達到相同幀數。');
+  return lines.join('\n');
+ }
+ return {slots,money,isPart,check,resolve,validate,suggest,summary,colorOf,compileNeeds,compileExperience,experienceLabels,requirementReasons,plan,safeProductUrl,cleanOtherDraft,normalizeOthers};
 });

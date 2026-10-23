@@ -3,12 +3,17 @@
  const core=window.DKBuilder,$=id=>document.getElementById(id),KEY='dk_builder_draft_v1';
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const usageLabels={office:'文書、上網、看影片',game:'玩遊戲',create:'剪片、修圖、設計',stream:'直播與錄影',unsure:'不確定，想請你推薦'};
- let catalog,games=[],step=0,view='wizard',needs={usages:[],appNames:[],targets:[],gameTargets:{},budget:30000,color:'any',resolution:'unknown',monitor:'existing',ramGB:16},ids={},others={},otherDrafts={},photoEpoch=0,photoRequests={},photoPending=new Set(),limit=24,partLimit=4,partSearch='',changed=false,dirty=false;
+ const apps=window.DKBuilderApps||[],defaults=()=>({usages:[],appNames:[],appKinds:{},targets:[],gameTargets:{},budget:30000,color:'any',resolution:'unknown',monitor:'existing',monitorModel:'',refreshRate:'unknown',experience:'unsure',simultaneous:'unknown',workload:'',advancedNotes:'',ramGB:16,experienceVersion:1});
+ let catalog,games=[],step=0,view='wizard',needs=defaults(),ids={},others={},otherDrafts={},photoEpoch=0,photoRequests={},photoPending=new Set(),limit=24,partLimit=4,partSearch='',changed=false,dirty=false,appKind='game',appQuery='',appCategory='',appLimit=8,planMessage='';
  const selected=()=>core.resolve(ids,catalog?.products||[],others);
  function safeRead(){try{return JSON.parse(localStorage.getItem(KEY)||'null');}catch(_){return null;}}
  function restore(){const d=safeRead();if(d?.version!==1)return;const n=d.needs||{};
   needs.usages=Array.isArray(n.usages)?n.usages.filter(x=>Object.hasOwn(usageLabels,x)):[];
-  needs.appNames=Array.isArray(n.appNames)?n.appNames.filter(x=>typeof x==='string').slice(0,20).map(x=>x.slice(0,100)):[];
+  needs.appNames=Array.isArray(n.appNames)?[...new Set(n.appNames.filter(x=>typeof x==='string').slice(0,20).map(x=>findApp(x)?.name||x.slice(0,100)))]:[];
+  needs.appKinds={};for(const name of needs.appNames)needs.appKinds[name]=apps.find(a=>a.name===name)?.kind||(['game','software'].includes(n.appKinds?.[name])?n.appKinds[name]:needs.usages.includes('game')?'game':'software');
+  for(const key of ['monitorModel','workload','advancedNotes'])needs[key]=typeof n[key]==='string'?n[key].slice(0,key==='monitorModel'?100:1000):'';
+  for(const [key,values]of Object.entries({experience:Object.keys(core.experienceLabels),refreshRate:['unknown','60','75','100','120','144','165','180','240','360'],simultaneous:['unknown','yes','no']}))if(values.includes(n[key]))needs[key]=n[key];
+  needs.legacyTargets=typeof n.legacyTargets==='string'?n.legacyTargets.slice(0,2000):n.experienceVersion!==1?games.filter(g=>needs.appNames.includes(g.name)&&n.gameTargets?.[g.id]).map(g=>g.name+'：'+(g.targets.find(t=>t.id===n.gameTargets[g.id])?.label||'其他目標，待確認')).join('；'):'';
   needs.budget=Number(n.budget)>0?Math.min(1000000,Number(n.budget)):30000;
   for(const [key,allowed]of Object.entries({color:['any','white','black','allwhite'],resolution:['unknown','1080p','1440p','4k'],monitor:['existing','buy','unknown']}))if(allowed.includes(n[key]))needs[key]=n[key];
   needs.gameTargets={};for(const g of games){const target=n.gameTargets?.[g.id];if(g.targets.some(t=>t.id===target)||target==='custom')needs.gameTargets[g.id]=target;}
@@ -18,10 +23,7 @@
   updateTargets();
  }
  function save(){dirty=true;try{localStorage.setItem(KEY,JSON.stringify({version:1,needs,ids,others,otherDrafts,step,updatedAt:catalog.updatedAt}));dirty=false;$('saveStatus').textContent='草稿已保存在這台裝置；價格會依目前資料重新計算。';}catch(_){$('saveStatus').textContent='此瀏覽器無法保存草稿，離開前請複製需求。';}}
- function updateTargets(){needs.targets=[];
-  if(needs.usages.includes('game'))for(const g of games.filter(g=>needs.appNames.includes(g.name))){const t=g.targets.find(t=>t.id===needs.gameTargets[g.id]);needs.targets.push(g.name+'：'+(t?.label||'自訂目標，待確認'));}
-  needs=core.compileNeeds(needs,games);
- }
+ function updateTargets(){needs=core.compileExperience(needs,games,apps);}
  function refreshSummary(){const p=selected(),q=core.validate(p,needs);
   window.DKBuilderPreview?.update(p);
   $('buildItems').innerHTML=core.slots.map((s,i)=>'<div class="summary-line"><span>'+s.title+'</span><button type="button" data-step="'+(4+i)+'">'+esc(p[s.key]?.name||'尚未選擇')+'</button>'+(p[s.key]?esc(p[s.key].isCustom?(p[s.key].custom.mode==='owned'?'自備零件 · 相容性待確認':'待報價 · 相容性待確認'):core.money(p[s.key].price)):'')+'</div>').join('');
@@ -30,20 +32,31 @@
  function choice(name,value,text,checked,type='checkbox'){return '<label class="choice"><input type="'+type+'" name="'+name+'" value="'+esc(value)+'" '+(checked?'checked':'')+'>'+esc(text)+'</label>';}
  function sourceLink(url,text){try{const u=new URL(url);if(u.protocol==='https:')return '<a href="'+esc(u.href)+'" target="_blank" rel="noopener noreferrer">'+esc(text)+'</a>';}catch(_){}return '';}
  function render(focus=true){
-  partSearch='';partLimit=4;$('stepMessage').textContent='';$('previous').disabled=step===0;$('next').hidden=step===12;$('next').textContent=step===2?'整理需求 →':step===3?'開始逐項挑選 →':'下一步 →';$('stepLabel').textContent='步驟 '+(step+1)+' / 13';$('builderProgress').value=step+1;
+  partSearch='';partLimit=4;$('stepMessage').textContent='';$('previous').disabled=step===0;$('next').hidden=step===12||step===3;$('next').textContent=step===2?'查看整台推薦 →':'下一步 →';$('stepLabel').textContent=step<=3?'需求 '+(step+1)+' / 4':step===12?'核對完整需求':'調整零件 '+(step-3)+' / 8';$('builderProgress').max=step<=3?4:13;$('builderProgress').value=step+1;
   let title='',lead='',html='';
   if(step===0){title='你想拿電腦做什麼？';lead='可以複選，我們會一起考慮。';html='<div class="choices">'+Object.entries(usageLabels).map(([v,t])=>choice('usage',v,t,needs.usages.includes(v))).join('')+'</div>';}
-  if(step===1){title='常用什麼遊戲或軟體？';lead='選擇遊戲後，查看官方需求與已建檔的實測參考目標；找不到的名稱直接填寫。';
-   if(needs.usages.includes('game'))html+='<div class="choices">'+games.map(g=>choice('game',g.id,g.name,needs.appNames.includes(g.name))).join('')+'</div><div id="gameRequirements"></div>';
-   html+='<label>其他遊戲／常用軟體<textarea id="appNames" maxlength="1000" rows="3" placeholder="例如：Minecraft、Excel、剪映；不同名稱請換行">'+esc(needs.appNames.filter(n=>!games.some(g=>g.name===n)).join('\n'))+'</textarea></label><p class="muted small">可填寫版本、模組、剪輯解析度等細節。未建檔的需求由 DK 進一步確認。</p>';
+  if(step===1){title='把想玩的、想用的加入清單';lead='可以複選。先加入名稱，下一步再統一選擇螢幕與體驗偏好。';html='<div class="tabs" role="group" aria-label="搜尋類型"><button type="button" data-app-kind="game">遊戲</button><button type="button" data-app-kind="software">軟體</button></div><div class="fields"><label>搜尋名稱或關鍵字<input id="appSearch" type="search" maxlength="100" placeholder="例如：瓦羅蘭、Minecraft、Excel" value="'+esc(appQuery)+'"></label><label>分類<select id="appCategory"></select></label></div><p class="muted small">搜尋目前已收錄的名稱；名稱收錄與效能驗證分開，查不到也能自行加入。</p><div id="appResults" class="app-results"></div><button id="appsMore" type="button" class="secondary">顯示更多名稱</button><p id="appSearchStatus" class="small" role="status"></p><button id="addCustomApp" type="button" class="secondary">加入搜尋框中的名稱</button><h3>已加入的遊戲／軟體</h3><div id="selectedApps" class="selected-apps"></div><p id="appMessage" role="status"></p>';}
+  if(step===2){title='統一選擇你的使用體驗';lead='所有遊戲共用這次偏好，不用逐款設定。預算先以主機本體計算，螢幕、系統與周邊另計。';html='<div class="fields"><label>主機預算（元）<input id="budget" type="number" min="5000" max="1000000" step="1" required value="'+needs.budget+'"></label><label>螢幕安排<select id="monitor"><option value="existing">已有螢幕</option><option value="buy">還沒買，希望一起推薦（另計）</option><option value="unknown">還不確定</option></select></label><label>螢幕解析度<select id="resolution"><option value="unknown">不清楚，請 DK 協助</option><option value="1080p">1080P／Full HD</option><option value="1440p">2K／1440P</option><option value="4k">4K</option></select></label><label>螢幕型號（選填）<input id="monitorModel" maxlength="100" placeholder="不知道解析度時可填型號" value="'+esc(needs.monitorModel)+'"></label><label>螢幕更新率<select id="refreshRate"><option value="unknown">不清楚</option>'+['60','75','100','120','144','165','180','240','360'].map(v=>'<option value="'+v+'">'+v+'Hz</option>').join('')+'</select></label><label>外觀偏好<select id="color"><option value="any">不限</option><option value="black">黑色機殼</option><option value="white">白色機殼，內部不限色</option><option value="allwhite">全白搭配（可見零件與電源）</option></select></label></div>';
+   if(needs.usages.includes('game'))html+='<h3>你比較重視什麼？</h3><div class="choices">'+Object.entries(core.experienceLabels).map(([value,label])=>choice('experience',value,label+'：'+({smooth:'操作反應順暢，願意調低部分畫面效果',balanced:'畫面好看，也兼顧流暢度',visual:'重視場景細節與較高畫質',unsure:'依遊戲、螢幕與預算協助安排'})[value],needs.experience===value,'radio')).join('')+'</div><p class="small muted">這是你的偏好；系統會依各款遊戲可取得的資料整理參考條件，不代表每款遊戲都達到相同畫質或幀數。</p>';
+   html+='<label>會同時開遊戲、直播或其他程式嗎？<select id="simultaneous"><option value="unknown">還不確定</option><option value="no">主要分開使用</option><option value="yes">會，希望一起考慮</option></select></label>';
+   if(needs.appNames.some(name=>needs.appKinds[name]==='software')||needs.usages.some(x=>['office','create','stream'].includes(x)))html+='<label>工作量與使用情況（選填）<textarea id="workload" maxlength="1000" rows="3" placeholder="例如：Excel 大型報表、同時開很多分頁、剪輯 4K 影片；軟體版本或模組也可填寫">'+esc(needs.workload)+'</textarea></label>';
+   html+='<details class="advanced-needs"><summary>進階需求／補充說明（選填）</summary><label>幀數、光追或其他要求<textarea id="advancedNotes" maxlength="1000" rows="3" placeholder="例如：希望主要競技遊戲 240 FPS、想開光追；會交由 DK 核對">'+esc(needs.advancedNotes)+'</textarea></label></details>';
+   if(needs.legacyTargets)html+='<p class="notice">舊版個別目標已保留在完整需求：'+esc(needs.legacyTargets)+'。請確認本次共同偏好，如有必須達成的條件可填在進階需求。</p>';
   }
-  if(step===2){title='你的預算與使用環境';lead='預算先以主機本體計算；螢幕、正版系統及周邊另行確認。';html='<div class="fields"><label>主機預算（元）<input id="budget" type="number" min="5000" max="1000000" step="1" required value="'+needs.budget+'"></label><label>螢幕安排<select id="monitor"><option value="existing">已有螢幕</option><option value="buy">需要一起購買（另計）</option><option value="unknown">還不確定</option></select></label><label>螢幕解析度<select id="resolution"><option value="unknown">不知道，請協助推薦</option><option value="1080p">1080P</option><option value="1440p">2K／1440P</option><option value="4k">4K</option></select></label><label>外觀偏好<select id="color"><option value="any">不限</option><option value="black">黑色機殼</option><option value="white">白色機殼，內部不限色</option><option value="allwhite">全白搭配（主板、記憶體、顯卡、散熱、機殼與電源）</option></select></label></div>';}
-  if(step===3){title='先確認你想要的體驗';lead='需求完整後，再逐項挑選零件。';html='<div class="requirements"><p><strong>用途：</strong>'+esc(needs.usages.map(v=>usageLabels[v]).join('、'))+'</p><p><strong>遊戲／軟體：</strong>'+esc(needs.appNames.join('、')||'待補充')+'</p><p><strong>遊玩目標：</strong>'+esc(needs.targets.join('；')||'待確認')+'</p><p><strong>主機預算：</strong>'+core.money(needs.budget)+'</p><p><strong>記憶體規劃：</strong>先以 '+needs.ramGB+'GB 作為容量篩選目標，依工作量調整。</p></div><div class="notice">有建檔的目標會依測試參考型號、容量與外觀條件搭配，再檢查整體費用。不會為了壓低價格，自動降低目標或改用其他顏色。尚未完成 DK 整機實測與供貨確認。</div><button id="suggestBuild" type="button">依需求產生配置草稿</button>';if(needs.unmapped?.length)html+='<p class="notice">'+needs.unmapped.map(esc).join('<br>')+'</p>';if(needs.ruleSources?.length)html+='<p class="muted small">選配依據：'+needs.ruleSources.map(url=>sourceLink(url,'查看原始測試')).join('、')+'</p>';if(changed)html+='<p class="notice">商品或價格資料已更新；已下架或不再開放的項目已移出草稿，請重新核對。</p>';}
+  if(step===3){const p=selected(),q=core.validate(p,needs);title=Object.keys(p).length?'先看看你的整台配置':'需求已整理，還有幾項需要確認';lead='可直接採用這份需求交給 DK 核對，或只調整你在意的外觀與零件。';html='<div class="requirements"><p><strong>遊戲／軟體：</strong>'+esc(needs.appNames.join('、')||'一般日常使用')+'</p><p><strong>整體偏好：</strong>'+esc(core.experienceLabels[needs.experience])+'；'+esc({unknown:'解析度待確認','1080p':'1080P','1440p':'2K／1440P','4k':'4K'}[needs.resolution])+'</p><p><strong>主機預算：</strong>'+core.money(needs.budget)+'</p></div><div class="notice">'+esc(needs.hasGameRule?'已建檔的遊戲以來源支持的型號範圍挑選處理器與顯示卡，記憶體與儲存則整合容量需求，再依相容性及整體費用搭配。':'目前資料不足以完整對照所有需求，請 DK 確認後提供正式推薦。')+' 不會為符合預算自行降低目標或改變外觀條件。</div>';
+   if(planMessage)html+='<p class="notice">'+esc(planMessage).replace(/\n/g,'<br>')+'</p>';
+   if(needs.unmapped?.length)html+='<div class="notice"><strong>需要 DK 確認</strong><br>'+needs.unmapped.map(esc).join('<br>')+'</div>';
+   if(q.errors.length)html+='<div class="notice error">'+q.errors.map(esc).join('<br>')+'</div>';
+   html+='<div class="build-overview">'+core.slots.map((s,i)=>'<article><div><span class="muted small">'+s.title+'</span><h3>'+esc(p[s.key]?.name||'尚未選擇／待確認')+'</h3><p class="small muted">'+esc(s.plain)+'</p></div><button type="button" class="secondary" data-edit-part="'+(i+4)+'">調整'+s.title+'</button></article>').join('')+'</div><div class="actions overview-actions"><button id="adoptBuild" type="button">'+(needs.unmapped.length||!Object.keys(p).length?'帶著需求請 DK 協助':'採用這份配置，核對需求')+'</button><button id="adjustLook" type="button" class="secondary">調整外觀／使用偏好</button><button id="suggestBuild" type="button" class="secondary">依目前需求重新推薦</button></div><details><summary>推薦參考條件與來源</summary><p class="small">'+esc(needs.targets.join('；')||'未有完整對應目標')+'</p><p class="small muted">'+needs.ruleNotes.map(esc).join('<br>')+'</p>'+needs.ruleSources.map(url=>sourceLink(url,'查看選配參考來源')).join('、')+'</details>';
+   if(changed)html+='<p class="notice">商品或價格資料已更新，請重新核對配單。</p>';
+  }
   if(step>=4&&step<=11){const s=core.slots[step-4];title='選擇'+s.title;lead=s.plain;html='<label>搜尋'+s.title+'<input id="partSearch" type="search" maxlength="100" placeholder="品牌、型號或顏色"></label><p class="muted small">預設顯示能通過已知規格初步篩選的項目；這不是完整相容性認證。</p><label><input id="showPending" type="checkbox"> 同時查看規格待補的品項（僅供參考，不能自動選入）</label><div id="otherPartHost"></div><p id="partCount" role="status"></p><div id="partProducts" class="cards"></div><button id="partsMore" type="button" class="secondary">顯示更多</button><button id="clearPart" type="button" class="text-button">先不選，交給 DK 確認</button>';}
   if(step===12){title='這是你的配單需求';lead='核對後複製內容，再到官方 LINE 貼上傳送，由 DK 確認配備、供貨與正式報價。';const p=selected(),q=core.validate(p,needs);html='<span class="draft-tag">配單草稿 · 尚未完成店家確認</span>'+otherPhotos(p)+(q.errors.length?'<div class="notice error">'+q.errors.map(esc).join('<br>')+'</div>':'')+'<div class="notice">'+q.pending.map(esc).join('<br>')+'</div><label>完整需求<textarea id="summaryText" readonly rows="14">'+esc(core.summary(needs,p,catalog))+'</textarea></label><div class="actions"><button id="copyBuild" type="button">複製配單需求</button><a class="secondary" id="builderLine" href="https://lin.ee/vOtt85O" target="_blank" rel="noopener noreferrer">開啟官方 LINE</a></div><p class="muted small">此頁不會自動傳送訊息；請在 LINE 貼上後自行傳送。</p>';}
+  if(step===3){const q=core.validate(selected(),needs);html='<div class="overview-total"><span>已計價零件參考小計</span><strong>'+esc(q.total?core.money(q.total):'待確認')+'</strong><p class="small muted">組裝、系統與周邊另計；待報價項目未計入，正式價格與供貨由 DK 確認。</p></div>'+html+'<details class="requirements"><summary>查看相容性與待確認事項（'+q.pending.length+'）</summary><p class="small">'+q.pending.map(esc).join('<br>')+'</p></details>';}
+  if(step>=4&&step<=11)html='<button id="backToOverview" type="button" class="text-button">← 返回整台配置</button>'+html;
   $('stepTitle').textContent=title;$('stepLead').textContent=lead;$('stepBody').innerHTML=html;
-  if(step===1)renderGames();
-  if(step===2)for(const k of ['monitor','resolution','color'])$(k).value=needs[k];
+  if(step===1){renderAppCategories();renderApps();}
+  if(step===2)for(const k of ['monitor','resolution','color','refreshRate','simultaneous'])$(k).value=needs[k];
   if(step>=4&&step<=11){renderOtherPart();renderParts();}
   if(step===12){const url=window.DK?.getConfig?.()?.line?.url;try{const u=new URL(url);if(u.protocol==='https:'&&['lin.ee','line.me'].includes(u.hostname))$('builderLine').href=u.href;}catch(_){}}
   refreshSummary();save();if(focus)$('stepTitle').focus({preventScroll:true});
@@ -92,9 +105,23 @@
   }catch(error){if(epoch===photoEpoch&&request===photoRequests[key]&&currentSlot()?.key===key&&$('otherMessage'))$('otherMessage').textContent=error.message||'無法處理照片，原照片已保留。';}
   finally{if(epoch===photoEpoch&&request===photoRequests[key]){photoPending.delete(key);renderOtherPhoto(key);}}
  }
- function renderGames(){const host=$('gameRequirements');if(!host)return;
-  host.innerHTML=games.filter(g=>needs.appNames.includes(g.name)).map(g=>{const t=g.targets.find(t=>t.id===needs.gameTargets[g.id]);return '<div class="requirements"><h3>'+esc(g.name)+'</h3><label>想要的遊玩目標<select data-game-target="'+g.id+'"><option value="custom">我有其他需求／還不確定</option>'+g.targets.map(t=>'<option value="'+t.id+'">'+esc(t.label)+'</option>').join('')+'</select></label>'+(t?'<p>參考 CPU：'+esc(t.cpu)+'<br>參考顯示卡：'+esc(t.gpu)+'<br>參考記憶體容量：'+t.ramGB+'GB</p><p class="muted">'+esc(t.note)+'</p>':'<p class="muted">請在下方補充希望的畫質、流暢度；未驗證前不會承諾效能。</p>')+sourceLink(t?.sourceUrl||g.sourceUrl,t?.sourceLabel||'查看官方需求依據')+'</div>';}).join('');
-  for(const g of games){const s=host.querySelector('[data-game-target="'+g.id+'"]');if(s)s.value=needs.gameTargets[g.id]||'custom';}
+ function appKey(s){return String(s).toLowerCase().replace(/[\s（）():：／/\-]/g,'');}
+ function findApp(name){return apps.find(a=>appKey(a.name)===appKey(name)||a.aliases.split(' ').some(x=>appKey(x)===appKey(name)));}
+ function renderAppCategories(){const categories=[...new Set(apps.filter(a=>a.kind===appKind).map(a=>a.category))];$('appCategory').innerHTML='<option value="">全部分類</option>'+categories.map(c=>'<option>'+esc(c)+'</option>').join('');$('appCategory').value=appCategory;}
+ function renderApps(){if(!$('appResults'))return;
+  for(const b of document.querySelectorAll('[data-app-kind]')){b.classList.toggle('active',b.dataset.appKind===appKind);b.setAttribute('aria-pressed',String(b.dataset.appKind===appKind));}
+  const query=appKey(appQuery),rows=apps.filter(a=>a.kind===appKind&&(!appCategory||a.category===appCategory)&&(!query||appKey(a.name+' '+a.aliases).includes(query)));
+  $('appResults').innerHTML=rows.slice(0,appLimit).map(a=>'<button type="button" class="app-result secondary" data-add-app="'+esc(a.name)+'" '+(needs.appNames.includes(a.name)?'disabled':'')+'><strong>'+esc(a.name)+'</strong><span>'+esc(a.category)+' · '+(needs.appNames.includes(a.name)?'已加入':'＋ 加入清單')+'</span></button>').join('');
+  $('appsMore').hidden=rows.length<=appLimit;$('appSearchStatus').textContent=rows.length?'找到 '+rows.length+' 個已收錄名稱。':'找不到名稱，可用下方按鈕自行加入，配置需求由 DK 確認。';
+  $('addCustomApp').hidden=!appQuery.trim();$('addCustomApp').textContent='以'+(appKind==='game'?'遊戲':'軟體')+'加入「'+appQuery.trim()+'」';
+  $('selectedApps').innerHTML=needs.appNames.length?needs.appNames.map(name=>'<div class="selected-app"><span>'+esc(name)+' <small class="muted">'+(needs.appKinds[name]==='game'?'遊戲':'軟體')+'</small></span><button type="button" class="text-button" data-remove-app="'+esc(name)+'" aria-label="移除'+esc(name)+'">移除</button></div>').join(''):'<p class="muted">還沒有加入項目。</p>';
+ }
+ function addApp(value){const found=findApp(value.trim()),name=(found?.name||value.trim()).slice(0,100),kind=found?.kind||appKind;if(!name)return;
+  if(needs.appNames.some(n=>appKey(n)===appKey(name))){$('appMessage').textContent='這個項目已經在清單中。';return;}
+  if(needs.appNames.length>=20){$('appMessage').textContent='最多加入 20 個項目，請先移除不需要的名稱。';return;}
+  needs.appNames.push(name);needs.appKinds[name]=kind;
+  const usage=kind==='game'?'game':found?.category==='文書／日常'||found?.category==='直播／通訊'&&name!=='OBS Studio'?'office':name==='OBS Studio'?'stream':'create';if(!needs.usages.includes(usage))needs.usages.push(usage);
+  updateTargets();save();refreshSummary();renderApps();$('appMessage').textContent='已加入 '+name+'。';
  }
  function optionContext(key,p){const context={...p};if(key==='cpu'){delete context.board;delete context.cooler;}if(key==='board'){delete context.ram;delete context.case;}return context;}
  function renderParts(){const slot=core.slots[step-4];if(!slot)return;const p=selected(),pending=$('showPending').checked;
@@ -106,19 +133,25 @@
   $('catalogCount').textContent='共 '+rows.length+' 筆；顯示前 '+Math.min(rows.length,limit)+' 筆';$('catalogProducts').innerHTML=rows.slice(0,limit).map(p=>'<article class="product"><h3>'+esc(p.name)+'</h3><strong>'+core.money(p.price)+'</strong><p>'+esc(p.group)+'</p><p>供貨與相容性待確認</p></article>').join('')||'<p>找不到符合的商品。</p>';$('catalogMore').hidden=rows.length<=limit;
  }
  function go(n){step=n;render();$('wizardView').scrollIntoView?.({behavior:'smooth',block:'start'});}
- function capture(){if(step===1){const known=games.filter(g=>$('stepBody').querySelector('input[name="game"][value="'+g.id+'"]:checked')).map(g=>g.name);needs.appNames=[...new Set([...known,...($('appNames')?.value||'').split(/[\n、,，]/).map(x=>x.trim()).filter(Boolean)])].slice(0,20);}
-  if(step===2){needs.budget=Number($('budget').value);for(const k of ['monitor','resolution','color'])needs[k]=$(k).value;}updateTargets();save();refreshSummary();
+ function capture(){
+  if(step===2){needs.budget=Number($('budget').value);for(const k of ['monitor','resolution','color','refreshRate','simultaneous'])needs[k]=$(k).value;for(const k of ['monitorModel','workload','advancedNotes'])if($(k))needs[k]=$(k).value.trim();const chosen=document.querySelector('[name="experience"]:checked');if(chosen)needs.experience=chosen.value;}updateTargets();save();refreshSummary();
  }
- $('builderForm').addEventListener('submit',e=>{e.preventDefault();capture();if(step===0&&!needs.usages.length){$('stepMessage').textContent='請先選擇至少一個用途。';return;}if(step===1&&!needs.appNames.length&&needs.usages.some(x=>['game','create','stream'].includes(x))){$('stepMessage').textContent='請選擇或填寫遊戲／軟體名稱。';return;}go(Math.min(12,step+1));});
+ function recommend(){const plan=core.plan(catalog.products,needs);planMessage=plan.warnings.filter(w=>!needs.ruleNotes.includes(w)).join('\n');if(Object.keys(plan.ids).length)ids=plan.ids;save();return plan;}
+ $('builderForm').addEventListener('submit',e=>{e.preventDefault();if(e.submitter?.id==='appSearch')return;capture();if(step===0&&!needs.usages.length){$('stepMessage').textContent='請先選擇至少一個用途。';return;}if(step===0){appKind=needs.usages.includes('game')?'game':'software';appQuery='';appCategory='';appLimit=8;}if(step===1&&!needs.appNames.length&&needs.usages.some(x=>['game','create','stream'].includes(x))){$('stepMessage').textContent='請加入遊戲／軟體名稱。';return;}if(step===2){if(!Object.keys(ids).length&&!Object.keys(others).length)recommend();else planMessage='已保留目前配單；需求若有變更，可按「依目前需求重新推薦」，或交由 DK 核對。';}go(Math.min(12,step+1));});
  $('previous').onclick=()=>{capture();go(Math.max(0,step-1));};
  $('builderForm').addEventListener('change',e=>{const t=e.target;if(t.name==='usage'){needs.usages=[...document.querySelectorAll('[name="usage"]:checked')].map(x=>x.value);updateTargets();save();}
-  if(t.name==='game'){capture();renderGames();}
-  if(t.dataset.gameTarget){needs.gameTargets[t.dataset.gameTarget]=t.value;updateTargets();renderGames();save();}
-  if(t.id==='otherMode')readOtherDraft();if(t.id==='otherPhotoInput')attachOtherPhoto(t.files?.[0]);if(t.id==='showPending')renderParts();if(['monitor','resolution','color','budget'].includes(t.id))capture();
+  if(t.id==='appCategory'){appCategory=t.value;appLimit=8;renderApps();}
+  if(t.id==='otherMode')readOtherDraft();if(t.id==='otherPhotoInput')attachOtherPhoto(t.files?.[0]);if(t.id==='showPending')renderParts();if(['monitor','resolution','color','budget','refreshRate','simultaneous'].includes(t.id)||t.name==='experience')capture();
  });
- $('builderForm').addEventListener('input',e=>{if(e.target.id==='partSearch'){partSearch=e.target.value.trim();partLimit=4;renderParts();}else if(e.target.id==='appNames')capture();else if(['otherName','otherUrl'].includes(e.target.id))readOtherDraft();});
+ $('builderForm').addEventListener('input',e=>{if(e.target.id==='partSearch'){partSearch=e.target.value.trim();partLimit=4;renderParts();}else if(e.target.id==='appSearch'){appQuery=e.target.value;appLimit=8;renderApps();}else if(['monitorModel','workload','advancedNotes','budget'].includes(e.target.id))capture();else if(['otherName','otherUrl'].includes(e.target.id))readOtherDraft();});
+ $('builderForm').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing&&e.target.id==='appSearch'){e.preventDefault();addApp(e.target.value);}});
  $('builderForm').addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;
-  if(b.id==='suggestBuild'){if(Object.keys(others).length){$('stepMessage').textContent='目前含有自填／自備零件，請先由 DK 確認規格；已保留你的配單，可繼續手動選配。';return;}const plan=core.plan(catalog.products,needs);if(!Object.keys(plan.ids).length){$('stepMessage').textContent=plan.warnings.join('\n');return;}if(Object.keys(ids).length&&!window.confirm('產生新草稿會取代目前已選零件，是否繼續？'))return;ids=plan.ids;save();refreshSummary();$('stepMessage').textContent='已產生需求配置草稿，參考小計 '+core.money(plan.total)+'。\n'+plan.warnings.join('\n')+'\n尚待完整相容性、整機效能與供貨核對。';}
+  if(b.dataset.appKind){appKind=b.dataset.appKind;appCategory='';appQuery='';appLimit=8;$('appSearch').value='';renderAppCategories();renderApps();}
+  if(b.dataset.addApp)addApp(b.dataset.addApp);
+  if(b.dataset.removeApp){needs.appNames=needs.appNames.filter(n=>n!==b.dataset.removeApp);delete needs.appKinds[b.dataset.removeApp];updateTargets();save();refreshSummary();renderApps();$('appMessage').textContent='已移除 '+b.dataset.removeApp+'。';}
+  if(b.id==='addCustomApp')addApp(appQuery);if(b.id==='appsMore'){appLimit+=8;renderApps();}
+  if(b.id==='adoptBuild'){go(12);return;}if(b.id==='backToOverview'){go(3);return;}if(b.id==='adjustLook'){go(2);return;}if(b.dataset.editPart){go(Number(b.dataset.editPart));return;}
+  if(b.id==='suggestBuild'){if(Object.keys(others).length){$('stepMessage').textContent='目前含有自填／自備零件，請先由 DK 確認規格；已保留你的配單，可繼續手動選配。';return;}const plan=core.plan(catalog.products,needs);if(!Object.keys(plan.ids).length){$('stepMessage').textContent=plan.warnings.join('\n');return;}if(Object.keys(ids).length&&!window.confirm('產生新草稿會取代目前已選零件，是否繼續？'))return;recommend();render(false);$('stepMessage').textContent='已產生配置草稿，參考小計 '+core.money(plan.total)+'。\n'+plan.warnings.join('\n')+'\n尚待完整相容性、整機效能與供貨核對。';}
   if(b.id==='partsMore'){partLimit+=8;renderParts();}if(b.id==='clearPart'){const key=core.slots[step-4].key;delete ids[key];delete others[key];save();refreshSummary();renderOtherPart();renderParts();}
   if(b.dataset.part){const slot=core.slots[step-4],item=catalog.products.find(x=>x.id===b.dataset.part),p=selected();if(!item||core.check(item,slot.key,optionContext(slot.key,p)).state!=='basic'||core.requirementReasons(item,slot.key,needs).length)return;const proposed={...p,[slot.key]:item},bad=core.slots.filter(s=>proposed[s.key]&&s.key!==slot.key&&core.check(proposed[s.key],s.key,proposed).state==='incompatible');if(bad.length&&!window.confirm('這次更換會使'+bad.map(s=>s.title).join('、')+'不相容，將移除這些選項並保留其餘零件。是否繼續？'))return;ids[slot.key]=item.id;delete others[slot.key];for(const s of bad)delete ids[s.key];save();refreshSummary();renderOtherPart();renderParts();$('stepMessage').textContent='已選擇，可按下一步繼續。';}
 
@@ -136,7 +169,7 @@
   }
   if(b.id==='copyBuild'){const text=$('summaryText').value;try{await navigator.clipboard.writeText(text);$('stepMessage').textContent='已複製。請開啟官方 LINE，貼上後自行傳送。';}catch(_){$('summaryText').focus();$('summaryText').select();$('stepMessage').textContent='無法自動複製，已選取內容，請手動複製。';}}
  });
- $('restart').onclick=()=>{if(!window.confirm('清除這台裝置保存的配單並重新開始？'))return;photoEpoch++;photoRequests={};photoPending.clear();ids={};others={};otherDrafts={};needs={usages:[],appNames:[],targets:[],gameTargets:{},budget:30000,color:'any',resolution:'unknown',monitor:'existing',ramGB:16};changed=false;go(0);};
+ $('restart').onclick=()=>{if(!window.confirm('清除這台裝置保存的配單並重新開始？'))return;photoEpoch++;photoRequests={};photoPending.clear();ids={};others={};otherDrafts={};needs=defaults();planMessage='';changed=false;go(0);};
  $('buildItems').onclick=e=>{const b=e.target.closest('[data-step]');if(b){view='wizard';switchView();go(Number(b.dataset.step));}};
  $('mobileSummary').onclick=()=>$('toSummary').click();
  $('toSummary').onclick=()=>{capture();view='wizard';switchView();go(12);};
