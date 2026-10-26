@@ -11,7 +11,7 @@
   }
   function plan(order, options){
     const ready=[],issues=[],reviews=[];
-    const remaining=(order?.items || []).filter(it=>it.procurementStatus!=='received');
+    const remaining=(order?.items || []).filter(it=>it.procurementStatus!=='received' && (!options.sourceOrderId || String(it.sourceSalesOrderId || order?.sourceSalesOrderId || '')===String(options.sourceOrderId)));
     if (!order || !['ordered','partial'].includes(order.status)) issues.push('僅已叫貨或部分到貨的單據可統一登記');
     for(const item of remaining){
       const name=String(item.selectedSpec || item.requestText || '未命名品項');
@@ -30,7 +30,7 @@
     }
     if (!remaining.length) issues.push('所有品項均已到貨，無需重複登記');
     if (reviews.length && !options.allowCompleted) issues.push('含已完成的來源訂單；請先核對是否曾以其他方式入庫，並勾選確認');
-    return {ready,issues,reviews,alreadyReceived:(order?.items || []).length-remaining.length};
+    return {ready,issues,reviews,alreadyReceived:(order?.items || []).filter(it=>it.procurementStatus==='received'&&(!options.sourceOrderId||String(it.sourceSalesOrderId||order?.sourceSalesOrderId||'')===String(options.sourceOrderId))).length};
   }
   const running=new Set();
   async function run(order, batch, options){

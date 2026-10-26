@@ -7275,6 +7275,16 @@
       const q = (orderSearchEl?.value || "").trim().toLowerCase();
       const range = orderDateRangeEl?.value || "";
       const statusFilter = orderStatusFilterEl?.value || "";
+      if(window.DKRecordHistory) return window.DKRecordHistory.filter(list,{type:"order",view:document.getElementById("orderHistoryView")?.value||"active",query:q,status:q?"":statusFilter}).filter(o=>{
+        // An explicit search covers historical dates as well as active records.
+        if(q||!range)return true;
+        const now=new Date(),start=new Date(now),end=new Date(now);
+        if(range==="month"){start.setDate(1);end.setMonth(end.getMonth()+1,0);}
+        else if(range==="week"){start.setDate(start.getDate()-(start.getDay()||7)+1);end.setTime(start.getTime());end.setDate(end.getDate()+6);}
+        else return true;
+        const ymd=d=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
+        return getOrderDateStr(o)>=ymd(start)&&getOrderDateStr(o)<=ymd(end);
+      });
       if (q) {
         list = list.filter((o) =>
           [o.order_no, o.customer_name].some((v) => String(v || "").toLowerCase().includes(q))
@@ -7606,8 +7616,8 @@
         } else if (action === "complete") {
           const pendingPurchases = pendingLinkedPurchases(order.id);
           if (pendingPurchases.length) {
-            const go = window.confirm(pendingPurchaseMessage(pendingPurchases) + "\n\n是否前往第一張叫貨單核對？本次不會變更訂單狀態。");
-            if (go && canPerm("purchase")) { switchTab("purchase"); window.__dkPurchaseOrdersOpen?.(pendingPurchases[0].order.id); }
+            const go = window.confirm(pendingPurchaseMessage(pendingPurchases) + "\n\n是否開啟第一張叫貨單的到貨確認？只列出本訂單的未到貨品項，請確認實際收到後再登記。核對完成後請回訂單確認交付並完成。");
+            if (go && canPerm("purchase")) { switchTab("purchase"); window.__dkPurchaseOrdersOpen?.(pendingPurchases[0].order.id, order.id); }
             return;
           }
           if (String(order.delivery_status || "pending") !== "delivered") {
@@ -7637,6 +7647,7 @@
       quickCompleteOrderState(button.getAttribute("data-id"), button.getAttribute("data-order-quick"), button);
     });
     orderSearchEl?.addEventListener("input", () => { ordersPage = 1; renderV2Orders(); });
+    document.getElementById("orderHistoryView")?.addEventListener("change",()=>{if(orderSearchEl)orderSearchEl.value="";if(orderStatusFilterEl)orderStatusFilterEl.value="";if(orderDateRangeEl)orderDateRangeEl.value="";ordersPage=1;renderV2Orders();});
     orderSearchEl?.addEventListener("search", () => { ordersPage = 1; renderV2Orders(); });
     orderDateRangeEl?.addEventListener("change", () => { ordersPage = 1; renderV2Orders(); });
     orderStatusFilterEl?.addEventListener("change", () => { applyOrderStatusSelectClass(); ordersPage = 1; renderV2Orders(); });
