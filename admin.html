@@ -299,7 +299,7 @@
               <div class="toolbar orders-toolbar admin-stack-gap" style="flex-wrap: wrap; gap: 8px">
                 <label class="search">
                   <span class="search-label">搜尋</span>
-                  <input id="orderSearch" type="search" placeholder="訂單編號／客戶名稱" autocomplete="off" />
+                  <input id="orderSearch" type="search" placeholder="搜尋全部紀錄：單號／姓名／電話／LINE" autocomplete="off" />
                 </label>
                 <div class="filters" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
                   <label>日期</label>
@@ -309,6 +309,7 @@
                     <option value="week">本週</option>
                   </select>
                   <label>狀態</label>
+                  <select id="orderHistoryView" aria-label="訂單紀錄"><option value="active">進行中</option><option value="history">歷史紀錄</option><option value="all">全部紀錄</option></select>
                   <select id="orderStatusFilter">
                     <option value="">全部</option>
                     <option value="negotiating">洽談中</option>
@@ -1403,6 +1404,7 @@
                   </div>
                   <div class="field" style="margin:0;min-width:140px">
                     <label for="poListStatusFilter">狀態</label>
+                    <select id="poHistoryView" aria-label="叫貨單紀錄"><option value="active">進行中</option><option value="history">歷史紀錄</option><option value="all">全部紀錄</option></select>
                     <select id="poListStatusFilter">
                       <option value="">全部</option>
                       <option value="draft">編輯中</option>
@@ -3671,14 +3673,15 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="./admin-record-history.js?v=20261026history1"></script>
     <script src="./admin-order-trend.js?v=20261018trend1"></script>
     <script src="./admin-inventory-funding.js?v=20261019funding1"></script>
     <script src="./admin-order-funding.js?v=20261022funding1"></script>
-    <script src="./purchase-receive-batch.js?v=20261019batch1"></script>
+    <script src="./purchase-receive-batch.js?v=20261026history1"></script>
     <script src="./shop-admin.js?v=20261021launch1"></script>
     <script src="./admin-quote-print.js?v=20261020quoteprint1"></script>
     <script src="./admin-unsaved.js?v=20261022draft1"></script>
-    <script src="./admin3.js?v=20261022draft1"></script>
+    <script src="./admin3.js?v=20261026history1"></script>
     <script src="./builder-service-config.js?v=20261023launch1"></script>
     <script src="./admin-builder-usage.js?v=20261023launch1"></script>
     <script src="./admin-item-coolpc.js?v=20261020itemprice1"></script>
@@ -3686,7 +3689,7 @@
     <script src="./used-market-auto-admin.js?v=20260929stage35"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
     <script src="./used-acquisition-admin.js?v=20260927stage32"></script>
-    <script src="./purchase-orders.js?v=20261022adopt2"></script>
+    <script src="./purchase-orders.js?v=20261026history1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260913s20"></script>
   </body>

@@ -788,10 +788,11 @@
     let list = loadOrders().slice().sort(function (a, b) {
       return String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
     });
-    if (st) list = list.filter(function (o) { return o.status === st; });
+    if(window.DKRecordHistory) list=window.DKRecordHistory.filter(list,{type:"purchase",view:q||st?"all":el("poHistoryView")?.value||"active",status:q?"":st});
+    if (st&&!q) list = list.filter(function (o) { return o.status === st; });
     if (q) {
       list = list.filter(function (o) {
-        const parts = [o.orderNo, o.note, o.status];
+        const parts = [o.orderNo, o.note, o.status, o.sourceSalesOrderNo, o.sourceCustomerName];
         (o.items || []).forEach(function (it) {
           parts.push(it.requestText, it.selectedSpec, it.selectedVendor, it.manualVendor, it.itemNote);
         });
@@ -799,8 +800,8 @@
       });
     }
     if (!list.length) {
-      tbody.innerHTML = '<tr><td class="muted" colspan="9">尚無叫貨單</td></tr>';
-      if (cards) cards.innerHTML = '<div class="po-mobile-empty muted">尚無叫貨單</div>';
+      tbody.innerHTML = '<tr><td class="muted" colspan="9">此範圍沒有叫貨單，可切換歷史紀錄或搜尋全部紀錄。</td></tr>';
+      if (cards) cards.innerHTML = '<div class="po-mobile-empty muted">此範圍沒有叫貨單，可切換歷史紀錄或搜尋全部紀錄。</div>';
       return;
     }
     if (cards) cards.innerHTML = list.map(buildMobileOrderCard).join("");
@@ -1840,6 +1841,7 @@
     return window.DKPurchaseBatch.plan(currentOrder, {
       destination: el("poBulkReceiveDestination").value, priceOf: itemPrice,
       orders: window.DK?.getOrders?.() || [], allowCompleted: el("poBulkReceiveReviewed").checked,
+      sourceOrderId: bulkReceiveSnapshot?.sourceOrderId || "",
     });
   }
   function renderBulkReceivePlan() {
@@ -1853,10 +1855,10 @@
     el("poBulkReceiveSummary").textContent = currentOrder.orderNo + "｜本次 " + batch.ready.length + " 項｜已到貨 " + batch.alreadyReceived + " 項不重複處理";
     bulkReceiveMessage(batch.issues.join("；"));
   }
-  function openBulkReceiveModal() {
+  function openBulkReceiveModal(sourceOrderId) {
     if (purchaseOperationBusy || !currentOrder || !window.stage7IsAdminRole?.()) return;
     if (!window.DKPurchaseBatch) return showMsg("統一到貨功能尚未載入，請重新整理");
-    bulkReceiveSnapshot = { id: currentOrder.id, fingerprint: JSON.stringify(currentOrder) };
+    bulkReceiveSnapshot = { id: currentOrder.id, fingerprint: JSON.stringify(currentOrder), sourceOrderId: typeof sourceOrderId === "string" ? sourceOrderId : "" };
     el("poBulkReceiveDate").value = todayYMD();
     el("poBulkReceiveDestination").value = "auto";
     el("poBulkReceiveNote").value = "";
@@ -1899,7 +1901,7 @@
         purchaseGuard?.clean(JSON.stringify(purchaseDraft(currentOrder, false)));
       }
       renderList(); renderPurchaseOrdersSyncPanel();
-      const message = "本次已登記 " + result.completed.length + " 項。" + (result.error ? "其餘已停止：" + result.error + "。已成功項目保留；請同步核對後再繼續。" : "所有待到貨品項已完成登記。");
+      const message = "本次已登記 " + result.completed.length + " 項。" + (result.error ? "其餘已停止：" + result.error + "。已成功項目保留；請同步核對後再繼續。" : "本次確認範圍的品項已完成登記；其他訂單品項維持原狀。");
       bulkReceiveMessage(message);
       el("poBulkReceiveSaveBtn").hidden = true;
       el("poBulkReceiveCloseBtn").textContent = "關閉";
@@ -2177,6 +2179,7 @@
       if (currentOrder) printOrder(currentOrder);
     });
     el("poListSearch") && el("poListSearch").addEventListener("input", renderList);
+    el("poHistoryView")?.addEventListener("change",function(){if(el("poListSearch"))el("poListSearch").value="";if(el("poListStatusFilter"))el("poListStatusFilter").value="";renderList();});
     el("poListStatusFilter") && el("poListStatusFilter").addEventListener("change", renderList);
 
     el("poSearchQuotesBtn") && el("poSearchQuotesBtn").addEventListener("click", function () {
@@ -2580,7 +2583,7 @@
   }
 
   window.__dkPurchaseOrdersOnShow = onShow;
-  window.__dkPurchaseOrdersOpen = function(id) { if (!window.DK?.canPermission?.("purchase")) return; onShow(); openOrder(id, false); };
+  window.__dkPurchaseOrdersOpen = function(id, sourceOrderId) { if (!window.DK?.canPermission?.("purchase")) return; onShow(); openOrder(id, false); if(sourceOrderId && currentOrder?.id===id) openBulkReceiveModal(sourceOrderId); };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
