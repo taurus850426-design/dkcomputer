@@ -49,10 +49,10 @@
   const purchaseGuard = window.DKUnsaved?.register("purchase", {
     label: "叫貨單", root: el("poEditorView"),
     read: () => purchaseDraft(currentOrder, true),
-    pending: () => !!currentOrder && purchaseUnsyncedId === currentOrder.id,
+    pending: () => (!!currentOrder && purchaseUnsyncedId === currentOrder.id) || !!window.DKPurchaseShortage?.pending(),
     busy: () => purchaseOperationBusy || !!purchaseSavePromise,
-    save: () => purchaseSavePromise || persistCurrent(),
-    discard: () => { closeQuoteModal(); currentOrder = null; purchaseGuard?.reset(); setListVisible(true); renderList(); }
+    save: () => { if(window.DKPurchaseShortage?.pending()) { showMsg("請先在缺貨處理視窗確認儲存，或取消本次填寫。",5000); return false; } return purchaseSavePromise || persistCurrent(); },
+    discard: () => { closeQuoteModal(); window.DKPurchaseShortage?.close(true); currentOrder = null; purchaseGuard?.reset(); setListVisible(true); renderList(); }
   });
   let purchaseOperationBusy = false;
   let bulkReceiveSnapshot = null;
@@ -320,9 +320,14 @@
     const nextLinked = [];
     wanted.forEach(function (line, index) {
       const lineKey = String(line.line_key || line.lineKey || line.id || (sourceId + ":" + index));
+      const latestCancellation = (order.shortageHistory || []).slice().reverse().find(entry => entry.before?.sourceSalesOrderLineKey === lineKey && entry.mode === "cancel");
+      if (latestCancellation && !existingByKey.has(lineKey)) {
+        warnings.push("「" + String(line.name || line.spec || "品項") + "」已取消採購，未自動重新加入；仍有需求請重新確認叫貨。");
+        return;
+      }
       const old = existingByKey.get(lineKey) || null;
       const desiredVendor = String(line.preferred_vendor || line.preferredVendor || "").trim();
-      const locked = old && (old.procurementStatus === "ordered" || old.procurementStatus === "received" || String(src.status || "") === "completed");
+      const locked = old && (old.shortageState || old.procurementStatus === "ordered" || old.procurementStatus === "received" || String(src.status || "") === "completed");
       if (locked) {
         const changed = Math.max(1, Number(line.qty) || 1) !== old.quantity
           || String(line.name || line.spec || "") !== old.requestText
@@ -372,7 +377,7 @@
     });
 
     existingByKey.forEach(function (old) {
-      if (old.procurementStatus === "ordered" || old.procurementStatus === "received") {
+      if (old.shortageState || old.procurementStatus === "ordered" || old.procurementStatus === "received") {
         nextLinked.push(old);
         warnings.push("已叫貨品項「" + (old.selectedSpec || old.requestText) + "」已從訂單移除，但叫貨紀錄仍保留，需人工處理取消。");
       } else if (old.sourceSalesOrderLineKey) {
@@ -560,11 +565,11 @@
 
   function canReceiveItem(order, item) {
     return !!order && !!item && (order.status === "ordered" || order.status === "partial")
-      && item.procurementStatus !== "received";
+      && item.procurementStatus !== "received" && !item.shortageState;
   }
 
   function canRemoveItem(order, item) {
-    if (!order || !item || item.procurementStatus === "received") return false;
+    if (!order || !item || item.procurementStatus === "received" || item.shortageState) return false;
     return order.status === "draft" || order.status === "ordered" || order.status === "partial";
   }
 
@@ -574,6 +579,7 @@
     const idx = (currentOrder.items || []).findIndex(function (it) { return String(it.id) === String(itemId); });
     if (idx < 0) return showMsg("找不到要取消的叫貨品項", 3000);
     const item = currentOrder.items[idx];
+    if (item.shortageState) return showMsg("此品項有缺貨處理紀錄，請使用「缺貨／換貨」取消並保留紀錄。", 4000);
     if (!canRemoveItem(currentOrder, item)) {
       return showMsg(item.procurementStatus === "received"
         ? "此品項已登記到貨，不能直接刪除；請先處理入庫紀錄"
@@ -729,7 +735,7 @@
       '<section class="po-list-detail" aria-label="' + esc(order.orderNo) + ' 叫貨單內容">' +
       '<div class="po-list-detail__head">' +
       '<div><div class="po-list-detail__eyebrow">叫貨單內容</div><div class="po-list-detail__title">' + esc(order.orderNo) + "</div></div>" +
-      '<span class="' + statusBadgeClass(order.status) + '">' + esc(STATUS_LABEL[order.status] || order.status) + "</span>" +
+      '<span class="' + statusBadgeClass(order.status) + '">' + esc(purchaseStatusText(order)) + "</span>" +
       "</div>" +
       '<div class="po-list-detail__meta">' +
       '<div><span>建立日期</span><strong>' + esc(fmtDate(order.createdAt)) + "</strong></div>" +
@@ -767,7 +773,7 @@
     return '<article class="po-mobile-card" data-po-row-id="' + esc(order.id) + '">' +
       '<button class="po-mobile-card__summary" type="button" data-po-act="view" data-id="' + esc(order.id) + '" aria-expanded="' + (expanded ? "true" : "false") + '">' +
         '<span><strong>' + esc(note) + '</strong><small>' + esc(order.orderNo) + '｜' + esc(fmtDate(order.createdAt)) + '</small></span>' +
-        '<span class="po-mobile-card__status"><span class="' + statusBadgeClass(order.status) + '">' + esc(STATUS_LABEL[order.status] || order.status) + '</span><small>' + (expanded ? "收合" : "展開") + '</small></span>' +
+        '<span class="po-mobile-card__status"><span class="' + statusBadgeClass(order.status) + '">' + esc(purchaseStatusText(order)) + '</span><small>' + (expanded ? "收合" : "展開") + '</small></span>' +
       '</button>' +
       '<div class="po-mobile-card__metrics"><span>品項 <strong>' + esc(String(tot.itemCount)) + '</strong></span><span>數量 <strong>' + esc(String(tot.totalQty)) + '</strong></span><span>總額 <strong>' + esc(fmtNT(tot.totalAmount)) + '</strong></span></div>' +
       (expanded ? '<div class="po-mobile-card__detail">' + (items || '<p class="muted small">尚無品項</p>') +
@@ -813,7 +819,7 @@
         '<tr class="po-list-row' + (expanded ? " is-expanded" : "") + '" data-po-row-id="' + esc(o.id) + '" tabindex="0" aria-expanded="' + (expanded ? "true" : "false") + '">' +
         "<td class=\"nowrap\">" + esc(o.orderNo) + "</td>" +
         "<td class=\"nowrap\">" + esc(fmtDate(o.createdAt)) + "</td>" +
-        "<td><span class=\"" + statusBadgeClass(o.status) + "\">" + esc(STATUS_LABEL[o.status] || o.status) + "</span></td>" +
+        "<td><span class=\"" + statusBadgeClass(o.status) + "\">" + esc(purchaseStatusText(o)) + "</span></td>" +
         '<td><div class="po-list-note' + (orderNote ? "" : " is-missing") + '" title="' + esc(orderNote || "未填備註") + '">' + esc(orderNote || "未填備註") + "</div></td>" +
         '<td style="text-align:right">' + esc(String(tot.itemCount)) + "</td>" +
         '<td style="text-align:right">' + esc(fmtNT(tot.totalAmount)) + "</td>" +
@@ -948,6 +954,7 @@
     }
     if (nextStatus === "ordered" && currentOrder.status !== "ordered") {
       currentOrder.items = (currentOrder.items || []).map(function (it) {
+        if (it.shortageState) return it;
         return Object.assign({}, it, { procurementStatus: "ordered" });
       });
     }
@@ -1020,6 +1027,7 @@
     const sum = el("poItemsSummary");
     if (!tbody || !currentOrder) return;
     const items = currentOrder.items || [];
+    renderShortageHistory();
     const bulkBtn = el("poReceiveAllBtn");
     if (bulkBtn) {
       bulkBtn.hidden = !window.stage7IsAdminRole?.() || !["ordered", "partial"].includes(currentOrder.status);
@@ -1059,15 +1067,17 @@
             ? '<span class="badge warn">過期參考</span>'
             : '<span class="badge ok">已報價／待確認</span>'));
       const canEdit = isEditable(currentOrder);
-      const canQuote = canUpdateQuote(currentOrder) && it.procurementStatus !== "received";
+      const canShortage = canUpdateQuote(currentOrder) && it.procurementStatus !== "received";
+      const canQuote = canShortage && !it.shortageState;
       const canReceive = canReceiveItem(currentOrder, it);
       const canRemove = canRemoveItem(currentOrder, it);
       const quoteLabel = currentOrder.status === "draft" ? "比價／新增報價" : "補廠商報價";
       const receiptBadge = it.procurementStatus === "received"
         ? '<div style="margin-top:4px"><span class="badge ok">已到貨・' + esc(it.receiptDestination === "inventory" ? "一般庫存" : "客戶專用") + '</span></div>'
-        : (currentOrder.status === "ordered" || currentOrder.status === "partial"
+        : (it.shortageState ? '<div><span class="badge warn">' + esc(it.shortageState === "waiting" ? "缺貨待補" + (it.shortageExpectedDate ? "・" + it.shortageExpectedDate : "") : "替代品待叫貨") + '</span></div>' : currentOrder.status === "ordered" || currentOrder.status === "partial"
           ? '<div style="margin-top:4px"><span class="badge info">等待到貨</span></div>' : "");
       const actions =
+        (canShortage ? '<button type="button" class="btn btn-ghost btn-sm" data-poi-act="shortage" data-id="' + esc(it.id) + '">缺貨／換貨</button> ' : "") +
         (canQuote ? '<button type="button" class="btn btn-primary btn-sm" data-poi-act="quote" data-id="' + esc(it.id) + '">' + quoteLabel + '</button> ' : "") +
         (canReceive ? '<button type="button" class="btn btn-ghost btn-sm secondary-action" data-poi-act="receive" data-id="' + esc(it.id) + '">登記到貨</button> ' : "") +
         (it.procurementStatus === "received" ? '<button type="button" class="btn btn-ghost btn-sm secondary-action" data-poi-act="destination" data-id="' + esc(it.id) + '">修改用途</button> ' : "") +
@@ -1085,12 +1095,41 @@
         "<td>" + tip + receiptBadge + "</td>" +
         "<td>" + esc(it.itemNote || "") + "</td>" +
         '<td style="text-align:right;white-space:nowrap">' +
-        (actions || "—") +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;min-width:180px;max-width:280px">' + (actions || "—") + '</div>' +
         "</td></tr>"
       );
     }).join("");
     lastAddedItemId = null;
     schedulePurchasePreview();
+  }
+
+  function openShortage(itemId) {
+    if (!currentOrder || purchaseOperationBusy) return;
+    if (purchaseGuard?.dirty?.() || purchaseUnsyncedId === currentOrder.id) return showMsg("請先儲存叫貨單並確認同步成功，再處理缺貨。", 5000);
+    const item = currentOrder.items.find(it => String(it.id) === String(itemId));
+    if (!item || !canUpdateQuote(currentOrder) || item.procurementStatus === "received") return;
+    if (!window.DKPurchaseShortage) return showMsg("缺貨處理功能尚未載入，請重新整理。",4000);
+    const orderId = currentOrder.id;
+    window.DKPurchaseShortage.open({order:JSON.parse(JSON.stringify(currentOrder)),item:JSON.parse(JSON.stringify(item)),quotes:loadQuotes(),
+      isBusy:()=>purchaseOperationBusy,setBusy:value=>{purchaseOperationBusy=value;},
+      onSaved:async saved=>{
+        if(currentOrder?.id===orderId){currentOrder=normalizeOrder(saved);fillEditor(currentOrder.status!=="draft");purchaseGuard?.clean();}
+        renderList();renderPurchaseOrdersSyncPanel();showMsg("缺貨處理已儲存；原紀錄保留，可展開「缺貨／更換紀錄」查詢。",5000);
+      }});
+  }
+
+  function purchaseStatusText(order) {
+    const waiting=(order.items||[]).filter(it=>it.shortageState==="waiting").length;
+    const pending=(order.items||[]).filter(it=>it.shortageState==="replacement_pending").length;
+    return (STATUS_LABEL[order.status]||order.status)+(waiting?"・缺貨待補 "+waiting+" 項":"")+(pending?"・替代品待叫貨 "+pending+" 項":"");
+  }
+
+  function renderShortageHistory() {
+    const host=el("poShortageHistoryRows"), panel=el("poShortageHistory");
+    if(!host||!panel)return;
+    const history=currentOrder?.shortageHistory||[];
+    panel.hidden=!history.length;
+    host.innerHTML=history.map((entry,index)=>'<div class="section-card-soft" style="margin-top:8px"><strong>'+esc(window.DKPurchaseShortage?.labels[entry.mode]||entry.mode)+'</strong> '+esc(String(entry.at||"").replace("T"," ").slice(0,19))+'<p>'+esc(itemSpec(entry.before||{}))+' × '+esc(entry.before?.quantity||"")+'｜'+esc(itemVendor(entry.before||{}))+' → '+esc(entry.after ? itemSpec(entry.after)+' × '+entry.after.quantity+'｜'+itemVendor(entry.after) : "已取消採購，客戶需求仍保留")+'</p><p>'+esc(entry.reason||"")+(entry.syncSpec?'（已同步客戶訂單規格）':'')+'</p><button type="button" class="btn btn-ghost btn-sm" data-shortage-notice="'+index+'">複製廠商異動通知</button></div>').join("");
   }
 
   function groupByVendor(order) {
@@ -1111,8 +1150,9 @@
     }).join("｜");
   }
 
-  function buildVendorText(order, vendorName, items) {
-    const customerNames = [String(order.sourceCustomerName || "").trim()];
+  function buildVendorText(order, vendorName, items, mode) {
+    const inquiry = mode === "inquiry";
+    const customerNames = [String(order.sourceCustomerName || "").trim()].concat(order.customerNames || []);
     [order.note].concat((order.items || []).map(function (it) { return it.itemNote; })).forEach(function (note) {
       String(note || "").split(/[｜|\r\n]+/).forEach(function (part) {
         const match = part.trim().match(/^客戶(?:姓名|名稱)?\s*[:：]\s*(.+)$/);
@@ -1120,21 +1160,18 @@
       });
     });
     const lines = [];
-    lines.push("DK Computer 叫貨單");
-    lines.push("單號：" + order.orderNo);
+    lines.push(inquiry ? "DK Computer 詢價（尚未下單）" : "DK Computer 確認叫貨");
+    if (order.orderNo) lines.push("單號：" + order.orderNo);
     lines.push("日期：" + fmtDate(order.createdAt || todayYMD()));
     lines.push("");
     lines.push("廠商：" + vendorName);
+    lines.push(inquiry ? "以下先詢問價格與庫存，請先不要出貨：" : "以下品項確認訂購，請協助安排：");
     lines.push("");
     items.forEach(function (it, i) {
-      lines.push((i + 1) + ". " + (itemSpec(it) || it.requestText || "品項"));
-      lines.push("   數量：" + it.quantity);
+      let row = (i + 1) + ". " + (itemSpec(it) || it.requestText || "品項") + " × " + it.quantity;
       const p = itemPrice(it);
-      if (p != null) {
-        lines.push("   參考單價：" + fmtNT(p));
-      } else {
-        lines.push("   參考單價：請確認");
-      }
+      if (!inquiry) row += p != null ? "｜報價單價：" + fmtNT(p) : "｜單價待廠商確認";
+      lines.push(row);
       const note = vendorCopyNote(it.itemNote, customerNames);
       if (note) lines.push("   品項備註：" + note);
       lines.push("");
@@ -1144,8 +1181,63 @@
       lines.push("整單備註：" + note);
     }
     lines.push("");
-    lines.push("請協助確認庫存、實際單價及到貨時間，謝謝。");
+    lines.push(inquiry ? "請回覆各品項單價、是否有貨及預計到貨時間；確認後會再統一叫貨，謝謝。" : "請回覆接單確認及預計到貨時間；如有缺貨或價格異動，請先告知，勿自行替換，謝謝。");
     return lines.join("\n");
+  }
+
+  // Only pending lines enter a new vendor batch; copying never changes business data.
+  function vendorBatchRows(orders) {
+    const groups = new Map();
+    orders.forEach(function (order) {
+      if (poIsDeleted(order) || ["cancelled", "received"].includes(order.status)) return;
+      (order.items || []).forEach(function (it) {
+        if (it.shortageState === "waiting" || (order.status === "ordered" && it.shortageState !== "replacement_pending")) return;
+        if ((it.procurementStatus || "pending") !== "pending") return;
+        const vendor = itemVendor(it) || "未指定廠商";
+        if (!groups.has(vendor)) groups.set(vendor, []);
+        groups.get(vendor).push({ order: order, item: it });
+      });
+    });
+    return groups;
+  }
+
+  let vendorBatchSnapshot = "";
+  function openVendorBatch() {
+    const orders = loadOrders();
+    vendorBatchSnapshot = JSON.stringify(orders);
+    const host = el("poVendorBatchRows");
+    host.innerHTML = "";
+    vendorBatchRows(orders).forEach(function (rows, vendor) {
+      const section = document.createElement("section");
+      section.className = "po-vendor-block card";
+      section.innerHTML = "<h4>" + esc(vendor) + "</h4>" + rows.map(function (row, i) {
+        return '<label style="display:block;margin:10px 0"><input type="checkbox" data-batch-index="' + i + '"> ' + esc(itemSpec(row.item)) + " × " + esc(row.item.quantity) + "<span class=\"muted small\">（" + esc(row.order.orderNo) + "）</span></label>";
+      }).join("") + '<div class="actions"><button type="button" class="btn btn-ghost" data-batch-mode="inquiry">複製勾選詢價</button><button type="button" class="btn btn-primary" data-batch-mode="order">複製勾選確認叫貨</button></div>';
+      section.addEventListener("click", async function (event) {
+        const button = event.target.closest("[data-batch-mode]");
+        if (!button) return;
+        const message = el("poVendorBatchMsg");
+        if (JSON.stringify(loadOrders()) !== vendorBatchSnapshot) {
+          message.textContent = "叫貨資料已變更，請關閉後重新開啟彙整，再核對品項。";
+          return;
+        }
+        const selected = Array.from(section.querySelectorAll("input:checked")).map(input => rows[Number(input.dataset.batchIndex)]);
+        if (!selected.length) { message.textContent = "請先勾選要傳給這間廠商的品項。"; return; }
+        const inquiry = button.dataset.batchMode === "inquiry";
+        if (!inquiry && (!itemVendor(selected[0].item) || selected.some(row => !itemPrice(row.item)))) {
+          message.textContent = "請先指定廠商並採用報價，再複製確認叫貨；尚未報價可先複製詢價。";
+          return;
+        }
+        const combined = { createdAt: todayYMD(), items: selected.map(row => row.item), customerNames: orders.map(order => order.sourceCustomerName) };
+        const ok = await copyText(buildVendorText(combined, vendor, combined.items, inquiry ? "inquiry" : "order"));
+        message.textContent = ok ? "已複製「" + vendor + "」" + selected.length + " 項" + (inquiry ? "詢價文字；尚未下單。" : "確認叫貨文字；傳給廠商後，請回原叫貨單登記已叫貨。") : "複製失敗，請重試。";
+      });
+      host.appendChild(section);
+    });
+    if (!host.children.length) host.textContent = "目前沒有待叫貨品項；已叫貨、已到貨及已取消不列入。";
+    el("poVendorBatchMsg").textContent = "";
+    el("poVendorBatchModal").hidden = false;
+    el("poVendorBatchCloseBtn").focus();
   }
 
   function buildAllText(order) {
@@ -1156,6 +1248,15 @@
       chunks.push("--------------------");
     });
     return chunks.join("\n");
+  }
+
+  function readyForConfirmedText(items) {
+    if (items.some(it => it.shortageState === "waiting")) { showMsg("含缺貨待補品項，請先確認供貨，或使用按廠商彙整只勾選本次要叫貨的品項。",5000); return false; }
+    if (!items.length || items.some(it => !itemVendor(it) || itemPrice(it) == null)) {
+      showMsg("請先指定廠商並採用報價，再複製確認叫貨；尚未報價請使用「複製詢價」。", 5000);
+      return false;
+    }
+    return true;
   }
 
   async function copyText(text) {
@@ -1209,7 +1310,8 @@
         "<ul>" + rows + "</ul>" +
         '<div class="muted">小計：' + esc(has ? fmtNT(sub) : "—") + "</div>" +
         '<div class="actions" style="margin-top:8px">' +
-        '<button type="button" class="btn btn-primary btn-sm" data-po-vg="copy" data-vendor="' + esc(vendor) + '">複製叫貨文字</button> ' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-po-vg="inquiry" data-vendor="' + esc(vendor) + '">複製詢價（未下單）</button> ' +
+        '<button type="button" class="btn btn-primary btn-sm" data-po-vg="copy" data-vendor="' + esc(vendor) + '">複製確認叫貨</button> ' +
         '<button type="button" class="btn btn-ghost btn-sm" data-po-vg="print" data-vendor="' + esc(vendor) + '">列印此廠商</button>' +
         "</div></div>";
     });
@@ -2163,6 +2265,18 @@
     if (!root || root.dataset.poBound === "1") return;
     root.dataset.poBound = "1";
 
+    el("poVendorBatchBtn")?.addEventListener("click", openVendorBatch);
+    el("poVendorBatchCloseBtn")?.addEventListener("click", function () { el("poVendorBatchModal").hidden = true; el("poVendorBatchBtn").focus(); });
+    el("poVendorBatchModal")?.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") { event.preventDefault(); el("poVendorBatchCloseBtn").click(); }
+      if (event.key === "Tab") {
+        const controls = Array.from(el("poVendorBatchModal").querySelectorAll("button,input:not(:disabled)"));
+        const first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    });
+
     el("poNewBtn") && el("poNewBtn").addEventListener("click", newOrder);
     el("poBackToListBtn") && el("poBackToListBtn").addEventListener("click", function () {
       currentOrder = null;
@@ -2172,6 +2286,7 @@
     el("poSaveBtn") && el("poSaveBtn").addEventListener("click", persistCurrent);
     el("poCopyAllBtn") && el("poCopyAllBtn").addEventListener("click", async function () {
       if (!currentOrder) return;
+      if (!readyForConfirmedText(currentOrder.items || [])) return;
       const ok = await copyText(buildAllText(currentOrder));
       showMsg(ok ? "已複製全部叫貨文字" : "複製失敗，請手動選取", 2500);
     });
@@ -2279,7 +2394,7 @@
         else if (act === "edit") openOrder(id, false);
         else if (act === "copy") {
           const o = loadOrders().find(function (x) { return x.id === id; });
-          if (o) copyText(buildAllText(o)).then(function (ok) { showMsg(ok ? "已複製" : "複製失敗", 2000); });
+          if (o && readyForConfirmedText(o.items || [])) copyText(buildAllText(o)).then(function (ok) { showMsg(ok ? "已複製確認叫貨文字" : "複製失敗", 2000); });
         } else if (act === "print") {
           const o = loadOrders().find(function (x) { return x.id === id; });
           if (o) printOrder(o);
@@ -2348,11 +2463,19 @@
         return;
       }
 
+      const notice = t.closest("[data-shortage-notice]");
+      if (notice && currentOrder) {
+        const entry = currentOrder.shortageHistory?.[Number(notice.dataset.shortageNotice)];
+        if (entry && window.DKPurchaseShortage) copyText(window.DKPurchaseShortage.notification(entry)).then(ok=>showMsg(ok?"已複製廠商異動通知，請傳給原廠商核對。":"複製失敗",3500));
+        return;
+      }
       const poi = t.closest("[data-poi-act]");
       if (poi && currentOrder) {
         const id = poi.getAttribute("data-id");
         const act = poi.getAttribute("data-poi-act");
-        if (act === "quote") {
+        if (act === "shortage") {
+          openShortage(id);
+        } else if (act === "quote") {
           openQuoteModal(id);
         } else if (act === "receive") {
           openReceiveModal(id);
@@ -2379,9 +2502,10 @@
         const vendor = vg.getAttribute("data-vendor");
         const act = vg.getAttribute("data-po-vg");
         const items = groupByVendor(currentOrder).get(vendor) || [];
-        if (act === "copy") {
-          copyText(buildVendorText(currentOrder, vendor, items)).then(function (ok) {
-            showMsg(ok ? "已複製「" + vendor + "」叫貨文字" : "複製失敗", 2500);
+        if (act === "copy" || act === "inquiry") {
+          if (act === "copy" && !readyForConfirmedText(items)) return;
+          copyText(buildVendorText(currentOrder, vendor, items, act === "inquiry" ? "inquiry" : "order")).then(function (ok) {
+            showMsg(ok ? "已複製「" + vendor + "」" + (act === "inquiry" ? "詢價文字（未下單）" : "確認叫貨文字") : "複製失敗", 2500);
           });
         } else if (act === "print") {
           printOrder(currentOrder, vendor);
