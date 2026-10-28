@@ -1397,6 +1397,7 @@
 
               <!-- 列表 -->
               <div id="poListView">
+                <div class="actions" style="margin-top:12px"><button id="poVendorBatchBtn" class="btn btn-primary" type="button">按廠商彙整詢價／叫貨</button></div>
                 <div class="po-toolbar" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
                   <div class="field" style="flex:1;min-width:180px;margin:0">
                     <label for="poListSearch">搜尋</label>
@@ -1536,6 +1537,7 @@
                       <tbody id="poItemsTbody"></tbody>
                     </table>
                   </div>
+                  <details id="poShortageHistory" hidden><summary>缺貨／更換紀錄</summary><div id="poShortageHistoryRows"></div></details>
                 </div>
 
                 <div class="section-card-soft po-vendor-card" style="margin-top:12px">
@@ -3611,6 +3613,43 @@
         </div>
       </div>
     </div>
+    <div id="poShortageModal" class="po-quote-modal" hidden>
+      <div class="po-quote-modal__card" role="dialog" aria-modal="true" aria-labelledby="poShortageTitle">
+        <div class="po-quote-modal__head"><h3 id="poShortageTitle" class="h3">缺貨／換貨處理</h3></div>
+        <div class="po-quote-modal__body">
+          <p class="form-hint">只處理目前這個品項，保留原紀錄。已到貨請另行處理退換貨；更換採購內容不會自動改動客戶售價或折扣。</p>
+          <div class="form-grid">
+            <div class="field full"><label for="poShortageMode">處理方式</label><select id="poShortageMode"></select></div>
+            <div id="poShortageDateField" class="field"><label for="poShortageDate">預計補貨日期（可不填）</label><input id="poShortageDate" type="date"></div>
+          </div>
+          <div id="poShortageReplacement" class="form-grid" hidden>
+            <div class="field full"><label for="poShortageQuote">採用歷史報價，或手動填寫</label><select id="poShortageQuote"></select></div>
+            <div class="field"><label for="poShortageVendor">新廠商</label><input id="poShortageVendor" type="text"></div>
+            <div class="field"><label for="poShortagePrice">新進價（每件）</label><input id="poShortagePrice" type="number" min="0.01" step="0.01"></div>
+            <div class="field full"><label for="poShortageSpec">替代商品規格</label><input id="poShortageSpec" type="text"></div>
+            <div class="field"><label for="poShortageQuantity">數量</label><input id="poShortageQuantity" type="number" min="1" step="1"><p class="form-hint">連動訂單時保留原數量；需要增減請先回訂單核對。</p></div>
+          </div>
+          <p id="poShortageComparison" class="section-card-soft" style="white-space:pre-line"></p>
+          <label id="poShortageSyncField" hidden><input id="poShortageSyncSpec" type="checkbox"> 同步將客戶訂單的配備名稱與規格改為替代品（售價、折扣不變）</label>
+          <div class="field"><label for="poShortageReason">處理原因／備註（必填，僅內部紀錄）</label><textarea id="poShortageReason" rows="2"></textarea></div>
+          <label id="poShortageConfirmField" hidden><input id="poShortageConfirmed" type="checkbox"> <span id="poShortageConfirmLabel"></span></label>
+          <p class="form-hint">更換後會標示「替代品待叫貨」。傳送新叫貨內容並確認廠商接單後，再從此視窗選「替代品已叫貨」，才可登記到貨。取消採購只清除採購成本，不會刪除客戶訂單上的需求。</p>
+          <p id="poShortageMsg" role="status" aria-live="polite"></p>
+        </div>
+        <div class="po-quote-modal__actions"><button id="poShortageSave" class="btn btn-primary" type="button">確認處理並儲存</button><button id="poShortageClose" class="btn btn-ghost" type="button">取消／關閉</button></div>
+      </div>
+    </div>
+    <div id="poVendorBatchModal" class="po-quote-modal" hidden>
+      <div class="po-quote-modal__card" role="dialog" aria-modal="true" aria-labelledby="poVendorBatchTitle">
+        <div class="po-quote-modal__head"><h3 id="poVendorBatchTitle" class="h3">按廠商彙整待叫貨品項</h3></div>
+        <div class="po-quote-modal__body">
+          <p>從全部叫貨單整理待叫貨品項，不受列表搜尋影響。先勾選詢價；採用報價後，再勾選確認要的品項，每間廠商一次複製。</p>
+          <p class="form-hint">已叫貨、已到貨、已取消不列入。複製不會自動下單或改狀態；傳給廠商後請回原叫貨單登記。單號只供本視窗核對，不帶入彙整訊息。</p>
+          <div id="poVendorBatchRows"></div><p id="poVendorBatchMsg" role="status" aria-live="polite"></p>
+        </div>
+        <div class="po-quote-modal__actions"><button id="poVendorBatchCloseBtn" class="btn btn-ghost" type="button">關閉</button></div>
+      </div>
+    </div>
     <div id="poBulkReceiveModal" class="po-quote-modal" hidden>
       <div class="po-quote-modal__card" role="dialog" aria-modal="true" aria-labelledby="poBulkReceiveTitle">
         <div class="po-quote-modal__head"><h3 id="poBulkReceiveTitle" class="h3">確認統一登記到貨</h3></div>
@@ -3677,7 +3716,8 @@
     <script src="./admin-order-trend.js?v=20261018trend1"></script>
     <script src="./admin-inventory-funding.js?v=20261019funding1"></script>
     <script src="./admin-order-funding.js?v=20261022funding1"></script>
-    <script src="./purchase-receive-batch.js?v=20261026history1"></script>
+    <script src="./purchase-receive-batch.js?v=20261028shortage1"></script>
+    <script src="./purchase-shortage.js?v=20261028shortage1"></script>
     <script src="./shop-admin.js?v=20261021launch1"></script>
     <script src="./admin-quote-print.js?v=20261020quoteprint1"></script>
     <script src="./admin-unsaved.js?v=20261022draft1"></script>
@@ -3689,7 +3729,7 @@
     <script src="./used-market-auto-admin.js?v=20260929stage35"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
     <script src="./used-acquisition-admin.js?v=20260927stage32"></script>
-    <script src="./purchase-orders.js?v=20261026history1"></script>
+    <script src="./purchase-orders.js?v=20261028shortage1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260913s20"></script>
   </body>

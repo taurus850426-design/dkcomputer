@@ -15,6 +15,7 @@
     if (!order || !['ordered','partial'].includes(order.status)) issues.push('僅已叫貨或部分到貨的單據可統一登記');
     for(const item of remaining){
       const name=String(item.selectedSpec || item.requestText || '未命名品項');
+      if(item.shortageState) issues.push(name+(item.shortageState==='waiting'?'：缺貨待補，請先確認供貨':'：替代品尚未確認叫貨'));
       const linked=!!(item.sourceSalesOrderId && item.sourceSalesOrderLineKey);
       const destination=options.destination==='auto' ? (linked?'customer':'inventory') : options.destination;
       if (!['customer','inventory'].includes(destination)) issues.push(name+'：請選擇到貨用途');

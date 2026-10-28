@@ -17,7 +17,7 @@ test('Stage 36 with real existing order/cost/receipt SQL functions',async t=>{
   const stage21=read('supabase-stage21-order-save-integrity.sql');const note=stage21.indexOf('CREATE OR REPLACE FUNCTION public.backoffice_set_order_quote_note(');
   await db.exec(stage21.slice(note,stage21.indexOf('$$;',note)+3));
   for(const file of ['supabase-stage22-order-procurement-link.sql','supabase-stage23-procurement-flow.sql','supabase-stage24-order-analysis.sql',
-    'supabase-stage25-order-auto-inventory.sql','supabase-stage25-1-receipt-destination.sql','supabase-stage27-order-operations.sql','supabase-stage36-operation-integrity.sql','supabase-stage36-operation-integrity-enforce.sql'])await db.exec(read(file));
+    'supabase-stage25-order-auto-inventory.sql','supabase-stage25-1-receipt-destination.sql','supabase-stage27-order-operations.sql','supabase-stage36-operation-integrity.sql','supabase-stage36-operation-integrity-enforce.sql','supabase/migrations/20261028050858_purchase_shortage_resolution.sql'])await db.exec(read(file));
   const payload={order_no:'TEST-REAL',customer_name:'測試客戶',status:'confirmed',sales_type:'new',payment_status:'unpaid',received_amount:0,delivery_status:'pending',
     items:[{line_key:'cpu',fulfillment_type:'procurement',name:'CPU BLACK',category:'CPU',qty:1,unit_price:85000,quote_unit_price:0}],quote_note:'原備註'};
   let salesId,po;

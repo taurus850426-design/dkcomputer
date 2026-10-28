@@ -4,6 +4,9 @@ const {plan,run,pendingForOrder}=require('../purchase-receive-batch.js');
 const item=(id,extra={})=>({id,requestText:id,quantity:1,category:'處理器',price:100,procurementStatus:'quoted',...extra});
 const order=(items)=>({id:'po',status:'ordered',cloudUpdatedAt:'v1',items});
 const options=(extra={})=>({destination:'auto',priceOf:i=>i.price,orders:[],...extra});
+test('shortage and unconfirmed replacements cannot enter a bulk receipt',()=>{
+ for(const shortageState of ['waiting','replacement_pending'])assert.ok(plan(order([item('a',{shortageState})]),options()).issues.some(text=>/缺貨|替代品/.test(text)));
+});
 test('plan skips received items and routes linked and stock items explicitly',()=>{
  const po=order([item('done',{procurementStatus:'received'}),item('customer',{sourceSalesOrderId:'o1',sourceSalesOrderLineKey:'k1'}),item('stock')]);
  const batch=plan(po,options({orders:[{id:'o1',status:'pending'}]}));
