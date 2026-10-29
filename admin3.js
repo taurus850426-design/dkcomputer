@@ -5740,7 +5740,7 @@
     };
     const FORMAL_INBOUND_TYPES = { INITIAL_STOCK: true, MANUAL_IN: true, PURCHASE_RECEIPT: true };
     const REF_TYPE_LABEL = { PURCHASE: "進貨", ORDER: "訂單", RMA: "退換", SCRAP: "報廢", MOVE: "移倉", ADJUST: "調整" };
-    const ORDER_STATUS_LABEL = { negotiating: "洽談中", confirmed: "已確認", pending: "待處理", paid: "已付款", shipped: "已出貨", completed: "已完成", refunded: "已退貨" };
+    const ORDER_STATUS_LABEL = { negotiating: "洽談中", lost: "洽談失敗", cancelled: "已取消", confirmed: "已確認", pending: "待處理", paid: "已付款", shipped: "已出貨", completed: "已完成", refunded: "已退貨" };
     const ORDER_PAYMENT_LABEL = { cash: "現金", transfer: "轉帳", card: "刷卡" };
     const EXPENSE_TYPE_LABEL = { COGS: "銷貨成本", OPEX: "營業費用", OTHER: "其他" };
 
@@ -7114,6 +7114,7 @@
     let editingManualOrderLineIndex = -1;
     let orderEditorGeneration = 0;
     const orderDraftFields = ["orderNo", "orderDate", "orderCustomer", "orderCustomerPhone", "orderCustomerLine", "orderSalesType", "orderCustomerSource", "orderTotalSale", "orderShipping", "orderDiscount", "orderCogs", "orderStatus", "orderPaymentStatus", "orderPayment", "orderReceivedAmount", "orderPaymentDate", "orderPaymentReference", "orderDeliveryStatus", "orderDeliveredAt", "orderDeliveryNote", "orderQuoteNote"];
+    orderDraftFields.push("orderDepositAmount");
     function pendingOrderLine() {
       return !document.getElementById("orderManualBox")?.hidden && !!String(document.getElementById("orderManualName")?.value || "").trim();
     }
@@ -7441,6 +7442,7 @@
     }
 
     function orderProcurementStatusMeta(order, purchaseOrders) {
+      if (["lost","cancelled"].includes(order?.status)) return {label:"已結案",className:"status-muted"};
       if (order?.status === "completed" && window.DKPurchaseBatch?.pendingForOrder(order.id, purchaseOrders).length)
         return { label: "已完成・到貨待核對", className: "status-warning" };
       const lines = (Array.isArray(order?.items) ? order.items : []).filter((line) => line && typeof line === "object");
@@ -7482,7 +7484,7 @@
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
       const monthOrders = allOrders.filter((o) => {
-        if (o.status === "refunded") return false;
+        if (["refunded","lost","cancelled"].includes(o.status)) return false;
         const d = String(getOrderDateStr(o) || "");
         if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
         const dt = new Date(d + "T00:00:00");
@@ -7519,14 +7521,15 @@
         const paymentStatus = orderPaymentStatusMeta(o.payment_status);
         const paymentMethod = orderPaymentMethodMeta(o.payment_method);
         const procurementStatus = orderProcurementStatusMeta(o, purchaseOrders);
-        const canQuickComplete = statusKey !== "completed" && statusKey !== "refunded";
+        const closed=["lost","cancelled"].includes(statusKey);
+        const canQuickComplete = !closed && statusKey !== "completed" && statusKey !== "refunded";
         const statusTag = canQuickComplete
           ? `<button type="button" class="${statusClass} order-quick-status-btn" data-order-quick="complete" data-id="${v2Esc(o.id)}" title="點一下改為已完成">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</button>`
           : `<span class="${statusClass}">${v2Esc(ORDER_STATUS_LABEL[o.status] || o.status)}</span>`;
-        const paymentTag = o.payment_status !== "paid"
+        const paymentTag = !closed && o.payment_status !== "paid"
           ? `<button type="button" class="status-badge ${paymentStatus.className} order-quick-status-btn" data-order-quick="payment" data-id="${v2Esc(o.id)}" title="點一下改為已收款">${v2Esc(paymentStatus.label)}</button>`
           : `<span class="status-badge ${paymentStatus.className}">${v2Esc(paymentStatus.label)}</span>`;
-        const deliveryTag = o.delivery_status !== "delivered"
+        const deliveryTag = closed ? '<span class="status-badge status-muted">不需交付</span>' : o.delivery_status !== "delivered"
           ? `<button type="button" class="status-badge status-warning order-quick-status-btn" data-order-quick="delivery" data-id="${v2Esc(o.id)}" title="點一下改為已交付">未交付</button>`
           : `<span class="status-badge status-success">已交付</span>`;
         const profitCls = profitNumberClass(o.gross_profit);
@@ -7544,7 +7547,7 @@
             </div>
           </td>
           <td class="table-number ${profitCls}" data-admin-only>${v2Esc(margin)}</td>
-          <td><div class="order-status-stack">${statusTag}${paymentTag}<span class="status-badge ${paymentMethod.className}">${v2Esc(paymentMethod.label)}</span></div></td>
+          <td><div class="order-status-stack">${statusTag}${paymentTag}<span class="status-badge ${paymentMethod.className}">${v2Esc(paymentMethod.label)}</span>${!closed?'<small>'+v2Esc(window.DKOrderPayment?.text(o)||'')+'</small>':''}</div></td>
           <td><span class="status-badge ${procurementStatus.className}">${v2Esc(procurementStatus.label)}</span></td>
           <td>${deliveryTag}</td>
           <td class="nowrap table-secondary">${v2Esc((o.created_at || "").toString().slice(0, 10))}</td>
@@ -7733,6 +7736,7 @@
       if (cogsEl && canPerm("viewCost")) cogsEl.value = cogsSum;
       updateV2OrderGrossDisplay();
       scheduleLiveQuotePreview();
+      window.DKOrderPayment?.refresh();
     }
 
     function openV2OrderEditor(id) {
@@ -7788,12 +7792,14 @@
       set("orderPayment", o ? o.payment_method ?? "transfer" : "transfer");
       set("orderPaymentStatus", o ? o.payment_status ?? "unpaid" : "unpaid");
       set("orderReceivedAmount", o ? o.received_amount ?? 0 : 0);
+      window.DKOrderPayment?.load(o);
       set("orderPaymentDate", o ? o.payment_date ?? "" : "");
       set("orderPaymentReference", o ? o.payment_reference ?? "" : "");
       set("orderDeliveryStatus", o ? o.delivery_status ?? "pending" : "pending");
       set("orderDeliveredAt", o ? o.delivered_at ?? "" : "");
       set("orderDeliveryNote", o ? o.delivery_note ?? "" : "");
       set("orderStatus", o ? o.status ?? "negotiating" : "negotiating");
+      window.DKOrderPayment?.refresh();
       set("orderQuoteNote", o ? o.quote_note ?? "" : "");
       applyOrderWorkflowSelectClasses();
       renderOrderLineTbody();
@@ -7833,7 +7839,7 @@
       }
     }
     function applyOrderWorkflowSelectClasses() {
-      const statusKeys = ["negotiating", "confirmed", "pending", "paid", "shipped", "completed", "refunded"];
+      const statusKeys = ["negotiating", "lost", "cancelled", "confirmed", "pending", "paid", "shipped", "completed", "refunded"];
       [document.getElementById("orderStatus"), document.getElementById("orderStatusFilter")].forEach((el) => {
         if (!el) return;
         statusKeys.forEach((k) => el.classList.remove("order-status-" + k));
@@ -8088,6 +8094,7 @@
           payment_method: document.getElementById("orderPayment")?.value || "transfer",
           payment_status: document.getElementById("orderPaymentStatus")?.value || "unpaid",
           received_amount: parseFloat(document.getElementById("orderReceivedAmount")?.value) || 0,
+          ...(window.DKOrderPayment?.value()!==undefined?{deposit_amount:window.DKOrderPayment.value()}:{}),
           payment_date: document.getElementById("orderPaymentDate")?.value || null,
           payment_reference: document.getElementById("orderPaymentReference")?.value || "",
           delivery_status: document.getElementById("orderDeliveryStatus")?.value || "pending",
@@ -8115,6 +8122,10 @@
           ? orders.find((x) => String(x.id) === String(editingV2OrderId))
           : null;
         const amountDue = Math.max(0, payload.total_sale + payload.shipping_income - payload.discount);
+        if(["lost","cancelled"].includes(payload.status)&&previousOrder?.status!==payload.status){
+          if(!window.stage7IsAdminRole?.())return v2Show(orderMsg,"僅管理員可結案訂單");
+          if(!confirm((payload.status==="lost"?"確認將此筆標示為洽談失敗？":"確認取消此訂單？")+"\n\n紀錄會保留在歷史；未叫貨草稿會同步取消，已預留庫存會依原流程釋放。若有收款、交付或已叫貨，系統會阻擋。結案後需要重新洽談請另建訂單。"))return false;
+        }
         if (payload.payment_status === "unpaid" && payload.received_amount !== 0) return v2Show(orderMsg, "未收款時，實收金額必須為 0");
         if (payload.payment_status === "partial" && !(payload.received_amount > 0 && payload.received_amount < amountDue)) return v2Show(orderMsg, "部分收款金額必須大於 0 且小於訂單應收總額");
         if (payload.payment_status === "paid" && payload.received_amount < amountDue) return v2Show(orderMsg, "已收款金額不可低於訂單應收總額");
@@ -8209,7 +8220,7 @@
             nextCustomer.name = customerName;
             nextCustomer.phone = payload.customer_phone;
             nextCustomer.line = payload.customer_line;
-            nextCustomer.status = payload.status === "completed" ? "成交" : "洽談中";
+            if(!["lost","cancelled"].includes(payload.status))nextCustomer.status = payload.status === "completed" ? "成交" : "洽談中";
             if (idx >= 0) records[idx] = nextCustomer; else records.unshift(nextCustomer);
             saveCustomerRecords(records);
             saveCustomerRecordToCloud(nextCustomer).catch(() => {});
@@ -8226,7 +8237,7 @@
           return false;
         }
         v2Show(orderMsg, (wasEditing ? "訂單已更新。" : "訂單已新增。") + quoteNoteWarning + customerSourceWarning + operationsWarning + purchaseWarning);
-        if (!wasEditing) tryUpdateLinkedCustomerStatus(payload.status);
+        if (!wasEditing && !["lost","cancelled"].includes(payload.status)) tryUpdateLinkedCustomerStatus(payload.status);
         else clearPendingCustomerOrderLink();
         showSyncToast({ ok: true }, "訂單");
         renderV2Orders();

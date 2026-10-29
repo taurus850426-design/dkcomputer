@@ -1,0 +1,11 @@
+const{test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');const{JSDOM}=require('jsdom');
+const read=n=>fs.readFileSync(path.join(__dirname,'..',n),'utf8');
+test('balance uses discounted total and cumulative receipts without counting deposit twice',()=>{const api=require('../admin-order-payment.js');assert.deepEqual(api.summary({total_sale:50000,shipping_income:500,discount:1500,received_amount:10000,deposit_amount:10000}),{due:49000,received:10000,deposit:10000,balance:39000,overpaid:0});assert.equal(api.summary({total_sale:1000,received_amount:1100}).overpaid,100);});
+test('deposit entry updates new receipts, but classifying old receipts does not double them',()=>{
+ const dom=new JSDOM(read('admin.html'),{runScripts:'outside-only'}),w=dom.window,el=id=>w.document.getElementById(id);
+ try{w.eval(read('admin-order-payment.js'));el('orderTotalSale').value='50000';el('orderReceivedAmount').value='0';w.DKOrderPayment.load(null);el('orderDepositAmount').value='10000';el('orderDepositAmount').dispatchEvent(new w.Event('input',{bubbles:true}));assert.equal(el('orderReceivedAmount').value,'10000');assert.equal(el('orderPaymentStatus').value,'partial');assert.match(el('orderPaymentSummary').textContent,/40,000/);
+  el('orderReceivedAmount').value='10000';w.DKOrderPayment.load({received_amount:10000});assert.equal(el('orderDepositAmount').value,'');el('orderDepositAmount').value='10000';el('orderDepositAmount').dispatchEvent(new w.Event('input',{bubbles:true}));assert.equal(el('orderReceivedAmount').value,'10000');
+  el('orderReceivedAmount').value='50000';el('orderReceivedAmount').dispatchEvent(new w.Event('input',{bubbles:true}));assert.equal(el('orderDepositAmount').value,'10000');assert.match(el('orderPaymentSummary').textContent,/尚欠尾款 NT\$ 0/);
+ }finally{w.close();}
+});
+test('failed and cancelled records remain searchable in history',()=>{const api=require('../admin-record-history.js');const rows=[{status:'lost',customer_name:'客戶A'},{status:'cancelled',customer_phone:'0912345678'},{status:'confirmed'}];assert.equal(api.filter(rows,{type:'order'}).length,1);assert.equal(api.filter(rows,{type:'order',view:'history'}).length,2);assert.equal(api.filter(rows,{type:'order',query:'091234'}).length,1);});
