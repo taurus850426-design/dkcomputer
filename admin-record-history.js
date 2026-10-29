@@ -1,6 +1,6 @@
 (function(root){
  'use strict';
- const historical=(row,type)=>type==='order'?['completed','refunded'].includes(row.status):['received','cancelled'].includes(row.status);
+ const historical=(row,type)=>type==='order'?['completed','refunded','lost','cancelled'].includes(row.status):['received','cancelled'].includes(row.status);
  function filter(rows,{type,view='active',query='',status=''}={}){
   const q=String(query).trim().toLocaleLowerCase();
   return rows.filter(row=>{

@@ -16,7 +16,7 @@
     });
     const index = new Map(months.map(m => [m.month, m]));
     (Array.isArray(orders) ? orders : []).forEach(o => {
-      if (!o || o.status === 'refunded') return;
+      if (!o || ['refunded','lost','cancelled'].includes(o.status)) return;
       const date = String(dateOf(o) || '');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
       const parsed = new Date(date + 'T00:00:00Z');
