@@ -406,6 +406,7 @@
                       <div class="field"><label for="orderManualVendor">預計廠商</label><select id="orderManualVendor"><option value="">尚未決定</option></select></div>
                       <div class="field"><label for="orderManualQty">數量</label><input id="orderManualQty" type="number" min="1" value="1" /></div>
                       <div class="field"><label for="orderManualPrice">客戶單價</label><input id="orderManualPrice" type="number" min="0" step="1" value="0" /></div>
+                      <div class="field" data-admin-only hidden><label for="orderManualCost">單位成本</label><input id="orderManualCost" type="number" min="0" step="0.01" value="0" /><p id="orderManualCostHint" class="form-hint">每件成本；不會改動客戶單價。採購報價確認後以廠商報價為準。</p></div>
                       <div class="field full actions"><button id="orderManualAdd" class="btn btn-primary" type="button">加入訂單</button><button id="orderManualCancel" class="btn btn-ghost" type="button">取消</button></div>
                     </div>
                     <div class="table-wrap" style="margin-top:8px">
@@ -3707,7 +3708,7 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20261022funding1"></script>
+    <script src="./shared.js?v=20261029manualcost1"></script>
     <script src="./inventory-ledger.js?v=20260927stage34"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
@@ -3721,7 +3722,7 @@
     <script src="./shop-admin.js?v=20261021launch1"></script>
     <script src="./admin-quote-print.js?v=20261020quoteprint1"></script>
     <script src="./admin-unsaved.js?v=20261022draft1"></script>
-    <script src="./admin3.js?v=20261026history1"></script>
+    <script src="./admin3.js?v=20261029manualcost1"></script>
     <script src="./builder-service-config.js?v=20261023launch1"></script>
     <script src="./admin-builder-usage.js?v=20261023launch1"></script>
     <script src="./admin-item-coolpc.js?v=20261020itemprice1"></script>
