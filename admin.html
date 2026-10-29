@@ -329,7 +329,7 @@
                     <tr>
                       <th>訂單編號</th>
                       <th>客戶</th>
-                      <th class="table-number">售價</th>
+                      <th class="table-number">折扣前售價</th>
                       <th class="table-number">運費</th>
                       <th class="table-number">折扣</th>
                       <th class="table-number" data-admin-only>成本</th>
@@ -417,7 +417,7 @@
                       </table>
                     </div>
                   </div>
-                  <div class="field"><label for="orderTotalSale">售價合計（原價）</label><input id="orderTotalSale" type="number" min="0" value="0" /></div>
+                  <div class="field"><label for="orderTotalSale">折扣前售價合計</label><input id="orderTotalSale" type="number" min="0" value="0" /><p class="form-hint">實際應收＝折扣前售價＋運費－折扣。</p></div>
                   <div class="field"><label for="orderShipping">運費收入</label><input id="orderShipping" type="number" min="0" value="0" /></div>
                   <div class="field"><label for="orderDiscount">現金優惠折扣</label><input id="orderDiscount" type="number" min="0" value="0" /></div>
                   <div class="field" data-admin-only><label for="orderCogs">整單成本</label><input id="orderCogs" type="number" min="0" value="0" /></div>
