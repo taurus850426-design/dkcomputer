@@ -7129,7 +7129,7 @@
     const orderGuard = window.DKUnsaved?.register("order", {
       label: "訂單", root: orderForm,
       read: () => ({ fields: orderDraftFields.map(id => document.getElementById(id)?.value || ""), lines: orderLineItems,
-        manual: pendingOrderLine() ? ["orderManualName", "orderManualCategory", "orderManualVendor", "orderManualQty", "orderManualPrice", "orderManualType"].map(id => document.getElementById(id)?.value || "") : null }),
+        manual: pendingOrderLine() ? ["orderManualName", "orderManualCategory", "orderManualVendor", "orderManualQty", "orderManualPrice", "orderManualCost", "orderManualType"].map(id => document.getElementById(id)?.value || "") : null }),
       busy: () => document.getElementById("orderSave")?.dataset.saving === "1",
       save: () => saveV2Order(), discard: closeOrderEditor
     });
@@ -7705,6 +7705,8 @@
           set("orderManualName", line.name || line.spec || "");
           set("orderManualQty", line.qty || 1);
           set("orderManualPrice", line.quote_unit_price ?? line.unit_price ?? 0);
+          set("orderManualCost", line.cost_unit ?? 0);
+          configureManualCost(line);
           const vendor = document.getElementById("orderManualVendor");
           if (vendor) {
             const vendors = (window.DKPurchaseBridge && typeof window.DKPurchaseBridge.getVendors === "function") ? window.DKPurchaseBridge.getVendors() : [];
@@ -7895,6 +7897,14 @@
       updateOrderTotalsFromLines();
       v2Hide(orderMsg);
     });
+    function configureManualCost(line) {
+      const input=document.getElementById("orderManualCost");
+      if(!input)return;
+      const authoritative=!!(line?.procurement_cost_locked || line?.procurement_vendor || line?.procurement_quote_id || line?.procurement_received);
+      input.disabled=!window.stage7IsAdminRole?.() || authoritative;
+      const hint=document.getElementById("orderManualCostHint");
+      if(hint)hint.textContent=authoritative?"成本已由廠商報價／到貨帶入；調整請到叫貨單處理。":"每件成本；不會改動客戶單價。採購報價確認後以廠商報價為準。";
+    }
     (function initManualOrderLine() {
       const box = document.getElementById("orderManualBox");
       const vendor = document.getElementById("orderManualVendor");
@@ -7969,6 +7979,8 @@
         if (box) box.hidden = true;
         if (quoteHistory) { quoteHistory.hidden = true; quoteHistory.innerHTML = ""; }
         editingManualOrderLineIndex = -1;
+        const cost=document.getElementById("orderManualCost");
+        if(cost)cost.value="0";
         const add = document.getElementById("orderManualAdd");
         if (add) add.textContent = "加入訂單";
       }
@@ -7981,6 +7993,7 @@
         refreshVendors();
         fillV2CategoryOptions();
         if (box) box.hidden = !box.hidden;
+        configureManualCost(editingManualOrderLineIndex>=0?orderLineItems[editingManualOrderLineIndex]:null);
         scheduleRecentManualQuotes();
       });
       nameInput?.addEventListener("input", scheduleRecentManualQuotes);
@@ -8002,27 +8015,32 @@
         const category = String(document.getElementById("orderManualCategory")?.value || "").trim();
         const qty = Math.max(1, parseInt(document.getElementById("orderManualQty")?.value, 10) || 1);
         const price = Math.max(0, Number(document.getElementById("orderManualPrice")?.value) || 0);
+        const costInput=document.getElementById("orderManualCost");
+        const manualCost=costInput&&!costInput.disabled&&window.stage7IsAdminRole?.()===true?Number(costInput.value):null;
+        if(manualCost!==null&&(!Number.isFinite(manualCost)||manualCost<0))return v2Show(orderMsg,"成本須為大於或等於 0 的數字");
         if (!category) return v2Show(orderMsg, "請選擇品類");
         if (!name) return v2Show(orderMsg, "請填品項／完整規格");
         const previous = editingManualOrderLineIndex >= 0 ? orderLineItems[editingManualOrderLineIndex] : null;
         const nextLine = {
+          ...previous,
           line_key: previous?.line_key || ("line_" + Date.now() + "_" + Math.random().toString(16).slice(2)),
           fulfillment_type: type,
           item_id: null,
           sku: "",
           name,
-          spec: "",
+          spec: previous && name===previous.name ? previous.spec||"" : "",
           category,
           preferred_vendor: type === "procurement" ? String(vendor?.value || "") : "",
           qty,
           unit_price: previous && Object.prototype.hasOwnProperty.call(previous, "quote_unit_price") && price === Number(previous.quote_unit_price)
             ? Number(previous.unit_price) || 0 : price,
           quote_unit_price: price,
-          cost_unit: previous?.cost_unit || 0,
+          cost_unit: manualCost ?? previous?.cost_unit ?? 0,
+          ...(manualCost!==null?{manual_cost_unit:manualCost}:{}),
         };
         if (editingManualOrderLineIndex >= 0) orderLineItems[editingManualOrderLineIndex] = nextLine;
         else orderLineItems.push(nextLine);
-        ["orderManualName", "orderManualCategory", "orderManualPrice"].forEach((id) => { const el = document.getElementById(id); if (el) el.value = id === "orderManualPrice" ? "0" : ""; });
+        ["orderManualName", "orderManualCategory", "orderManualPrice", "orderManualCost"].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ["orderManualPrice","orderManualCost"].includes(id) ? "0" : ""; });
         if (vendor) vendor.value = "";
         renderOrderLineTbody();
         updateOrderTotalsFromLines();
@@ -8089,6 +8107,7 @@
             qty: Number(l.qty) || 0,
             unit_price: Number(l.unit_price != null ? l.unit_price : l.unitPrice) || 0,
             ...(Object.prototype.hasOwnProperty.call(l, "quote_unit_price") ? { quote_unit_price: Number(l.quote_unit_price) || 0 } : {}),
+            ...(window.stage7IsAdminRole?.()===true&&Object.prototype.hasOwnProperty.call(l,"manual_cost_unit")?{manual_cost_unit:l.manual_cost_unit}:{}),
           })),
         };
         if (orderReceivedAmountEl) orderReceivedAmountEl.value = String(payload.received_amount);

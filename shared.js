@@ -1034,7 +1034,7 @@ async function saveOrdersToSupabase(orders) {
 // ===== Stage 7：庫存＋記帳改走 normalized tables + RPC =====
 // v2_data 保留作 archive，不再作為 Stage 7 runtime SoT。禁止 blob POST。
 const STAGE7_REST_LIMIT = 10000;
-const STAGE7_COST_KEYS = ["cost_unit", "costUnit", "unit_cost", "unitCost", "cogs", "cogs_total", "cogsTotal", "inventory_value", "gross_profit", "gross_margin"];
+const STAGE7_COST_KEYS = ["manual_cost_unit", "cost_unit", "costUnit", "unit_cost", "unitCost", "cogs", "cogs_total", "cogsTotal", "inventory_value", "gross_profit", "gross_margin"];
 
 function bumpV2LocalWriteGen() {
   if (typeof window === "undefined") return;
@@ -1455,6 +1455,7 @@ function stage7OrderLinesPayload(lines, headerTotal) {
     spec: String(l.spec || ""),
     category: String(l.category || ""),
     preferred_vendor: String(l.preferred_vendor || l.preferredVendor || ""),
+    ...(stage7IsAdminRole()&&Object.prototype.hasOwnProperty.call(l,"manual_cost_unit")?{manual_cost_unit:l.manual_cost_unit}:{}),
     qty: Number(l.qty) || 0,
     unit_price: Number(l.unit_price != null ? l.unit_price : l.unitPrice) || 0,
     ...(Object.prototype.hasOwnProperty.call(l, "quote_unit_price") ? { quote_unit_price: Number(l.quote_unit_price) || 0 } : {}),
