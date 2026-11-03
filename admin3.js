@@ -10257,7 +10257,7 @@
       }
     }
 
-    function apOpenCreate(preVendor) {
+    function apOpenCreate(preVendor, voidedHeader, originalItems) {
       if (!requirePerm("ap")) return;
       const modal = apEl("apCreateModal");
       const sel = apEl("apCreateVendor");
@@ -10275,8 +10275,22 @@
       if (apEl("apCreateNotes")) apEl("apCreateNotes").value = "";
       apShow(apEl("apCreateMsg"), "");
       apShow(apEl("apCreateErrRaw"), "");
+      apEl("apOpenConflict").hidden = true;
       apFillCreateType(sel && sel.value);
       apRenderCreatePos(sel && sel.value);
+      if (voidedHeader && sel && sel.value === preVendor) {
+        startEl.value = voidedHeader.period_start;
+        endEl.value = voidedHeader.period_end;
+        const originalIds = new Set(originalItems.map(function (item) { return String(item.purchase_order_id); }));
+        let selected = 0;
+        modal.querySelectorAll(".ap-po-cb").forEach(function (box) {
+          box.checked = originalIds.has(box.value);
+          if (box.checked) selected++;
+        });
+        apShow(apEl("apCreateMsg"), selected === originalIds.size && selected > 0
+          ? "已帶入原對帳期間及叫貨單，可調整後建立新對帳。"
+          : "原單有叫貨單目前無法帶入，請確認可選項目後再建立。");
+      }
       if (modal) modal.hidden = false;
     }
 
@@ -10340,6 +10354,8 @@
       const msg = apEl("apCreateMsg");
       const rawEl = apEl("apCreateErrRaw");
       apShow(rawEl, "");
+      const conflictBtn = apEl("apOpenConflict");
+      conflictBtn.hidden = true;
       if (!vendor) { apShow(msg, "請選擇廠商"); return; }
       const setting = apSettingsByVendor[vendor];
       if (!setting || !setting.settlement_type) { apShow(msg, "尚未設定結帳方式"); return; }
@@ -10369,11 +10385,29 @@
         });
         if (!res || !res.ok) {
           const raw = (res && (res.error || (res.data && (res.data.message || res.data.details)))) || "";
-          apShow(msg, apMapCreateError(raw));
+          const periodConflict = /active reconciliation already exists for vendor\/period/i.test(raw)
+            || /vendor_reconciliations_active_period_uidx/i.test(raw);
+          if (periodConflict) {
+            await apRefresh(false);
+            const existing = apRows.find(function (row) {
+              return row.vendor_name === vendor && row.period_start === start && row.period_end === end && row.status !== "VOID";
+            });
+            if (existing) {
+              apShow(msg, "此期間已有對帳單 " + existing.id + "（" + (AP_RECON_STATUS[existing.status] || existing.status) + "）。");
+              conflictBtn.hidden = false;
+              conflictBtn.onclick = function () {
+                apCloseCreate();
+                apOpenDetail(existing.id);
+              };
+              return;
+            }
+          }
+          apShow(msg, periodConflict ? "此廠商在此期間已有未作廢對帳，請至全部紀錄查看。" : apMapCreateError(raw));
           apShow(rawEl, raw ? ("診斷：" + String(raw).slice(0, 240)) : "");
           return;
         }
         apCloseCreate();
+        if (apEl("apHistoryView")) apEl("apHistoryView").value = "active";
         apShow(apEl("apPageMsg"), "已建立對帳");
         await apRefresh(true);
         setTimeout(function () { apShow(apEl("apPageMsg"), ""); }, 2500);
@@ -10468,7 +10502,8 @@
           '<p class="muted small">已自動記入支出：進貨款</p></div>';
       } else if (st === "VOID") {
         lockBanner = '<div class="section-card-soft surface-neutral"><span class="status-badge status-muted">已作廢</span>' +
-          '<p class="muted small">此對帳已作廢，僅供查看。</p></div>';
+          '<p class="muted small">此對帳已作廢。可按「重新對帳」帶入原期間及可用的叫貨單。</p>' +
+          '<button type="button" class="btn btn-primary" data-ap-act="recreate">重新對帳</button></div>';
       }
 
       let actions = "";
@@ -10887,6 +10922,9 @@
         const act = actBtn.getAttribute("data-ap-act");
         if (act === "save") apSaveDetail({});
         else if (act === "confirm") apSaveDetail({ confirm: true });
+        else if (act === "recreate" && apDetailHeader?.status === "VOID") {
+          apOpenCreate(apDetailHeader.vendor_name, apDetailHeader, apDetailItems);
+        }
         else if (act === "void") apVoidDetail();
         else if (act === "pay") apConfirmPayment();
         else if (act === "cancel-pay") apCancelPayment();
