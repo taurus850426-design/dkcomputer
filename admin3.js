@@ -10067,10 +10067,15 @@
       const tbody = apEl("apListTbody");
       const cards = apEl("apListCards");
       const state = apEl("apListState");
-      const list = Array.isArray(rows) ? rows : [];
+      const view = apEl("apHistoryView")?.value || "active";
+      const list = (Array.isArray(rows) ? rows : []).filter(function (row) {
+        const historical = row.status === "PAID" || row.status === "VOID";
+        return view === "all" || historical === (view === "history");
+      });
+      const emptyText = view === "history" ? "尚無已付款或已作廢紀錄" : view === "all" ? "尚無廠商對帳紀錄" : "目前沒有待處理對帳；已付款與已作廢紀錄可至歷史紀錄查看。";
       if (state) {
         if (apLoading) apShow(state, "載入中…");
-        else if (!list.length) apShow(state, "尚無廠商對帳紀錄");
+        else if (!list.length) apShow(state, emptyText);
         else apShow(state, "");
       }
       function rowHtml(r) {
@@ -10101,7 +10106,7 @@
         };
       }
       if (tbody) {
-        if (!list.length) tbody.innerHTML = '<tr><td class="muted" colspan="9">尚無廠商對帳紀錄</td></tr>';
+        if (!list.length) tbody.innerHTML = '<tr><td class="muted" colspan="9">' + v2Esc(emptyText) + '</td></tr>';
         else tbody.innerHTML = list.map(function (r) { return "<tr>" + rowHtml(r).cells + "</tr>"; }).join("");
       }
       if (cards) cards.innerHTML = list.map(function (r) { return rowHtml(r).card; }).join("");
@@ -10858,6 +10863,7 @@
       if (showList) apSetListVisible(true);
     }
 
+    apEl("apHistoryView")?.addEventListener("change", function () { apRenderList(apRows); });
     apEl("apCreateBtn") && apEl("apCreateBtn").addEventListener("click", function () { apOpenCreate(""); });
     apEl("apCreateCloseBtn") && apEl("apCreateCloseBtn").addEventListener("click", apCloseCreate);
     apEl("apCreateCancel") && apEl("apCreateCancel").addEventListener("click", apCloseCreate);
