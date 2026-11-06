@@ -1563,6 +1563,13 @@ async function stage7DeleteItem(id) {
 }
 
 async function stage7CreateOrder(payload) {
+  if (payload.shop_source) {
+    return stage7MapOrderWriteError(await stage7Rpc("backoffice_convert_shop_order", {
+      p_shop_id: payload.shop_source.id, p_version: payload.shop_source.version,
+      p_payload: { ...payload, sales_type: payload.salesType || payload.sales_type || "",
+        items: stage7OrderLinesPayload(payload.items || [], payload.total_sale) },
+    }));
+  }
   return stage7MapOrderWriteError(await stage7Rpc("backoffice_create_order_checked", {
     p_payload: { ...payload, sales_type: payload.salesType || payload.sales_type || "",
       items: stage7OrderLinesPayload(payload.items || payload.lines || [], payload.total_sale) },
