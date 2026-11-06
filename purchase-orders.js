@@ -2085,6 +2085,9 @@
     const selectedInventoryItemId = String((el("poReceiveInventoryItem") && el("poReceiveInventoryItem").value) || "__auto__").trim();
     const inventoryItemId = selectedInventoryItemId === "__auto__" ? "" : selectedInventoryItemId;
     const note = String((el("poReceiveNote") && el("poReceiveNote").value) || "").trim();
+    const serialNumbers = String((el("poReceiveSerials") && el("poReceiveSerials").value) || "").split(/[\\n,，;；]+/).map(function(v){return v.trim();}).filter(Boolean);
+    if (new Set(serialNumbers.map(function(v){return v.toUpperCase();})).size !== serialNumbers.length) return receiveModalMessage("S/N 有重複，請核對後再到貨", true);
+    if (serialNumbers.length > Math.max(1, Number(original.quantity) || 1)) return receiveModalMessage("S/N 數量不可超過本次到貨數量", true);
     if (!receivedAt) return receiveModalMessage("請選擇到貨日期", true);
     if (!String(original.category || "").trim()) return receiveModalMessage("此叫貨品項尚未設定品類，請先補上品類", true);
     if (destination === "customer" && (!original.sourceSalesOrderId || !original.sourceSalesOrderLineKey)) {
@@ -2110,7 +2113,8 @@
         unit_cost: itemPrice(original),
         vendor: itemVendor(original),
         received_at: receivedAt,
-        note: note,
+        note: serialNumbers.length ? (note + (note ? "｜" : "") + "S/N: " + serialNumbers.join(", ")) : note,
+        serial_numbers: serialNumbers,
       });
       if (!stockResult || !stockResult.ok) {
         return notify("入庫失敗：" + String((stockResult && stockResult.error) || "未知錯誤"), true);
