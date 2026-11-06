@@ -1,0 +1,13 @@
+const fs=require("fs"),vm=require("vm"),assert=require("assert");
+const html=fs.readFileSync("admin.html","utf8"), admin=fs.readFileSync("admin3.js","utf8"), builder=fs.readFileSync("builder-simple.js","utf8"), po=fs.readFileSync("purchase-orders.js","utf8");
+assert(html.includes("builderSubmissionsPanel"),"admin builder queue missing");
+assert(html.includes("poReceiveSerials"),"receipt serial input missing");
+assert(builder.includes("builder_submissions"),"public submission endpoint missing");
+assert(builder.includes("DK-BUILD-"),"build number missing");
+assert(admin.includes("matchBuilderLineToInventory"),"inventory match missing");
+assert(admin.includes('fulfillment_type:"procurement"'),"procurement fallback missing");
+assert(admin.includes("dk_pending_builder_submission_v1"),"conversion link missing");
+assert(admin.includes('stage7SetBuilderSubmissionStatus(builderLink.id,"converted",savedId)'),"conversion completion missing");
+assert(po.includes("S/N 有重複"),"serial duplicate guard missing");
+assert(po.includes("stage7RegisterReceiptSerials"),"serial persistence missing");
+console.log("builder submission flow regression: ok");
