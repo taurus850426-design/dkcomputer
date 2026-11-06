@@ -19,6 +19,7 @@
 
 - public 62 表均啟用 RLS；3 個 view 均為 security_invoker。
 - 168 個 public SECURITY DEFINER 函式均設定 search_path；anon 對這些函式的 execute 權限為 0。
+- 額外在隔離正式結構對 106 個 authenticated SECURITY DEFINER 入口執行無 profile 身分的拒絕探測：104 個拒絕，兩個公開授權 helper 僅回傳 false；每次以 savepoint 回滾。
 - 106 個 authenticated SECURITY DEFINER 掃描警告：這些是後台 RPC／授權 helper 的預期入口，具有 profile／角色授權或受保護的內部呼叫，不能一律撤權。兩個訂單 wrapper 委派到 dk_save_order_v2，由 dk_require_backoffice 查正式 profile 授權。
 - 9 個 RLS 無 policy 提示是禁止直連的內部／舊表；不因消除提示而開放資料。
 - 唯一仍需設定的 Auth 警告：Leaked Password Protection 未開啟。現有 MCP 無更新此設定的工具，Dashboard 目前停在登入頁，未代改密碼或提升任何存取權。
