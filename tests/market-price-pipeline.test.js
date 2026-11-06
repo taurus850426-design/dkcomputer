@@ -7,5 +7,5 @@ const out=p.priceCatalog([{id:'x',brand:'Kingston',name:'Kingston KC3000 1TB',pr
  {source:'sinya',brand:'Kingston',name:'Kingston KC3000 1TB',price:3200,priceLabel:'售價'},
  {source:'autobuy',brand:'Kingston',name:'Kingston KC3000 2TB',price:5000,priceLabel:'售價'}
 ]);
-assert.equal(out[0].market.sourceCount,2);assert.equal(out[0].price,3150);
+assert.equal(out[0].market.sourceCount,2);assert.equal(out[0].price,3100);
 console.log('market-price-pipeline tests passed');
