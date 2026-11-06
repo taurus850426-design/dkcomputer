@@ -8,7 +8,7 @@ const money=n=>'NT$ '+Number(n||0).toLocaleString('zh-TW');
 function restore(){try{const d=JSON.parse(localStorage.getItem(KEY)||'{}');if(d&&typeof d==='object')selectedIds=d;}catch(_){}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(selectedIds));}catch(_){}}
 function selected(){return core.resolve(selectedIds,catalog?.products||[]);}
-function baseFor(slot){return (catalog?.products||[]).filter(p=>core.isPart(p,slot.key));}
+function baseFor(slot){return (catalog?.products||[]).filter(p=>core.isPart(p,slot.key)&&window.DKCatalogPricePolicy.accepts(p));}
 function optionsFor(slot){
  const f=filters[slot.key]||{},q=query.toLowerCase();
  return baseFor(slot).filter(p=>(!f.category||facets.category(p,slot.key)===f.category)&&(!f.brand||facets.brand(p)===f.brand)&&(!q||String(p.name||'').toLowerCase().includes(q))).sort((a,b)=>(a.price||0)-(b.price||0));
@@ -76,7 +76,8 @@ async function submitBuild(){
 }
 $('saveBuild').onclick=submitBuild;
 async function load(){try{
- $('builderFailure').hidden=true;const r=await fetch('./data/builder-catalog.json',{cache:'no-cache',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('catalog');let c=await r.json();if(c.schemaVersion!==1||!Array.isArray(c.products)||!c.products.length||!Number.isFinite(Date.parse(c.updatedAt)))throw Error('invalid');try{const pr=await fetch('./data/dk-market-prices.json',{cache:'no-cache',signal:AbortSignal.timeout(5000)});if(pr.ok&&window.DKMarketOverlay)c=window.DKMarketOverlay.apply(c,await pr.json());}catch(_){}catalog=c;restore();
+ $('builderFailure').hidden=true;const r=await fetch('./data/builder-catalog.json',{cache:'no-cache',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('catalog');let c=await r.json();if(c.schemaVersion!==1||!Array.isArray(c.products)||!c.products.length||!Number.isFinite(Date.parse(c.updatedAt)))throw Error('invalid');try{const pr=await fetch('./data/dk-market-prices.json',{cache:'no-cache',signal:AbortSignal.timeout(5000)});if(pr.ok&&window.DKMarketOverlay)c=window.DKMarketOverlay.apply(c,await pr.json());}catch(_){}c={...c,products:c.products.filter(window.DKCatalogPricePolicy.accepts)};catalog=c;restore();
+ const removedCount=Object.values(selectedIds).filter(id=>!c.products.some(p=>p.id===id)).length;if(removedCount)$('actionStatus').textContent='原配單有 '+removedCount+' 項已下架或不符合一般單品價，請重新挑選；其餘選擇保留。';
  const valid=new Set(c.products.map(p=>p.id));selectedIds=Object.fromEntries(Object.entries(selectedIds).filter(([,id])=>valid.has(id)));save();
  const stale=Date.now()-Date.parse(c.updatedAt)>24*3600000;$('catalogStatus').textContent='目前商品 '+c.products.length.toLocaleString('zh-TW')+' 筆 · 更新 '+new Date(c.updatedAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})+(stale?' · 價格資料已超過 24 小時，正式報價需重新確認':'')+'。';
  $('simpleLayout').hidden=false;render();
