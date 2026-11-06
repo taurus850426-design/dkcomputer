@@ -7113,6 +7113,19 @@
     let orderLineItems = [];
     let editingManualOrderLineIndex = -1;
     let orderEditorGeneration = 0;
+    window.addEventListener('dk:order-scan-saved', (event) => {
+      const d = event.detail;
+      if (String(editingV2OrderId || '') !== String(d?.id || '')) return;
+      if (editingV2OrderVersion !== d.previous_version) return;
+      editingV2OrderVersion = d.updated_at;
+      refreshOrdersAfterQuickUpdate().catch(() => {});
+      if (d.delivery_status === 'delivered') {
+        const input = document.getElementById('orderDeliveryStatus');
+        if (input) input.value = 'delivered';
+        const date = document.getElementById('orderDeliveredAt');
+        if (date) date.value = new Intl.DateTimeFormat('sv-SE', {timeZone:'Asia/Taipei'}).format(new Date());
+      }
+    });
     const orderDraftFields = ["orderNo", "orderDate", "orderCustomer", "orderCustomerPhone", "orderCustomerLine", "orderSalesType", "orderCustomerSource", "orderTotalSale", "orderShipping", "orderDiscount", "orderCogs", "orderStatus", "orderPaymentStatus", "orderPayment", "orderReceivedAmount", "orderPaymentDate", "orderPaymentReference", "orderDeliveryStatus", "orderDeliveredAt", "orderDeliveryNote", "orderQuoteNote"];
     orderDraftFields.push("orderDepositAmount");
     function pendingOrderLine() {
@@ -7123,6 +7136,7 @@
       if (orderForm) orderForm.hidden = true;
       document.body.classList.remove("order-workspace-open");
       editingV2OrderId = null;
+      window.DKOrderScan?.load(null);
       orderGuard?.reset();
       clearPendingCustomerOrderLink();
       v2Hide(orderMsg);
@@ -7134,6 +7148,11 @@
       busy: () => document.getElementById("orderSave")?.dataset.saving === "1",
       save: () => saveV2Order(), discard: closeOrderEditor
     });
+    window.DKOrderScanCanWrite = (version) => {
+      if (orderGuard?.dirty()) return '訂單有未儲存修改，請先儲存，再重新載入掃碼核對。';
+      if (editingV2OrderVersion !== version) return '訂單版本已不同，請關閉後重新開啟訂單再核對。';
+      return '';
+    };
     const orderReceivedAmountEl = document.getElementById("orderReceivedAmount");
     orderReceivedAmountEl?.addEventListener("blur", function () {
       const amount = Number(orderReceivedAmountEl.value);
@@ -7840,6 +7859,7 @@
       set("orderPaymentStatus", o ? o.payment_status ?? "unpaid" : "unpaid");
       set("orderReceivedAmount", o ? o.received_amount ?? 0 : 0);
       window.DKOrderPayment?.load(o);
+      window.DKOrderScan?.load(o);
       set("orderPaymentDate", o ? o.payment_date ?? "" : "");
       set("orderPaymentReference", o ? o.payment_reference ?? "" : "");
       set("orderDeliveryStatus", o ? o.delivery_status ?? "pending" : "pending");
