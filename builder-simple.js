@@ -38,6 +38,33 @@ $('partSearch').addEventListener('input',e=>{query=e.target.value.trim();renderS
 $('clearBuild').onclick=()=>{if(!Object.keys(selectedIds).length||confirm('確定清空目前配單？')){selectedIds={};save();render();}};
 $('copyBuild').onclick=async()=>{try{await navigator.clipboard.writeText(buildText());$('actionStatus').textContent='配單已複製。';}catch(_){$('actionStatus').textContent='瀏覽器無法自動複製，請使用列印功能。';}};
 $('printBuild').onclick=()=>window.print();
+function buildPayload(){
+ const p=selected(),items=[];let total=0;
+ for(const slot of core.slots){const item=p[slot.key];if(!item)continue;const price=Number(item.price||0);total+=price;items.push({line_key:slot.key,category:slot.title,product_id:item.id,name:item.name,unit_price:price,qty:1});}
+ return {schema_version:1,source:'dk-simple-builder',items,total,website:'',catalog_updated_at:catalog?.updatedAt||null,user_agent:String(navigator.userAgent||'').slice(0,300)};
+}
+function makeBuildNo(){
+ const d=new Date(),stamp=d.toLocaleDateString('en-CA',{timeZone:'Asia/Taipei'}).replaceAll('-','');
+ const rand=crypto.getRandomValues(new Uint32Array(1))[0].toString(36).toUpperCase().padStart(6,'0').slice(-6);
+ return 'DK-BUILD-'+stamp+'-'+rand;
+}
+async function submitBuild(){
+ const btn=$('saveBuild'),payload=buildPayload();
+ if(!payload.items.length){$('actionStatus').textContent='請至少選擇一個零件後再儲存配單。';return;}
+ if(!window.DK?.isSupabaseConfigured?.()){$('actionStatus').textContent='目前無法儲存配單，請先複製配單與 DK 聯絡。';return;}
+ const buildNo=makeBuildNo();btn.disabled=true;$('actionStatus').textContent='正在儲存配單…';
+ try{
+  const url=window.DK.getSupabaseProjectUrl()+'/rest/v1/builder_submissions';
+  const key=window.DK.getSupabaseAnonKey();
+  const res=await fetch(url,{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({build_no:buildNo,payload,status:'new'})});
+  if(!res.ok)throw new Error('HTTP '+res.status);
+  try{localStorage.setItem('dk_last_builder_submission_v1',JSON.stringify({buildNo,savedAt:new Date().toISOString()}));}catch(_){}
+  $('actionStatus').textContent='配單已儲存｜編號 '+buildNo+'。到店或聯絡 DK 時提供這個編號即可。';
+  try{await navigator.clipboard.writeText(buildNo);}catch(_){}
+ }catch(_){$('actionStatus').textContent='配單目前無法送出；你的選擇仍保留在本機，可先使用「複製配單」。';}
+ finally{btn.disabled=false;}
+}
+$('saveBuild').onclick=submitBuild;
 async function load(){try{
  $('builderFailure').hidden=true;const r=await fetch('./data/builder-catalog.json',{cache:'no-cache',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('catalog');let c=await r.json();if(c.schemaVersion!==1||!Array.isArray(c.products)||!c.products.length)throw Error('invalid');try{const pr=await fetch('./data/dk-market-prices.json',{cache:'no-cache',signal:AbortSignal.timeout(5000)});if(pr.ok&&window.DKMarketOverlay)c=window.DKMarketOverlay.apply(c,await pr.json());}catch(_){}catalog=c;restore();
  const valid=new Set(c.products.map(p=>p.id));selectedIds=Object.fromEntries(Object.entries(selectedIds).filter(([,id])=>valid.has(id)));save();
