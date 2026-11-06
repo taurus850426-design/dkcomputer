@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
 <title>電腦自由配單｜DK電競電腦</title>
 <meta name="description" content="自由挑選 CPU、主機板、記憶體、SSD、顯示卡、散熱器、機殼與電源，即時計算配置並產生可列印配單。">
-<link rel="icon" href="./favicon.svg"><link rel="stylesheet" href="./builder.css?v=20261106simple1"><link rel="stylesheet" href="./builder-simple.css?v=20261106simple1">
+<link rel="icon" href="./favicon.svg"><link rel="stylesheet" href="./builder.css?v=20261106simple1"><link rel="stylesheet" href="./builder-simple.css?v=20261107categories1">
 </head>
 <body>
 <header class="builder-header"><a class="brand" href="./index.html">DK <span>電競電腦</span></a><nav aria-label="頁面導覽"><a href="./machine.html">買電腦</a><a href="./index.html">首頁</a><a href="./repair.html">電腦維修</a><a href="./valuation.html">二手估價</a></nav></header>
@@ -14,10 +14,11 @@
 <div id="simpleLayout" class="simple-layout" hidden>
 <section class="panel simple-parts" aria-labelledby="partsTitle"><div class="simple-section-head"><div><p class="eyebrow">PARTS</p><h2 id="partsTitle">選擇零件</h2></div><button id="clearBuild" class="secondary" type="button">清空配單</button></div>
 <div class="fields simple-filters"><label>搜尋品牌或型號<input id="partSearch" type="search" placeholder="例如：7500F、5070、1TB" maxlength="100"></label></div>
+<p class="small muted">每種零件先選規格分類，再選品牌與商品；也能用上方搜尋直接找型號。切換分類不會移除已選零件。</p>
 <div id="slotList"></div>
 </section>
-<aside class="panel summary simple-summary"><p class="eyebrow">YOUR BUILD</p><h2>目前配單</h2><div id="buildItems"></div><div class="total"><span>零件參考總價</span><strong id="buildTotal">NT$ 0</strong></div><div id="compatibility" class="simple-compatibility"></div><p class="muted small">商品價格為目前配單資料的參考價格；實際供貨與正式售價以 DK 最終確認為準。</p><div class="simple-actions"><button id="printBuild" type="button">列印／產生配單</button><button id="saveBuild" type="button">儲存配單／取得編號</button><button id="copyBuild" class="secondary" type="button">複製配單</button></div><p id="actionStatus" class="muted small" role="status"></p></aside>
+<aside class="panel summary simple-summary"><p class="eyebrow">YOUR BUILD</p><h2>目前配單</h2><div id="buildItems"></div><div class="total"><span>零件參考總價</span><strong id="buildTotal">NT$ 0</strong></div><div id="compatibility" class="simple-compatibility"></div><p class="muted small">價格排程每日 09:17、13:17、17:17（台灣時間）更新；成功發布後重新整理即可取得，排程可能延遲。商品價格為參考價格；實際供貨與正式售價以 DK 最終確認為準。</p><div class="simple-actions"><button id="printBuild" type="button">列印／產生配單</button><button id="saveBuild" type="button">儲存配單／取得編號</button><button id="copyBuild" class="secondary" type="button">複製配單</button></div><p id="actionStatus" class="muted small" role="status"></p></aside>
 </div>
 </main>
-<script src="./shared.js?v=20261106builder1"></script><script src="./builder-policy.js?v=20261023auto1"></script><script src="./builder-fit.js?v=20261024advisor1"></script><script src="./builder-core.js?v=20261024advisor1"></script><script src="./market-price-overlay.js?v=20261106market1"></script><script src="./builder-simple.js?v=20261106market1"></script>
+<script src="./shared.js?v=20261106builder1"></script><script src="./builder-policy.js?v=20261023auto1"></script><script src="./builder-fit.js?v=20261024advisor1"></script><script src="./builder-core.js?v=20261024advisor1"></script><script src="./market-price-overlay.js?v=20261106market1"></script><script src="./builder-categories.js?v=20261107categories1"></script><script src="./builder-simple.js?v=20261107categories1"></script>
 </body></html>
