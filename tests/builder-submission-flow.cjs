@@ -1,6 +1,8 @@
 const fs=require("fs"),assert=require("assert");
-const html=fs.readFileSync("admin.html","utf8"), admin=fs.readFileSync("admin3.js","utf8"), builder=fs.readFileSync("builder-simple.js","utf8"), po=fs.readFileSync("purchase-orders.js","utf8");
+const html=fs.readFileSync("admin.html","utf8"), admin=fs.readFileSync("admin3.js","utf8"), builder=fs.readFileSync("builder-simple.js","utf8"), builderHtml=fs.readFileSync("builder.html","utf8"), po=fs.readFileSync("purchase-orders.js","utf8");
 assert(html.includes("builderSubmissionsPanel"),"admin builder queue missing");
+assert(builderHtml.includes(">買電腦<") && builderHtml.includes(">二手估價<"),"builder navigation labels inconsistent");
+assert(!builderHtml.includes(">現貨主機<") && !builderHtml.includes(">免費估價<"),"legacy builder navigation labels remain");
 assert(html.includes("poReceiveSerials"),"receipt serial input missing");
 assert(builder.includes("builder_submissions"),"public submission endpoint missing");
 assert(builder.includes("DK-BUILD-"),"build number missing");
