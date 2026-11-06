@@ -1,4 +1,4 @@
-const fs=require("fs"),vm=require("vm"),assert=require("assert");
+const fs=require("fs"),assert=require("assert");
 const html=fs.readFileSync("admin.html","utf8"), admin=fs.readFileSync("admin3.js","utf8"), builder=fs.readFileSync("builder-simple.js","utf8"), po=fs.readFileSync("purchase-orders.js","utf8");
 assert(html.includes("builderSubmissionsPanel"),"admin builder queue missing");
 assert(html.includes("poReceiveSerials"),"receipt serial input missing");
