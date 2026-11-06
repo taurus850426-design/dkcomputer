@@ -1645,7 +1645,7 @@ async function stage7ReceivePurchaseItem(payload) {
   return upsertPurchaseOrderToSupabase(payload.purchase_order, {
     type: "receive", purchase_item_id: payload.purchase_item_id,
     destination: payload.destination, inventory_item_id: payload.inventory_item_id || "",
-    received_at: payload.received_at, note: payload.note || "",
+    received_at: payload.received_at, note: payload.note || "", serial_numbers: payload.serial_numbers || [],
   });
 }
 
@@ -4384,7 +4384,7 @@ async function upsertPurchaseOrderToSupabase(order, action) {
   purchaseWritesInFlight.add(id);
   const snapshot = vpEnsureTimestamps(JSON.parse(JSON.stringify(order)), { forceUpdated: false });
   try {
-    const result = await stage7Rpc("backoffice_purchase_operation", {
+    const result = await stage7Rpc(action?.type === "receive" && action?.serial_numbers?.length ? "backoffice_receive_scanned_purchase" : "backoffice_purchase_operation", {
       p_row: purchaseOrderToCloudRow(snapshot),
       p_expected_updated_at: snapshot.cloudUpdatedAt ?? null,
       p_action: action || { type: "save" },
@@ -5679,3 +5679,5 @@ if (window.DK && window.DK.fetchInventoryFromSupabase && window.DK.saveInventory
 if (document.getElementById("copyrightYear") || document.getElementById("lineMainBtn") || document.getElementById("navLineBtn")) {
   applyConfigToHomePage();
 }
+
+window.dkScanOperation = function(action, orderId, code, lineKey, note) { return stage7Rpc("backoffice_scan_operation", {p_action:action,p_order_id:orderId||"",p_code:code||"",p_line_key:lineKey||"",p_note:note||""}); };

@@ -446,6 +446,17 @@
                   <div class="field"><label for="orderDeliveryStatus">交貨狀態</label><select id="orderDeliveryStatus"><option value="pending">尚未交付</option><option value="delivered">已交付</option></select></div>
                   <div class="field"><label for="orderDeliveredAt">交付日期</label><input id="orderDeliveredAt" type="date" /></div>
                   <div class="field full"><label for="orderDeliveryNote">交貨備註</label><input id="orderDeliveryNote" type="text" placeholder="例如：門市取貨／宅配單號" /></div>
+                  <section id="dkScanPanel" class="field full surface-info" aria-label="掃碼作業">
+                    <h3>掃碼組裝／出貨核對</h3>
+                    <p class="form-hint">先儲存訂單，再掃零件序號核對。掃碼只填入文字；按確認才登記。庫存仍由原本結單流程扣除。</p>
+                    <div class="field"><label for="dkScanLine">本次要裝的零件</label><select id="dkScanLine"></select></div>
+                    <div class="field"><label for="dkScanCode">零件序號／出貨訂單編號</label><input id="dkScanCode" autocomplete="off" /></div>
+                    <div class="actions" style="flex-wrap:wrap;gap:8px"><button type="button" class="btn btn-ghost" id="dkScanBind">確認裝入這件零件</button><button type="button" class="btn btn-ghost" id="dkScanUnbind">移除此序號綁定</button><button type="button" class="btn btn-ghost" id="dkScanRefresh">重新核對</button><button type="button" class="btn btn-ghost" id="dkScanPrintOrder">列印訂單條碼貼紙</button></div>
+                    <div class="field"><label for="dkScanNote">檢測紀錄／無序號品項說明</label><input id="dkScanNote" placeholder="填寫實測結果；無序號品項請寫明原因" /></div>
+                    <div class="actions" style="flex-wrap:wrap;gap:8px"><button type="button" class="btn btn-ghost" id="dkScanWaive">確認此品項無序號</button><button type="button" class="btn btn-ghost" id="dkScanTest">確認整機測試通過</button><button type="button" class="btn btn-ghost" id="dkScanShip">核對出貨訂單</button></div>
+                    <p id="dkScanMessage" role="status" aria-live="polite"></p><ul id="dkScanResults"></ul>
+                    <details><summary>售後查詢：掃序號或訂單編號</summary><label for="dkScanLookup">序號／訂單編號</label><input id="dkScanLookup" autocomplete="off" /><button type="button" class="btn btn-ghost" id="dkScanLookupBtn">查詢紀錄</button><pre id="dkScanLookupResult" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
+                  </section>
                   <div class="field full" data-admin-only><label>毛利（自動）</label><div id="orderGrossProfitDisplay" class="order-gross-preview">-</div></div>
                   <div class="field full"><label for="orderQuoteNote">報價備註</label><input id="orderQuoteNote" type="text" placeholder="例如：價格有效 3 天、含組裝…" autocomplete="off" /><div class="form-hint">會隨訂單儲存，重新開啟仍會保留，並顯示在報價單。</div></div>
                   <div class="field full actions" style="flex-wrap:wrap;gap:8px">
@@ -3698,6 +3709,7 @@
             <div class="field"><label for="poReceiveDate">到貨日期</label><input id="poReceiveDate" type="date" /></div>
             <div class="field"><label for="poReceiveDestination">到貨用途</label><select id="poReceiveDestination"><option value="customer">客戶訂單專用（預設）</option><option value="inventory">入一般庫存</option></select></div>
             <div id="poReceiveInventoryField" class="field full" hidden><label for="poReceiveInventoryItem">加入哪個庫存品項</label><select id="poReceiveInventoryItem"><option value="__auto__">自動建立新庫存品項（建議）</option></select><div class="form-hint">可自動建立庫存；只有確定是同一品項時，才選擇合併到既有庫存。</div></div>
+            <div class="field full actions"><button type="button" class="btn btn-ghost" id="dkScanGenerateSerial">產生一個 DK 序號</button><button type="button" class="btn btn-ghost" id="dkScanPrintSerials">列印序號貼紙</button></div>
             <div class="field full"><label for="poReceiveSerials">產品序號 S/N（可掃碼或輸入）</label><textarea id="poReceiveSerials" rows="3" placeholder="每件一個序號；可用換行、逗號分隔。沒有 S/N 的品項可留空。"></textarea><div class="form-hint">若有填寫，序號數量不可超過本次到貨數量；會隨到貨紀錄保存並綁定來源訂單。</div></div>
             <div class="field full"><label for="poReceiveNote">到貨備註</label><input id="poReceiveNote" type="text" placeholder="例如：客戶王先生專用／外盒微損" /></div>
           </div>
@@ -3724,7 +3736,7 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20261029manualcost1"></script>
+    <script src="./shared.js?v=20261107scan1"></script>
     <script src="./inventory-ledger.js?v=20260927stage34"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.12.1/dist/quagga.min.js"></script>
@@ -3739,7 +3751,9 @@
     <script src="./admin-quote-print.js?v=20261020quoteprint1"></script>
     <script src="./admin-unsaved.js?v=20261022draft1"></script>
     <script src="./admin-order-payment.js?v=20261029closingdeposit1"></script>
-    <script src="./admin3.js?v=20261103apretry1"></script>
+    <script src="./assets/vendor/JsBarcode.code128.min.js"></script>
+    <script src="./scanner-workflow.js?v=20261107scan1"></script>
+    <script src="./admin3.js?v=20261107scan1"></script>
     <script src="./builder-service-config.js?v=20261023launch1"></script>
     <script src="./admin-builder-usage.js?v=20261023launch1"></script>
     <script src="./admin-item-coolpc.js?v=20261020itemprice1"></script>
@@ -3747,7 +3761,7 @@
     <script src="./used-market-auto-admin.js?v=20260929stage35"></script>
     <script src="./used-valuation-engine-admin.js?v=20260912s04"></script>
     <script src="./used-acquisition-admin.js?v=20260927stage32"></script>
-    <script src="./purchase-orders.js?v=20261028shortage1"></script>
+    <script src="./purchase-orders.js?v=20261107scan1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./attendance.js?v=20260913s20"></script>
   </body>
