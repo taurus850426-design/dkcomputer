@@ -39,7 +39,7 @@ $('clearBuild').onclick=()=>{if(!Object.keys(selectedIds).length||confirm('確�
 $('copyBuild').onclick=async()=>{try{await navigator.clipboard.writeText(buildText());$('actionStatus').textContent='配單已複製。';}catch(_){$('actionStatus').textContent='瀏覽器無法自動複製，請使用列印功能。';}};
 $('printBuild').onclick=()=>window.print();
 async function load(){try{
- $('builderFailure').hidden=true;const r=await fetch('./data/builder-catalog.json',{cache:'no-cache',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('catalog');const c=await r.json();if(c.schemaVersion!==1||!Array.isArray(c.products)||!c.products.length)throw Error('invalid');catalog=c;restore();
+ $('builderFailure').hidden=true;const r=await fetch('./data/builder-catalog.json',{cache:'no-cache',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('catalog');let c=await r.json();if(c.schemaVersion!==1||!Array.isArray(c.products)||!c.products.length)throw Error('invalid');try{const pr=await fetch('./data/dk-market-prices.json',{cache:'no-cache',signal:AbortSignal.timeout(5000)});if(pr.ok&&window.DKMarketOverlay)c=window.DKMarketOverlay.apply(c,await pr.json());}catch(_){}catalog=c;restore();
  const valid=new Set(c.products.map(p=>p.id));selectedIds=Object.fromEntries(Object.entries(selectedIds).filter(([,id])=>valid.has(id)));save();
  const stale=Date.now()-Date.parse(c.updatedAt)>48*3600000;$('catalogStatus').textContent='目前商品 '+c.products.length.toLocaleString('zh-TW')+' 筆 · 更新 '+new Date(c.updatedAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})+(stale?' · 價格資料已超過 48 小時，正式報價需重新確認':'')+'。';
  $('simpleLayout').hidden=false;render();

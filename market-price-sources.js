@@ -1,0 +1,6 @@
+(function(root,factory){const api=factory(root);if(typeof module==='object'&&module.exports)module.exports=api;else root.DKMarketSources=api;})(typeof window==='object'?window:globalThis,function(){'use strict';
+const ALLOWED=new Set(['coolpc','sinya','autobuy']);
+function normalizeRows(source,rows,capturedAt){if(!ALLOWED.has(source))throw Error('unsupported_source');return (rows||[]).map(r=>({source,brand:String(r.brand||'').trim(),name:String(r.name||'').trim(),model:String(r.model||r.name||'').trim(),price:Number(r.price),priceLabel:String(r.priceLabel||r.label||'').trim(),url:String(r.url||'').trim(),capturedAt:r.capturedAt||capturedAt||new Date().toISOString()}));}
+function validateFeed(feed){if(!feed||feed.schemaVersion!==1||!ALLOWED.has(feed.source)||!Array.isArray(feed.products))throw Error('invalid_feed');return normalizeRows(feed.source,feed.products,feed.capturedAt);}
+function combine(feeds){return (feeds||[]).flatMap(validateFeed);}
+return {normalizeRows,validateFeed,combine};});
