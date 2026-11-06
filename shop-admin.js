@@ -13,18 +13,29 @@
  function render(){
   list.innerHTML=rows.length?rows.map(row=>{const c=row.customer||{},buttons=[];
    const instructions=row.payment==='transfer'?'請加入官方 LINE，提供本頁單號，確認收款帳號後再轉帳。':'請先與官方 LINE 確認自取地址及時間，到店付款。';
-   if(row.status==='awaiting_confirmation')buttons.push('<label>運費 <input aria-label="運費" type="number" min="0" max="10000" step="1" value="0" data-fee="'+escape(row.id)+'" style="width:110px" '+(c.fulfillment==='pickup'?'readonly':'')+'></label><label style="flex:1 1 100%">付款／取貨說明（客人可見，可填銀行代碼、帳號及聯絡方式）<textarea rows="3" maxlength="2000" data-instructions="'+escape(row.id)+'" style="display:block;width:100%">'+escape(instructions)+'</textarea></label><button type="button" class="btn btn-primary" data-action="approve">確認供貨並提供付款資訊</button>');
-   if(['awaiting_confirmation','awaiting_payment','payment_review'].includes(row.status))buttons.push('<button type="button" class="btn btn-ghost" data-action="cancel">取消訂購</button>');
-   if(['awaiting_payment','payment_review'].includes(row.status))buttons.push('<button type="button" class="btn btn-ghost" data-action="manual_payment">登記已核實收款</button>');
-   if(row.status==='paid'&&row.environment==='live')buttons.push('<button type="button" class="btn btn-primary" data-action="fulfill">確認交付並扣官網數量</button>');
+   if(!row.core_order_id&&row.status==='awaiting_confirmation')buttons.push('<label>運費 <input aria-label="運費" type="number" min="0" max="10000" step="1" value="0" data-fee="'+escape(row.id)+'" style="width:110px" '+(c.fulfillment==='pickup'?'readonly':'')+'></label><label style="flex:1 1 100%">付款／取貨說明（客人可見，可填銀行代碼、帳號及聯絡方式）<textarea rows="3" maxlength="2000" data-instructions="'+escape(row.id)+'" style="display:block;width:100%">'+escape(instructions)+'</textarea></label><button type="button" class="btn btn-primary" data-action="approve">確認供貨並提供付款資訊</button>');
+   if(!row.core_order_id&&['awaiting_confirmation','awaiting_payment','payment_review'].includes(row.status))buttons.push('<button type="button" class="btn btn-ghost" data-action="cancel">取消訂購</button>');
+   if(!row.core_order_id&&['awaiting_payment','payment_review'].includes(row.status))buttons.push('<button type="button" class="btn btn-ghost" data-action="manual_payment">登記已核實收款</button>');
+   if(!row.core_order_id&&row.status==='paid'&&row.environment==='live')buttons.push('<button type="button" class="btn btn-primary" data-action="fulfill">確認交付並扣官網數量</button>');
+   if(row.core_order_id)buttons.push('<button type="button" class="btn btn-primary" data-action="open_core">開啟後台訂單</button><span>已轉單，收款與交付請由後台訂單操作</span>');
+   else if(row.environment==='live'&&['awaiting_payment','payment_review','paid'].includes(row.status))buttons.push('<button type="button" class="btn btn-primary" data-action="convert">轉成後台訂單／確認零件</button>');
    buttons.push('<button type="button" class="btn btn-ghost" data-action="copy">複製訂購資料</button>');
    return '<article data-shop-order="'+escape(row.id)+'" class="section-card-soft admin-stack-gap" style="padding:16px;overflow-wrap:anywhere"><h4>'+escape(row.order_no)+' '+(row.environment==='test'?'【測試】':'')+'</h4><p>'+escape(statuses[row.status]||row.status)+'｜'+escape(row.payment==='store'?'到店付款':'銀行轉帳')+'｜'+money(row.subtotal)+(row.shipping_fee!=null?'＋運費 '+money(row.shipping_fee)+'＝'+money(row.subtotal+row.shipping_fee):'（運費待確認）')+'</p><p>'+escape(c.name)+'｜'+escape(c.phone)+'｜'+escape(c.email)+'</p><p>'+escape(c.fulfillment==='pickup'?'到店自取':c.address)+'</p><ul>'+row.items.map(x=>'<li>'+escape(x.name)+' × '+escape(x.qty)+'｜單價 '+money(x.unit_price)+'</li>').join('')+'</ul><p>客人備註：'+escape(c.note||'無')+'</p>'+(row.transfer_last5?'<p><strong>客人回報轉出帳號末五碼：'+escape(row.transfer_last5)+'（請核對實際銀行入帳）</strong></p>':'')+(row.customer_message?'<p style="white-space:pre-wrap">客人可見說明：'+escape(row.customer_message)+'</p>':'')+(row.hold_until&&row.status==='awaiting_payment'?'<p>保留期限：'+escape(new Date(row.hold_until).toLocaleString('zh-TW'))+'</p>':'')+'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">'+buttons.join('')+'</div></article>';
   }).join(''):'<p class="muted">此頁尚無網站訂購需求。</p>';
  }
  async function refresh(){
   if(busy)return;busy=true;message.textContent='讀取網站訂購中…';
-  try{const result=await api('list',{page});rows=result.rows||[];render();dirty=false;message.textContent='第'+(page+1)+'頁，每頁最多25筆。網站單獨立管理；原後台庫存與財務請另依現行流程登記。';document.getElementById('webShopPrev').disabled=page===0;document.getElementById('webShopNext').disabled=!result.hasMore;}catch(e){message.textContent=e.message||'網站訂購暫時無法連線，請稍後更新。';}finally{busy=false;}
+  try{const result=await api('list',{page});rows=result.rows||[];
+   if(rows.length){
+    const auth=await window.DK.getSupabaseRestAuthHeaders({requireUser:true});if(!auth.ok)throw Error('請先登入管理員');
+    const ids=rows.map(x=>x.id);if(ids.some(x=>!(/^[0-9a-f-]{36}$/i).test(x)))throw Error('網站單號格式錯誤');
+    const response=await fetch(window.DK.getSupabaseProjectUrl()+'/rest/v1/shop_order_links?select=shop_order_id,core_order_id&shop_order_id=in.('+ids.join(',')+')',{headers:auth.headers,signal:AbortSignal.timeout(20000)});
+    if(!response.ok)throw Error('無法核對轉單狀態，請稍後更新，勿重複建立訂單');
+    const links=await response.json();rows=rows.map(row=>({...row,core_order_id:links.find(l=>l.shop_order_id===row.id)?.core_order_id||null}));
+   }
+   render();dirty=false;message.textContent='第'+(page+1)+'頁，每頁最多25筆。轉單後請由後台訂單統一處理，請勿再手動建立同一筆交易。';document.getElementById('webShopPrev').disabled=page===0;document.getElementById('webShopNext').disabled=!result.hasMore;}catch(e){rows=[];list.innerHTML='';message.textContent=e.message||'網站訂購暫時無法連線，請稍後更新。';}finally{busy=false;}
  }
+ window.addEventListener('dk-shop-linked',()=>{if(!busy&&!dirty)refresh();});
  const canReload=()=>!dirty||confirm('尚有未送出的運費／付款說明，確定放棄並重新載入？');
  section.addEventListener('input',()=>{dirty=true;});
  document.getElementById('webShopRefresh').onclick=()=>{if(!busy&&canReload()){page=0;refresh();}};
@@ -36,6 +47,10 @@
   const button=event.target.closest('[data-action]');if(!button||busy)return;
   const row=rows.find(x=>x.id===button.closest('[data-shop-order]').dataset.shopOrder);if(!row)return;
   const action=button.dataset.action,data={id:row.id,version:row.updated_at};let text='';
+  if(action==='convert'||action==='open_core'){
+   if(!window.DKShopOrderEditor?.open(row))message.textContent='請先完成目前訂單編輯，並確認後台資料已載入，再開啟網站轉單。';
+   return;
+  }
   if(action==='copy'){
    const c=row.customer||{},lines=[row.order_no,statuses[row.status],c.name,c.phone,c.email,c.fulfillment==='pickup'?'到店自取':c.address,...row.items.map(x=>x.name+' × '+x.qty+'｜單價 '+money(x.unit_price)),'商品小計 '+money(row.subtotal),'運費 '+(row.shipping_fee==null?'待確認':money(row.shipping_fee)),'客人備註：'+(c.note||'無')];
    try{await navigator.clipboard.writeText(lines.join('\n'));message.textContent='訂購資料已複製，建立原後台訂單時請記錄WEB單號，避免重複入帳。';}catch(_){message.textContent='無法存取剪貼簿，請直接選取上方訂購資料複製。';}return;

@@ -7113,12 +7113,15 @@
     let orderLineItems = [];
     let editingManualOrderLineIndex = -1;
     let orderEditorGeneration = 0;
+    let pendingShopOrder = null;
     const orderDraftFields = ["orderNo", "orderDate", "orderCustomer", "orderCustomerPhone", "orderCustomerLine", "orderSalesType", "orderCustomerSource", "orderTotalSale", "orderShipping", "orderDiscount", "orderCogs", "orderStatus", "orderPaymentStatus", "orderPayment", "orderReceivedAmount", "orderPaymentDate", "orderPaymentReference", "orderDeliveryStatus", "orderDeliveredAt", "orderDeliveryNote", "orderQuoteNote"];
     orderDraftFields.push("orderDepositAmount");
     function pendingOrderLine() {
       return !document.getElementById("orderManualBox")?.hidden && !!String(document.getElementById("orderManualName")?.value || "").trim();
     }
     function closeOrderEditor() {
+      pendingShopOrder = null;
+      document.getElementById("shopOrderSourceBanner")?.remove();
       orderEditorGeneration++;
       if (orderForm) orderForm.hidden = true;
       document.body.classList.remove("order-workspace-open");
@@ -7787,6 +7790,8 @@
     }
 
     function openV2OrderEditor(id) {
+      pendingShopOrder = null;
+      document.getElementById("shopOrderSourceBanner")?.remove();
       orderEditorGeneration++;
       editingV2OrderId = id || null;
       const o = id ? DK.getOrders().find((x) => x.id === id) : null;
@@ -7865,6 +7870,40 @@
       orderGuard?.clean();
       window.DKScanner?.open(o, orderLineItems);
     }
+    window.DKShopOrderEditor = {
+      open(row) {
+        if (!row || !window.stage7IsAdminRole?.()) return false;
+        if (document.getElementById("orderSave")?.dataset.saving === "1") return false;
+        if (orderGuard?.dirty()) return false;
+        if (row.core_order_id) {
+          if (!DK.getOrders().some(o => o.id === row.core_order_id)) {
+            alert("後台訂單尚未載入，請更新後台資料後再開啟；請勿重新建立。"); return false;
+          }
+          openV2OrderEditor(row.core_order_id);
+        } else {
+          if (row.environment !== "live" || !["awaiting_payment","payment_review","paid"].includes(row.status)) return false;
+          openV2OrderEditor(null);
+          pendingShopOrder = { id: row.id, version: row.updated_at };
+          try { sessionStorage.removeItem("dk_pending_builder_submission_v1"); } catch (_) {}
+          const set = (id,v) => { const el=document.getElementById(id); if(el)el.value=v; };
+          set("orderCustomer",row.customer?.name || ""); set("orderCustomerPhone",row.customer?.phone || "");
+          set("orderSalesType","整機"); set("orderCustomerSource","其他"); set("orderStatus","confirmed");
+          set("orderTotalSale",row.subtotal); set("orderShipping",row.shipping_fee || 0);
+          set("orderPayment",row.payment === "store" ? "cash" : "transfer");
+          if (row.status === "paid") {
+            set("orderPaymentStatus","paid"); set("orderReceivedAmount",row.subtotal+(row.shipping_fee||0));
+            set("orderPaymentDate",todayStr());
+          }
+          set("orderDeliveryNote",row.customer?.fulfillment === "pickup" ? "到店自取" : row.customer?.address || "");
+          set("orderQuoteNote",[row.order_no,...(row.items||[]).map(x=>x.name+" × "+x.qty),"客人備註："+(row.customer?.note||"無")].join("\n"));
+          const banner=document.createElement("p"); banner.id="shopOrderSourceBanner"; banner.setAttribute("role","status");
+          banner.style.cssText="padding:12px;background:#fff4d1;overflow-wrap:anywhere";
+          banner.textContent=row.order_no+"｜商品合計 NT$ "+Number(row.subtotal).toLocaleString("zh-TW")+"、運費 NT$ "+Number(row.shipping_fee||0).toLocaleString("zh-TW")+"。"+(row.items||[]).map(x=>x.name+" × "+x.qty).join("；")+"。請加入實際零件或整機：庫存選現有庫存，缺貨選需要採購；整台售價只計一次。儲存後由本訂單統一管理收款、交貨與記帳。"+(row.status==="paid"?"網站已核實收款，會帶入原收款紀錄，請勿再收一次。":"");
+          orderForm.prepend(banner); window.DKOrderPayment?.refresh(); updateV2OrderGrossDisplay();
+        }
+        orderForm?.scrollIntoView?.({behavior:"smooth",block:"start"}); return true;
+      }
+    };
     function updateV2OrderGrossDisplay() {
       const sale = parseFloat(document.getElementById("orderTotalSale")?.value) || 0;
       const ship = parseFloat(document.getElementById("orderShipping")?.value) || 0;
@@ -8130,6 +8169,7 @@
         const missingCategory = orderLineItems.find((line) => !String(line.category || "").trim() && !line.historical_missing);
         if (missingCategory) return v2Show(orderMsg, "訂單品項「" + String(missingCategory.name || missingCategory.spec || "未命名品項") + "」尚未選擇品類");
         const payload = {
+          ...(pendingShopOrder && !editingV2OrderId ? {shop_source:{...pendingShopOrder}} : {}),
           order_no: orderNo,
           customer_name: document.getElementById("orderCustomer")?.value || "",
           customer_phone: document.getElementById("orderCustomerPhone")?.value || "",
@@ -8165,6 +8205,10 @@
             ...(window.stage7IsAdminRole?.()===true&&Object.prototype.hasOwnProperty.call(l,"manual_cost_unit")?{manual_cost_unit:l.manual_cost_unit}:{}),
           })),
         };
+        if (payload.shop_source) {
+          if (payload.status !== "confirmed") return v2Show(orderMsg,"網站轉單請選擇已確認，並核對實際零件或整機後儲存。");
+          if (payload.items.some(x=>!["inventory","procurement"].includes(x.fulfillment_type))) return v2Show(orderMsg,"網站轉單請加入現有庫存或需要採購的商品，不能以服務取代。");
+        }
         if (orderReceivedAmountEl) orderReceivedAmountEl.value = String(payload.received_amount);
         const previousOrder = editingV2OrderId
           ? orders.find((x) => String(x.id) === String(editingV2OrderId))
@@ -8242,6 +8286,15 @@
           return;
         }
         const savedId = (res.data && (res.data.id || (Array.isArray(res.data) ? res.data[0] && res.data[0].id : ""))) || editingV2OrderId || "";
+        if (payload.shop_source && savedId) {
+          pendingShopOrder=null;
+          window.dispatchEvent(new Event("dk-shop-linked"));
+          if (res.data?.shop_already_linked) {
+            if (!res.refreshFailed) openV2OrderEditor(savedId);
+            v2Show(orderMsg,"此網站單已建立後台訂單，已沿用原單，未重複建立或覆蓋。請核對原單內容及叫貨單；若上次儲存回應中斷，請在原單確認後儲存以補同步叫貨。");
+            return false;
+          }
+        }
         auditAction(editingV2OrderId ? "編輯訂單" : "新增訂單", savedId);
         if (!wasEditing && savedId) {
           let builderLink=null;

@@ -57,7 +57,7 @@
   }
   function leaves(name, target) {
     if (target.id === 'logoutBtn') return true;
-    if (name === 'order' && target.matches('#orderCancel,#btnNewOrder,.btn-edit-order')) return true;
+    if (name === 'order' && target.matches('#orderCancel,#btnNewOrder,.btn-edit-order,[data-action="convert"],[data-action="open_core"]')) return true;
     if (name === 'purchase' && target.matches('#poBackToListBtn,#poNewBtn,[data-po-act="edit"]')) return true;
     const v2 = target.getAttribute('data-v2'), tab = target.getAttribute('data-tab');
     if (v2) return name === 'order' ? v2 !== 'orders' : true;
