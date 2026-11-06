@@ -16,14 +16,10 @@ concurrency:
 permissions:
   contents: write
   pages: write
-  id-token: write
 jobs:
   refresh:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,12 +51,10 @@ jobs:
             git commit -m 'chore: refresh verified market source snapshots'
             git push origin HEAD:main
           fi
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-      - name: Publish refreshed catalog
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Request the existing Pages branch build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST "repos/${GITHUB_REPOSITORY}/pages/builds" --silent
       - name: Surface incomplete sources
         if: steps.collect.outcome == 'failure' || steps.catalog.outcome == 'failure'
         run: |

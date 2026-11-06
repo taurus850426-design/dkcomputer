@@ -49,4 +49,4 @@
 
 `node scripts/sync-coolpc-catalog.mjs`：正式原價屋目錄原子更新，來源結構或商品數異常時保留既有檔案。
 
-排程 commit 以一般 push 寫入，main 同時更新時會拒絕，避免覆蓋；Pages 使用明確 deploy job，避免 GITHUB_TOKEN commit 不觸發 Pages 的問題。
+排程 commit 以一般 push 寫入，main 同時更新時會拒絕，避免覆蓋；抓價完成後透過官方 Pages build API 明確請求既有 main 分支建置，避免 GITHUB_TOKEN commit 不觸發發布，以及分支建置與自訂 artifact 部署並行的問題。
