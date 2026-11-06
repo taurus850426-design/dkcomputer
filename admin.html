@@ -284,7 +284,16 @@
                 <button id="webShopNext" class="btn btn-ghost" type="button" disabled>下一頁</button>
                 <p id="webShopMessage" role="status"></p><div id="webShopList"></div>
               </details>
-              <div id="orderTodayKpi" class="kpi-grid ui-enter admin-stack-gap"></div>
+              <details id="builderSubmissionsPanel" class="section-card-soft admin-stack-gap" data-admin-only>
+  <summary>客人線上配單｜待審核 <span id="builderSubmissionCount" class="status-badge status-warning">0</span></summary>
+  <div class="section-head" style="margin-top:12px">
+    <div><h3 class="h3">客人配單草稿</h3><p class="muted small">配單只會先進草稿區；確認成交後才轉成正式訂單，不會直接扣庫存。</p></div>
+    <button id="builderSubmissionsRefresh" class="btn btn-ghost btn-sm" type="button">重新載入</button>
+  </div>
+  <div id="builderSubmissionsMsg" class="muted small" role="status"></div>
+  <div id="builderSubmissionsList" class="admin-stack-gap"></div>
+</details>
+<div id="orderTodayKpi" class="kpi-grid ui-enter admin-stack-gap"></div>
               <section id="orderMonthlyAnalysis" class="order-monthly-analysis section-card-soft surface-neutral admin-stack-gap" aria-label="訂單分析">
                 <div class="order-monthly-analysis__head">
                   <div><h3 class="h3 section-title">訂單分析</h3><p class="muted small">上方為本月非退貨訂單筆數；點選分類切換近 12 個月曲線</p></div>
