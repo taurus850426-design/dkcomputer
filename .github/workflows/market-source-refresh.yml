@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/collect-market-sources.mjs'
       - 'scripts/market-source-collectors.mjs'
+      - 'scripts/sinya-source.mjs'
       - '.github/workflows/market-source-refresh.yml'
   schedule:
     - cron: '17 1,5,9 * * *'
@@ -30,7 +31,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test tests/market-collectors.mjs
+      - run: node --test tests/market-collectors.mjs tests/sinya-source.mjs
       - name: Collect real source feeds
         id: collect
         continue-on-error: true

@@ -1,28 +1,31 @@
-name: Sinya public response diagnosis
+name: Sinya live collector verification
 on:
   pull_request:
     paths:
       - '.github/workflows/sinya-source-diagnosis.yml'
+      - 'scripts/sinya-source.mjs'
+      - 'scripts/collect-market-sources.mjs'
 permissions:
   contents: read
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Capture public source response
-        run: |
-          mkdir -p /tmp/sinya-response
-          node --input-type=module -e "import fs from 'node:fs'; const r=await fetch('https://www.sinya.com.tw/diy/show_option',{method:'POST',body:'id=1',signal:AbortSignal.timeout(25000),headers:{'Content-Type':'application/x-www-form-urlencoded','User-Agent':'DKComputer-PriceMonitor/1.0'}});const t=await r.text(); console.log(JSON.stringify({status:r.status,bytes:t.length,type:r.headers.get('content-type')}));fs.writeFileSync('/tmp/sinya-response/sinya-api.json',t);"
-      - name: Capture published category contract
-        run: |
-          curl --fail --max-time 25 'https://www.sinya.com.tw/api/prod_sub' -o /tmp/sinya-response/prod-sub.json
+      - run: node --test tests/sinya-source.mjs tests/market-collectors.mjs
+      - name: Verify all real source collectors
+        continue-on-error: true
+        run: node scripts/collect-market-sources.mjs
+        env:
+          DK_MARKET_OUTPUT: /tmp/sinya-response
       - uses: actions/upload-artifact@v4
         with:
           name: sinya-public-response
           path: /tmp/sinya-response
           retention-days: 1
+      - name: Require verified Sinya prices
+        run: node -e "const x=require('/tmp/sinya-response/health.json');if(!x.sources.sinya.ok)process.exit(1);console.log(JSON.stringify(x.sources.sinya));"
