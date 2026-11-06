@@ -17,3 +17,8 @@ test('reviewed cooler brackets are overlaid by exact ID without changing the sou
 test('dual-module memory count and rated transfer speed come from explicit source text',()=>{
  const f=factsFor(6,'32G(雙通16G*2)D5-5600 白','桌上型記憶體 DDR5 雙通道');assert.equal(f.modules,2);assert.equal(f.speedMT,5600);assert.equal(f.capacityGB,32);assert.equal(factsFor(6,'單條16GB DDR5-6000','桌上型').modules,1);
 });
+
+test('conditional prefix is rejected without treating a normal price promotion or NITRO+ model as a bundle',()=>{
+ const c=parseCatalog(html('<option>任搭價 Acer RX9070XT 16G, $29990</option><option>Acer RX9070XT 16G, $31990 ◆ ↓任搭29990↓</option><option>藍寶石 NITRO+ RX9070XT 16G, $32990</option>'));
+ assert.ok(!c.products.some(p=>p.name.startsWith('任搭價')));assert.equal(c.products.find(p=>p.name==='Acer RX9070XT 16G').price,31990);assert.ok(c.products.some(p=>p.name.includes('NITRO+')));
+});

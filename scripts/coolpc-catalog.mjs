@@ -1,5 +1,6 @@
 /** Parse public estimate options without executing source scripts. No source images are copied. */
 import { createHash } from 'node:crypto';
+import pricePolicy from '../catalog-price-policy.js';
 export const SOURCE_URL = 'https://www.coolpc.com.tw/evaluate.php';
 export const CATEGORIES = ['品牌主機','筆電與平板','套裝主機','處理器','主機板','記憶體','SSD','傳統硬碟','隨身儲存','散熱器','水冷散熱','顯示卡','螢幕','機殼','電源供應器','風扇與燈效','鍵盤滑鼠與周邊','控制器與數位板','網通設備','NAS','音效與視訊','耳機麥克風','燒錄器','USB擴充與外接盒','攝影機與擷取卡','不斷電系統','擴充卡','線材與轉接','作業系統與軟體','福利品'];
 export function plain(s) {
@@ -8,11 +9,7 @@ export function plain(s) {
     return {amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",nbsp:' '}[e.toLowerCase()];
   }).replace(/\s+/g,' ').trim();
 }
-export function exclusionReason(text) {
-  if(/獨家|独家|專賣|專售|原價屋限定|原價屋特仕|exclusive/i.test(text)) return 'exclusive';
-  if(/搭板|搭主機板|搭配主機板|任搭主機板|限搭|限組裝|裝機價|組裝價|組合價|組合包|套裝必搭|套裝加購|主機搭購|須搭|需搭|限購|組裝限定/.test(text)) return 'conditional';
-  return '';
-}
+export function exclusionReason(text) { return pricePolicy.reason(text); }
 export function factsFor(category,title,group) {
   title=title.replace(/[｛｝]/g,' '); const text=(title+' '+group).normalize('NFKC'); const f={}; let m;
   const sockets=[...text.matchAll(/\b(AM[45]|LGA\s*1[278]00|1851|1700|1200|1151|1150|sTR5|sTRX4)\b/gi)].map(x=>x[1].toUpperCase().replace(/LGA|\s/g,''));
