@@ -3698,6 +3698,7 @@
             <div class="field"><label for="poReceiveDate">到貨日期</label><input id="poReceiveDate" type="date" /></div>
             <div class="field"><label for="poReceiveDestination">到貨用途</label><select id="poReceiveDestination"><option value="customer">客戶訂單專用（預設）</option><option value="inventory">入一般庫存</option></select></div>
             <div id="poReceiveInventoryField" class="field full" hidden><label for="poReceiveInventoryItem">加入哪個庫存品項</label><select id="poReceiveInventoryItem"><option value="__auto__">自動建立新庫存品項（建議）</option></select><div class="form-hint">可自動建立庫存；只有確定是同一品項時，才選擇合併到既有庫存。</div></div>
+            <div class="field full"><label for="poReceiveSerials">產品序號 S/N（可掃碼或輸入）</label><textarea id="poReceiveSerials" rows="3" placeholder="每件一個序號；可用換行、逗號分隔。沒有 S/N 的品項可留空。"></textarea><div class="form-hint">若有填寫，序號數量不可超過本次到貨數量；會隨到貨紀錄保存並綁定來源訂單。</div></div>
             <div class="field full"><label for="poReceiveNote">到貨備註</label><input id="poReceiveNote" type="text" placeholder="例如：客戶王先生專用／外盒微損" /></div>
           </div>
           <div id="poReceiveMsg" class="muted small" hidden></div>
