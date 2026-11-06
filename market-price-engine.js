@@ -5,8 +5,8 @@ function cleanText(v){return String(v??'').replace(/\s+/g,' ').trim();}
 function normalizeModel(v){return cleanText(v).toUpperCase().replace(/[™®]/g,'').replace(/[^A-Z0-9]+/g,' ').trim();}
 function normalizeQuote(raw){
  const source=cleanText(raw?.source).toLowerCase(),name=cleanText(raw?.name),model=normalizeModel(raw?.model||name),price=Number(raw?.price),label=cleanText(raw?.priceLabel||raw?.note);
- const validSource=SOURCE_IDS.has(source),validPrice=Number.isFinite(price)&&price>0;
- return {source,name,model,price,priceLabel:label,url:cleanText(raw?.url),capturedAt:cleanText(raw?.capturedAt),eligible:validSource&&validPrice&&!!model&&!PROMO.test(label),reason:!validSource?'unknown_source':!validPrice?'invalid_price':!model?'missing_model':PROMO.test(label)?'conditional_price':''};
+ const validSource=SOURCE_IDS.has(source),validPrice=Number.isFinite(price)&&price>0,promoText=[name,label].filter(Boolean).join(' ');
+ return {source,name,model,price,priceLabel:label,url:cleanText(raw?.url),capturedAt:cleanText(raw?.capturedAt),eligible:validSource&&validPrice&&!!model&&!PROMO.test(promoText),reason:!validSource?'unknown_source':!validPrice?'invalid_price':!model?'missing_model':PROMO.test(promoText)?'conditional_price':''};
 }
 function median(values){const a=values.filter(Number.isFinite).sort((x,y)=>x-y);if(!a.length)return null;const m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2;}
 function groupQuotes(rows){const groups=new Map();for(const raw of rows||[]){const q=normalizeQuote(raw);if(!q.model)continue;if(!groups.has(q.model))groups.set(q.model,[]);groups.get(q.model).push(q);}return groups;}
