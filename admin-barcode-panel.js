@@ -17,6 +17,7 @@
       '<button data-scan-clear class="btn btn-ghost" type="button">清空</button></div>' +
       '<video data-scan-video playsinline muted style="display:none;width:100%;max-width:400px;margin-top:10px"></video>' +
       '<p data-scan-message class="form-hint" role="status" aria-live="polite"></p>' +
+      '<p data-scan-lookup class="form-hint" role="status" aria-live="polite"></p>' +
       '<div data-scan-results></div>';
     section.insertAdjacentElement('afterend', box);
     const code = box.querySelector('[data-scan-code]');
@@ -27,6 +28,18 @@
     const video = box.querySelector('[data-scan-video]');
     const staging = window.DKBarcodeScanner.createStaging();
     let stopCamera = null;
+    let lookupSequence = 0;
+    async function lookup(codeValue) {
+      if (!window.DKBarcodeLookup) return;
+      const current = ++lookupSequence;
+      const result = await window.DKBarcodeLookup.findBySku(codeValue);
+      if (current !== lookupSequence) return;
+      const text = result.ok
+        ? (result.item ? '庫存匹配：' + result.item.name + '（SKU ' + result.item.sku + '，現有 ' + result.item.qty_on_hand + '）' : '找不到相同 SKU，請人工確認；不會自動新增')
+        : '查詢提醒：' + result.error;
+      const label = box.querySelector('[data-scan-lookup]');
+      if (label) label.textContent = text;
+    }
     function render() {
       results.replaceChildren();
       for (const row of staging.list()) {
@@ -42,6 +55,7 @@
         staging.add(value, qty.value);
         code.value = '';
         render();
+        lookup(value);
       } catch (error) { message.textContent = error.message; }
     }
     window.DKBarcodeScanner.attachKeyboard(code, add);
