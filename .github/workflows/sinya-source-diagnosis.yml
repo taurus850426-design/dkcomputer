@@ -1,0 +1,25 @@
+name: Sinya public response diagnosis
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/sinya-source-diagnosis.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Capture public source response
+        run: |
+          mkdir -p /tmp/sinya-response
+          node --input-type=module -e "import fs from 'node:fs'; const r=await fetch('https://www.sinya.com.tw/diy/',{signal:AbortSignal.timeout(25000),headers:{'User-Agent':'DKComputer-PriceMonitor/1.0'}});const t=await r.text(); console.log(JSON.stringify({status:r.status,bytes:t.length,type:r.headers.get('content-type')}));fs.writeFileSync('/tmp/sinya-response/sinya.html',t);"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sinya-public-response
+          path: /tmp/sinya-response
+          retention-days: 1
