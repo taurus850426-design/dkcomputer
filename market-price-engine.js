@@ -12,10 +12,10 @@ function median(values){const a=values.filter(Number.isFinite).sort((x,y)=>x-y);
 function groupQuotes(rows){const groups=new Map();for(const raw of rows||[]){const q=normalizeQuote(raw);if(!q.model)continue;if(!groups.has(q.model))groups.set(q.model,[]);groups.get(q.model).push(q);}return groups;}
 function evaluate(rows,previousPrice=null,opts={}){
  const quotes=(rows||[]).map(normalizeQuote),eligible=quotes.filter(q=>q.eligible),bySource=new Map();for(const q of eligible){const old=bySource.get(q.source);if(!old||q.price<old.price)bySource.set(q.source,q);}
- const used=[...bySource.values()],marketPrice=median(used.map(q=>q.price)),minSources=opts.minSources??2,maxChange=opts.maxChange??0.20;
- let status='ok',reason='';if(used.length<minSources){status='hold';reason='insufficient_sources';}
- if(status==='ok'&&Number.isFinite(previousPrice)&&previousPrice>0&&Math.abs(marketPrice-previousPrice)/previousPrice>maxChange){status='hold';reason='abnormal_change';}
- return {status,reason,marketPrice:status==='ok'?marketPrice:previousPrice,observedMedian:marketPrice,sourceCount:used.length,usedSources:used.map(q=>q.source),quotes};
+ const used=[...bySource.values()],coolpc=bySource.get('coolpc')||null,observedMedian=median(used.map(q=>q.price)),referencePrice=coolpc?.price??null,maxChange=opts.maxChange??0.20;
+ let status='ok',reason='';if(!coolpc){status='hold';reason='missing_coolpc_reference';}
+ if(status==='ok'&&Number.isFinite(previousPrice)&&previousPrice>0&&Math.abs(referencePrice-previousPrice)/previousPrice>maxChange){status='hold';reason='abnormal_change';}
+ return {status,reason,marketPrice:status==='ok'?referencePrice:previousPrice,observedMedian,sourceCount:used.length,usedSources:used.map(q=>q.source),referenceSource:coolpc?'coolpc':null,quotes};
 }
 function dkPrice(marketPrice,cost=null,opts={}){
  if(!Number.isFinite(marketPrice)||marketPrice<=0)return null;const floor=Number.isFinite(cost)&&cost>0?cost*(1+(opts.minMarginRate??0)):0;const step=opts.roundStep??10;return Math.ceil(Math.max(marketPrice,floor)/step)*step;
