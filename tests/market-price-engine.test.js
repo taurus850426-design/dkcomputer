@@ -13,3 +13,5 @@ assert.equal(r.status,'hold');assert.equal(r.reason,'abnormal_change');assert.eq
 assert.equal(e.dkPrice(16190,17000,{minMarginRate:.05,roundStep:10}),17850);
 assert.equal(e.normalizeModel('Kingston KC3000-1TB'),'KINGSTON KC3000 1TB');
 console.log('market-price-engine tests passed');
+let promoName=e.normalizeQuote({source:'autobuy',name:'【搭板】Kingston DDR5-5600 16G',price:7999,priceLabel:'售價'});assert.equal(promoName.eligible,false);assert.equal(promoName.reason,'conditional_price');
+let bundle=e.normalizeQuote({source:'autobuy',name:'☆裝機配★ i5-12400+主機板+UMAX DDR4-3200 16G',price:13188,priceLabel:'售價'});assert.equal(bundle.eligible,false);
