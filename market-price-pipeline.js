@@ -1,4 +1,4 @@
-(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.DKMarketPipeline=api;})(typeof window==='object'?window:globalThis,function(){'use strict';
+(function(root,factory){const api=factory(root);if(typeof module==='object'&&module.exports)module.exports=api;else root.DKMarketPipeline=api;})(typeof window==='object'?window:globalThis,function(root){'use strict';
 const engine=typeof require==='function'?require('./market-price-engine.js'):root.DKMarketPrice;
 const STOP=new Set(['GB','G','TB','MB','MHZ','GHZ','DDR4','DDR5','PCIE','GEN','OC']);
 function tokens(v){return engine.normalizeModel(v).split(' ').filter(Boolean);}
