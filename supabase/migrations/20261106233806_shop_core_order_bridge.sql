@@ -91,7 +91,14 @@ BEGIN
  END IF;
  UPDATE public.shop_orders SET status=state,hold_until=NULL,
   paid_at=CASE WHEN paid THEN coalesce(paid_at,clock_timestamp()) ELSE paid_at END,
-  customer_message=CASE WHEN core.status='refunded' THEN '本筆已辦理退貨退款，如需確認款項請聯絡店家。' ELSE customer_message END,
+  customer_message=CASE
+   WHEN core.status='refunded' THEN '本筆已辦理退貨退款，如需確認款項請聯絡店家。'
+   WHEN core.status IN ('cancelled','lost') THEN '本筆訂購已取消；如有款項疑問請聯絡店家。'
+   WHEN paid THEN '本筆已核實收足款項，請勿重複付款；交貨安排請聯絡店家。'
+   WHEN coalesce((core.extra->>'received_amount')::numeric,0)>0 THEN
+    '已核實收到 NT$ '||(core.extra->>'received_amount')||'，剩餘 NT$ '||(source.subtotal+source.shipping_fee-(core.extra->>'received_amount')::numeric)::text||'。請先聯絡店家確認剩餘款項，勿再支付原訂單全額。'
+   WHEN customer_message LIKE '已核實收到 NT$ %' THEN '收款紀錄已調整，請先聯絡店家核對款項後再付款。'
+   ELSE customer_message END,
   updated_at=CASE WHEN status IS DISTINCT FROM state THEN clock_timestamp() ELSE updated_at END
  WHERE id=source.id;
  RETURN NULL;

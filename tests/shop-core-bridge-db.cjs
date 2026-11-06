@@ -43,7 +43,10 @@ test('WEB bridge: reviewed conversion, trusted payment, idempotent order, one st
   const update=async(changes={})=>{const old=await scalar('select updated_at::text v from orders where id=$1',[id]);return rpc('backoffice_update_order_checked',[old.v,JSON.stringify({...payload,id,customer_name:'Synthetic Buyer',payment_status:'paid',received_amount:6100,payment_date:'2026-11-07',delivery_status:'delivered',delivered_at:'2026-11-07',...changes})]);};
   await reject(()=>update({items:[{...payload.items[0],unit_price:7000}],received_amount:7100}),/原單一致/);
   assert.equal(Number((await scalar('select total_sale from orders where id=$1',[id])).total_sale),6000);
+  await update({status:'confirmed',payment_status:'partial',received_amount:1000,delivery_status:'pending',delivered_at:null});
+  assert.match((await scalar('select customer_message from shop_orders where id=$1',[web])).customer_message,/剩餘 NT\$ 5100/);
   await update({status:'confirmed',delivery_status:'pending',delivered_at:null});
+  assert.match((await scalar('select customer_message from shop_orders where id=$1',[web])).customer_message,/已核實收足款項/);
   assert.equal((await scalar('select status from shop_orders where id=$1',[web])).status,'paid');
   await update({status:'completed'});
   const tally=await scalar("select (select qty from inventory where id='WEB-PC') web_qty,(select qty_on_hand from inventory_items where id='CPU-A') core_qty,(select cogs_total from order_costs where order_id=$1) cost,(select count(*) from shop_order_links where catalogue_deducted) deducted",[id]);
