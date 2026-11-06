@@ -15,6 +15,8 @@
 - 正式報價仍只用原價屋；欣亞／AUTOBUY 不混入正式售價。
 - 固定驗證依賴版本與 lockfile，新增全套 Regression／隔離 E2E GitHub Actions。
 
+- 正式站部署前 Smoke 發現首頁四個預設圖片 404：已在前端將三個舊入口圖片參照映射到既有素材，Hero fallback 改用既有工作室圖片；不修改 site_config 或後台自訂圖片。
+
 ## Security Audit
 
 - public 62 表均啟用 RLS；3 個 view 均為 security_invoker。

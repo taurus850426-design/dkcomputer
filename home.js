@@ -270,7 +270,12 @@
         const href = e.link || "#";
         const title = e.title || "";
         const subtitle = e.subtitle || "";
-        const img = e.image || "";
+        const legacyImages = {
+          "./assets/entry-cafe.png": "./assets/products/air903-black.webp",
+          "./assets/entry-select.png": "./assets/dk-logo-search.jpg",
+          "./assets/entry-repair.png": "./assets/dk-repair-workshop.jpg",
+        };
+        const img = legacyImages[e.image] || e.image || "";
         return `
           <a href="${href}" class="home-category-item dk-card reveal-child" style="--reveal-delay:${i * 80}ms">
             <div class="home-category-img">
