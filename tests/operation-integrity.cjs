@@ -71,7 +71,7 @@ test('deleted target never resurrected by delayed async persist',async()=>{
   const res=await s.api.persist(a);assert.equal(res.ok,false);assert.equal(s.cloudCalls(),0);assert.ok(s.getList()[0].deletedAt);s.dom.window.close();
 });
 test('quote display metadata preserves legacy values and whole-order accounting allocation',()=>{
-  const c=ctx();vm.runInContext(fn(shared,'stage7OrderLinesPayload'),c);
+  const c=ctx({stage7IsAdminRole:()=>true});vm.runInContext(fn(shared,'stage7OrderLinesPayload'),c);
   const modern=c.stage7OrderLinesPayload([{name:'CPU',qty:1,unit_price:0,quote_unit_price:0}],85000);
   assert.equal(modern[0].unit_price,85000);assert.equal(modern[0].quote_unit_price,0);
   const legacy=c.stage7OrderLinesPayload([{name:'CPU',qty:1,unit_price:85000}],85000);

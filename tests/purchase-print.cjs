@@ -5,7 +5,7 @@ const os=require('node:os');
 const path=require('node:path');
 const {execFileSync}=require('node:child_process');
 const {JSDOM}=require('jsdom');
-const chromium=require('@sparticuz/chromium').default;
+const chromium=process.env.DK_TEST_CHROME?null:require('@sparticuz/chromium');
 const {chromium:playwright}=require('playwright');
 const read=name=>fs.readFileSync(path.join(__dirname,'..',name),'utf8');
 for(const longText of [false,true])test('purchase print preserves physical font sizes: '+(longText?'long specifications and notes':'normal six-item order'),async()=>{
@@ -15,7 +15,7 @@ for(const longText of [false,true])test('purchase print preserves physical font 
  const rows=Array.from({length:6},(_,i)=>({id:'line'+i,quantity:1,selectedSpec:'Intel Core Ultra 5 225F '+(longText&&i===5?'LONGSPEC'.repeat(35):''),selectedVendor:['Vendor A','Vendor B','Vendor C'][i%3],selectedUnitPrice:4450,itemNote:'ORD-20261016-003 | Customer: Test '+(longText&&i===5?'LongNote'.repeat(45):'')}));
  const printHtml=dom.window.printTest.build({orderNo:'PO-TEST',createdAt:'2026-10-16',status:'ordered',items:rows,note:'TEST TOTAL'},'');
  dom.window.close();
- const browser=await playwright.launch({executablePath:await chromium.executablePath(),args:chromium.args,headless:true});
+ const browser=await playwright.launch({executablePath:process.env.DK_TEST_CHROME||await chromium.executablePath(),args:chromium?.args||['--no-sandbox','--disable-dev-shm-usage'],headless:true});
  try{
   const page=await browser.newPage({viewport:{width:1755,height:1161}});
   await page.setContent(read('admin.html').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<link\b[^>]*>/gi,''));

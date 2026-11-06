@@ -1,0 +1,13 @@
+{
+  "name": "dkcomputer",
+  "private": true,
+  "scripts": {
+    "test": "node --test --test-concurrency=2 tests/*.cjs tests/*.mjs tests/*.test.js"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@sparticuz/chromium": "138.0.2",
+    "jsdom": "26.1.0",
+    "playwright": "1.62.1"
+  }
+}
