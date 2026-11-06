@@ -27,8 +27,10 @@ jobs:
           node --check market-price-engine.js
           node --check market-price-pipeline.js
           node --check market-price-overlay.js
+          node --check market-price-sources.js
           node --check builder-simple.js
       - name: Unit tests
         run: |
           node tests/market-price-engine.test.js
           node tests/market-price-pipeline.test.js
+          node tests/market-price-sources.test.js
