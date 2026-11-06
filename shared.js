@@ -1649,6 +1649,22 @@ async function stage7ReceivePurchaseItem(payload) {
   });
 }
 
+async function stage7RegisterReceiptSerials(payload) {
+  const src=payload||{};
+  const serials=Array.isArray(src.serial_numbers)?src.serial_numbers.map(String).map(v=>v.trim()).filter(Boolean):[];
+  if(!serials.length) return {ok:true,data:{ok:true,count:0}};
+  return stage7Rpc("backoffice_register_receipt_serials", {
+    p_item_id:String(src.item_id||""),
+    p_purchase_order_id:String(src.purchase_order_id||""),
+    p_purchase_item_id:String(src.purchase_item_id||""),
+    p_order_id:String(src.order_id||""),
+    p_order_line_key:String(src.line_key||""),
+    p_received_at:src.received_at||null,
+    p_serials:serials,
+    p_note:String(src.note||""),
+  });
+}
+
 async function stage7SetPurchaseReceiptDestination(payload) {
   if (!stage7IsAdminRole()) return { ok: false, forbidden: true, error: "只有管理員可以修改到貨用途" };
   if (!payload?.purchase_order) return { ok: false, error: "缺少原叫貨單版本，請重新載入" };
@@ -2056,6 +2072,7 @@ if (typeof window !== "undefined") {
   window.stage7SyncProcurementCost = stage7SyncProcurementCost;
   window.stage7ClearProcurementCost = stage7ClearProcurementCost;
   window.stage7ReceivePurchaseItem = stage7ReceivePurchaseItem;
+  window.stage7RegisterReceiptSerials = stage7RegisterReceiptSerials;
   window.stage7SetPurchaseReceiptDestination = stage7SetPurchaseReceiptDestination;
   window.stage7SetOrderOperations = stage7SetOrderOperations;
   window.stage7ListBuilderSubmissions = stage7ListBuilderSubmissions;
