@@ -1,6 +1,12 @@
 name: Verified market source refresh
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/collect-market-sources.mjs'
+      - 'scripts/market-source-collectors.mjs'
+      - '.github/workflows/market-source-refresh.yml'
   schedule:
     - cron: '17 1,5,9 * * *'
 concurrency:
