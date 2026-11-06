@@ -1666,6 +1666,18 @@ async function stage7SetOrderOperations(payload) {
   });
 }
 
+async function stage7ListBuilderSubmissions(limit) {
+  return stage7Rpc("backoffice_list_builder_submissions", { p_limit: Math.min(Math.max(Number(limit) || 100, 1), 500) });
+}
+
+async function stage7SetBuilderSubmissionStatus(id, status, convertedOrderId) {
+  return stage7Rpc("backoffice_set_builder_submission_status", {
+    p_id: String(id || ""),
+    p_status: String(status || ""),
+    p_converted_order_id: convertedOrderId ? String(convertedOrderId) : null,
+  });
+}
+
 async function stage7ListCustomerRecords() {
   return stage7Rpc("backoffice_list_customer_records", {});
 }
@@ -2046,6 +2058,8 @@ if (typeof window !== "undefined") {
   window.stage7ReceivePurchaseItem = stage7ReceivePurchaseItem;
   window.stage7SetPurchaseReceiptDestination = stage7SetPurchaseReceiptDestination;
   window.stage7SetOrderOperations = stage7SetOrderOperations;
+  window.stage7ListBuilderSubmissions = stage7ListBuilderSubmissions;
+  window.stage7SetBuilderSubmissionStatus = stage7SetBuilderSubmissionStatus;
   window.stage7ListCustomerRecords = stage7ListCustomerRecords;
   window.stage7UpsertCustomerRecord = stage7UpsertCustomerRecord;
   window.stage7DeleteCustomerRecord = stage7DeleteCustomerRecord;
