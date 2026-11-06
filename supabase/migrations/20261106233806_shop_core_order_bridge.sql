@@ -28,6 +28,8 @@ BEGIN
  END IF;
  IF source.updated_at IS DISTINCT FROM p_version THEN RAISE EXCEPTION '網站訂購已更新，請重新載入後再轉單'; END IF;
  IF source.hold_until<now() AND source.status='awaiting_payment' THEN RAISE EXCEPTION '網站訂購保留期限已過，請先核對'; END IF;
+ IF p_payload->>'shop_reviewed' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION '請先核對此網站單未曾手動建單，且實際零件與整機未重複加入'; END IF;
+ IF EXISTS(SELECT 1 FROM public.orders WHERE order_no=source.order_no OR strpos(coalesce(extra->>'quote_note',''),source.order_no)>0) THEN RAISE EXCEPTION '已有記錄此網站單號的後台訂單，請先核對，避免重複建單'; END IF;
  IF p_payload->>'status' IS DISTINCT FROM 'confirmed' THEN RAISE EXCEPTION '轉單時請選擇已確認，先核對實際零件或整機'; END IF;
  IF jsonb_typeof(p_payload->'items') IS DISTINCT FROM 'array' OR jsonb_array_length(p_payload->'items') NOT BETWEEN 1 AND 100 THEN RAISE EXCEPTION '請加入實際零件或整機'; END IF;
  FOR line IN SELECT * FROM jsonb_array_elements(p_payload->'items') LOOP

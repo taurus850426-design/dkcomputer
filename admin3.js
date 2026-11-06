@@ -7133,6 +7133,7 @@
     const orderGuard = window.DKUnsaved?.register("order", {
       label: "訂單", root: orderForm,
       read: () => ({ fields: orderDraftFields.map(id => document.getElementById(id)?.value || ""), lines: orderLineItems,
+        shopReview: !!document.getElementById("shopOrderReviewed")?.checked,
         manual: pendingOrderLine() ? ["orderManualName", "orderManualCategory", "orderManualVendor", "orderManualQty", "orderManualPrice", "orderManualCost", "orderManualType"].map(id => document.getElementById(id)?.value || "") : null }),
       busy: () => document.getElementById("orderSave")?.dataset.saving === "1",
       save: () => saveV2Order(), discard: closeOrderEditor
@@ -7899,6 +7900,9 @@
           const banner=document.createElement("p"); banner.id="shopOrderSourceBanner"; banner.setAttribute("role","status");
           banner.style.cssText="padding:12px;background:#fff4d1;overflow-wrap:anywhere";
           banner.textContent=row.order_no+"｜商品合計 NT$ "+Number(row.subtotal).toLocaleString("zh-TW")+"、運費 NT$ "+Number(row.shipping_fee||0).toLocaleString("zh-TW")+"。"+(row.items||[]).map(x=>x.name+" × "+x.qty).join("；")+"。請加入實際零件或整機：庫存選現有庫存，缺貨選需要採購；整台售價只計一次。儲存後由本訂單統一管理收款、交貨與記帳。"+(row.status==="paid"?"網站已核實收款，會帶入原收款紀錄，請勿再收一次。":"");
+          const review=document.createElement("label"); review.style.cssText="display:block;margin-top:10px";
+          const check=document.createElement("input"); check.type="checkbox"; check.id="shopOrderReviewed";
+          review.append(check,document.createTextNode(" 我已核對此網站單尚未手動建單，且實際零件與整機沒有重複加入。")); banner.append(review);
           orderForm.prepend(banner); window.DKOrderPayment?.refresh(); updateV2OrderGrossDisplay();
         }
         orderForm?.scrollIntoView?.({behavior:"smooth",block:"start"}); return true;
@@ -8169,7 +8173,7 @@
         const missingCategory = orderLineItems.find((line) => !String(line.category || "").trim() && !line.historical_missing);
         if (missingCategory) return v2Show(orderMsg, "訂單品項「" + String(missingCategory.name || missingCategory.spec || "未命名品項") + "」尚未選擇品類");
         const payload = {
-          ...(pendingShopOrder && !editingV2OrderId ? {shop_source:{...pendingShopOrder}} : {}),
+          ...(pendingShopOrder && !editingV2OrderId ? {shop_source:{...pendingShopOrder},shop_reviewed:!!document.getElementById("shopOrderReviewed")?.checked} : {}),
           order_no: orderNo,
           customer_name: document.getElementById("orderCustomer")?.value || "",
           customer_phone: document.getElementById("orderCustomerPhone")?.value || "",
@@ -8206,6 +8210,7 @@
           })),
         };
         if (payload.shop_source) {
+          if (!payload.shop_reviewed) return v2Show(orderMsg,"請先勾選已核對未重複建單與實際出貨品項。");
           if (payload.status !== "confirmed") return v2Show(orderMsg,"網站轉單請選擇已確認，並核對實際零件或整機後儲存。");
           if (payload.items.some(x=>!["inventory","procurement"].includes(x.fulfillment_type))) return v2Show(orderMsg,"網站轉單請加入現有庫存或需要採購的商品，不能以服務取代。");
         }

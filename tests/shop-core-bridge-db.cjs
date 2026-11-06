@@ -19,13 +19,16 @@ test('WEB bridge: reviewed conversion, trusted payment, idempotent order, one st
   const rpc=async(name,args)=>(await db.query('select public.'+name+'('+args.map((_,i)=>'$'+(i+1)).join(',')+') r',args)).rows[0].r;
   const scalar=async(sql,args=[])=>{const role=(await db.query('select current_user r')).rows[0].r;await db.exec('reset role');try{return (await db.query(sql,args)).rows[0];}finally{await db.exec('set role '+role);}};
   const version=async()=> (await scalar('select updated_at::text v from shop_orders where id=$1',[web])).v;
-  const payload={order_no:'BRIDGE-001',customer_name:'forged',sales_type:'整機',shipping_income:100,discount:0,status:'confirmed',payment_status:'paid',received_amount:6100,delivery_status:'delivered',items:[{line_key:'cpu',fulfillment_type:'inventory',item_id:'CPU-A',category:'處理器',name:'Actual CPU',qty:1,unit_price:6000}]};
+  const payload={shop_reviewed:true,order_no:'BRIDGE-001',customer_name:'forged',sales_type:'整機',shipping_income:100,discount:0,status:'confirmed',payment_status:'paid',received_amount:6100,delivery_status:'delivered',items:[{line_key:'cpu',fulfillment_type:'inventory',item_id:'CPU-A',category:'處理器',name:'Actual CPU',qty:1,unit_price:6000}]};
   const convert=(p=payload,v)=>rpc('backoffice_convert_shop_order',[web,v,JSON.stringify(p)]);
   const reject=async(fn,re)=>{await assert.rejects(fn,re);}; // each RPC is a standalone transaction: test atomic rollback
   await reject(()=>convert({...payload,items:[{...payload.items[0],fulfillment_type:'service'}]},'2026-01-01'),/更新/);
   await reject(async()=>convert({...payload,items:[{...payload.items[0],fulfillment_type:'service'}]},await version()),/服務/);
   await reject(async()=>convert({...payload,shipping_income:999},await version()),/合計/);
   await reject(async()=>convert({...payload,status:'completed'},await version()),/已確認/);
+  await reject(async()=>convert({...payload,shop_reviewed:false},await version()),/先核對/);
+  await db.exec('reset role');await db.query("insert into orders(id,order_no,customer_name,status,extra) values('MANUAL','MANUAL','Synthetic','negotiating',jsonb_build_object('quote_note',(select order_no from shop_orders where id=$1)))",[web]);await db.exec('set role authenticated');
+  await reject(async()=>convert(payload,await version()),/已有記錄/);await db.exec("reset role;delete from orders where id='MANUAL';set role authenticated");
   assert.equal(Number((await scalar('select count(*) n from orders')).n),0);
   const v=await version();const created=await convert(payload,v),id=created.id;
   assert.ok(id);const core=await scalar('select * from orders where id=$1',[id]);assert.equal(core.customer_name,'Synthetic Buyer');assert.equal(core.extra.payment_status,'unpaid');assert.equal(core.extra.delivery_status,'pending');assert.equal(core.extra.shop_order_id,web);
