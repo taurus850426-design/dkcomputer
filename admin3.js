@@ -7863,6 +7863,7 @@
       scheduleLiveQuotePreview();
       v2Hide(orderMsg);
       orderGuard?.clean();
+      window.DKScanner?.open(o, orderLineItems);
     }
     function updateV2OrderGrossDisplay() {
       const sale = parseFloat(document.getElementById("orderTotalSale")?.value) || 0;

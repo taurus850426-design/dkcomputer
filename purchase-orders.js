@@ -1909,6 +1909,7 @@
   function closeReceiveModal() {
     receiveModalItemId = null;
     receiveModalMode = "receive";
+    if (el("poReceiveSerials")) { el("poReceiveSerials").value = ""; el("poReceiveSerials").disabled = false; }
     const modal = el("poReceiveModal");
     if (modal) modal.hidden = true;
     document.body.classList.remove("po-quote-modal-open");
@@ -2024,6 +2025,7 @@
     if (!(itemPrice(item) > 0)) return showMsg("請先補上廠商報價，再登記到貨", 3500);
     receiveModalItemId = String(item.id);
     receiveModalMode = "receive";
+    if (el("poReceiveSerials")) { el("poReceiveSerials").value = ""; el("poReceiveSerials").disabled = false; }
     if (el("poReceiveModalTitle")) el("poReceiveModalTitle").textContent = "登記品項到貨";
     if (el("poReceiveSaveBtn")) el("poReceiveSaveBtn").textContent = "確認到貨";
     if (el("poReceiveDate")) el("poReceiveDate").disabled = false;
@@ -2047,6 +2049,7 @@
     if (!item || item.procurementStatus !== "received") return showMsg("此品項尚未登記到貨", 3000);
     receiveModalItemId = String(item.id);
     receiveModalMode = "destination";
+    if (el("poReceiveSerials")) { el("poReceiveSerials").value = (item.serialNumbers || []).join("\n"); el("poReceiveSerials").disabled = true; }
     if (el("poReceiveModalTitle")) el("poReceiveModalTitle").textContent = "修改到貨用途";
     if (el("poReceiveSaveBtn")) el("poReceiveSaveBtn").textContent = "儲存用途";
     if (el("poReceiveDate")) {
@@ -2085,7 +2088,7 @@
     const selectedInventoryItemId = String((el("poReceiveInventoryItem") && el("poReceiveInventoryItem").value) || "__auto__").trim();
     const inventoryItemId = selectedInventoryItemId === "__auto__" ? "" : selectedInventoryItemId;
     const note = String((el("poReceiveNote") && el("poReceiveNote").value) || "").trim();
-    const serialNumbers = String((el("poReceiveSerials") && el("poReceiveSerials").value) || "").split(/[\\n,，;；]+/).map(function(v){return v.trim();}).filter(Boolean);
+    const serialNumbers = String((el("poReceiveSerials") && el("poReceiveSerials").value) || "").split(/[\r\n,，;；]+/).map(function(v){return v.trim();}).filter(Boolean);
     if (new Set(serialNumbers.map(function(v){return v.toUpperCase();})).size !== serialNumbers.length) return receiveModalMessage("S/N 有重複，請核對後再到貨", true);
     if (serialNumbers.length > Math.max(1, Number(original.quantity) || 1)) return receiveModalMessage("S/N 數量不可超過本次到貨數量", true);
     if (!receivedAt) return receiveModalMessage("請選擇到貨日期", true);
@@ -2120,14 +2123,7 @@
         return notify("入庫失敗：" + String((stockResult && stockResult.error) || "未知錯誤"), true);
       }
       const resultData = stockResult.data && typeof stockResult.data === "object" ? stockResult.data : {};
-      if (serialNumbers.length) {
-        const inventoryItemIdFromReceipt=String(resultData.item_id||resultData.inventory_item_id||"");
-        if(!inventoryItemIdFromReceipt) return notify("到貨已完成，但找不到入庫品項 ID，S/N 尚未登記；請勿重複到貨，先重新同步核對。",true);
-        if(typeof window.stage7RegisterReceiptSerials!=="function") return notify("到貨已完成，但 S/N 功能尚未載入；請勿重複到貨，先完成 Stage 38 更新。",true);
-        const serialRes=await window.stage7RegisterReceiptSerials({item_id:inventoryItemIdFromReceipt,purchase_order_id:targetOrder.id,purchase_item_id:original.id,order_id:destination==="customer"?original.sourceSalesOrderId:"",line_key:destination==="customer"?original.sourceSalesOrderLineKey:"",received_at:receivedAt,serial_numbers:serialNumbers,note});
-        if(!serialRes?.ok) return notify("到貨已完成，但 S/N 登記失敗："+String(serialRes?.error||"未知錯誤")+"。請勿重複到貨，請核對序號紀錄。",true);
-        original.serialNumbers=serialNumbers.slice();
-      }
+      if (serialNumbers.length && !resultData.serials_registered) return notify("伺服器未確認序號登記，請重新同步核對；勿重複到貨。", true);
 
       if (currentOrder && currentOrder.id === targetOrder.id) {
         currentOrder = normalizeOrder(targetOrder);
