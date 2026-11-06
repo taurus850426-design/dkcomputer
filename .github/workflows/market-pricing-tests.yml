@@ -1,0 +1,34 @@
+name: Market Pricing Tests
+on:
+  pull_request:
+    paths:
+      - 'market-price-*.js'
+      - 'builder-simple.js'
+      - 'builder.html'
+      - 'data/dk-market-prices.json'
+      - 'tests/market-price-*.test.js'
+      - '.github/workflows/market-pricing-tests.yml'
+  push:
+    branches:
+      - feat/market-price-engine
+    paths:
+      - 'market-price-*.js'
+      - 'tests/market-price-*.test.js'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Syntax check
+        run: |
+          node --check market-price-engine.js
+          node --check market-price-pipeline.js
+          node --check market-price-overlay.js
+          node --check builder-simple.js
+      - name: Unit tests
+        run: |
+          node tests/market-price-engine.test.js
+          node tests/market-price-pipeline.test.js
