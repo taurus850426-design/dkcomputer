@@ -3,7 +3,16 @@ on:
   push:
     branches: [feat/simple-pc-builder]
   pull_request:
-    paths: ['builder-simple.js','builder.html','home.js','index.html','.github/workflows/simple-builder-checks.yml']
+    paths:
+      - 'builder-simple.js'
+      - 'builder.html'
+      - 'home.js'
+      - 'index.html'
+      - 'admin.html'
+      - 'admin3.js'
+      - 'purchase-orders.js'
+      - 'tests/builder-submission-flow.cjs'
+      - '.github/workflows/simple-builder-checks.yml'
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -11,4 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-      - run: node --check builder-simple.js
+      - name: Syntax check
+        run: node --check builder-simple.js
+      - name: Builder submission flow regression
+        run: node tests/builder-submission-flow.cjs
