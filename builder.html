@@ -1,26 +1,23 @@
 <!doctype html>
 <html lang="zh-Hant">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>我要配電腦｜DK電競電腦</title><meta name="description" content="加入想玩的遊戲與常用軟體，確認螢幕與預算，比較完整配置方案，再客製化零件。"><link rel="icon" href="./favicon.svg"><link rel="stylesheet" href="./builder.css?v=20261024advisor1"></head>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>電腦自由配單｜DK電競電腦</title>
+<meta name="description" content="自由挑選 CPU、主機板、記憶體、SSD、顯示卡、散熱器、機殼與電源，即時計算配置並產生可列印配單。">
+<link rel="icon" href="./favicon.svg"><link rel="stylesheet" href="./builder.css?v=20261106simple1"><link rel="stylesheet" href="./builder-simple.css?v=20261106simple1">
+</head>
 <body>
 <header class="builder-header"><a class="brand" href="./index.html">DK <span>電競電腦</span></a><nav aria-label="頁面導覽"><a href="./machine.html">現貨主機</a><a href="./shop.html">線上選購</a><a href="./form.html">請店家協助</a></nav></header>
-<main class="builder-shell">
-<div class="builder-intro-row"><div class="intro"><p class="eyebrow">BUILD YOUR NEXT PC</p><h1>先說你的需求，<br>再一起挑電腦。</h1><p>不用先懂規格。從你想做的事情開始，逐步整理配單。</p></div>
-<div class="tabs" role="group" aria-label="選擇功能"><button id="wizardTab" class="active" type="button">帶我配電腦</button><button id="catalogTab" type="button">查看所有商品</button></div></div>
-<p id="catalogStatus" class="muted" role="status">正在載入商品與價格…</p>
-<div id="builderFailure" class="notice" hidden><p>暫時無法取得配單資料，你的既有草稿仍會保留。</p><button id="retryLoad" type="button">重新載入</button> <a href="./form.html">改填需求表單</a></div>
-<div id="builderLayout" class="layout" hidden>
-<section id="wizardView" class="panel" aria-labelledby="stepTitle">
-<div class="step-top"><p id="stepLabel" class="eyebrow"></p><button id="restart" class="text-button" type="button">重新開始</button></div>
-<progress id="builderProgress" max="13" value="1" aria-label="配單進度"></progress>
-<h2 id="stepTitle" tabindex="-1"></h2><p id="stepLead" class="muted"></p>
-<form id="builderForm"><nav id="stepNavigation" class="step-navigation" aria-label="配單步驟"></nav><div id="stepBody"></div><p id="stepMessage" role="status" aria-live="polite"></p><div class="actions"><button id="previous" type="button" class="secondary">上一步</button><button id="next" type="submit">下一步 →</button></div></form>
+<main class="builder-shell simple-builder">
+<section class="simple-hero"><p class="eyebrow">BUILD YOUR PC</p><h1>自由配電腦</h1><p>直接挑選你要的零件。右側會即時整理配置與參考總價，完成後可列印配單。</p><p id="catalogStatus" class="muted" role="status">正在載入商品與價格…</p></section>
+<div id="builderFailure" class="notice" hidden><p>暫時無法取得配單資料。</p><button id="retryLoad" type="button">重新載入</button></div>
+<div id="simpleLayout" class="simple-layout" hidden>
+<section class="panel simple-parts" aria-labelledby="partsTitle"><div class="simple-section-head"><div><p class="eyebrow">PARTS</p><h2 id="partsTitle">選擇零件</h2></div><button id="clearBuild" class="secondary" type="button">清空配單</button></div>
+<div class="fields simple-filters"><label>搜尋品牌或型號<input id="partSearch" type="search" placeholder="例如：7500F、5070、1TB" maxlength="100"></label></div>
+<div id="slotList"></div>
 </section>
-<section id="catalogView" class="panel" hidden aria-labelledby="catalogTitle"><p class="eyebrow">PARTS CATALOG</p><h2 id="catalogTitle">從商品清單找零件</h2><p class="muted">商品價格供配單估算參考，不代表 DK 庫存或已確認可供貨；實際價格與供貨請洽 DK 確認。</p><div class="fields"><label>商品分類<select id="catalogCategory"></select></label><label>搜尋品牌或型號<input id="catalogSearch" type="search" placeholder="例如：7500F、白色、1TB" maxlength="100"></label></div><details class="part-filters" open><summary>⌕ 分類與價格篩選</summary><div class="fields"><label>品牌<select id="catalogBrand"><option value="">全部品牌</option></select></label><label>細部分類<select id="catalogGroup"><option value="">全部細分類</option></select></label><label>單項價格上限<select id="catalogPrice"><option value="">不限</option><option value="2000">NT$ 2,000</option><option value="5000">NT$ 5,000</option><option value="10000">NT$ 10,000</option><option value="20000">NT$ 20,000</option><option value="40000">NT$ 40,000</option></select></label></div><p class="small muted">各分類均可先縮小範圍；進入選配步驟可再按已收錄規格篩選。</p></details><p id="catalogCount" role="status"></p><div id="catalogProducts" class="cards"></div><button id="catalogMore" type="button" class="secondary">顯示更多</button></section>
-<aside class="panel summary"><p class="eyebrow">YOUR BUILD</p><h2>你的配單</h2><section><h3>實體商品外觀</h3><div id="realCasePreview"></div></section><div id="buildItems"></div><div class="total"><span>已計價零件參考小計</span><strong id="buildTotal">NT$ 0</strong></div><p id="budgetStatus"></p><p class="muted small">未選零件、組裝服務、系統與周邊另計。供貨及正式價格由 DK 確認。</p><p id="saveStatus" class="muted small" role="status"></p><button id="toSummary" type="button" class="secondary full">查看完整需求</button></aside>
+<aside class="panel summary simple-summary"><p class="eyebrow">YOUR BUILD</p><h2>目前配單</h2><div id="buildItems"></div><div class="total"><span>零件參考總價</span><strong id="buildTotal">NT$ 0</strong></div><div id="compatibility" class="simple-compatibility"></div><p class="muted small">商品價格為目前配單資料的參考價格；實際供貨與正式售價以 DK 最終確認為準。</p><div class="simple-actions"><button id="printBuild" type="button">列印／產生配單</button><button id="copyBuild" class="secondary" type="button">複製配單</button></div><p id="actionStatus" class="muted small" role="status"></p></aside>
 </div>
-<div id="mobileTotalBox" hidden class="mobile-total"><div><span>已計價零件參考小計</span><strong id="mobileTotal">NT$ 0</strong></div><button id="mobileSummary" type="button">查看配單</button></div>
-<noscript><p class="notice">請開啟 JavaScript 使用配單，或<a href="./form.html">填寫需求表單</a>。</p></noscript>
-<footer>DK 電競電腦 · 依用途配機，不亂賣、不踩雷。<br><a href="./index.html">回官網首頁</a></footer>
 </main>
-<script src="./shared.js?v=20260914line1"></script><script src="./builder-policy.js?v=20261023auto1"></script><script src="./builder-advisor.js?v=20261024advisor2"></script><script src="./builder-fit.js?v=20261024advisor1"></script><script src="./builder-core.js?v=20261024advisor1"></script><script src="./builder-apps.js?v=20261023auto1"></script><script src="./builder-service-config.js?v=20261023launch1"></script><script src="./builder-research.js?v=20261023launch1"></script><script src="./builder-catalog-media.js?v=20261023fit1"></script><script src="./builder-media.js?v=20261023plans1"></script><script src="./builder.js?v=20261024advisor2"></script>
+<script src="./builder-policy.js?v=20261023auto1"></script><script src="./builder-fit.js?v=20261024advisor1"></script><script src="./builder-core.js?v=20261024advisor1"></script><script src="./builder-simple.js?v=20261106simple1"></script>
 </body></html>
