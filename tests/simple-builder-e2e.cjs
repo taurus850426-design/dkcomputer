@@ -23,10 +23,19 @@ test('current builder: desktop/mobile, search, total, restoration, failed/succes
   });
   await page.goto(origin+'/builder.html');await page.locator('#simpleLayout').waitFor();
   await page.locator('#saveBuild').click();assert.match(await page.locator('#actionStatus').innerText(),/至少選擇/);assert.equal(writes.length,0);
-  const cpu=page.locator('[data-slot="cpu"]');const value=await cpu.locator('option').nth(1).getAttribute('value');await cpu.selectOption(value);
-  const total=await page.locator('#buildTotal').innerText();assert.notEqual(total,'NT$ 0');
+  await page.locator('[data-slot-filter="cpu"]').selectOption({label:'AMD AM5'});const cpu=page.locator('[data-slot="cpu"]');const value=await cpu.locator('option').nth(1).getAttribute('value');await cpu.selectOption(value);
+  let total=await page.locator('#buildTotal').innerText();assert.notEqual(total,'NT$ 0');
+  await page.locator('[data-slot-filter="cpu"]').selectOption({label:'Intel LGA 1700'});assert.equal(await page.locator('#buildTotal').innerText(),total);assert.match(await page.locator('.simple-slot').first().innerText(),/配單仍保留/);
+  await page.locator('[data-slot-filter="cpu"]').selectOption({label:'AMD AM5'});assert.equal(await cpu.inputValue(),value);
+  await page.locator('[data-slot-filter="case"]').selectOption({label:'ATX 機殼'});assert.ok(await page.locator('[data-slot="case"] option').count()<=101);
+  await page.locator('[data-brand-filter="case"]').selectOption({label:'ASUS'});assert.match(await page.locator('[data-slot="case"]').innerText(),/華碩|ASUS/);
+
   await page.locator('#partSearch').fill('7500F');assert.match(await cpu.innerText(),/7500F/);await page.locator('#partSearch').fill('');
   await page.reload();await page.locator('#simpleLayout').waitFor();assert.equal(await cpu.inputValue(),value);assert.equal(await page.locator('#buildTotal').innerText(),total);
+  // Unsaved local drafts retain product IDs, but reprice from the next verified snapshot.
+  const latest=JSON.parse(fs.readFileSync(path.join(root,'data/builder-catalog.json'),'utf8'));const chosen=latest.products.find(p=>p.id===value);chosen.price+=100;latest.updatedAt=new Date().toISOString();
+  await page.route('**/data/builder-catalog.json',r=>r.fulfill({contentType:'application/json',body:JSON.stringify(latest)}));await page.reload();await page.locator('#simpleLayout').waitFor();assert.equal(await cpu.inputValue(),value);total='NT$ '+chosen.price.toLocaleString('zh-TW');assert.equal(await page.locator('#buildTotal').innerText(),total);
+
   for(const width of [1440,390]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
   await page.locator('#saveBuild').click();await page.waitForFunction(()=>document.getElementById('actionStatus').textContent.includes('無法送出'));
   assert.equal(await cpu.inputValue(),value);assert.equal(writes.length,1);reject=false;
