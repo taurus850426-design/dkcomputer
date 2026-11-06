@@ -11,5 +11,5 @@ assert(admin.includes('fulfillment_type:"procurement"'),"procurement fallback mi
 assert(admin.includes("dk_pending_builder_submission_v1"),"conversion link missing");
 assert(admin.includes('stage7SetBuilderSubmissionStatus(builderLink.id,"converted",savedId)'),"conversion completion missing");
 assert(po.includes("S/N 有重複"),"serial duplicate guard missing");
-assert(po.includes("stage7RegisterReceiptSerials"),"serial persistence missing");
+assert(po.includes("serial_numbers: serialNumbers") && fs.readFileSync("shared.js","utf8").includes("serial_numbers: payload.serial_numbers"),"atomic receipt serial persistence missing");
 console.log("builder submission flow regression: ok");

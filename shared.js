@@ -1645,7 +1645,7 @@ async function stage7ReceivePurchaseItem(payload) {
   return upsertPurchaseOrderToSupabase(payload.purchase_order, {
     type: "receive", purchase_item_id: payload.purchase_item_id,
     destination: payload.destination, inventory_item_id: payload.inventory_item_id || "",
-    received_at: payload.received_at, note: payload.note || "",
+    received_at: payload.received_at, note: payload.note || "", serial_numbers: payload.serial_numbers || [],
   });
 }
 
@@ -1664,6 +1664,8 @@ async function stage7RegisterReceiptSerials(payload) {
     p_note:String(src.note||""),
   });
 }
+
+window.DKOrderScanRpc = (args) => stage7Rpc("backoffice_order_scan", args);
 
 async function stage7SetPurchaseReceiptDestination(payload) {
   if (!stage7IsAdminRole()) return { ok: false, forbidden: true, error: "只有管理員可以修改到貨用途" };
