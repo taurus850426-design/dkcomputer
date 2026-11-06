@@ -17,7 +17,7 @@ jobs:
       - name: Capture public source response
         run: |
           mkdir -p /tmp/sinya-response
-          node --input-type=module -e "import fs from 'node:fs'; const r=await fetch('https://gateway.sinya.com.tw/api/diy/search?keyword=',{signal:AbortSignal.timeout(25000),headers:{'User-Agent':'DKComputer-PriceMonitor/1.0'}});const t=await r.text(); console.log(JSON.stringify({status:r.status,bytes:t.length,type:r.headers.get('content-type')}));fs.writeFileSync('/tmp/sinya-response/sinya-api.json',t);"
+          node --input-type=module -e "import fs from 'node:fs'; const r=await fetch('https://www.sinya.com.tw/diy/diyCartList',{method:'POST',signal:AbortSignal.timeout(25000),headers:{'User-Agent':'DKComputer-PriceMonitor/1.0'}});const t=await r.text(); console.log(JSON.stringify({status:r.status,bytes:t.length,type:r.headers.get('content-type')}));fs.writeFileSync('/tmp/sinya-response/sinya-api.json',t);"
       - name: Capture published category contract
         run: |
           curl --fail --max-time 25 'https://www.sinya.com.tw/api/prod_sub' -o /tmp/sinya-response/prod-sub.json
