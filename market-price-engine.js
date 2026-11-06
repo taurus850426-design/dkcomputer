@@ -1,6 +1,6 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.DKMarketPrice=api;})(typeof window==='object'?window:globalThis,function(){'use strict';
 const SOURCE_IDS=new Set(['coolpc','sinya','autobuy']);
-const PROMO=/搭機|任搭|限搭|組裝價|會員價|限時|特價|活動|贈品|折價|coupon|combo/i;
+const PROMO=/搭機|搭板|任搭|限搭|組裝價|會員價|限時|特價|活動|贈品|折價|優惠|現省|原價\s*[$＄]|coupon|combo/i;
 function cleanText(v){return String(v??'').replace(/\s+/g,' ').trim();}
 function normalizeModel(v){return cleanText(v).toUpperCase().replace(/[™®]/g,'').replace(/[^A-Z0-9]+/g,' ').trim();}
 function normalizeQuote(raw){
