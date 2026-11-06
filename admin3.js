@@ -7265,6 +7265,53 @@
       try { updateV2OrderGrossDisplay(); } catch (_) {}
     }
 
+    let builderSubmissionRows = [];
+    function builderSubmissionEsc(v){ return v2Esc(String(v ?? "")); }
+    async function loadBuilderSubmissions(){
+      const host=document.getElementById("builderSubmissionsList"),msg=document.getElementById("builderSubmissionsMsg"),count=document.getElementById("builderSubmissionCount");
+      if(!host||typeof window.stage7ListBuilderSubmissions!=="function") return;
+      if(msg) msg.textContent="載入中…";
+      const res=await window.stage7ListBuilderSubmissions(100);
+      if(!res?.ok){ if(msg) msg.textContent="無法載入客人配單："+String(res?.error||"未知錯誤"); return; }
+      const body=res.data&&typeof res.data==="object"?res.data:{};
+      builderSubmissionRows=Array.isArray(body.submissions)?body.submissions:[];
+      const active=builderSubmissionRows.filter(x=>["new","reviewing"].includes(String(x.status||"new")));
+      if(count) count.textContent=String(active.length);
+      if(msg) msg.textContent=active.length?"":"目前沒有待審核配單。";
+      host.innerHTML=active.map(row=>{
+        const p=row.payload||{},items=Array.isArray(p.items)?p.items:[],total=Number(p.total)||items.reduce((n,x)=>n+(Number(x.unit_price)||0)*(Number(x.qty)||1),0);
+        return '<article class="section-card-soft" data-builder-id="'+builderSubmissionEsc(row.id)+'"><div class="section-head"><div><strong>'+builderSubmissionEsc(row.build_no)+'</strong><div class="muted small">'+builderSubmissionEsc(new Date(row.created_at).toLocaleString("zh-TW"))+'｜'+items.length+' 項｜NT$ '+v2FmtNum(total)+'</div></div><div class="actions"><button type="button" class="btn btn-primary btn-sm builder-to-order" data-id="'+builderSubmissionEsc(row.id)+'">轉成訂單</button><button type="button" class="btn btn-ghost btn-sm builder-cancel" data-id="'+builderSubmissionEsc(row.id)+'">取消</button></div></div><div class="muted small">'+items.map(x=>builderSubmissionEsc((x.category||"零件")+'：'+(x.name||""))).join("｜")+'</div></article>';
+      }).join("");
+    }
+    function matchBuilderLineToInventory(line){
+      const products=DK.getItems().filter(i=>typeof DK.isSellableOnHand==="function"?DK.isSellableOnHand(i):Number(i.qty_on_hand)>0);
+      const productId=String(line.product_id||"");
+      const name=String(line.name||"").trim().toLowerCase();
+      const exact=products.find(i=>String(i.id)===productId)||products.find(i=>String(i.name||"").trim().toLowerCase()===name);
+      return exact||null;
+    }
+    function convertBuilderSubmissionToOrder(id){
+      const row=builderSubmissionRows.find(x=>String(x.id)===String(id)); if(!row)return;
+      const p=row.payload||{},items=Array.isArray(p.items)?p.items:[];
+      openV2OrderEditor(null);
+      orderLineItems=items.map((line,idx)=>{
+        const stock=matchBuilderLineToInventory(line),qty=Math.max(1,Number(line.qty)||1),price=Number(line.unit_price)||0;
+        if(stock&&Number(stock.qty_on_hand)>=qty) return {line_key:String(line.line_key||("builder_"+idx)),fulfillment_type:"inventory",item_id:stock.id,sku:stock.sku,name:stock.name,spec:stock.spec||"",category:String(stock.category||line.category||""),qty,unit_price:price,quote_unit_price:price,cost_unit:canPerm("viewCost")?(Number(stock.cost_unit)||0):undefined};
+        return {line_key:String(line.line_key||("builder_"+idx)),fulfillment_type:"procurement",item_id:null,sku:"",name:String(line.name||""),spec:"",category:String(line.category||""),qty,unit_price:price,quote_unit_price:price,cost_unit:0,preferred_vendor:"",builder_product_id:String(line.product_id||"")};
+      });
+      const sales=document.getElementById("orderSalesType");if(sales)sales.value="整機";
+      const note=document.getElementById("orderQuoteNote");if(note)note.value="來源配單："+String(row.build_no||"");
+      try{sessionStorage.setItem("dk_pending_builder_submission_v1",JSON.stringify({id:row.id,buildNo:row.build_no}));}catch(_){}
+      renderOrderLineTbody();updateOrderTotalsFromLines();
+      if(orderMsg){orderMsg.hidden=false;orderMsg.textContent="已帶入 "+row.build_no+"。有庫存的品項已標為「現有庫存」，不足或無法精準對應的品項已標為「需要採購」；請核對客戶資料後儲存正式訂單。";}
+    }
+    document.getElementById("builderSubmissionsRefresh")?.addEventListener("click",()=>loadBuilderSubmissions());
+    document.getElementById("builderSubmissionsList")?.addEventListener("click",async(e)=>{
+      const to=e.target.closest(".builder-to-order");if(to){convertBuilderSubmissionToOrder(to.dataset.id);return;}
+      const cancel=e.target.closest(".builder-cancel");if(cancel&&confirm("確定取消這筆客人配單？")){const r=await window.stage7SetBuilderSubmissionStatus(cancel.dataset.id,"cancelled",null);if(!r?.ok)alert("取消失敗："+String(r?.error||"未知錯誤"));else loadBuilderSubmissions();}
+    });
+    window.addEventListener("dk:v2-tab-changed",(e)=>{if(e?.detail?.tab==="orders")loadBuilderSubmissions();});
+
     function getOrderDateStr(o) {
       if (typeof DK.orderBusinessDate === "function") return DK.orderBusinessDate(o);
       const dateCol = o && o.date != null ? String(o.date).slice(0, 10) : "";
@@ -8195,6 +8242,15 @@
         }
         const savedId = (res.data && (res.data.id || (Array.isArray(res.data) ? res.data[0] && res.data[0].id : ""))) || editingV2OrderId || "";
         auditAction(editingV2OrderId ? "編輯訂單" : "新增訂單", savedId);
+        if (!wasEditing && savedId) {
+          let builderLink=null;
+          try { builderLink=safeParse(sessionStorage.getItem("dk_pending_builder_submission_v1"),null); } catch (_) {}
+          if (builderLink?.id && typeof window.stage7SetBuilderSubmissionStatus==="function") {
+            const linked=await window.stage7SetBuilderSubmissionStatus(builderLink.id,"converted",savedId);
+            if(linked?.ok){ try{sessionStorage.removeItem("dk_pending_builder_submission_v1");}catch(_){} loadBuilderSubmissions().catch(()=>{}); }
+            else v2Show(orderMsg,"訂單已建立，但配單草稿尚未標記完成；請勿重複轉單，重新整理後核對。");
+          }
+        }
         if (res.refreshFailed) {
           if (!editingV2OrderId && savedId) editingV2OrderId = savedId;
           v2Show(orderMsg, res.error || "訂單已寫入，但畫面重新載入失敗。請重新整理頁面，不要再按一次儲存。");

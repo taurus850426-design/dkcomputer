@@ -1649,6 +1649,22 @@ async function stage7ReceivePurchaseItem(payload) {
   });
 }
 
+async function stage7RegisterReceiptSerials(payload) {
+  const src=payload||{};
+  const serials=Array.isArray(src.serial_numbers)?src.serial_numbers.map(String).map(v=>v.trim()).filter(Boolean):[];
+  if(!serials.length) return {ok:true,data:{ok:true,count:0}};
+  return stage7Rpc("backoffice_register_receipt_serials", {
+    p_item_id:String(src.item_id||""),
+    p_purchase_order_id:String(src.purchase_order_id||""),
+    p_purchase_item_id:String(src.purchase_item_id||""),
+    p_order_id:String(src.order_id||""),
+    p_order_line_key:String(src.line_key||""),
+    p_received_at:src.received_at||null,
+    p_serials:serials,
+    p_note:String(src.note||""),
+  });
+}
+
 async function stage7SetPurchaseReceiptDestination(payload) {
   if (!stage7IsAdminRole()) return { ok: false, forbidden: true, error: "只有管理員可以修改到貨用途" };
   if (!payload?.purchase_order) return { ok: false, error: "缺少原叫貨單版本，請重新載入" };
@@ -1663,6 +1679,18 @@ async function stage7SetOrderOperations(payload) {
   return stage7Rpc("backoffice_set_order_operations_checked", {
     p_expected_updated_at: src.expected_updated_at ?? src.updated_at ?? null,
     p_payload: { ...src, id: String(src.order_id || src.id || "") },
+  });
+}
+
+async function stage7ListBuilderSubmissions(limit) {
+  return stage7Rpc("backoffice_list_builder_submissions", { p_limit: Math.min(Math.max(Number(limit) || 100, 1), 500) });
+}
+
+async function stage7SetBuilderSubmissionStatus(id, status, convertedOrderId) {
+  return stage7Rpc("backoffice_set_builder_submission_status", {
+    p_id: String(id || ""),
+    p_status: String(status || ""),
+    p_converted_order_id: convertedOrderId ? String(convertedOrderId) : null,
   });
 }
 
@@ -2044,8 +2072,11 @@ if (typeof window !== "undefined") {
   window.stage7SyncProcurementCost = stage7SyncProcurementCost;
   window.stage7ClearProcurementCost = stage7ClearProcurementCost;
   window.stage7ReceivePurchaseItem = stage7ReceivePurchaseItem;
+  window.stage7RegisterReceiptSerials = stage7RegisterReceiptSerials;
   window.stage7SetPurchaseReceiptDestination = stage7SetPurchaseReceiptDestination;
   window.stage7SetOrderOperations = stage7SetOrderOperations;
+  window.stage7ListBuilderSubmissions = stage7ListBuilderSubmissions;
+  window.stage7SetBuilderSubmissionStatus = stage7SetBuilderSubmissionStatus;
   window.stage7ListCustomerRecords = stage7ListCustomerRecords;
   window.stage7UpsertCustomerRecord = stage7UpsertCustomerRecord;
   window.stage7DeleteCustomerRecord = stage7DeleteCustomerRecord;
