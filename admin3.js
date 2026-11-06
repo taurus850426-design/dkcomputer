@@ -8242,6 +8242,15 @@
         }
         const savedId = (res.data && (res.data.id || (Array.isArray(res.data) ? res.data[0] && res.data[0].id : ""))) || editingV2OrderId || "";
         auditAction(editingV2OrderId ? "編輯訂單" : "新增訂單", savedId);
+        if (!wasEditing && savedId) {
+          let builderLink=null;
+          try { builderLink=safeParse(sessionStorage.getItem("dk_pending_builder_submission_v1"),null); } catch (_) {}
+          if (builderLink?.id && typeof window.stage7SetBuilderSubmissionStatus==="function") {
+            const linked=await window.stage7SetBuilderSubmissionStatus(builderLink.id,"converted",savedId);
+            if(linked?.ok){ try{sessionStorage.removeItem("dk_pending_builder_submission_v1");}catch(_){} loadBuilderSubmissions().catch(()=>{}); }
+            else v2Show(orderMsg,"訂單已建立，但配單草稿尚未標記完成；請勿重複轉單，重新整理後核對。");
+          }
+        }
         if (res.refreshFailed) {
           if (!editingV2OrderId && savedId) editingV2OrderId = savedId;
           v2Show(orderMsg, res.error || "訂單已寫入，但畫面重新載入失敗。請重新整理頁面，不要再按一次儲存。");
