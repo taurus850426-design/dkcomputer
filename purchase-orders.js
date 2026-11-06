@@ -2120,6 +2120,14 @@
         return notify("入庫失敗：" + String((stockResult && stockResult.error) || "未知錯誤"), true);
       }
       const resultData = stockResult.data && typeof stockResult.data === "object" ? stockResult.data : {};
+      if (serialNumbers.length) {
+        const inventoryItemIdFromReceipt=String(resultData.item_id||resultData.inventory_item_id||"");
+        if(!inventoryItemIdFromReceipt) return notify("到貨已完成，但找不到入庫品項 ID，S/N 尚未登記；請勿重複到貨，先重新同步核對。",true);
+        if(typeof window.stage7RegisterReceiptSerials!=="function") return notify("到貨已完成，但 S/N 功能尚未載入；請勿重複到貨，先完成 Stage 38 更新。",true);
+        const serialRes=await window.stage7RegisterReceiptSerials({item_id:inventoryItemIdFromReceipt,purchase_order_id:targetOrder.id,purchase_item_id:original.id,order_id:destination==="customer"?original.sourceSalesOrderId:"",line_key:destination==="customer"?original.sourceSalesOrderLineKey:"",received_at:receivedAt,serial_numbers:serialNumbers,note});
+        if(!serialRes?.ok) return notify("到貨已完成，但 S/N 登記失敗："+String(serialRes?.error||"未知錯誤")+"。請勿重複到貨，請核對序號紀錄。",true);
+        original.serialNumbers=serialNumbers.slice();
+      }
 
       if (currentOrder && currentOrder.id === targetOrder.id) {
         currentOrder = normalizeOrder(targetOrder);
