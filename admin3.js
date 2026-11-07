@@ -8602,7 +8602,13 @@
       let titleLineH = items.length >= 13 ? 27 : (items.length >= 9 ? 31 : 36);
       let rowPad = items.length >= 13 ? 7 : (items.length >= 9 ? 9 : 13);
       const itemStartY = 260;
-      const totalBoxY = H - 224;
+      // Reserve space before laying out items; never truncate delivery requirements.
+      ctx.font = "600 17px " + font;
+      const noteLines = String(data.note || "").trim().split(/\r?\n/)
+        .flatMap(line => wrapCanvasText(ctx, line, contentW - 20));
+      const hasNote = String(data.note || "").trim().length > 0;
+      const noteHeight = hasNote ? 28 + noteLines.length * 24 : 0;
+      const totalBoxY = H - 224 - noteHeight;
       const itemBottom = totalBoxY - 24;
       const priceW = anyPrice ? 208 : 0;
       const numberW = 42;
@@ -8808,8 +8814,11 @@
       ctx.stroke();
       ctx.fillStyle = C.muted;
       ctx.font = "600 17px " + font;
-      const note = String(data.note || "").trim();
-      ctx.fillText(note ? "備註｜" + note : "DK Computer", padX, footerY);
+      if (hasNote) {
+        ctx.fillText("備註", padX, totalBoxY + 142);
+        noteLines.forEach((line, index) => ctx.fillText(line, padX + 10, totalBoxY + 168 + index * 24));
+      }
+      ctx.fillText("DK Computer", padX, footerY);
       ctx.textAlign = "right";
       ctx.fillStyle = C.pink;
       ctx.font = "700 18px " + font;
