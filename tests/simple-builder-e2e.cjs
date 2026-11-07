@@ -28,8 +28,9 @@ test('current builder: desktop/mobile, search, total, restoration, failed/succes
   await page.locator('[data-slot-filter="cpu"]').selectOption({label:'Intel LGA 1700'});assert.equal(await page.locator('#buildTotal').innerText(),total);assert.match(await page.locator('.simple-slot').first().innerText(),/配單仍保留/);
   await page.locator('[data-slot-filter="cpu"]').selectOption({label:'AMD AM5'});assert.equal(await cpu.inputValue(),value);
   await page.locator('[data-slot-filter="case"]').selectOption({label:'ATX 機殼'});assert.ok(await page.locator('[data-slot="case"] option').count()<=101);
-  await page.locator('[data-brand-filter="case"]').selectOption({label:'ASUS'});assert.match(await page.locator('[data-slot="case"]').innerText(),/華碩|ASUS/);
+  await page.locator('[data-brand-filter="case"]').selectOption({label:'ASUS 華碩'});assert.match(await page.locator('[data-slot="case"]').innerText(),/華碩|ASUS/);
 
+  await page.locator('#partSearch').fill('華碩');assert.match(await page.locator('[data-slot="case"]').innerText(),/ASUS|華碩/);await page.locator('#partSearch').fill('');
   await page.locator('#partSearch').fill('7500F');assert.match(await cpu.innerText(),/7500F/);await page.locator('#partSearch').fill('');
   await page.reload();await page.locator('#simpleLayout').waitFor();assert.equal(await cpu.inputValue(),value);assert.equal(await page.locator('#buildTotal').innerText(),total);
   // Unsaved local drafts retain product IDs, but reprice from the next verified snapshot.

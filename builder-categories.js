@@ -15,6 +15,12 @@ function category(p,key){const f=p.facts||{};switch(key){
 }}
 const brands=[['ASUS',/華碩|\bASUS\b/i],['MSI',/微星|\bMSI\b/i],['GIGABYTE',/技嘉|\bGIGABYTE\b/i],['ASRock',/華擎|\bASRock\b/i],['Intel',/^Intel\b/i],['AMD',/^AMD\b/i],['Kingston',/金士頓|\bKingston\b/i],['Crucial',/美光|\bCrucial\b/i],['Corsair',/海盜船|\bCorsair\b/i],['G.SKILL',/芝奇|\bG[.]?SKILL\b/i],['TEAMGROUP',/十銓|\bTEAMGROUP\b/i],['ADATA',/威剛|\bADATA\b|\bXPG\b/i],['Samsung',/三星|\bSamsung\b/i],['WD',/威騰|^WD\b|Western Digital/i],['Seagate',/希捷|\bSeagate\b/i],['Thermalright',/利民|\bThermalright\b/i],['Cooler Master',/酷碼|Cooler\s?Master/i],['DeepCool',/九州風神|\bDeepCool\b/i],['Noctua',/貓頭鷹|\bNoctua\b/i],['Fractal Design',/Fractal Design/i],['Lian Li',/聯力|Lian\s?Li/i],['Montech',/君主|\bMontech\b/i],['FSP',/全漢|\bFSP\b/i],['Seasonic',/海韻|\bSeasonic\b/i],['Super Flower',/振華|Super Flower/i]];
 function brand(p){const name=String(p.name||'');for(const [label,rule] of brands)if(rule.test(name))return label;return name.match(/^([A-Za-z][A-Za-z0-9.-]*|[\u4e00-\u9fff]{2,5})/)?.[1]||'其他品牌';}
+// Display aliases only: product IDs, source names and prices remain unchanged.
+const chineseBrands={ASUS:'華碩',MSI:'微星',GIGABYTE:'技嘉',ASRock:'華擎',Intel:'英特爾',AMD:'超微',Kingston:'金士頓',Crucial:'美光',Corsair:'海盜船','G.SKILL':'芝奇',TEAMGROUP:'十銓',ADATA:'威剛',Samsung:'三星',WD:'威騰',Seagate:'希捷',Thermalright:'利民','Cooler Master':'酷碼',DeepCool:'九州風神',Noctua:'貓頭鷹','Fractal Design':'分形工藝','Lian Li':'聯力',Montech:'君主',FSP:'全漢',Seasonic:'海韻','Super Flower':'振華',Antec:'安鈦克',Acer:'宏碁',COUGAR:'美洲獅',Biwin:'佰維',KLEVV:'科賦',ZOTAC:'索泰',NZXT:'恩傑',INNO3D:'映眾',Phanteks:'追風者',Scythe:'大鐮',SAMA:'先馬',BitFenix:'火鳥'};
+function chineseBrand(key){const match=Object.keys(chineseBrands).find(k=>k.toLowerCase()===String(key).toLowerCase());return match?chineseBrands[match]:'';}
+function brandLabel(key){const zh=chineseBrand(key);return zh?key+' '+zh:key;}
+function productLabel(p){const name=String(p.name||''),zh=chineseBrand(brand(p));return zh&&!name.includes(zh)?name+'（'+zh+'）':name;}
+function matches(p,query){return [p.name,brandLabel(brand(p))].join(' ').toLowerCase().includes(String(query||'').trim().toLowerCase());}
 function values(products,fn){return [...new Set(products.map(fn))].sort((a,b)=>a.localeCompare(b,'zh-TW',{numeric:true}));}
-return{category,brand,values};
+return{category,brand,values,brandLabel,productLabel,matches};
 });
