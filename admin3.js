@@ -7514,6 +7514,10 @@
       return { label: "未叫貨", className: "status-danger" };
     }
 
+    function orderDueSummaryCell(o) {
+      const due = window.DKOrderPayment?.summary(o).due ?? Math.max(0, (Number(o.total_sale) || 0) + (Number(o.shipping_income) || 0) - (Number(o.discount) || 0));
+      return '<strong>' + v2FmtNum(due) + '</strong><small class="order-due-breakdown">售價 ' + v2FmtNum(o.total_sale) + '｜運費 ' + v2FmtNum(o.shipping_income) + '｜折扣 ' + v2FmtNum(o.discount) + '</small>';
+    }
     function renderV2Orders() {
       if (!ordersTbody) return;
       const list = getFilteredOrders();
@@ -7592,7 +7596,7 @@
         return `<tr>
           <td class="nowrap table-primary">${v2Esc(o.order_no)}</td>
           <td class="table-primary">${v2Esc(o.customer_name)}</td>
-          <td class="table-number neutral-number">${v2FmtNum(o.total_sale)}</td>
+          <td class="table-number neutral-number">${orderDueSummaryCell(o)}</td>
           <td class="table-number neutral-number">${v2FmtNum(o.shipping_income)}</td>
           <td class="table-number neutral-number">${v2FmtNum(o.discount)}</td>
           <td class="table-number cost-muted-num" data-admin-only>${v2FmtNum(o.cogs_total)}</td>

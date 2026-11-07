@@ -488,3 +488,5 @@
 }
 #orderForm :is(input[type="text"], input[type="tel"], input[type="number"], input[type="date"], select) { min-height: 42px; }
 #orderForm .field > label, #orderForm .order-compact-field { color: #334155; font-size: 14px; font-weight: 600; }
+
+body.admin-page #panel .orders-table .order-due-breakdown { display: block; margin-top: 5px; font-size: 12px; font-weight: 400; line-height: 1.5; color: #475569; white-space: normal; overflow-wrap: anywhere; }
