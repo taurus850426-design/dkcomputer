@@ -22,7 +22,7 @@
  async function loadHistory(){
   if(busy||!admin())return;const token=generation;lock(true);
   try{const data=await rpc('list',null,{});if(token!==generation||!admin())return;history=Array.isArray(data)?data:[];const host=el('assemblyHistoryList');host.replaceChildren();
-   for(const row of history){const box=document.createElement('details'),title=document.createElement('summary'),p=document.createElement('p'),list=document.createElement('ul');title.textContent=row.serial_no+'｜'+row.name+'｜'+(row.state==='disassembled'?'已拆回':row.serial_status==='sold'?'已出售':'已轉整機');p.textContent='移轉成本 '+money(row.material_cost)+'；原出資 BOSS '+money(row.funding.boss)+'、HALA '+money(row.funding.hala);
+   for(const row of history){const box=document.createElement('details'),title=document.createElement('summary'),p=document.createElement('p'),list=document.createElement('ul');title.textContent=row.serial_no+'｜'+row.name+'｜'+(row.state==='disassembled'?'已拆回':({sold:'已出售',reserved:'已預留',returned:'已退貨待驗收',in_stock:'在庫'}[row.serial_status]||'已轉整機'));p.textContent='移轉成本 '+money(row.material_cost)+'；原出資 BOSS '+money(row.funding.boss)+'、HALA '+money(row.funding.hala);
     for(const part of row.parts||[]){const li=document.createElement('li');li.textContent=part.category+'｜'+part.name+' × '+part.qty+'｜成本 '+money(part.unit_cost*part.qty)+'｜'+(part.serials.length?part.serials.join('、'):'無序號：'+part.serial_note);list.append(li);}
     const print=document.createElement('button');print.type='button';print.textContent='列印整機貼紙';print.dataset.assemblyPrint=row.id;
     box.append(title,p,list,print);

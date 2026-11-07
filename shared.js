@@ -490,7 +490,6 @@ function saveConfigSyncMeta(patch) {
 
 /** 正式庫存品類順序（顯示合併用；不批次改寫舊庫存資料） */
 const PREFERRED_INVENTORY_CATEGORIES = [
-  "整機",
   "處理器",
   "主機板",
   "記憶體",
@@ -505,6 +504,7 @@ const PREFERRED_INVENTORY_CATEGORIES = [
   "滑鼠",
   "耳機",
   "周邊",
+  "整機",
   "其他",
 ];
 

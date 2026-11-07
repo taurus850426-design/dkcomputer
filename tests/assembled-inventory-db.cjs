@@ -41,7 +41,7 @@ test('assembly: preserve book value and both principals, serial provenance, atom
  await assert.rejects(()=>rpc('backoffice_create_order_checked',[JSON.stringify(orderPayload)]),/小數|只有一台/);
  assert.deepEqual(await totals(),original);
  // An untouched system can be physically disassembled; append-only movement and provenance remain.
- await op('disassemble',created.id,{reviewed:true});assert.deepEqual(await totals(),original);assert.equal((await op('list',null))[0].state,'disassembled');assert.equal((await op('disassemble',created.id,{reviewed:true})).idempotent,true);
+ await op('disassemble',created.id,{reviewed:true});assert.deepEqual(await totals(),original);assert.equal((await op('list',null))[0].state,'disassembled');assert.equal((await op('trace',null,{serial:'CPU-001'}))[0]['組裝狀態'],'disassembled');assert.equal((await op('disassemble',created.id,{reviewed:true})).idempotent,true);
  const serial=await admin(async()=>(await db.query("select status,assembly_id from inventory_serials where serial_no='CPU-001'")).rows[0]);assert.equal(serial.status,'in_stock');assert.equal(serial.assembly_id,null);
  // Build again, sell the whole once, verify BOSS repayment principal activates only on the whole sale.
  const second={...payload,serial_no:'DK-ASM-002'},p2=await op('preview',null,second),c2=await op('create','22222222-2222-4222-8222-222222222222',{...second,signature:p2.signature,reviewed:true});
