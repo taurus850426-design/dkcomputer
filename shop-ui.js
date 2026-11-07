@@ -20,6 +20,7 @@
   const q=core.quote(rows,catalog);if(q.errors.length)throw Error(q.errors.join('；'));write(rows);
  }
  function render(){
+  document.dispatchEvent(new Event('dk:cart-change'));
   const rows=read(),q=core.quote(rows,catalog);if(el('shopCount'))el('shopCount').textContent=rows.reduce((n,x)=>n+x.qty,0);
   if(!el('shopCartItems'))return;
   el('shopCartItems').innerHTML=rows.length?rows.map(line=>{const item=catalog.find(p=>String(p.id)===line.id);return '<div class="shop-cart-line"><h3>'+esc(item?.name||'已下架商品')+'</h3><div class="shop-cart-controls"><label>數量 <input type="number" min="1" max="99" value="'+line.qty+'" data-shop-qty="'+esc(line.id)+'"></label><button type="button" class="shop-secondary" data-shop-remove="'+esc(line.id)+'">移除</button></div></div>';}).join(''):'<p class="shop-help">購物車還沒有商品。</p>';
