@@ -8,6 +8,8 @@ on:
       - 'data/dk-market-prices.json'
       - 'tests/market-price-*.test.js'
       - '.github/workflows/market-pricing-tests.yml'
+      - '.github/workflows/market-price-update.yml'
+      - 'scripts/update-market-prices.js'
   push:
     branches:
       - feat/market-price-engine
@@ -29,8 +31,10 @@ jobs:
           node --check market-price-overlay.js
           node --check market-price-sources.js
           node --check builder-simple.js
+          node --check scripts/update-market-prices.js
       - name: Unit tests
         run: |
           node tests/market-price-engine.test.js
           node tests/market-price-pipeline.test.js
           node tests/market-price-sources.test.js
+          node tests/market-price-production.test.js
