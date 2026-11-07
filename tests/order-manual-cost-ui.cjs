@@ -18,10 +18,21 @@ test('actual edit button restores cost, and authoritative procurement cost is lo
   const host=s.w.document.createElement('div');host.innerHTML='<button class="order-line-edit-manual" data-i="0"></button>';s.w.orderLineTbody=host;
   const source=read('admin3.js'),start=source.indexOf('      orderLineTbody.querySelectorAll(".order-line-edit-manual")');s.w.eval(source.slice(start,source.indexOf('\n    }\n    function updateOrderTotalsFromLines',start)));
   host.firstChild.click();assert.equal(s.field('Cost').value,'450');assert.equal(s.field('Cost').disabled,false);
-  s.w.configureManualCost({procurement_cost_locked:true});assert.equal(s.field('Cost').disabled,true);
+  s.field("Type").value="procurement";s.w.configureManualCost({procurement_cost_locked:true});assert.equal(s.field('Cost').disabled,true);
  }finally{s.dom.window.close();}
 });
 test('serializer retains explicit admin manual cost but removes it for staff',()=>{
  const s=setup();try{const source=read('shared.js'),start=source.indexOf('function stage7OrderLinesPayload(');s.w.eval(source.slice(start,source.indexOf('async function stage7UpsertItem',start)));const line={line_key:'x',fulfillment_type:'service',qty:1,unit_price:1000,manual_cost_unit:200};assert.equal(s.w.stage7OrderLinesPayload([line],1000)[0].manual_cost_unit,200);s.w.stage7IsAdminRole=()=>false;assert.equal('manual_cost_unit' in s.w.stage7OrderLinesPayload([line],1000)[0],false);
  }finally{s.dom.window.close();}
 });
+
+test('switching quoted procurement to service unlocks admin cost, switching back relocks',()=>{
+ const s=setup();try{
+ s.w.orderLineItems=[{line_key:'quoted',fulfillment_type:'procurement',procurement_cost_locked:true,procurement_vendor:'vendor',cost_unit:0}];s.w.editingManualOrderLineIndex=0;
+ s.field('Type').value='procurement';s.w.configureManualCost(s.w.orderLineItems[0]);assert.equal(s.field('Cost').disabled,true);
+ s.field('Type').value='service';s.field('Type').dispatchEvent(new s.w.Event('change'));assert.equal(s.field('Cost').disabled,false);assert.match(s.field('CostHint').textContent,/可手動/);
+ s.field('Cost').value='250';s.field('Qty').value='6';s.field('Add').click();assert.equal(s.w.orderLineItems[0].manual_cost_unit,250);assert.equal(s.w.orderLineItems[0].qty,6);
+ s.w.editingManualOrderLineIndex=0;s.field('Type').value='procurement';s.field('Type').dispatchEvent(new s.w.Event('change'));assert.equal(s.field('Cost').disabled,true);
+ }finally{s.dom.window.close();}
+});
+test('staff cannot unlock service cost by changing acquisition type',()=>{const s=setup(false);try{s.field('Type').dispatchEvent(new s.w.Event('change'));assert.equal(s.field('Cost').disabled,true);}finally{s.dom.window.close();}});
