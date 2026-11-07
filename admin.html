@@ -95,11 +95,32 @@
               </div>
               <div class="section-actions">
                 <button id="btnNewItem" class="btn btn-primary primary-action" type="button">新增品項</button>
+                <button id="btnAssembly" class="btn btn-ghost secondary-action" type="button" data-admin-only>零件轉整機</button>
                 <button id="btnRestock" class="btn btn-ghost secondary-action" type="button">補貨</button>
                 <button id="btnExportItemsExcel" class="btn btn-ghost tertiary-action" type="button">匯出 Excel</button>
                 <button id="btnDeleteSelectedItems" class="btn btn-ghost danger-action" type="button" data-admin-only>刪除所選</button>
               </div>
             </div>
+
+            <section id="assemblyPanel" style="min-width:0;overflow-wrap:anywhere" class="section-card admin-stack-gap" data-admin-only hidden aria-labelledby="assemblyTitle">
+              <div class="section-head"><h3 id="assemblyTitle" class="h3">零件轉整機｜一台一個編號</h3><button id="assemblyClose" type="button" class="btn btn-ghost">關閉</button></div>
+              <p>選擇已實際組入的庫存零件，核對成本與原出資後轉成一台整機。之後只出售整機，不再扣一次零件；庫存轉換不會產生營業收入或新增採購支出。</p>
+              <form id="assemblyForm"><div class="form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px">
+                <div class="field"><label for="assemblyName">整機名稱</label><input id="assemblyName" maxlength="120" /></div>
+                <div class="field"><label for="assemblySerial">整機序號／DK 貼紙編號</label><input id="assemblySerial" maxlength="80" autocomplete="off" /><button id="assemblyGenerate" type="button" class="btn btn-ghost">產生 DK 編號</button></div>
+                <div class="field"><label for="assemblySearch">搜尋庫存零件</label><input id="assemblySearch" type="search" placeholder="品牌、型號或品類" /></div>
+                <div class="field"><label for="assemblyItem">選擇現有零件</label><select id="assemblyItem"><option value="">選擇零件</option></select></div>
+                <div class="field"><label for="assemblyQty">裝入數量</label><input id="assemblyQty" type="number" min="1" max="999" step="1" value="1" /></div>
+                <div class="field"><label for="assemblySerials">實際零件序號（每行一個）</label><textarea id="assemblySerials" rows="3" autocomplete="off"></textarea><button type="button" class="btn btn-ghost" data-camera-target="assemblySerials">手機相機掃碼</button></div>
+                <div class="field"><label for="assemblySerialNote">沒有序號的原因（5 至 200 字）</label><input id="assemblySerialNote" maxlength="200" placeholder="例如：原廠未提供序號" /></div>
+              </div><button id="assemblyAdd" type="button" class="btn btn-ghost">加入整機零件清單</button>
+              <ul id="assemblyParts"></ul><button id="assemblyPreview" type="button" class="btn btn-ghost">預覽成本與出資</button>
+              <div id="assemblyPlan" style="overflow-wrap:anywhere"></div>
+              <label><input id="assemblyReviewed" type="checkbox" /> 已核對實際零件、序號、成本及 BOSS／HALA 原出資，本次只轉成一台整機。</label>
+              <button id="assemblyCreate" type="button" class="btn btn-primary" disabled>確認轉成整機</button>
+              </form><p id="assemblyMessage" role="status" style="overflow-wrap:anywhere"></p>
+              <details id="assemblyHistory"><summary>轉換紀錄／未售整機拆回</summary><button id="assemblyReload" type="button" class="btn btn-ghost">載入／更新轉換紀錄</button><label for="assemblyTrace">整機或零件序號查詢</label><input id="assemblyTrace" maxlength="80" autocomplete="off" /><button id="assemblyTraceBtn" type="button" class="btn btn-ghost">查詢整機與原零件</button><pre id="assemblyTraceResult" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre><div id="assemblyHistoryList"></div></details>
+            </section>
 
             <div id="replenishmentAlertsCard" class="section-card inv-attention surface-warning ui-enter admin-stack-gap">
               <div class="inv-section-head">
@@ -3736,25 +3757,26 @@
         </div>
       </div>
     </div>
-    <script src="./shared.js?v=20261107shopbridge1"></script>
+    <script src="./shared.js?v=20261107assembly1"></script>
     <script src="./inventory-ledger.js?v=20260927stage34"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
     <script src="./assets/vendor/quagga-1.12.1.min.js"></script>
     <script src="./assets/vendor/jsQR-1.4.0.js"></script>
     <script src="./admin-record-history.js?v=20261029closingdeposit1"></script>
     <script src="./admin-order-trend.js?v=20261029closingdeposit1"></script>
-    <script src="./admin-inventory-funding.js?v=20261019funding1"></script>
-    <script src="./admin-order-funding.js?v=20261022funding1"></script>
+    <script src="./admin-inventory-funding.js?v=20261107assembly1"></script>
+    <script src="./admin-order-funding.js?v=20261107assembly1"></script>
     <script src="./purchase-receive-batch.js?v=20261028shortage1"></script>
     <script src="./purchase-shortage.js?v=20261028shortage1"></script>
     <script src="./shop-admin.js?v=20261107shopbridge1"></script>
     <script src="./admin-quote-print.js?v=20261020quoteprint1"></script>
-    <script src="./admin-unsaved.js?v=20261107shopbridge1"></script>
+    <script src="./admin-unsaved.js?v=20261107assembly1"></script>
     <script src="./admin-order-payment.js?v=20261029closingdeposit1"></script>
     <script src="./assets/vendor/JsBarcode.code128.min.js"></script>
     <script src="./camera-scan.js?v=20261107camera1"></script>
-    <script src="./scanner-workflow.js?v=20261107camera1"></script>
-    <script src="./admin3.js?v=20261107shopbridge1"></script>
+    <script src="./scanner-workflow.js?v=20261107assembly1"></script>
+    <script src="./admin-assembly.js?v=20261107assembly1"></script>
+    <script src="./admin3.js?v=20261107assembly1"></script>
     <script src="./builder-service-config.js?v=20261023launch1"></script>
     <script src="./admin-builder-usage.js?v=20261023launch1"></script>
     <script src="./admin-item-coolpc.js?v=20261020itemprice1"></script>

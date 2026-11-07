@@ -22,7 +22,7 @@
    if(!cell.isConnected)continue;if(!canRead()){cell.hidden=true;cell.textContent='';continue;}
    const line=lines[Number(cell.dataset.orderFunding)];if(!line?.item_id||line.fulfillment_type==='service'||line.fulfillment_type==='procurement')continue;
    const row=result?.ok&&Array.isArray(result.data)?result.data.find(x=>x.item_id===String(line.item_id)):null;
-   const info=describe(row);cell.textContent=info.label;cell.title=info.title;
+   const info=describe(row);if(dk.findItemById?.(line.item_id)?.assembly_id&&row&&["actual","estimated"].includes(row.mode))info.title="預組整機按原零件出資移轉；本金明細請查閱整機轉換紀錄。";cell.textContent=info.label;cell.title=info.title;
   }
  }
  const api={describe,populate};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.DKOrderFunding=api;

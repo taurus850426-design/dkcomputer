@@ -28,6 +28,7 @@
         if (!current(cell)) continue;
         if (!canRead()) { cell.hidden = true; cell.textContent = ''; continue; }
         const info = describe(result);
+        if(dk.findItemById?.(cell.dataset.fundingItem)?.assembly_id && result?.ok) info.title="預組整機的出資由原零件帶入；本金明細請開啟「零件轉整機」的轉換紀錄。";
         cell.textContent = info.label;
         cell.title = info.title;
       }

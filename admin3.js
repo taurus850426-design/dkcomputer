@@ -523,6 +523,7 @@
     const user = window.DK?.getCurrentAdminUser?.() || null;
     const role = user && user.role ? user.role : "";
     document.body.classList.toggle("dk-role-staff", role === "staff");
+    window.DKAssembly?.resetIfUnauthorized();
     try { syncAdminNavVisibility(); } catch (_) {}
     const label = document.getElementById("adminCurrentUser");
     if (label) {
@@ -6010,6 +6011,9 @@
       set("itemStatus", item ? item.status : "READY");
       set("itemQty", item ? item.qty_on_hand : 0);
       set("itemCost", item ? item.cost_unit : (preset.cost != null ? preset.cost : 0));
+      for (const field of ["itemCost","itemQty","itemCategory","itemCondition"]) {
+        const input=getItemEditorField(field);if(input)input.disabled=!!item?.assembly_id;
+      }
       set("itemFundingOwner", "hala");
       const canEditFunding = !!(window.stage7IsAdminRole && window.stage7IsAdminRole());
       editingV2FundingLoaded = canEditFunding && !item;
@@ -6029,8 +6033,8 @@
           const owner = info.owner === "boss" || info.owner === "mixed" ? info.owner : "hala";
           set("itemFundingOwner", owner);
           editingV2FundingLoaded = !!(res && res.ok);
-          if (fundingOwnerSelect) fundingOwnerSelect.disabled = !editingV2FundingLoaded;
-          if (fundingOwnerHint) fundingOwnerHint.textContent = owner === "mixed"
+          if (fundingOwnerSelect) fundingOwnerSelect.disabled = !editingV2FundingLoaded || !!item.assembly_id;
+          if (fundingOwnerHint) fundingOwnerHint.textContent = item.assembly_id ? "此整機成本與出資由原零件帶入；售價可修改，出資明細請查轉換紀錄。" : owner === "mixed"
             ? "目前剩餘庫存同時包含 HALA 與 BOSS；選擇其中一方並儲存，可統一目前剩餘庫存的出資方。"
             : "目前剩餘庫存出資方：" + owner.toUpperCase() + "。";
         }).catch(function () {
@@ -6052,9 +6056,9 @@
       set("itemReorderPoint", item ? (item.reorder_point ?? 0) : 0);
       set("itemNotes", item ? item.notes ?? "" : (preset.notes != null ? String(preset.notes) : ""));
       const excludeEl = document.getElementById("itemExcludeFromInventoryValue");
-      if (excludeEl) excludeEl.checked = !!(item && item.exclude_from_inventory_value);
+      if (excludeEl) {excludeEl.checked = !!(item && item.exclude_from_inventory_value);excludeEl.disabled=!!item?.assembly_id;}
       const itemDeleteBtn = getItemEditorField("itemDelete") || document.getElementById("itemDelete");
-      if (itemDeleteBtn) itemDeleteBtn.hidden = !item || !canPerm("deleteItem");
+      if (itemDeleteBtn) itemDeleteBtn.hidden = !item || !!item.assembly_id || !canPerm("deleteItem");
       if (itemEditorModal) itemEditorModal.hidden = false;
       v2Hide(itemMsg);
       try { updateItemDuplicateHint(); } catch (_) {}
@@ -6477,7 +6481,7 @@
         const saved = await DK.saveItems(items);
         if (!saved || !saved.ok) return v2Show(itemMsg, (saved && saved.error) || "品項更新失敗");
         if (window.stage7IsAdminRole && window.stage7IsAdminRole() && typeof DK.stage7InventoryItemFunding === "function") {
-          const ownerToSave = editingV2FundingLoaded && (fundingOwner === "boss" || fundingOwner === "hala")
+          const ownerToSave = !editingItem?.assembly_id && editingV2FundingLoaded && (fundingOwner === "boss" || fundingOwner === "hala")
             ? fundingOwner
             : null;
           const funding = await DK.stage7InventoryItemFunding(editingV2ItemId, ownerToSave);
