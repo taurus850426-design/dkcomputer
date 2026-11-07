@@ -15,7 +15,7 @@
   const LEDGER_TYPES = ["IN", "OUT", "ADJUST"];
   const REF_TYPES = ["PURCHASE", "ORDER", "RMA", "SCRAP", "MOVE", "ADJUST"];
   const ORDER_STATUSES = ["pending", "paid", "shipped", "completed", "refunded"];
-  const ORDER_SALES_TYPES = ["整機", "零組件", "維修／服務", "周邊", "其他"];
+  const ORDER_SALES_TYPES = ["整機", "零組件", "零件升級", "維修／服務", "周邊", "其他"];
   const EXPENSE_TYPES = ["COGS", "OPEX", "OTHER"];
 
   const RULES = {

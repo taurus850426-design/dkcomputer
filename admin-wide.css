@@ -465,3 +465,26 @@
     margin-bottom: 4px;
   }
 }
+
+/* Order editor hierarchy; scoped to the form so lists and print stay unchanged. */
+#orderForm .order-editor-heading { padding: 18px 0 8px; border-top: 1px solid rgba(100,116,139,.25); }
+#orderForm .order-editor-heading h4 { margin: 0 0 6px; font-size: 18px; line-height: 1.5; }
+#orderForm .order-editor-heading p { margin: 0; color: #475569; font-size: 14px; line-height: 1.6; }
+#orderForm .order-editor-grid > .order-editor-heading:first-child { border-top: 0; padding-top: 6px; }
+#orderForm .order-compact-field { display: grid; gap: 6px; min-width: 0; font-size: 13px; }
+#orderForm .order-compact-field input { width: 100%; min-width: 0; box-sizing: border-box; }
+#orderForm .order-detail-row { align-items: end; grid-template-columns: minmax(0,1fr) 80px 120px auto !important; }
+#orderForm .form-hint { line-height: 1.6; }
+#orderForm textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 88px; }
+@media screen and (max-width: 700px) {
+  #orderForm .order-detail-row { grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important; }
+  #orderForm .order-detail-row .searchable-select-wrap,
+  #orderForm .order-detail-row > button { grid-column: 1 / -1; }
+}
+#orderForm :is(input[type="text"], input[type="tel"], input[type="number"], input[type="date"], select, textarea) {
+  width: 100%; min-width: 0; box-sizing: border-box;
+  padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 12px;
+  background: #fff; color: #243442; font: inherit; line-height: 1.5;
+}
+#orderForm :is(input[type="text"], input[type="tel"], input[type="number"], input[type="date"], select) { min-height: 42px; }
+#orderForm .field > label, #orderForm .order-compact-field { color: #334155; font-size: 14px; font-weight: 600; }
