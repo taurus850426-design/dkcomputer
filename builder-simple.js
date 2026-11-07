@@ -11,7 +11,7 @@ function selected(){return core.resolve(selectedIds,catalog?.products||[]);}
 function baseFor(slot){return (catalog?.products||[]).filter(p=>core.isPart(p,slot.key)&&window.DKCatalogPricePolicy.accepts(p));}
 function optionsFor(slot){
  const f=filters[slot.key]||{},q=query.toLowerCase();
- return baseFor(slot).filter(p=>(!f.category||facets.category(p,slot.key)===f.category)&&(!f.brand||facets.brand(p)===f.brand)&&(!q||String(p.name||'').toLowerCase().includes(q))).sort((a,b)=>(a.price||0)-(b.price||0));
+ return baseFor(slot).filter(p=>(!f.category||facets.category(p,slot.key)===f.category)&&(!f.brand||facets.brand(p)===f.brand)&&(!q||facets.matches(p,q))).sort((a,b)=>(a.price||0)-(b.price||0));
 }
 function renderSlots(){
  const current=selected();
@@ -20,17 +20,17 @@ function renderSlots(){
   if(!filters[slot.key])filters[slot.key]={category:chosen?facets.category(chosen,slot.key):'',brand:''};
   const f=filters[slot.key],categories=facets.values(base,p=>facets.category(p,slot.key)),brands=facets.values(base.filter(p=>!f.category||facets.category(p,slot.key)===f.category),facets.brand);
   const ready=!!f.category||!!query,items=ready?optionsFor(slot):[],visible=items.slice(0,LIMIT);
-  const option=(v,active)=>'<option value="'+esc(v)+'" '+(active===v?'selected':'')+'>'+esc(v)+'</option>';
+  const option=(v,active,label=v)=>'<option value="'+esc(v)+'" '+(active===v?'selected':'')+'>'+esc(label)+'</option>';
   return '<article class="simple-slot"><div class="simple-slot-title"><div><strong>'+esc(slot.title)+'</strong><span>'+esc(slot.plain)+'</span></div>'+(chosen?'<button type="button" class="text-button" data-clear="'+slot.key+'">移除</button>':'')+'</div>'+
-   '<div class="simple-category-grid"><label>規格分類<select data-slot-filter="'+slot.key+'" aria-label="'+esc(slot.title)+'規格分類"><option value="">先選分類，或直接搜尋型號</option>'+categories.map(v=>option(v,f.category)).join('')+'</select></label><label>品牌<select data-brand-filter="'+slot.key+'" aria-label="'+esc(slot.title)+'品牌"><option value="">全部品牌</option>'+brands.map(v=>option(v,f.brand)).join('')+'</select></label></div>'+
-   '<select data-slot="'+slot.key+'" aria-label="選擇'+esc(slot.title)+'" '+(!ready?'disabled':'')+'><option value="">'+(!ready?'— 請先選規格分類 —':items.length?'— 選擇'+esc(slot.title)+' —':'— 沒有符合的商品，請調整分類或搜尋 —')+'</option>'+visible.map(p=>'<option value="'+esc(p.id)+'" '+(chosen?.id===p.id?'selected':'')+'>'+esc(p.name)+' · '+money(p.price)+'</option>').join('')+'</select>'+
-   (chosen?'<p class="simple-chosen">目前已選：'+esc(chosen.name)+' · '+money(chosen.price)+(visible.some(p=>p.id===chosen.id)?'':'（目前篩選未顯示，配單仍保留）')+'</p>':'')+
+   '<div class="simple-category-grid"><label>規格分類<select data-slot-filter="'+slot.key+'" aria-label="'+esc(slot.title)+'規格分類"><option value="">先選分類，或直接搜尋型號</option>'+categories.map(v=>option(v,f.category)).join('')+'</select></label><label>品牌<select data-brand-filter="'+slot.key+'" aria-label="'+esc(slot.title)+'品牌"><option value="">全部品牌</option>'+brands.map(v=>option(v,f.brand,facets.brandLabel(v))).join('')+'</select></label></div>'+
+   '<select data-slot="'+slot.key+'" aria-label="選擇'+esc(slot.title)+'" '+(!ready?'disabled':'')+'><option value="">'+(!ready?'— 請先選規格分類 —':items.length?'— 選擇'+esc(slot.title)+' —':'— 沒有符合的商品，請調整分類或搜尋 —')+'</option>'+visible.map(p=>'<option value="'+esc(p.id)+'" '+(chosen?.id===p.id?'selected':'')+'>'+esc(facets.productLabel(p))+' · '+money(p.price)+'</option>').join('')+'</select>'+
+   (chosen?'<p class="simple-chosen">目前已選：'+esc(facets.productLabel(chosen))+' · '+money(chosen.price)+(visible.some(p=>p.id===chosen.id)?'':'（目前篩選未顯示，配單仍保留）')+'</p>':'')+
    '<p class="small muted">'+(!ready?'先選規格分類，可避免大量商品擠在同一選單。':items.length.toLocaleString('zh-TW')+' 個符合商品'+(items.length>LIMIT?'；先顯示價格最低的 '+LIMIT+' 筆，請再選品牌或搜尋型號縮小範圍。':''))+'</p></article>';
  }).join('');
 }
 function renderSummary(){
  const p=selected();let total=0;
- $('buildItems').innerHTML=core.slots.map(slot=>{const item=p[slot.key];if(item)total+=Number(item.price||0);return '<div class="summary-line"><span>'+esc(slot.title)+'</span><strong>'+(item?esc(item.name):'尚未選擇')+'</strong>'+(item?'<em>'+money(item.price)+'</em>':'')+'</div>';}).join('');
+ $('buildItems').innerHTML=core.slots.map(slot=>{const item=p[slot.key];if(item)total+=Number(item.price||0);return '<div class="summary-line"><span>'+esc(slot.title)+'</span><strong>'+(item?esc(facets.productLabel(item)):'尚未選擇')+'</strong>'+(item?'<em>'+money(item.price)+'</em>':'')+'</div>';}).join('');
  $('buildTotal').textContent=money(total);
  const issues=[];
  for(const slot of core.slots){const item=p[slot.key];if(!item)continue;const check=core.check(item,slot.key,p);if(check.state==='incompatible')issues.push(...check.reasons);}
@@ -39,7 +39,7 @@ function renderSummary(){
 function render(){renderSlots();renderSummary();}
 function buildText(){
  const p=selected(),lines=['DK 電競電腦｜電腦配置單',''];
- let total=0;for(const slot of core.slots){const item=p[slot.key];if(!item)continue;total+=Number(item.price||0);lines.push(slot.title+'｜'+item.name+'｜'+money(item.price));}
+ let total=0;for(const slot of core.slots){const item=p[slot.key];if(!item)continue;total+=Number(item.price||0);lines.push(slot.title+'｜'+facets.productLabel(item)+'｜'+money(item.price));}
  lines.push('','參考總價｜'+money(total),'','實際供貨與正式售價以 DK 最終確認為準。');return lines.join('\n');
 }
 $('slotList').addEventListener('change',e=>{const category=e.target.dataset.slotFilter,brand=e.target.dataset.brandFilter;if(category){filters[category]={category:e.target.value,brand:''};renderSlots();return;}if(brand){filters[brand].brand=e.target.value;renderSlots();return;}const s=e.target.dataset.slot;if(!s)return;if(e.target.value)selectedIds[s]=e.target.value;else delete selectedIds[s];save();render();});
