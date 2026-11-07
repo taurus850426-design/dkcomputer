@@ -1,15 +1,16 @@
 (function(){
 'use strict';
 const core=window.DKBuilder,$=id=>document.getElementById(id),KEY='dk_simple_builder_v1';
-let catalog=null,selectedIds={},extras=[],quantities={},query='',filters={},expandedSlot=null,adding=null;
+let catalog=null,selectedIds={},extras=[],quantities={},query='',filters={},expandedSlot=null,adding=null,orderOptions={retain_boxes:false,fulfillment_preference:'undecided'};
+const deliveryOptions=window.DKBuilderOrderOptions;
 const peripherals=window.DKBuilderPeripherals,slots=[...core.slots,...peripherals.slots],mobile=window.matchMedia('(max-width:900px)');
 const categoryFor=(p,key)=>peripherals.slots.some(s=>s.key===key)?peripherals.category(p,key):facets.category(p,key);
 const validQty=n=>Number.isInteger(Number(n))&&Number(n)>=1&&Number(n)<=99;
 const facets=window.DKBuilderCategories,LIMIT=100;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>'NT$ '+Number(n||0).toLocaleString('zh-TW');
-function restore(){try{const d=JSON.parse(localStorage.getItem(KEY)||'{}');if(d?.version===2){selectedIds=d.ids||{};extras=Array.isArray(d.extras)?d.extras:[];quantities=d.quantities||{};}else if(d&&typeof d==='object')selectedIds=d;}catch(_){}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify({version:2,ids:selectedIds,extras,quantities}));}catch(_){}}
+function restore(){try{const d=JSON.parse(localStorage.getItem(KEY)||'{}');if(d?.version===2){selectedIds=d.ids||{};extras=Array.isArray(d.extras)?d.extras:[];quantities=d.quantities||{};orderOptions=deliveryOptions.normalize(d.order_options);}else if(d&&typeof d==='object')selectedIds=d;}catch(_){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({version:2,ids:selectedIds,extras,quantities,order_options:orderOptions}));}catch(_){}}
 function selected(){const result=core.resolve(selectedIds,catalog?.products||[]);for(const slot of peripherals.slots){const p=catalog?.products.find(p=>p.id===selectedIds[slot.key]&&peripherals.isPart(p,slot.key));if(p)result[slot.key]=p;}return result;}
 function lines(){const products=catalog?.products||[],p=selected();return slots.flatMap(slot=>[...(p[slot.key]?[{key:slot.key,slot,item:p[slot.key],qty:validQty(quantities[slot.key])?Number(quantities[slot.key]):1}]:[]),...extras.filter(x=>x.slot===slot.key).map(x=>({key:x.key,slot,item:products.find(p=>p.id===x.id),qty:validQty(x.qty)?Number(x.qty):1})).filter(x=>x.item)]);}
 function baseFor(slot){return (catalog?.products||[]).filter(p=>(slot.optional?peripherals.isPart(p,slot.key):core.isPart(p,slot.key))&&window.DKCatalogPricePolicy.accepts(p));}
@@ -25,7 +26,7 @@ function renderSlots(){
   const f=filters[slot.key],categories=facets.values(base,p=>categoryFor(p,slot.key)),brands=facets.values(base.filter(p=>!f.category||categoryFor(p,slot.key)===f.category),facets.brand);
   const ready=!!f.category||!!query,items=ready?optionsFor(slot):[],visible=items.slice(0,LIMIT);
   const option=(v,active,label=v)=>'<option value="'+esc(v)+'" '+(active===v?'selected':'')+'>'+esc(label)+'</option>';
-  return (slot.key==='cpu'?'<h3>主機零件</h3>':slot.key==='monitor'?'<h3>周邊選購（可留空）</h3>':'')+'<details class="simple-slot" data-part="'+slot.key+'" '+(!mobile.matches||expandedSlot===slot.key?'open':'')+'><summary class="simple-slot-title"><div><strong>'+esc(slot.title)+(rows.length?' · '+rows.reduce((n,x)=>n+x.qty,0)+' 件':'')+'</strong><span>'+esc(rows.length?rows.map(x=>facets.productLabel(x.item)+(x.qty>1?' × '+x.qty:'')).join('、'):'點開選擇')+'</span></div><span class="slot-toggle" aria-hidden="true"></span></summary><div class="simple-slot-body"><p class="small muted">'+esc(slot.plain)+'</p>'+rows.map(x=>'<div class="chosen-row"><span>'+esc(facets.productLabel(x.item))+'</span><label>數量<input type="number" min="1" max="99" step="1" data-qty="'+esc(x.key)+'" value="'+x.qty+'" aria-label="'+esc(x.item.name)+'數量"></label><button type="button" class="text-button" data-remove="'+esc(x.key)+'">移除</button></div>').join('')+(rows.length?'<button type="button" class="secondary" data-add="'+slot.key+'">再加一項'+esc(slot.title)+'</button>':'')+(adding===slot.key?'<p class="small">正在加購：選擇商品後加入，原有商品會保留。</p>':'')+
+  return (slot.key==='cpu'?'<h3>主機零件</h3>':slot.key==='os'?'<h3>作業系統與周邊（可留空）</h3>':'')+'<details class="simple-slot" data-part="'+slot.key+'" '+(!mobile.matches||expandedSlot===slot.key?'open':'')+'><summary class="simple-slot-title"><div><strong>'+esc(slot.title)+(rows.length?' · '+rows.reduce((n,x)=>n+x.qty,0)+' 件':'')+'</strong><span>'+esc(rows.length?rows.map(x=>facets.productLabel(x.item)+(x.qty>1?' × '+x.qty:'')).join('、'):'點開選擇')+'</span></div><span class="slot-toggle" aria-hidden="true"></span></summary><div class="simple-slot-body"><p class="small muted">'+esc(slot.plain)+'</p>'+rows.map(x=>'<div class="chosen-row"><span>'+esc(facets.productLabel(x.item))+'</span><label>數量<input type="number" min="1" max="99" step="1" data-qty="'+esc(x.key)+'" value="'+x.qty+'" aria-label="'+esc(x.item.name)+'數量"></label><button type="button" class="text-button" data-remove="'+esc(x.key)+'">移除</button></div>').join('')+(rows.length?'<button type="button" class="secondary" data-add="'+slot.key+'">再加一項'+esc(slot.title)+'</button>':'')+(adding===slot.key?'<p class="small">正在加購：選擇商品後加入，原有商品會保留。</p>':'')+
    '<div class="simple-category-grid"><label>規格分類<select data-slot-filter="'+slot.key+'" aria-label="'+esc(slot.title)+'規格分類"><option value="">先選分類，或直接搜尋型號</option>'+categories.map(v=>option(v,f.category)).join('')+'</select></label><label>品牌<select data-brand-filter="'+slot.key+'" aria-label="'+esc(slot.title)+'品牌"><option value="">全部品牌</option>'+brands.map(v=>option(v,f.brand,facets.brandLabel(v))).join('')+'</select></label></div>'+
    '<select data-slot="'+slot.key+'" aria-label="選擇'+esc(slot.title)+'" '+(!ready?'disabled':'')+'><option value="">'+(!ready?'— 請先選規格分類 —':items.length?'— 選擇'+esc(slot.title)+' —':'— 沒有符合的商品，請調整分類或搜尋 —')+'</option>'+visible.map(p=>'<option value="'+esc(p.id)+'" '+(chosen?.id===p.id?'selected':'')+'>'+esc(facets.productLabel(p))+' · '+money(p.price)+'</option>').join('')+'</select>'+
    (chosen?'<p class="simple-chosen">目前已選：'+esc(facets.productLabel(chosen))+' · '+money(chosen.price)+(visible.some(p=>p.id===chosen.id)?'':'（目前篩選未顯示，配單仍保留）')+'</p>':'')+
@@ -35,8 +36,11 @@ function renderSlots(){
 function renderSummary(){
  const p=selected(),rows=lines();let total=0,parts=0,addons=0;
  $('buildItems').innerHTML=rows.map(x=>{const cost=Number(x.item.price||0)*x.qty;total+=cost;if(x.slot.optional)addons+=cost;else parts+=cost;return '<div class="summary-line"><span>'+esc(x.slot.title)+'</span><strong>'+esc(facets.productLabel(x.item))+' × '+x.qty+'</strong><em>'+money(cost)+'</em></div>';}).join('')||'<p class="muted">尚未選擇商品</p>';
+ const boxFee=deliveryOptions.fee(orderOptions);total+=boxFee;if(boxFee)$('buildItems').insertAdjacentHTML('beforeend','<div class="summary-line"><span>運費</span><strong>空盒分箱運費 × 1</strong><em>'+money(boxFee)+'</em></div>');
  $('buildTotal').textContent=money(total);
- $('buildSubtotals').textContent='主機零件 '+money(parts)+' · 周邊 '+money(addons);
+ $('deliverySummary').textContent=deliveryOptions.describe(orderOptions);
+ $('retainBoxes').value=orderOptions.retain_boxes?'yes':'no';$('fulfillmentPreference').value=orderOptions.fulfillment_preference;
+ $('buildSubtotals').textContent='主機零件 '+money(parts)+' · 周邊／系統 '+money(addons)+(boxFee?' · 空盒分箱 '+money(boxFee):'');
  const quick=$('estimateQuick');if(quick)quick.textContent='查看配單 '+rows.reduce((n,x)=>n+x.qty,0)+' 件 · '+money(total);
  for(const slot of core.slots){const first=rows.find(x=>x.slot.key===slot.key);if(first)p[slot.key]=first.item;}
  const issues=[];
@@ -47,6 +51,7 @@ function renderSummary(){
 function render(){renderSlots();renderSummary();}
 function buildText(){
  const text=['DK 電競電腦｜電腦配置單',''];let total=0;for(const x of lines()){const cost=Number(x.item.price||0)*x.qty;total+=cost;text.push(x.slot.title+'｜'+facets.productLabel(x.item)+'｜數量 '+x.qty+'｜'+money(cost));}
+ const boxFee=deliveryOptions.fee(orderOptions);if(boxFee){text.push('空盒分箱運費｜'+money(boxFee));total+=boxFee;}text.push('',deliveryOptions.describe(orderOptions),'商品寄送運費另行確認。');
  text.push('','參考總價｜'+money(total),'','實際供貨與正式售價以 DK 最終確認為準。');return text.join('\n');
 }
 $('slotList').addEventListener('toggle',e=>{if(!mobile.matches||!e.target.matches('details[data-part]')||!e.target.isConnected)return;if(e.target.open){expandedSlot=e.target.dataset.part;for(const d of $('slotList').querySelectorAll('details[open]'))if(d!==e.target)d.open=false;}else if(expandedSlot===e.target.dataset.part)expandedSlot=null;},true);
@@ -56,13 +61,15 @@ $('slotList').addEventListener('change',e=>{const qty=e.target.dataset.qty;if(qt
 $('slotList').addEventListener('click',e=>{const add=e.target.closest('[data-add]');if(add){adding=add.dataset.add;expandedSlot=adding;renderSlots();return;}const b=e.target.closest('[data-remove]');if(!b)return;const key=b.dataset.remove;if(key in selectedIds){delete selectedIds[key];delete quantities[key];}else extras=extras.filter(x=>x.key!==key);save();render();});
 mobile.addEventListener('change',()=>{expandedSlot=null;render();});
 $('partSearch').addEventListener('input',e=>{query=e.target.value.trim();renderSlots();});
-$('clearBuild').onclick=()=>{if(!lines().length||confirm('確定清空目前配單？')){selectedIds={};extras=[];quantities={};filters={};adding=null;expandedSlot=null;save();render();}};
+$('clearBuild').onclick=()=>{if(!lines().length||confirm('確定清空目前配單？')){selectedIds={};extras=[];quantities={};filters={};adding=null;expandedSlot=null;orderOptions=deliveryOptions.normalize({});save();render();}};
 $('copyBuild').onclick=async()=>{try{await navigator.clipboard.writeText(buildText());$('actionStatus').textContent='配單已複製。';}catch(_){$('actionStatus').textContent='瀏覽器無法自動複製，請使用列印功能。';}};
 $('printBuild').onclick=()=>window.print();
+for(const id of ['retainBoxes','fulfillmentPreference'])$(id).addEventListener('change',()=>{orderOptions=deliveryOptions.normalize({retain_boxes:$('retainBoxes').value==='yes',fulfillment_preference:$('fulfillmentPreference').value});save();renderSummary();});
 function buildPayload(){
  const rows=lines(),items=rows.map(x=>({line_key:x.key,category:x.slot.title,product_id:x.item.id,name:x.item.name,unit_price:Number(x.item.price||0),qty:x.qty}));
+ const boxLine=deliveryOptions.serviceLine(orderOptions);if(boxLine)items.push(boxLine);
  const subtotal=optional=>rows.filter(x=>!!x.slot.optional===optional).reduce((n,x)=>n+Number(x.item.price||0)*x.qty,0);
- return {schema_version:1,source:'dk-simple-builder',items,total:subtotal(false)+subtotal(true),parts_subtotal:subtotal(false),peripherals_subtotal:subtotal(true),website:'',catalog_updated_at:catalog?.updatedAt||null,user_agent:String(navigator.userAgent||'').slice(0,300)};
+ return {schema_version:1,source:'dk-simple-builder',items,total:subtotal(false)+subtotal(true)+deliveryOptions.fee(orderOptions),items_subtotal:subtotal(false)+subtotal(true),parts_subtotal:subtotal(false),peripherals_subtotal:rows.filter(x=>x.slot.optional&&x.slot.key!=='os').reduce((n,x)=>n+Number(x.item.price||0)*x.qty,0),software_subtotal:rows.filter(x=>x.slot.key==='os').reduce((n,x)=>n+Number(x.item.price||0)*x.qty,0),retain_boxes:orderOptions.retain_boxes,fulfillment_preference:orderOptions.fulfillment_preference,box_shipping_fee:deliveryOptions.fee(orderOptions),website:'',catalog_updated_at:catalog?.updatedAt||null,user_agent:String(navigator.userAgent||'').slice(0,300)};
 }
 
 function makeBuildNo(){
@@ -72,7 +79,7 @@ function makeBuildNo(){
 }
 async function submitBuild(){
  const btn=$('saveBuild'),payload=buildPayload();
- if(!payload.items.length){$('actionStatus').textContent='請至少選擇一個零件後再儲存配單。';return;}
+ if(!lines().length){$('actionStatus').textContent='請至少選擇一個零件後再儲存配單。';return;}
  if(!window.DK?.isSupabaseConfigured?.()){$('actionStatus').textContent='目前無法儲存配單，請先複製配單與 DK 聯絡。';return;}
  if(JSON.stringify(payload).length>45000){$('actionStatus').textContent='配單內容較多，請分成兩張配單或直接聯絡 DK。';return;}
  const buildNo=makeBuildNo();btn.disabled=true;$('actionStatus').textContent='正在儲存配單…';

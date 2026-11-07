@@ -7288,7 +7288,7 @@
       if(msg) msg.textContent=active.length?"":"目前沒有待審核配單。";
       host.innerHTML=active.map(row=>{
         const p=row.payload||{},items=Array.isArray(p.items)?p.items:[],total=Number(p.total)||items.reduce((n,x)=>n+(Number(x.unit_price)||0)*(Number(x.qty)||1),0);
-        return '<article class="section-card-soft" data-builder-id="'+builderSubmissionEsc(row.id)+'"><div class="section-head"><div><strong>'+builderSubmissionEsc(row.build_no)+'</strong><div class="muted small">'+builderSubmissionEsc(new Date(row.created_at).toLocaleString("zh-TW"))+'｜'+items.length+' 項｜NT$ '+v2FmtNum(total)+'</div></div><div class="actions"><button type="button" class="btn btn-primary btn-sm builder-to-order" data-id="'+builderSubmissionEsc(row.id)+'">轉成訂單</button><button type="button" class="btn btn-ghost btn-sm builder-cancel" data-id="'+builderSubmissionEsc(row.id)+'">取消</button></div></div><div class="muted small">'+items.map(x=>builderSubmissionEsc((x.category||"零件")+'：'+(x.name||""))).join("｜")+'</div></article>';
+        return '<article class="section-card-soft" data-builder-id="'+builderSubmissionEsc(row.id)+'"><div class="section-head"><div><strong>'+builderSubmissionEsc(row.build_no)+'</strong><div class="muted small">'+builderSubmissionEsc(new Date(row.created_at).toLocaleString("zh-TW"))+'｜'+items.length+' 項｜NT$ '+v2FmtNum(total)+'</div></div><div class="actions"><button type="button" class="btn btn-primary btn-sm builder-to-order" data-id="'+builderSubmissionEsc(row.id)+'">轉成訂單</button><button type="button" class="btn btn-ghost btn-sm builder-cancel" data-id="'+builderSubmissionEsc(row.id)+'">取消</button></div></div><div class="muted small">'+items.map(x=>builderSubmissionEsc((x.category||"零件")+'：'+(x.name||"")+' × '+(Number(x.qty)||1))).join("｜")+'</div><p class="muted small">'+builderSubmissionEsc(window.DKBuilderOrderOptions?.describe(p)||'')+'</p></article>';
       }).join("");
     }
     function matchBuilderLineToInventory(line){
@@ -7302,13 +7302,14 @@
       const row=builderSubmissionRows.find(x=>String(x.id)===String(id)); if(!row)return;
       const p=row.payload||{},items=Array.isArray(p.items)?p.items:[];
       openV2OrderEditor(null);
-      orderLineItems=items.map((line,idx)=>{
+      orderLineItems=items.filter(line=>line.line_key!=='box_shipping').map((line,idx)=>{
         const stock=matchBuilderLineToInventory(line),qty=Math.max(1,Number(line.qty)||1),price=Number(line.unit_price)||0;
         if(stock&&Number(stock.qty_on_hand)>=qty) return {line_key:String(line.line_key||("builder_"+idx)),fulfillment_type:"inventory",item_id:stock.id,sku:stock.sku,name:stock.name,spec:stock.spec||"",category:String(stock.category||line.category||""),qty,unit_price:price,quote_unit_price:price,cost_unit:canPerm("viewCost")?(Number(stock.cost_unit)||0):undefined};
         return {line_key:String(line.line_key||("builder_"+idx)),fulfillment_type:"procurement",item_id:null,sku:"",name:String(line.name||""),spec:"",category:String(line.category||""),qty,unit_price:price,quote_unit_price:price,cost_unit:0,preferred_vendor:"",builder_product_id:String(line.product_id||"")};
       });
+      const shipping=document.getElementById("orderShipping");if(shipping)shipping.value=String(window.DKBuilderOrderOptions?.fee(p)||0);
       const sales=document.getElementById("orderSalesType");if(sales)sales.value="整機";
-      const note=document.getElementById("orderQuoteNote");if(note)note.value="來源配單："+String(row.build_no||"");
+      const note=document.getElementById("orderQuoteNote");if(note)note.value="來源配單："+String(row.build_no||"")+"\n"+(window.DKBuilderOrderOptions?.describe(p)||"");
       try{sessionStorage.setItem("dk_pending_builder_submission_v1",JSON.stringify({id:row.id,buildNo:row.build_no}));}catch(_){}
       renderOrderLineTbody();updateOrderTotalsFromLines();
       if(orderMsg){orderMsg.hidden=false;orderMsg.textContent="已帶入 "+row.build_no+"。有庫存的品項已標為「現有庫存」，不足或無法精準對應的品項已標為「需要採購」；請核對客戶資料後儲存正式訂單。";}
