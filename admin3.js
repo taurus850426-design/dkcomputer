@@ -8006,10 +8006,11 @@
     function configureManualCost(line) {
       const input=document.getElementById("orderManualCost");
       if(!input)return;
-      const authoritative=!!(line?.procurement_cost_locked || line?.procurement_vendor || line?.procurement_quote_id || line?.procurement_received);
+      const type=document.getElementById("orderManualType")?.value || line?.fulfillment_type;
+      const authoritative=type==="procurement" && !!(line?.procurement_cost_locked || line?.procurement_vendor || line?.procurement_quote_id || line?.procurement_received);
       input.disabled=!window.stage7IsAdminRole?.() || authoritative;
       const hint=document.getElementById("orderManualCostHint");
-      if(hint)hint.textContent=authoritative?"成本已由廠商報價／到貨帶入；調整請到叫貨單處理。":"每件成本；不會改動客戶單價。採購報價確認後以廠商報價為準。";
+      if(hint)hint.textContent=authoritative?"成本已由廠商報價／到貨帶入；調整請到叫貨單處理。":type==="service"?"每件服務／其他成本，可手動填寫；成本小計＝數量×單位成本。":"每件成本；不會改動客戶單價。採購報價確認後以廠商報價為準。";
     }
     (function initManualOrderLine() {
       const box = document.getElementById("orderManualBox");
@@ -8114,6 +8115,7 @@
       document.getElementById("orderManualCancel")?.addEventListener("click", close);
       document.getElementById("orderManualType")?.addEventListener("change", (e) => {
         if (vendor) vendor.disabled = String(e.target.value) !== "procurement";
+        configureManualCost(editingManualOrderLineIndex>=0?orderLineItems[editingManualOrderLineIndex]:null);
       });
       document.getElementById("orderManualAdd")?.addEventListener("click", () => {
         const type = String(document.getElementById("orderManualType")?.value || "procurement");
