@@ -490,6 +490,7 @@ function saveConfigSyncMeta(patch) {
 
 /** 正式庫存品類順序（顯示合併用；不批次改寫舊庫存資料） */
 const PREFERRED_INVENTORY_CATEGORIES = [
+  "整機",
   "處理器",
   "主機板",
   "記憶體",
@@ -5688,3 +5689,5 @@ if (document.getElementById("copyrightYear") || document.getElementById("lineMai
 }
 
 window.dkScanOperation = function(action, orderId, code, lineKey, note) { return stage7Rpc("backoffice_scan_operation", {p_action:action,p_order_id:orderId||"",p_code:code||"",p_line_key:lineKey||"",p_note:note||""}); };
+
+window.dkAssemblyOperation = function(action, key, payload) { return stage7Rpc("backoffice_assembly_operation", {p_action:action,p_key:key||null,p_payload:payload||{}}); };

@@ -59,7 +59,7 @@
     field.dispatchEvent(new Event('input',{bubbles:true}));
   });
   el('dkScanPrintSerials')?.addEventListener('click', () => printLabels((el('poReceiveSerials')?.value || '').split(/[\r\n,，;；]+/).map(x=>x.trim()).filter(Boolean)));
-  window.DKScanner = { open(o, lines) {
+  window.DKScanner = { printLabels, open(o, lines) {
     window.DKCameraScan?.close();
     order = o; generation++;
     el('dkScanCode').value = ''; el('dkScanNote').value = ''; el('dkScanResults').replaceChildren();
