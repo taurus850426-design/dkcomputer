@@ -17,7 +17,22 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install print verification tools
-        run: sudo apt-get update && sudo apt-get install -y poppler-utils fonts-noto-cjk
+        timeout-minutes: 6
+        run: |
+          install_print_tools() {
+            timeout 60s sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update &&
+            timeout 90s sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y --no-install-recommends poppler-utils fonts-noto-cjk
+          }
+          if ! install_print_tools; then
+            for source_file in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+              if [ -f "$source_file" ]; then
+                sudo sed -i 's|azure[.]archive[.]ubuntu[.]com|archive.ubuntu.com|g' "$source_file"
+              fi
+            done
+            install_print_tools
+          fi
+          pdftoppm -v
+          [[ $(fc-match -f '%{family}' 'Noto Sans CJK TC') == *'Noto Sans CJK'* ]]
       - name: Prepare headless browser
         run: node -e "require('@sparticuz/chromium').executablePath().then(p=>require('fs').appendFileSync(process.env.GITHUB_ENV,'DK_TEST_CHROME='+p+'\n'))"
       - name: Regression, current UI and production schema in isolation
