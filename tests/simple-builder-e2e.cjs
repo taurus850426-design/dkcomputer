@@ -43,6 +43,26 @@ test('current builder: desktop/mobile, search, total, restoration, failed/succes
   await page.locator('#saveBuild').click();await page.waitForFunction(()=>document.getElementById('actionStatus').textContent.includes('配單已儲存'));
   assert.equal(writes.length,2);assert.equal(writes[1].payload.payload.items[0].product_id,value);assert.match(writes[1].payload.build_no,/^DK-BUILD-\d{8}-[A-Z0-9]{6}$/);
   const prices=writes[1].payload.payload.items.reduce((n,x)=>n+x.qty*x.unit_price,0);assert.equal(prices,writes[1].payload.payload.total);
+  // Real mobile controls: accordion, extra brands, quantities, peripherals and fixed shortcuts.
+  await page.locator('[data-part="cpu"] summary').click();await page.waitForFunction(()=>document.querySelector('[data-part="cpu"]').open);
+  await page.locator('[data-add="cpu"]').click();await page.locator('[data-slot-filter="cpu"]').selectOption({label:'Intel LGA 1700'});
+  const extraCpu=await cpu.locator('option').nth(2).getAttribute('value');await cpu.selectOption(extraCpu);
+  await page.waitForFunction(()=>!document.querySelector('[data-part="cpu"]').open);
+  await page.locator('[data-part="cpu"] summary').click();await page.locator('[data-qty="cpu"]').fill('2');await page.locator('[data-qty="cpu"]').press('Tab');
+  for(const key of ['monitor','keyboard','mouse']){
+   await page.locator('[data-part="'+key+'"] summary').click();await page.waitForFunction(k=>document.querySelector('[data-part="'+k+'"]').open,key);
+   const filter=page.locator('[data-slot-filter="'+key+'"]');await filter.selectOption(await filter.locator('option').nth(1).getAttribute('value'));
+   assert.equal(await page.locator('[data-part="'+key+'"]').getAttribute('open'),'');
+   const select=page.locator('[data-slot="'+key+'"]');await select.selectOption(await select.locator('option').nth(1).getAttribute('value'));
+   await page.waitForFunction(k=>!document.querySelector('[data-part="'+k+'"]').open,key);
+  }
+  assert.match(await page.locator('#estimateQuick').innerText(),/6 件/);await page.locator('#estimateQuick').click();
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  const beforeNav=await page.locator('.dk-mobile-nav').boundingBox();await page.evaluate(()=>scrollTo(0,0));const afterNav=await page.locator('.dk-mobile-nav').boundingBox();assert.equal(beforeNav.y,afterNav.y);
+  await page.locator('#saveBuild').click();await page.waitForFunction(()=>document.getElementById('actionStatus').textContent.includes('配單已儲存'));
+  const multi=writes.at(-1).payload.payload;assert.equal(multi.items.length,5);assert.equal(multi.items[0].qty,2);assert.equal(multi.total,multi.items.reduce((n,x)=>n+x.qty*x.unit_price,0));assert.equal(multi.parts_subtotal+multi.peripherals_subtotal,multi.total);
+  await page.reload();await page.locator('#simpleLayout').waitFor();assert.equal(await page.locator('.summary-line').count(),5);assert.equal(await page.locator('[data-qty="cpu"]').inputValue(),'2');assert.equal(await page.locator('details[open]').count(),0);
+  await page.locator('#estimateQuick').click();await page.emulateMedia({media:'print'});assert.equal(await page.locator('.dk-mobile-nav').isVisible(),false);assert.match(await page.locator('#buildItems').innerText(),/× 2/);await page.emulateMedia({media:'screen'});
   await page.evaluate(()=>window.print=()=>{window.__printed=true;});await page.locator('#printBuild').click();assert.equal(await page.evaluate(()=>window.__printed),true);
   page.once('dialog',d=>d.accept());await page.locator('#clearBuild').click();assert.equal(await page.locator('#buildTotal').innerText(),'NT$ 0');assert.deepEqual(errors,[]);
  }finally{await browser?.close();await new Promise(r=>server.close(r));}
