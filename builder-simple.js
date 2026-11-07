@@ -38,6 +38,7 @@ function renderSummary(){
  $('buildTotal').textContent=money(total);
  $('buildSubtotals').textContent='主機零件 '+money(parts)+' · 周邊 '+money(addons);
  const quick=$('estimateQuick');if(quick)quick.textContent='查看配單 '+rows.reduce((n,x)=>n+x.qty,0)+' 件 · '+money(total);
+ for(const slot of core.slots){const first=rows.find(x=>x.slot.key===slot.key);if(first)p[slot.key]=first.item;}
  const issues=[];
  for(const row of rows.filter(x=>!x.slot.optional)){const slot=row.slot,item=row.item;const check=core.check(item,slot.key,Object.assign(Object.create(p),{[slot.key]:item}));if(check.state==='incompatible')issues.push(...check.reasons);}
  if(core.slots.some(s=>rows.filter(x=>x.slot.key===s.key).reduce((n,x)=>n+x.qty,0)>1))issues.push('已選多件主機零件；是否用於同一台電腦及完整相容性，請由 DK 確認');
