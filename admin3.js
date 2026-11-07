@@ -5772,7 +5772,7 @@
       const manualCategory = document.getElementById("orderManualCategory");
       if (manualCategory) {
         const current = String(manualCategory.value || "");
-        const serviceCats = ["維修服務", "升級服務", "安裝工資", "其他"];
+        const serviceCats = ["作業系統", "維修服務", "升級服務", "安裝工資", "其他"];
         const options = Array.from(new Set(cats.concat(serviceCats).map((c) => String(c || "").trim()).filter(Boolean)));
         manualCategory.innerHTML = '<option value="">請選擇品類</option>' + options.map((c) => '<option value="' + v2Esc(c) + '">' + v2Esc(c) + '</option>').join("");
         if (current && !options.includes(current)) manualCategory.add(new Option(current + "（歷史）", current));
