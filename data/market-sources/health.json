@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "attemptedAt": "2026-11-13T07:58:16.320Z",
+  "attemptedAt": "2026-11-13T17:13:36.454Z",
   "sources": {
     "coolpc": {
       "ok": true,
-      "count": 6282,
-      "capturedAt": "2026-11-13T07:58:17.861Z",
+      "count": 6286,
+      "capturedAt": "2026-11-13T17:13:37.779Z",
       "file": "coolpc.json.gz"
     },
     "sinya": {
       "ok": true,
-      "count": 1275,
-      "capturedAt": "2026-11-13T07:58:17.992Z",
+      "count": 1278,
+      "capturedAt": "2026-11-13T17:13:37.886Z",
       "file": "sinya.json.gz",
       "coverage": [
         {
@@ -24,7 +24,7 @@
           "category": "2",
           "groupsFetched": 11,
           "excludedGroups": 3,
-          "accepted": 57
+          "accepted": 60
         },
         {
           "category": "3",
@@ -60,19 +60,19 @@
           "category": "150",
           "groupsFetched": 26,
           "excludedGroups": 2,
-          "accepted": 170
+          "accepted": 169
         },
         {
           "category": "9",
           "groupsFetched": 22,
           "excludedGroups": 5,
-          "accepted": 184
+          "accepted": 183
         },
         {
           "category": "8",
           "groupsFetched": 33,
           "excludedGroups": 1,
-          "accepted": 343
+          "accepted": 345
         },
         {
           "category": "96",
@@ -84,8 +84,8 @@
     },
     "autobuy": {
       "ok": true,
-      "count": 1960,
-      "capturedAt": "2026-11-13T08:00:19.329Z",
+      "count": 1959,
+      "capturedAt": "2026-11-13T17:15:43.300Z",
       "file": "autobuy.json.gz"
     }
   }
