@@ -1,91 +1,22 @@
 {
   "schemaVersion": 1,
-  "attemptedAt": "2026-11-13T17:13:36.454Z",
+  "attemptedAt": "2026-11-14T07:37:11.657Z",
   "sources": {
     "coolpc": {
       "ok": true,
-      "count": 6286,
-      "capturedAt": "2026-11-13T17:13:37.779Z",
+      "count": 6299,
+      "capturedAt": "2026-11-14T07:37:13.096Z",
       "file": "coolpc.json.gz"
     },
     "sinya": {
-      "ok": true,
-      "count": 1278,
-      "capturedAt": "2026-11-13T17:13:37.886Z",
-      "file": "sinya.json.gz",
-      "coverage": [
-        {
-          "category": "1",
-          "groupsFetched": 2,
-          "excludedGroups": 8,
-          "accepted": 7
-        },
-        {
-          "category": "2",
-          "groupsFetched": 11,
-          "excludedGroups": 3,
-          "accepted": 60
-        },
-        {
-          "category": "3",
-          "groupsFetched": 2,
-          "excludedGroups": 4,
-          "accepted": 0
-        },
-        {
-          "category": "105",
-          "groupsFetched": 4,
-          "excludedGroups": 0,
-          "accepted": 143
-        },
-        {
-          "category": "4",
-          "groupsFetched": 5,
-          "excludedGroups": 0,
-          "accepted": 43
-        },
-        {
-          "category": "5",
-          "groupsFetched": 15,
-          "excludedGroups": 2,
-          "accepted": 24
-        },
-        {
-          "category": "11",
-          "groupsFetched": 23,
-          "excludedGroups": 1,
-          "accepted": 111
-        },
-        {
-          "category": "150",
-          "groupsFetched": 26,
-          "excludedGroups": 2,
-          "accepted": 169
-        },
-        {
-          "category": "9",
-          "groupsFetched": 22,
-          "excludedGroups": 5,
-          "accepted": 183
-        },
-        {
-          "category": "8",
-          "groupsFetched": 33,
-          "excludedGroups": 1,
-          "accepted": 345
-        },
-        {
-          "category": "96",
-          "groupsFetched": 18,
-          "excludedGroups": 0,
-          "accepted": 193
-        }
-      ]
+      "ok": false,
+      "error": "fetch failed",
+      "lastGoodRetained": true
     },
     "autobuy": {
       "ok": true,
       "count": 1959,
-      "capturedAt": "2026-11-13T17:15:43.300Z",
+      "capturedAt": "2026-11-14T07:37:25.329Z",
       "file": "autobuy.json.gz"
     }
   }
