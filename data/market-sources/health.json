@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "attemptedAt": "2026-11-18T18:04:27.986Z",
+  "attemptedAt": "2026-11-19T08:48:57.540Z",
   "sources": {
     "coolpc": {
       "ok": true,
-      "count": 6255,
-      "capturedAt": "2026-11-18T18:04:29.145Z",
+      "count": 6268,
+      "capturedAt": "2026-11-19T08:48:59.292Z",
       "file": "coolpc.json.gz"
     },
     "sinya": {
@@ -16,7 +16,7 @@
     "autobuy": {
       "ok": true,
       "count": 1949,
-      "capturedAt": "2026-11-18T18:04:41.276Z",
+      "capturedAt": "2026-11-19T08:49:11.813Z",
       "file": "autobuy.json.gz"
     }
   }
