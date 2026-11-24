@@ -7403,6 +7403,46 @@
           String(i.spec || "").toLowerCase().includes(q)
         );
       }
+      let catalog;
+      let catalogRequest;
+      let catalogResults = [];
+      function showCatalog() {
+        const query = input.value.trim().normalize("NFKC").toLowerCase();
+        catalogResults = [];
+        if (!query || !opts.orderCatalog) return;
+        if (!catalog) {
+          if (!catalogRequest) {
+            catalogRequest = fetch("./data/builder-catalog.json", {cache:"no-cache"})
+              .then(response => {
+                if (!response.ok) throw new Error("catalog");
+                return response.json();
+              }).then(data => {
+                if (data.schemaVersion !== 1 || !Array.isArray(data.products) || !window.DKCatalogPricePolicy) throw new Error("catalog");
+                const categories = new Map((data.categories || []).map(category => [Number(category.id), category.name]));
+                catalog = data.products.filter(window.DKCatalogPricePolicy.accepts).map(product => ({
+                  ...product, categoryName: categories.get(Number(product.category))
+                })).filter(product => product.name && product.categoryName);
+                if (!dropdown.hidden && document.activeElement === input) render();
+              }).catch(() => {
+                if (!dropdown.hidden && document.activeElement === input) {
+                  dropdown.insertAdjacentHTML("beforeend", '<div class="searchable-select-empty">線上估價暫時無法載入，可使用手動新增。</div>');
+                }
+              }).finally(() => { catalogRequest = null; });
+          }
+          dropdown.insertAdjacentHTML("beforeend", '<div class="searchable-select-empty">正在載入線上估價品項…</div>');
+          return;
+        }
+        const normalize = value => String(value || "").trim().normalize("NFKC").toLowerCase();
+        const stockNames = new Set(DK.getItems().filter(isSellable).map(item => normalize(item.name)));
+        catalogResults = catalog.filter(product => query.split(/\s+/).every(word => normalize(product.name).includes(word))).slice(0, 40);
+        if (!catalogResults.length) return;
+        if (!getFiltered().length) dropdown.replaceChildren();
+        dropdown.insertAdjacentHTML("beforeend", catalogResults.map((product, index) => {
+          const possibleMatch = stockNames.has(normalize(product.name));
+          const status = possibleMatch ? "請核對上方庫存" : "未配對庫存・需採購";
+          return `<button type="button" role="option" class="searchable-select-option order-catalog-option ${possibleMatch ? "order-catalog-check" : "order-catalog-procure"}" data-catalog-index="${index}">${v2Esc(product.name)} <strong>${status}</strong></button>`;
+        }).join(""));
+      }
       function render() {
         const list = getFiltered();
         if (list.length === 0) {
@@ -7440,6 +7480,7 @@
           }).join("");
         }
         dropdown.hidden = false;
+        showCatalog();
       }
       function pick(itemId, displayName) {
         if (itemId && ![...select.options].some((o) => o.value === itemId)) {
@@ -7454,10 +7495,17 @@
         if (typeof opts.onPick === "function") opts.onPick(itemId);
       }
       input.addEventListener("focus", () => render());
-      input.addEventListener("input", () => render());
+      input.addEventListener("input", () => { select.value = ""; render(); });
+      dropdown.addEventListener("click", event => {
+        const option = event.target.closest("[data-catalog-index]");
+        if (!option || !opts.orderCatalog) return;
+        const product = catalogResults[Number(option.dataset.catalogIndex)];
+        if (product && opts.orderCatalog(product)) { dropdown.hidden = true; select.value = ""; input.value = ""; }
+      });
       input.addEventListener("blur", () => setTimeout(() => { dropdown.hidden = true; }, 180));
       dropdown.addEventListener("mousedown", (e) => {
         const opt = e.target.closest(".searchable-select-option");
+        if (opt?.hasAttribute("data-catalog-index")) { e.preventDefault(); return; }
         if (opt) { e.preventDefault(); pick(opt.getAttribute("data-id"), opt.getAttribute("data-name")); }
       });
     }
@@ -8389,7 +8437,30 @@
     }
     document.getElementById("orderSave")?.addEventListener("click", saveV2Order);
 
-    makeSearchableItemSelect("orderLineItem", "orderLineItemSearch", "orderLineItemDropdown", { showQty: true, showCost: true, sellableOnly: true });
+    makeSearchableItemSelect("orderLineItem", "orderLineItemSearch", "orderLineItemDropdown", { showQty: true, showCost: true, sellableOnly: true,
+      orderCatalog(product) {
+        const box = document.getElementById("orderManualBox");
+        if (!box || !box.hidden) {
+          v2Show(orderMsg, "請先完成或取消目前編輯的品項。");
+          return false;
+        }
+        document.getElementById("orderManualToggle").click();
+        const category = document.getElementById("orderManualCategory");
+        if (![...category.options].some(option => option.value === product.categoryName)) {
+          category.add(new Option(product.categoryName, product.categoryName));
+        }
+        category.value = product.categoryName;
+        document.getElementById("orderManualName").value = product.name;
+        document.getElementById("orderManualQty").value = document.getElementById("orderLineQty").value || "1";
+        document.getElementById("orderManualPrice").value = Number(product.price) > 0 ? String(product.price) : "0";
+        document.getElementById("orderManualCost").value = "0";
+        document.getElementById("orderManualVendor").value = "";
+        const type = document.getElementById("orderManualType");
+        type.value = "procurement";
+        type.dispatchEvent(new Event("change"));
+        return true;
+      }
+    });
     makeSearchableItemSelect("ledgerItemId", "ledgerItemIdSearch", "ledgerItemIdDropdown");
 
     const restockForm = document.getElementById("restockForm");
