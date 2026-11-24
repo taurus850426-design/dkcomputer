@@ -7406,6 +7406,10 @@
       let catalog;
       let catalogRequest;
       let catalogResults = [];
+      function suggestedPriceLabel(value) {
+        const price = Number(value);
+        return Number.isFinite(price) && price > 0 ? "建議售價 NT$" + v2FmtNum(price) : "建議售價未設定";
+      }
       function showCatalog() {
         const query = input.value.trim().normalize("NFKC").toLowerCase();
         catalogResults = [];
@@ -7440,7 +7444,7 @@
         dropdown.insertAdjacentHTML("beforeend", catalogResults.map((product, index) => {
           const possibleMatch = stockNames.has(normalize(product.name));
           const status = possibleMatch ? "請核對上方庫存" : "未配對庫存・需採購";
-          return `<button type="button" role="option" class="searchable-select-option order-catalog-option ${possibleMatch ? "order-catalog-check" : "order-catalog-procure"}" data-catalog-index="${index}">${v2Esc(product.name)} <strong>${status}</strong></button>`;
+          return `<button type="button" role="option" class="searchable-select-option order-catalog-option ${possibleMatch ? "order-catalog-check" : "order-catalog-procure"}" data-catalog-index="${index}">${v2Esc(product.name)} <strong>${status}</strong> <span class="product-suggested-price">${v2Esc(suggestedPriceLabel(product.price))}</span></button>`;
         }).join(""));
       }
       function render() {
@@ -7465,9 +7469,10 @@
             const compact = costNum != null
               ? ("剩 " + qtyLabel + "｜NT$" + v2FmtNum(costNum))
               : ("剩 " + qtyLabel);
-            const aria = [name, stockFull].concat(costFull ? [costFull] : []).join("，");
+            const suggestion = opts.orderCatalog ? suggestedPriceLabel(i.price_list) : "";
+            const aria = [name, stockFull, costFull, suggestion].filter(Boolean).join("，");
             const zeroClass = Number.isFinite(qty) && qty <= 0 ? " qty-zero" : "";
-            return `<div class="searchable-select-option searchable-select-option--meta${zeroClass}" role="option" data-id="${v2Esc(i.id)}" data-name="${v2Esc(i.name || "")}" title="${v2Esc(name)}" aria-label="${v2Esc(aria)}"><div class="product-main"><span class="product-name">${v2Esc(name)}</span></div><div class="product-meta"><span class="product-meta-full">${opts.showQty ? `<span class="product-stock">${v2Esc(stockFull)}</span>` : ""}${opts.showCost && costFull ? `<span class="product-cost">${v2Esc(costFull)}</span>` : ""}</span><span class="product-meta-compact">${v2Esc(compact)}</span></div></div>`;
+            return `<div class="searchable-select-option searchable-select-option--meta${zeroClass}" role="option" data-id="${v2Esc(i.id)}" data-name="${v2Esc(i.name || "")}" title="${v2Esc(name)}" aria-label="${v2Esc(aria)}"><div class="product-main"><span class="product-name">${v2Esc(name)}</span></div><div class="product-meta"><span class="product-meta-full">${opts.showQty ? `<span class="product-stock">${v2Esc(stockFull)}</span>` : ""}${opts.showCost && costFull ? `<span class="product-cost">${v2Esc(costFull)}</span>` : ""}</span><span class="product-meta-compact">${v2Esc(compact)}</span>${suggestion ? `<span class="product-suggested-price">${v2Esc(suggestion)}</span>` : ""}</div></div>`;
           }).join("");
         } else {
           dropdown.innerHTML = list.map((i) => {
