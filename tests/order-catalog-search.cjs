@@ -10,7 +10,7 @@ test('catalog selection stays separate from the inventory ID and filters conditi
   try {
     const {document} = window;
     const selected = [];
-    const stock = [{id:'stock-1', name:'RTX 5060 White', qty_on_hand:2, price_list:8990}, {id:'stock-2',name:'RTX 5060 Used',qty_on_hand:1,cost_unit:5000}];
+    const stock = [{id:'stock-1', name:'RTX 5060 White', qty_on_hand:2, category:"顯示卡", price_list:8990}, {id:'stock-2',name:'RTX 5060 Used',qty_on_hand:1,cost_unit:5000}];
     window.DKCatalogPricePolicy = require('../catalog-price-policy');
     const context = vm.createContext({window, document, DK:{getItems:()=>stock}, canPerm:()=>false,
       v2Esc:String, v2FmtNum:value=>Number(value).toLocaleString("zh-TW"), fetch:async()=>({ok:true,json:async()=>({
@@ -34,6 +34,7 @@ test('catalog selection stays separate from the inventory ID and filters conditi
     assert.match(results.querySelector('[data-id="stock-1"]').textContent,/建議售價 NT\$8,990/);
     assert.match(results.querySelector('[data-id="stock-2"]').textContent,/建議售價未設定/);
     assert.match(results.querySelector('[data-catalog-index]').textContent,/建議售價 NT\$9,990/);
+    assert.deepEqual([...results.querySelectorAll('.order-search-category')].map(el=>el.textContent), ['顯示卡','未分類','顯示卡']);
     results.querySelector('[data-catalog-index]').click();
     assert.equal(selected[0].categoryName,'顯示卡');
     assert.equal(document.getElementById('item').value,'');
