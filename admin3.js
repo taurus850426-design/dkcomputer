@@ -7783,6 +7783,8 @@
       orderLineItemSelect.innerHTML = '<option value="">— 選擇品項 —</option>' + items.map((i) => `<option value="${v2Esc(i.id)}">${v2Esc(i.name || "")}</option>`).join("");
       const searchInp = document.getElementById("orderLineItemSearch");
       if (searchInp) { searchInp.value = ""; orderLineItemSelect.value = ""; }
+      const priceInput = document.getElementById("orderLinePrice");
+      if (priceInput) priceInput.value = "";
     }
     function renderOrderLineTbody() {
       if (!orderLineTbody) return;
@@ -8447,6 +8449,11 @@
     document.getElementById("orderSave")?.addEventListener("click", saveV2Order);
 
     makeSearchableItemSelect("orderLineItem", "orderLineItemSearch", "orderLineItemDropdown", { showQty: true, showCost: true, sellableOnly: true,
+      onPick(itemId) {
+        const priceInput = document.getElementById("orderLinePrice");
+        const price = Number(DK.findItemById(itemId)?.price_list);
+        if (priceInput) priceInput.value = Number.isFinite(price) && price > 0 ? String(price) : "";
+      },
       orderCatalog(product) {
         const box = document.getElementById("orderManualBox");
         if (!box || !box.hidden) {
