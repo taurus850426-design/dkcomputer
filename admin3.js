@@ -7130,6 +7130,7 @@
       if (orderForm) orderForm.hidden = true;
       document.body.classList.remove("order-workspace-open");
       editingV2OrderId = null;
+      window.DKOrderEditor?.close();
       orderGuard?.reset();
       clearPendingCustomerOrderLink();
       v2Hide(orderMsg);
@@ -7740,6 +7741,13 @@
             if (go && canPerm("purchase")) { switchTab("purchase"); window.__dkPurchaseOrdersOpen?.(pendingPurchases[0].order.id, order.id); }
             return;
           }
+          const pendingLine = (order.items || []).find(line =>
+            line && (line.fulfillment_type || line.fulfillmentType) === "procurement"
+          );
+          if (pendingLine) {
+            throw new Error("採購品項「" + (pendingLine.name || pendingLine.spec || "未命名品項") +
+              "」尚未連結到貨或出庫紀錄。請開啟此訂單查看採購進度。");
+          }
           if (String(order.delivery_status || "pending") !== "delivered") {
             throw new Error("請先點『未交付』改成已交付，再將訂單改為已完成");
           }
@@ -7771,7 +7779,10 @@
     orderSearchEl?.addEventListener("search", () => { ordersPage = 1; renderV2Orders(); });
     orderDateRangeEl?.addEventListener("change", () => { ordersPage = 1; renderV2Orders(); });
     orderStatusFilterEl?.addEventListener("change", () => { applyOrderStatusSelectClass(); ordersPage = 1; renderV2Orders(); });
-    window.addEventListener("dk:purchase-orders-updated", () => renderV2Orders());
+    window.addEventListener("dk:purchase-orders-updated", () => {
+      renderV2Orders();
+      window.DKOrderEditor?.refresh();
+    });
 
     function fillOrderLineItemSelect() {
       if (!orderLineItemSelect) return;
@@ -7938,6 +7949,24 @@
       v2Hide(orderMsg);
       orderGuard?.clean();
       window.DKScanner?.open(o, orderLineItems);
+      window.DKOrderEditor?.open({
+        orderId: () => editingV2OrderId,
+        lines: () => orderLineItems,
+        purchases: () => DK.loadPurchaseOrdersRaw?.(false) || [],
+        canOpenPurchase: () => canPerm("purchase"),
+        dirty: () => orderGuard?.dirty() || document.getElementById("orderSave")?.dataset.saving === "1",
+        notice: message => v2Show(orderMsg, message),
+        savedOrder: () => DK.getOrders().find(row => String(row.id) === String(editingV2OrderId)),
+        openPurchase(purchaseId) {
+          if (!canPerm("purchase")) return;
+          if (orderGuard?.dirty() || document.getElementById("orderSave")?.dataset.saving === "1") {
+            v2Show(orderMsg, "請先儲存目前的訂單修改，再開啟叫貨單。");
+            return;
+          }
+          switchTab("purchase");
+          window.__dkPurchaseOrdersOpen?.(purchaseId);
+        },
+      });
     }
     window.DKShopOrderEditor = {
       open(row) {
@@ -7981,6 +8010,7 @@
       const ship = parseFloat(document.getElementById("orderShipping")?.value) || 0;
       const disc = parseFloat(document.getElementById("orderDiscount")?.value) || 0;
       const cogs = parseFloat(document.getElementById("orderCogs")?.value) || 0;
+      window.DKOrderEditor?.refresh();
       const profit = sale + ship - disc - cogs;
       const rev = sale + ship - disc;
       const margin = rev > 0 ? ((profit / rev) * 100).toFixed(1) + "%" : "-";
@@ -8412,8 +8442,10 @@
           } catch (_) {}
         }
         let purchaseWarning = "";
+        let purchaseSynced = false;
         if (["confirmed", "pending", "paid", "shipped", "completed"].includes(payload.status) && window.DKPurchaseOrderSync?.syncFromSalesOrder) {
           const purchaseSync = await window.DKPurchaseOrderSync.syncFromSalesOrder({ ...payload, id: savedId });
+          purchaseSynced = !!purchaseSync?.ok && !purchaseSync.skipped;
           if (purchaseSync && Array.isArray(purchaseSync.warnings) && purchaseSync.warnings.length) purchaseWarning = " " + purchaseSync.warnings.join(" ");
           else if (!purchaseSync || !purchaseSync.ok) purchaseWarning = " 叫貨單同步失敗，請勿重複新增；請到叫貨單檢查。";
         }
@@ -8421,10 +8453,14 @@
           v2Show(orderMsg, "訂單已儲存；後續新填的內容尚未儲存，請核對後再儲存。" + purchaseWarning);
           return false;
         }
-        v2Show(orderMsg, (wasEditing ? "訂單已更新。" : "訂單已新增。") + quoteNoteWarning + customerSourceWarning + operationsWarning + purchaseWarning);
+        const savedMessage = (wasEditing ? "訂單已更新。" : "訂單已新增。") +
+          (purchaseSynced ? " 叫貨單已同步。" : "") + quoteNoteWarning + customerSourceWarning + operationsWarning + purchaseWarning;
+        v2Show(orderMsg, savedMessage);
         if (!wasEditing && !["lost","cancelled"].includes(payload.status)) tryUpdateLinkedCustomerStatus(payload.status);
         else clearPendingCustomerOrderLink();
-        showSyncToast({ ok: true }, "訂單");
+        if (purchaseWarning || quoteNoteWarning || customerSourceWarning || operationsWarning) showCenterToast(savedMessage, "error");
+        else if (purchaseSynced) showCenterToast(savedMessage, "success");
+        else showSyncToast({ ok: true }, "訂單");
         renderV2Orders();
         renderV2Items();
         renderV2Reports();
@@ -9013,6 +9049,10 @@
       if (previewDownload) previewDownload.textContent = isMobileQuoteDevice() ? "分享／儲存圖片" : "下載圖片";
       if (quoteModal) quoteModal.hidden = false;
     }
+    document.getElementById("orderEditorQuotePreview")?.addEventListener("click", () => {
+      if (!requirePerm("quoteImage")) return;
+      openQuotePreview().catch(e => v2Show(orderMsg, "報價單圖片產生失敗：" + String(e?.message || e)));
+    });
     let quotePrintBusy = false;
     document.getElementById("orderQuotePreview")?.addEventListener("click", async () => {
       if (!requirePerm("quoteImage") || quotePrintBusy) return;

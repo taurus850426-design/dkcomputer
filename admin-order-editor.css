@@ -1,0 +1,47 @@
+#orderForm .order-editor-overview,
+#orderForm .order-editor-panel {
+  background: var(--surface, #fff);
+  border: 1px solid rgba(100,116,139,.24);
+  border-radius: 14px;
+  padding: 16px;
+  min-width: 0;
+}
+#orderForm .order-editor-overview h3,
+#orderForm .order-editor-overview p { margin: 0; }
+#orderForm .order-editor-overview h3 { overflow-wrap: anywhere; }
+#orderForm .order-editor-grid { display: grid; gap: 12px; margin-block: 12px; }
+#orderForm .order-editor-heading { border: 0; padding: 0 0 8px; }
+#orderForm .order-editor-panel details { border-top: 1px solid rgba(100,116,139,.2); margin-top: 10px; padding-top: 8px; }
+#orderForm .order-editor-panel summary { cursor: pointer; font-weight: 600; padding: 5px 0; }
+#orderForm details > .form-grid { margin-top: 8px; }
+#orderForm .order-editor-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 12px 0;
+  padding: 10px 0;
+  border-block: 1px solid rgba(100,116,139,.24);
+  gap: 8px;
+}
+#orderForm .order-editor-totals dt { font-size: .85rem; }
+#orderForm .order-editor-totals dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+#orderForm .order-editor-next { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+#orderForm .order-editor-shortcuts { margin-top: 8px; flex-wrap: wrap; }
+#orderForm .order-editor-amount { font-size: 1.25rem; }
+#orderForm .order-editor-actions .actions { flex-wrap: wrap; gap: 8px; }
+#orderForm #orderMsg { margin-bottom: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+#orderForm #orderEditorPurchaseLines { margin: 8px 0; padding-inline-start: 1.4em; }
+#orderForm #orderEditorMessageText { width: 100%; }
+#orderForm #orderEditorCustomerMessage:not([hidden]) { margin-top: 8px; }
+@media (max-width: 640px) {
+  #orderForm .order-editor-overview,
+  #orderForm .order-editor-panel { padding: 12px; }
+  #orderForm .order-editor-actions {
+    position: sticky;
+    z-index: 20;
+    bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface, #fff);
+    border: 1px solid rgba(100,116,139,.24);
+    border-radius: 12px;
+    padding: 8px;
+  }
+}
