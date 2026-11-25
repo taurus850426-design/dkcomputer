@@ -1875,7 +1875,6 @@
         return showMsg(targetOrder.orderNo + "：已新增廠商報價" + (result.cloud?.ok ? "並同步雲端" : "，雲端同步未確認，請到廠商報價檢查"), 6000);
       }
 
-      renderQuoteModalHistory(Object.assign({}, currentOrder.items[idx], { selectedSpec: spec, category: category }));
       if (el("poQuoteVendor")) el("poQuoteVendor").value = "";
       if (el("poQuotePrice")) el("poQuotePrice").value = "";
       if (el("poQuoteWarranty")) el("poQuoteWarranty").value = "";
@@ -1894,6 +1893,14 @@
       if (button) {
         button.disabled = false;
         button.textContent = "新增這筆廠商報價";
+      }
+      const shown = currentOrder?.items?.find(function (it) { return String(it.id) === String(quoteModalItemId); });
+      if (shown) {
+        renderQuoteModalHistory({
+          ...shown,
+          selectedSpec: String(el("poQuoteSpec")?.value || ""),
+          category: String(el("poQuoteCategory")?.value || ""),
+        });
       }
     }
   }
