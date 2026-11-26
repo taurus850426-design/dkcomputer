@@ -41,6 +41,40 @@ test('new orders collapse optional fields, and shortcuts reveal the original con
   }finally{s.dom.window.close();}
 });
 
+test('order amount labels follow the calculation and the total remains visible when adjustments are collapsed',async()=>{
+  const s=setup();
+  try {
+    const d=s.window.document;
+    const adjustments=s.el('orderEditorAdjustments');
+    const total=s.el('orderEditorTotal');
+    const panel=total.closest('.order-editor-panel');
+    assert.equal(panel.querySelector('h4').textContent,'訂單金額');
+    for(const [id,label] of Object.entries({orderTotalSale:'商品小計',orderShipping:'運費收入',orderDiscount:'折扣金額'})){
+      assert.equal(d.querySelectorAll('#'+id).length,1);
+      assert.equal(d.querySelector('label[for="'+id+'"]').textContent,label);
+    }
+    assert.equal(total.previousElementSibling.textContent,'應收總額');
+    assert.ok(adjustments.compareDocumentPosition(total)&s.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.equal(total.closest('details'),null);
+    assert.ok(total.compareDocumentPosition(s.el('orderEditorCosts'))&s.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    s.el('orderTotalSale').value='96415';
+    s.el('orderShipping').value='4345';
+    s.el('orderReceivedAmount').value='10000';
+    s.open();
+    assert.equal(adjustments.open,false);
+    assert.equal(total.textContent,'NT$ 100,760');
+    adjustments.open=true;
+    s.el('orderDiscount').value='760';
+    s.el('orderDiscount').dispatchEvent(new s.window.Event('input',{bubbles:true}));
+    await Promise.resolve();
+    assert.equal(total.textContent,'NT$ 100,000');
+    assert.equal(s.el('orderEditorDue').textContent,total.textContent);
+    assert.equal(s.el('orderEditorBalance').textContent,'NT$ 90,000');
+    adjustments.open=false;
+    assert.equal(total.textContent,'NT$ 100,000');
+  }finally{s.dom.window.close();}
+});
+
 test('an old order shows a named missing line despite a received purchase and opens only an active linked purchase',()=>{
   const s=setup({
     orderId:'order-1',
@@ -114,6 +148,19 @@ test('order actions and responsive form remain usable on desktop and mobile',asy
         document.getElementById('orderForm').scrollIntoView();
       });
       assert.equal(await page.locator('#orderCustomer').isVisible(),true);
+      assert.equal(await page.locator('#orderEditorTotal').isVisible(),true);
+      await page.locator('#orderTotalSale').fill('96415');
+      await page.locator('#orderEditorAdjustments > summary').click();
+      await page.locator('#orderShipping').fill('4345');
+      await page.locator('#orderDiscount').fill('760');
+      assert.equal(await page.locator('#orderEditorTotal').textContent(),'NT$ 100,000');
+      assert.equal(await page.locator('#orderEditorTotal').evaluate(el=>{
+        const total=el.getBoundingClientRect();
+        const adjustments=document.getElementById('orderEditorAdjustments').getBoundingClientRect();
+        return total.top>=adjustments.bottom;
+      }),true);
+      await page.locator('#orderEditorAdjustments > summary').click();
+      assert.equal(await page.locator('#orderEditorTotal').isVisible(),true);
       assert.equal(await page.locator('#orderReceivedAmount').isVisible(),false);
       await page.getByRole('button',{name:'登記收款',exact:true}).click();
       await page.locator('#orderReceivedAmount').fill('100');

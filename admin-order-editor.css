@@ -26,7 +26,18 @@
 #orderForm .order-editor-totals dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
 #orderForm .order-editor-next { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 #orderForm .order-editor-shortcuts { margin-top: 8px; flex-wrap: wrap; }
-#orderForm .order-editor-amount { font-size: 1.25rem; }
+#orderForm .order-editor-amount-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid rgba(100,116,139,.2);
+  margin-top: 10px;
+  padding-top: 12px;
+  font-weight: 600;
+}
+#orderForm .order-editor-amount { font-size: 1.25rem; overflow-wrap: anywhere; }
 #orderForm .order-editor-actions .actions { flex-wrap: wrap; gap: 8px; }
 #orderForm #orderMsg { margin-bottom: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
 #orderForm #orderEditorPurchaseLines { margin: 8px 0; padding-inline-start: 1.4em; }
